@@ -36,6 +36,10 @@ next-env.d.ts
 
 # renders
 renders/
+<<<<<<< HEAD
 
 # .claude
 .claude/settings.local.json
+=======
+*.code-workspace
+>>>>>>> cad37b5 (pnpm)
