@@ -13,6 +13,7 @@
     "@tailwindcss/postcss": "^4.1.17",
     "@xyflow/react": "^12.9.3",
     "autoprefixer": "^10.4.22",
+    "jszip": "^3.10.1",
     "konva": "^10.0.12",
     "next": "^16.0.6",
     "postcss": "^8.5.6",

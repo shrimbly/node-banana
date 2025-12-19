@@ -4,7 +4,9 @@ import { useCallback } from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { NanoBananaNodeData, AspectRatio, Resolution, ModelType } from "@/types";
+import { useCropperStore } from "@/store/cropperStore";
+import { downloadImage } from "@/utils/downloadImage";
+import { NanoBananaNodeData, AspectRatio, Resolution, ModelType, AzureFluxSize, AzureGptImageSize, AzureGptImageQuality } from "@/types";
 
 // All 10 aspect ratios supported by both models
 const ASPECT_RATIOS: AspectRatio[] = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
@@ -12,9 +14,35 @@ const ASPECT_RATIOS: AspectRatio[] = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", 
 // Resolutions only for Nano Banana Pro (gemini-3-pro-image-preview)
 const RESOLUTIONS: Resolution[] = ["1K", "2K", "4K"];
 
+// Size options for Azure FLUX model
+const AZURE_FLUX_SIZES: { value: AzureFluxSize; label: string }[] = [
+  { value: "1024x1024", label: "1024×1024" },
+  { value: "1024x768", label: "1024×768" },
+  { value: "768x1024", label: "768×1024" },
+  { value: "1536x1024", label: "1536×1024" },
+  { value: "1024x1536", label: "1024×1536" },
+];
+
+// Size options for Azure GPT Image model
+const AZURE_GPT_IMAGE_SIZES: { value: AzureGptImageSize; label: string }[] = [
+  { value: "1024x1024", label: "1024×1024" },
+  { value: "1536x1024", label: "1536×1024" },
+  { value: "1024x1536", label: "1024×1536" },
+  { value: "auto", label: "Auto" },
+];
+
+// Quality options for Azure GPT Image model
+const AZURE_GPT_IMAGE_QUALITIES: { value: AzureGptImageQuality; label: string }[] = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+
 const MODELS: { value: ModelType; label: string }[] = [
   { value: "nano-banana", label: "Nano Banana" },
   { value: "nano-banana-pro", label: "Nano Banana Pro" },
+  { value: "azure-flux-pro", label: "Azure FLUX.2 Pro" },
+  { value: "azure-gpt-image", label: "Azure GPT Image" },
 ];
 
 type NanoBananaNodeType = Node<NanoBananaNodeData, "nanoBanana">;
@@ -22,6 +50,7 @@ type NanoBananaNodeType = Node<NanoBananaNodeData, "nanoBanana">;
 export function NanoBananaNode({ id, data, selected }: NodeProps<NanoBananaNodeType>) {
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
+  const openCropper = useCropperStore((state) => state.openModal);
 
   const handleAspectRatioChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -51,9 +80,42 @@ export function NanoBananaNode({ id, data, selected }: NodeProps<NanoBananaNodeT
     [id, updateNodeData]
   );
 
+  const handleSizeChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      updateNodeData(id, { size: e.target.value as AzureFluxSize });
+    },
+    [id, updateNodeData]
+  );
+
+  const handleGptImageSizeChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      updateNodeData(id, { gptImageSize: e.target.value as AzureGptImageSize });
+    },
+    [id, updateNodeData]
+  );
+
+  const handleGptImageQualityChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      updateNodeData(id, { gptImageQuality: e.target.value as AzureGptImageQuality });
+    },
+    [id, updateNodeData]
+  );
+
   const handleClearImage = useCallback(() => {
     updateNodeData(id, { outputImage: null, status: "idle", error: null });
   }, [id, updateNodeData]);
+
+  const handleDownload = useCallback(() => {
+    if (!nodeData.outputImage) return;
+    downloadImage(nodeData.outputImage, {
+      filename: `generated-${Date.now()}.png`,
+    });
+  }, [nodeData.outputImage]);
+
+  const handleOpenCropper = useCallback(() => {
+    if (!nodeData.outputImage) return;
+    openCropper(nodeData.outputImage, id);
+  }, [nodeData.outputImage, id, openCropper]);
 
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
@@ -63,6 +125,9 @@ export function NanoBananaNode({ id, data, selected }: NodeProps<NanoBananaNodeT
   }, [id, regenerateNode]);
 
   const isNanoBananaPro = nodeData.model === "nano-banana-pro";
+  const isAzureFlux = nodeData.model === "azure-flux-pro";
+  const isAzureGptImage = nodeData.model === "azure-gpt-image";
+  const isGeminiModel = nodeData.model === "nano-banana" || nodeData.model === "nano-banana-pro";
 
   return (
     <BaseNode
@@ -130,6 +195,24 @@ export function NanoBananaNode({ id, data, selected }: NodeProps<NanoBananaNodeT
               </div>
             )}
             <div className="absolute top-1 right-1 flex gap-1">
+              <button
+                onClick={handleOpenCropper}
+                className="w-5 h-5 bg-neutral-900/80 hover:bg-blue-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
+                title="Split grid / Crop"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                </svg>
+              </button>
+              <button
+                onClick={handleDownload}
+                className="w-5 h-5 bg-neutral-900/80 hover:bg-green-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
+                title="Download"
+              >
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </button>
               <button
                 onClick={handleRegenerate}
                 disabled={isRunning}
@@ -200,17 +283,21 @@ export function NanoBananaNode({ id, data, selected }: NodeProps<NanoBananaNodeT
 
         {/* Aspect ratio and resolution row */}
         <div className="flex gap-1.5 shrink-0">
-          <select
-            value={nodeData.aspectRatio}
-            onChange={handleAspectRatioChange}
-            className="flex-1 text-[10px] py-1 px-1.5 border border-neutral-700 rounded bg-neutral-900/50 focus:outline-none focus:ring-1 focus:ring-neutral-600 text-neutral-300"
-          >
-            {ASPECT_RATIOS.map((ratio) => (
-              <option key={ratio} value={ratio}>
-                {ratio}
-              </option>
-            ))}
-          </select>
+          {/* Aspect ratio - only for Gemini models */}
+          {isGeminiModel && (
+            <select
+              value={nodeData.aspectRatio}
+              onChange={handleAspectRatioChange}
+              className="flex-1 text-[10px] py-1 px-1.5 border border-neutral-700 rounded bg-neutral-900/50 focus:outline-none focus:ring-1 focus:ring-neutral-600 text-neutral-300"
+            >
+              {ASPECT_RATIOS.map((ratio) => (
+                <option key={ratio} value={ratio}>
+                  {ratio}
+                </option>
+              ))}
+            </select>
+          )}
+          {/* Resolution - only for Nano Banana Pro */}
           {isNanoBananaPro && (
             <select
               value={nodeData.resolution}
@@ -224,7 +311,50 @@ export function NanoBananaNode({ id, data, selected }: NodeProps<NanoBananaNodeT
               ))}
             </select>
           )}
+          {/* Size selector - for Azure FLUX */}
+          {isAzureFlux && (
+            <select
+              value={nodeData.size || "1024x1024"}
+              onChange={handleSizeChange}
+              className="flex-1 text-[10px] py-1 px-1.5 border border-neutral-700 rounded bg-neutral-900/50 focus:outline-none focus:ring-1 focus:ring-neutral-600 text-neutral-300"
+            >
+              {AZURE_FLUX_SIZES.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          )}
+          {/* Size selector - for Azure GPT Image */}
+          {isAzureGptImage && (
+            <select
+              value={nodeData.gptImageSize || "1024x1024"}
+              onChange={handleGptImageSizeChange}
+              className="flex-1 text-[10px] py-1 px-1.5 border border-neutral-700 rounded bg-neutral-900/50 focus:outline-none focus:ring-1 focus:ring-neutral-600 text-neutral-300"
+            >
+              {AZURE_GPT_IMAGE_SIZES.map((s) => (
+                <option key={s.value} value={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
+
+        {/* Quality selector - only for Azure GPT Image */}
+        {isAzureGptImage && (
+          <select
+            value={nodeData.gptImageQuality || "medium"}
+            onChange={handleGptImageQualityChange}
+            className="w-full text-[10px] py-1 px-1.5 border border-neutral-700 rounded bg-neutral-900/50 focus:outline-none focus:ring-1 focus:ring-neutral-600 text-neutral-300 shrink-0"
+          >
+            {AZURE_GPT_IMAGE_QUALITIES.map((q) => (
+              <option key={q.value} value={q.value}>
+                Quality: {q.label}
+              </option>
+            ))}
+          </select>
+        )}
 
         {/* Google Search toggle - only for Nano Banana Pro */}
         {isNanoBananaPro && (

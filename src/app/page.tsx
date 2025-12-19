@@ -6,6 +6,7 @@ import { Header } from "@/components/Header";
 import { WorkflowCanvas } from "@/components/WorkflowCanvas";
 import { FloatingActionBar } from "@/components/FloatingActionBar";
 import { AnnotationModal } from "@/components/AnnotationModal";
+import { CropperModal } from "@/components/CropperModal";
 import { useWorkflowStore } from "@/store/workflowStore";
 
 export default function Home() {
@@ -26,6 +27,7 @@ export default function Home() {
         <WorkflowCanvas />
         <FloatingActionBar />
         <AnnotationModal />
+        <CropperModal />
       </div>
     </ReactFlowProvider>
   );

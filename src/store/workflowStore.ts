@@ -152,6 +152,9 @@ const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         resolution: "1K",
         model: "nano-banana-pro",
         useGoogleSearch: false,
+        size: "1024x1024",
+        gptImageSize: "1024x1024",
+        gptImageQuality: "medium",
         status: "idle",
         error: null,
       } as NanoBananaNodeData;
@@ -772,6 +775,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
                 resolution: nodeData.resolution,
                 model: nodeData.model,
                 useGoogleSearch: nodeData.useGoogleSearch,
+                size: nodeData.size,
+                gptImageSize: nodeData.gptImageSize,
+                gptImageQuality: nodeData.gptImageQuality,
               };
 
               const response = await fetch("/api/generate", {
@@ -1006,6 +1012,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             resolution: nodeData.resolution,
             model: nodeData.model,
             useGoogleSearch: nodeData.useGoogleSearch,
+            size: nodeData.size,
+            gptImageSize: nodeData.gptImageSize,
+            gptImageQuality: nodeData.gptImageQuality,
           }),
         });
 

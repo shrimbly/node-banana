@@ -3,6 +3,8 @@
 import { useCallback, useState } from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
+import { useCropperStore } from "@/store/cropperStore";
+import { downloadImage } from "@/utils/downloadImage";
 import { OutputNodeData } from "@/types";
 
 type OutputNodeType = Node<OutputNodeData, "output">;
@@ -10,17 +12,19 @@ type OutputNodeType = Node<OutputNodeData, "output">;
 export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
   const nodeData = data;
   const [showLightbox, setShowLightbox] = useState(false);
+  const openCropper = useCropperStore((state) => state.openModal);
 
   const handleDownload = useCallback(() => {
     if (!nodeData.image) return;
-
-    const link = document.createElement("a");
-    link.href = nodeData.image;
-    link.download = `generated-${Date.now()}.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    downloadImage(nodeData.image, {
+      filename: `generated-${Date.now()}.png`,
+    });
   }, [nodeData.image]);
+
+  const handleOpenCropper = useCallback(() => {
+    if (!nodeData.image) return;
+    openCropper(nodeData.image, id);
+  }, [nodeData.image, id, openCropper]);
 
   return (
     <>
@@ -54,6 +58,12 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
               className="w-full py-1.5 bg-white hover:bg-neutral-200 text-neutral-900 text-[10px] font-medium rounded transition-colors shrink-0"
             >
               Download
+            </button>
+            <button
+              onClick={handleOpenCropper}
+              className="w-full py-1.5 bg-neutral-700 hover:bg-neutral-600 text-white text-[10px] font-medium rounded transition-colors shrink-0"
+            >
+              Split Grid / Crop
             </button>
           </div>
         ) : (
