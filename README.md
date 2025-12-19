@@ -4,16 +4,14 @@
 
 Node Banana is a node-based workflow application for AI image generation. Build image generation pipelines by connecting nodes on a visual canvas.
 
-![Node Banana Screenshot](docs/screenshot.png)
-
 ## Features
 
 - **Visual Node Editor** - Drag-and-drop nodes onto an infinite canvas with pan and zoom
 - **Image Annotation** - Full-screen editor with drawing tools (rectangles, circles, arrows, freehand, text)
 - **Multi-Provider AI Image Generation** - Generate images using:
   - Google Gemini (Nano Banana, Nano Banana Pro)
-  - Azure AI Foundry FLUX.2 Pro (Black Forest Labs)
-  - Azure AI Foundry GPT Image
+  - Microsoft Foundry FLUX.2 Pro (Black Forest Labs)
+  - Microsoft Foundry GPT Image
 - **Text Generation** - Generate text using Google Gemini or OpenAI models
 - **Workflow Chaining** - Connect multiple nodes to create complex pipelines
 - **Save/Load Workflows** - Export and import workflows as JSON files
@@ -66,13 +64,13 @@ GEMINI_API_KEY=your_gemini_api_key
 # Get your key from: https://platform.openai.com/api-keys
 OPENAI_API_KEY=your_openai_api_key
 
-# Azure AI Foundry - FLUX.2 Pro
-# Get from Azure AI Foundry portal > Keys and Endpoint
+# Microsoft Foundry - FLUX.2 Pro
+# Get from Microsoft Foundry portal > Keys and Endpoint
 AZURE_API_KEY=your_azure_flux_api_key
 AZURE_FLUX_ENDPOINT=https://your-resource.openai.azure.com/providers/blackforestlabs/v1/flux-2-pro?api-version=preview
 
-# Azure AI Foundry - GPT Image
-# Get from Azure AI Foundry portal > Keys and Endpoint
+# Microsoft Foundry - GPT Image
+# Get from Microsoft Foundry portal > Keys and Endpoint
 AZURE_GPT_IMAGE_API_KEY=your_azure_gpt_image_api_key
 AZURE_GPT_IMAGE_ENDPOINT=https://your-resource.openai.azure.com/openai/v1/images/generations
 ```
@@ -102,8 +100,8 @@ pnpm start
 |-------|----------|-------------|
 | Nano Banana | Google Gemini | gemini-2.5-flash-image - Fast image generation |
 | Nano Banana Pro | Google Gemini | gemini-3-pro-image-preview - Higher quality, more options |
-| Azure FLUX.2 Pro | Azure AI Foundry | Black Forest Labs FLUX.2 Pro model |
-| Azure GPT Image | Azure AI Foundry | GPT-based image generation with quality controls |
+| Azure FLUX.2 Pro | Microsoft Foundry | Black Forest Labs FLUX.2 Pro model |
+| Azure GPT Image | Microsoft Foundry | GPT-based image generation with quality controls |
 
 ### Text Generation (LLM Node)
 
@@ -149,11 +147,11 @@ The `/examples` directory contains example workflow files. To try them:
 3. Review the prompts and adjust as needed
 4. Click Run to execute
 
-## Azure AI Foundry Setup
+## Microsoft Foundry Setup
 
-To use Azure models, you need to deploy them in Azure AI Foundry:
+To use Azure models, you need to deploy them in Microsoft Foundry:
 
-1. Go to [Azure AI Foundry](https://ai.azure.com)
+1. Go to [Microsoft Foundry](https://ai.azure.com)
 2. Create or select a project
 3. Navigate to **Model catalog**
 4. Deploy **FLUX.2-pro** (Black Forest Labs) and/or **gpt-image-1** (Azure OpenAI)

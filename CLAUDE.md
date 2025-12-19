@@ -10,8 +10,8 @@ The application supports multiple AI image generation providers:
 |----------|--------------|----------|----------------|
 | `nano-banana` | Nano Banana | Google Gemini | gemini-2.5-flash-preview-image-generation |
 | `nano-banana-pro` | Nano Banana Pro | Google Gemini | gemini-3-pro-image-preview |
-| `azure-flux-pro` | Azure FLUX.2 Pro | Azure AI Foundry | FLUX.2-pro (Black Forest Labs) |
-| `azure-gpt-image` | Azure GPT Image | Azure AI Foundry | gpt-image-1.5 |
+| `azure-flux-pro` | Azure FLUX.2 Pro | Microsoft Foundry | FLUX.2-pro (Black Forest Labs) |
+| `azure-gpt-image` | Azure GPT Image | Microsoft Foundry | gpt-image-1.5 |
 
 ### Environment Variables
 
