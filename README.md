@@ -76,6 +76,29 @@ The `/examples` directory contains some example workflow files from my personal 
 4. **Run workflow** - Click the Run button to execute the pipeline
 5. **Save/Load** - Use the header menu to save or load workflows
 
+### Keyboard Shortcuts
+
+- **Shift + P** - Add Prompt node
+- **Shift + I** - Add Image Input node
+- **Shift + G** - Add Generation node
+- **Shift + L** - Add LLM Generate node
+- **Shift + A** - Add Annotation node
+- **Cmd/Ctrl + C** - Copy selected nodes
+- **Cmd/Ctrl + V** - Paste nodes or clipboard content (images/text)
+- **V** - Stack selected nodes vertically
+- **H** - Stack selected nodes horizontally
+- **G** - Arrange selected nodes in a grid
+
+### macOS Trackpad Controls
+
+When using a trackpad on macOS, enhanced gesture controls are automatically enabled:
+
+- **Pinch to Zoom** - Use two-finger pinch gesture to zoom in/out on the canvas
+- **Two-Finger Pan** - Smoothly pan around the canvas with two-finger scroll
+- **Precise Navigation** - High-precision scrolling for fine control
+
+The app automatically detects macOS trackpads and enables these features.
+
 ## Connection Rules
 
 - **Image** handles connect to **Image** handles only

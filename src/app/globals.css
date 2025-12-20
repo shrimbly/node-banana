@@ -199,3 +199,19 @@ body {
 .animate-fan-exit {
   animation: fanExit 0.15s ease-in forwards;
 }
+
+/* Fade in animation for notifications */
+@keyframes fadeIn {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}

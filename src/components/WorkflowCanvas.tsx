@@ -33,6 +33,7 @@ import { GlobalImageHistory } from "./GlobalImageHistory";
 import { GroupBackgroundsPortal, GroupControlsOverlay } from "./GroupsOverlay";
 import { NodeType, NanoBananaNodeData } from "@/types";
 import { detectAndSplitGrid } from "@/utils/gridSplitter";
+import { useTrackpadGestures } from "@/utils/useTrackpadGestures";
 
 const nodeTypes: NodeTypes = {
   imageInput: ImageInputNode,
@@ -105,6 +106,24 @@ export function WorkflowCanvas() {
   const [connectionDrop, setConnectionDrop] = useState<ConnectionDropState | null>(null);
   const [isSplitting, setIsSplitting] = useState(false);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+
+  // Enable macOS trackpad gestures (pinch-to-zoom, smooth panning)
+  const { isTrackpadDetected } = useTrackpadGestures({
+    enabled: true,
+    minZoom: 0.1,
+    maxZoom: 4,
+    zoomSpeed: 0.01,
+  });
+
+  // Show trackpad controls notification briefly on mount
+  const [showTrackpadNotice, setShowTrackpadNotice] = useState(false);
+  useEffect(() => {
+    if (isTrackpadDetected) {
+      setShowTrackpadNotice(true);
+      const timer = setTimeout(() => setShowTrackpadNotice(false), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [isTrackpadDetected]);
 
   // Just pass regular nodes to React Flow - groups are rendered separately
   const allNodes = useMemo(() => {
@@ -909,6 +928,18 @@ export function WorkflowCanvas() {
           <div className="bg-neutral-800 border border-neutral-600 rounded-lg px-6 py-4 shadow-xl flex items-center gap-3">
             <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
             <p className="text-neutral-200 text-sm font-medium">Splitting image grid...</p>
+          </div>
+        </div>
+      )}
+
+      {/* Trackpad controls notification */}
+      {showTrackpadNotice && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-40 animate-fade-in">
+          <div className="bg-neutral-800/90 backdrop-blur border border-green-500/50 rounded-lg px-4 py-2 shadow-xl">
+            <p className="text-green-400 text-xs font-medium flex items-center gap-2">
+              <span className="text-lg">🖐️</span>
+              macOS Trackpad Controls Active: Pinch to zoom, Two fingers to pan
+            </p>
           </div>
         </div>
       )}
