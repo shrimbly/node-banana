@@ -956,6 +956,8 @@ export function WorkflowCanvas() {
         edgeTypes={edgeTypes}
         isValidConnection={isValidConnection}
         fitView
+        minZoom={0.1}
+        maxZoom={4}
         deleteKeyCode={["Backspace", "Delete"]}
         multiSelectionKeyCode="Shift"
         selectionOnDrag={false}
