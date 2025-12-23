@@ -4,6 +4,8 @@ import { useCallback, useRef } from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { useWorkflowStore } from "@/store/workflowStore";
+import { useCropperStore } from "@/store/cropperStore";
+import { downloadImage } from "@/utils/downloadImage";
 import { ImageInputNodeData } from "@/types";
 
 type ImageInputNodeType = Node<ImageInputNodeData, "imageInput">;
@@ -11,6 +13,7 @@ type ImageInputNodeType = Node<ImageInputNodeData, "imageInput">;
 export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeType>) {
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
+  const openCropper = useCropperStore((state) => state.openModal);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = useCallback(
@@ -77,6 +80,18 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
     });
   }, [id, updateNodeData]);
 
+  const handleDownload = useCallback(() => {
+    if (!nodeData.image) return;
+    downloadImage(nodeData.image, {
+      filename: nodeData.filename || `image-${Date.now()}.png`,
+    });
+  }, [nodeData.image, nodeData.filename]);
+
+  const handleOpenCropper = useCallback(() => {
+    if (!nodeData.image) return;
+    openCropper(nodeData.image, id);
+  }, [nodeData.image, id, openCropper]);
+
   return (
     <BaseNode id={id} title="Image" selected={selected}>
       {/* Reference input handle for visual links from Split Grid node */}
@@ -103,14 +118,36 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
             alt={nodeData.filename || "Uploaded image"}
             className="w-full flex-1 min-h-0 object-contain rounded"
           />
-          <button
-            onClick={handleRemove}
-            className="absolute top-1 right-1 w-5 h-5 bg-black/60 text-white rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-          >
-            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          {/* Action buttons overlay */}
+          <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={handleOpenCropper}
+              className="w-5 h-5 bg-black/60 hover:bg-blue-600/80 text-white rounded text-xs flex items-center justify-center"
+              title="Split grid / Crop"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+              </svg>
+            </button>
+            <button
+              onClick={handleDownload}
+              className="w-5 h-5 bg-black/60 hover:bg-green-600/80 text-white rounded text-xs flex items-center justify-center"
+              title="Download"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+            </button>
+            <button
+              onClick={handleRemove}
+              className="w-5 h-5 bg-black/60 hover:bg-red-600/80 text-white rounded text-xs flex items-center justify-center"
+              title="Remove"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
           <div className="mt-1.5 flex items-center justify-between shrink-0">
             <span className="text-[10px] text-neutral-400 truncate max-w-[120px]">
               {nodeData.filename}

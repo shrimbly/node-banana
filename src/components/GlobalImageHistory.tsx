@@ -3,6 +3,8 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useWorkflowStore } from "@/store/workflowStore";
+import { useCropperStore } from "@/store/cropperStore";
+import { downloadImage } from "@/utils/downloadImage";
 import { ImageHistoryItem } from "@/types";
 
 // Helper function for relative time display
@@ -78,15 +80,20 @@ function HistorySidebar({
   onClear,
   onClose,
   onDragStart,
+  onDownload,
+  onOpenCropper,
   triggerRect,
 }: {
   history: ImageHistoryItem[];
   onClear: () => void;
   onClose: () => void;
   onDragStart: (e: React.DragEvent, item: ImageHistoryItem) => void;
+  onDownload: (item: ImageHistoryItem) => void;
+  onOpenCropper: (item: ImageHistoryItem) => void;
   triggerRect: DOMRect | null;
 }) {
   const sidebarRef = useRef<HTMLDivElement>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; item: ImageHistoryItem } | null>(null);
 
   // Close on click outside
   useEffect(() => {
@@ -105,11 +112,22 @@ function HistorySidebar({
   // Close on Escape
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        if (contextMenu) {
+          setContextMenu(null);
+        } else {
+          onClose();
+        }
+      }
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  }, [onClose, contextMenu]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, item: ImageHistoryItem) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, item });
+  }, []);
 
   // Position the sidebar near the trigger, but ensure it stays on screen
   const sidebarStyle: React.CSSProperties = {
@@ -167,16 +185,38 @@ function HistorySidebar({
             key={item.id}
             draggable
             onDragStart={(e) => onDragStart(e, item)}
+            onContextMenu={(e) => handleContextMenu(e, item)}
             className="flex gap-3 p-2 rounded-lg hover:bg-neutral-700/50 cursor-grab active:cursor-grabbing group transition-colors"
           >
             {/* Thumbnail */}
-            <div className="w-14 h-14 rounded overflow-hidden shrink-0 border border-neutral-600 group-hover:border-blue-500 transition-colors">
+            <div className="w-14 h-14 rounded overflow-hidden shrink-0 border border-neutral-600 group-hover:border-blue-500 transition-colors relative">
               <img
                 src={item.image}
                 alt={`History ${index + 1}`}
                 className="w-full h-full object-cover pointer-events-none"
                 draggable={false}
               />
+              {/* Quick action buttons on hover */}
+              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDownload(item); }}
+                  className="w-6 h-6 bg-neutral-700 hover:bg-green-600 rounded flex items-center justify-center text-white"
+                  title="Download"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onOpenCropper(item); }}
+                  className="w-6 h-6 bg-neutral-700 hover:bg-blue-600 rounded flex items-center justify-center text-white"
+                  title="Split Grid / Crop"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
             {/* Info */}
@@ -191,6 +231,39 @@ function HistorySidebar({
           </div>
         ))}
       </div>
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-[300]"
+            onClick={() => setContextMenu(null)}
+          />
+          <div
+            className="fixed z-[301] bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl py-1 min-w-[160px]"
+            style={{ left: contextMenu.x, top: contextMenu.y }}
+          >
+            <button
+              onClick={() => { onDownload(contextMenu.item); setContextMenu(null); }}
+              className="w-full px-3 py-2 text-xs text-left text-neutral-300 hover:bg-neutral-700 hover:text-white flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Download
+            </button>
+            <button
+              onClick={() => { onOpenCropper(contextMenu.item); setContextMenu(null); }}
+              className="w-full px-3 py-2 text-xs text-left text-neutral-300 hover:bg-neutral-700 hover:text-white flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+              </svg>
+              Split Grid / Crop
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Footer */}
       <div className="px-4 py-2 border-t border-neutral-700 bg-neutral-900/50 shrink-0">
@@ -209,6 +282,7 @@ export function GlobalImageHistory() {
 
   const history = useWorkflowStore((state) => state.globalImageHistory);
   const clearGlobalHistory = useWorkflowStore((state) => state.clearGlobalHistory);
+  const openCropper = useCropperStore((state) => state.openModal);
 
   // Show max 10 items in fan
   const fanItems = history.slice(0, 10);
@@ -285,6 +359,18 @@ export function GlobalImageHistory() {
     setIsOpen(false);
     setShowSidebar(false);
   }, [clearGlobalHistory]);
+
+  const handleDownload = useCallback((item: ImageHistoryItem) => {
+    downloadImage(item.image, {
+      filename: `generated-${Date.now()}.png`,
+    });
+  }, []);
+
+  const handleOpenCropper = useCallback((item: ImageHistoryItem) => {
+    openCropper(item.image);
+    setShowSidebar(false);
+    setIsOpen(false);
+  }, [openCropper]);
 
   if (history.length === 0) return null;
 
@@ -368,6 +454,8 @@ export function GlobalImageHistory() {
           onClear={handleClear}
           onClose={handleCloseSidebar}
           onDragStart={handleDragStart}
+          onDownload={handleDownload}
+          onOpenCropper={handleOpenCropper}
           triggerRect={triggerRef.current?.getBoundingClientRect() || null}
         />
       )}

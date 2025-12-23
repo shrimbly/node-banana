@@ -1,9 +1,32 @@
 # Node Banana - Development Guide
 
-## Model
-The application uses these models for image generation. These models are very recently released and do exist. 
-gemini-3-pro-image-preview
-gemini-2.5-flash-preview-image-generation
+## Supported Models
+
+### Image Generation Models
+
+The application supports multiple AI image generation providers:
+
+| Model ID | Display Name | Provider | API Model Name |
+|----------|--------------|----------|----------------|
+| `nano-banana` | Nano Banana | Google Gemini | gemini-2.5-flash-preview-image-generation |
+| `nano-banana-pro` | Nano Banana Pro | Google Gemini | gemini-3-pro-image-preview |
+| `azure-flux-pro` | Azure FLUX.2 Pro | Microsoft Foundry | FLUX.2-pro (Black Forest Labs) |
+| `azure-gpt-image` | Azure GPT Image | Microsoft Foundry | gpt-image-1.5 |
+
+### Environment Variables
+
+- `GEMINI_API_KEY` - Required for Nano Banana models
+- `OPENAI_API_KEY` - Optional, for OpenAI LLM provider
+- `AZURE_API_KEY` - Required for Azure FLUX.2 Pro
+- `AZURE_GPT_IMAGE_API_KEY` - Required for Azure GPT Image
+
+### API Endpoints (in `src/app/api/generate/route.ts`)
+
+- **Gemini**: Uses `@google/genai` SDK
+- **Azure FLUX**: `https://<resource>.openai.azure.com/providers/blackforestlabs/v1/flux-2-pro?api-version=preview`
+  - Auth: `api-key` header
+- **Azure GPT Image**: `https://<resource>.openai.azure.com/openai/v1/images/generations`
+  - Auth: `Authorization: Bearer` header
 
 
 

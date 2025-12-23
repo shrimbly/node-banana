@@ -17,7 +17,16 @@ export type AspectRatio = "1:1" | "2:3" | "3:2" | "3:4" | "4:3" | "4:5" | "5:4" 
 export type Resolution = "1K" | "2K" | "4K";
 
 // Image Generation Model Options
-export type ModelType = "nano-banana" | "nano-banana-pro";
+export type ModelType = "nano-banana" | "nano-banana-pro" | "azure-flux-pro" | "azure-gpt-image";
+
+// Size options for Azure FLUX model
+export type AzureFluxSize = "1024x1024" | "1024x768" | "768x1024" | "1536x1024" | "1024x1536";
+
+// Size options for Azure GPT Image model
+export type AzureGptImageSize = "1024x1024" | "1536x1024" | "1024x1536" | "auto";
+
+// Quality options for Azure GPT Image model
+export type AzureGptImageQuality = "low" | "medium" | "high";
 
 // LLM Provider Options
 export type LLMProvider = "google" | "openai";
@@ -127,6 +136,9 @@ export interface NanoBananaNodeData extends BaseNodeData {
   resolution: Resolution; // Only used by Nano Banana Pro
   model: ModelType;
   useGoogleSearch: boolean; // Only available for Nano Banana Pro
+  size: AzureFluxSize; // Only used by Azure FLUX
+  gptImageSize: AzureGptImageSize; // Only used by Azure GPT Image
+  gptImageQuality: AzureGptImageQuality; // Only used by Azure GPT Image
   status: NodeStatus;
   error: string | null;
 }
@@ -205,6 +217,9 @@ export interface GenerateRequest {
   resolution?: Resolution; // Only for Nano Banana Pro
   model?: ModelType;
   useGoogleSearch?: boolean; // Only for Nano Banana Pro
+  size?: AzureFluxSize; // Only for Azure FLUX model
+  gptImageSize?: AzureGptImageSize; // Only for Azure GPT Image model
+  gptImageQuality?: AzureGptImageQuality; // Only for Azure GPT Image model
 }
 
 export interface GenerateResponse {
