@@ -1,6 +1,7 @@
 "use client";
 
 import { ReactNode, useCallback, useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { NodeResizer, OnResize, useReactFlow } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 
@@ -45,8 +46,10 @@ export function BaseNode({
   const [isEditingComment, setIsEditingComment] = useState(false);
   const [editCommentValue, setEditCommentValue] = useState(comment || "");
   const [showCommentTooltip, setShowCommentTooltip] = useState(false);
+  const [tooltipPosition, setTooltipPosition] = useState<{ top: number; left: number } | null>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const commentPopoverRef = useRef<HTMLDivElement>(null);
+  const commentButtonRef = useRef<HTMLButtonElement>(null);
 
   // Sync state with props
   useEffect(() => {
@@ -68,6 +71,19 @@ export function BaseNode({
       titleInputRef.current.select();
     }
   }, [isEditingTitle]);
+
+  // Calculate tooltip position when showing
+  useEffect(() => {
+    if (showCommentTooltip && commentButtonRef.current) {
+      const rect = commentButtonRef.current.getBoundingClientRect();
+      setTooltipPosition({
+        top: rect.top - 8,
+        left: rect.right,
+      });
+    } else {
+      setTooltipPosition(null);
+    }
+  }, [showCommentTooltip]);
 
   // Title handlers
   const handleTitleSubmit = useCallback(() => {
@@ -198,6 +214,7 @@ export function BaseNode({
           {/* Comment Icon */}
           <div className="relative ml-2 shrink-0" ref={commentPopoverRef}>
             <button
+              ref={commentButtonRef}
               onClick={() => setIsEditingComment(!isEditingComment)}
               onMouseEnter={() => comment && setShowCommentTooltip(true)}
               onMouseLeave={() => setShowCommentTooltip(false)}
@@ -219,16 +236,24 @@ export function BaseNode({
               )}
             </button>
 
-            {/* Comment Tooltip on Hover */}
-            {showCommentTooltip && comment && !isEditingComment && (
-              <div className="absolute z-50 right-0 bottom-full mb-1 w-48 p-2 text-xs text-neutral-200 bg-neutral-900 border border-neutral-700 rounded shadow-lg whitespace-pre-wrap break-words">
+            {/* Comment Tooltip on Hover - rendered via portal to escape stacking context */}
+            {showCommentTooltip && comment && !isEditingComment && tooltipPosition && createPortal(
+              <div
+                className="fixed z-[9999] w-48 p-2 text-xs text-neutral-200 bg-neutral-900 border border-neutral-700 rounded shadow-lg whitespace-pre-wrap break-words pointer-events-none"
+                style={{
+                  top: tooltipPosition.top,
+                  left: tooltipPosition.left,
+                  transform: "translateY(-100%) translateX(-100%)",
+                }}
+              >
                 {comment}
-              </div>
+              </div>,
+              document.body
             )}
 
             {/* Comment Edit Popover */}
             {isEditingComment && (
-              <div className="absolute z-50 right-0 top-full mt-1 w-64 p-2 bg-neutral-800 border border-neutral-600 rounded shadow-lg">
+              <div className="absolute z-[60] right-0 top-full mt-1 w-64 p-2 bg-neutral-800 border border-neutral-600 rounded shadow-lg">
                 <textarea
                   value={editCommentValue}
                   onChange={(e) => setEditCommentValue(e.target.value)}

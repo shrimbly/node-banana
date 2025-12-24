@@ -14,7 +14,8 @@
       "WebSearch",
       "WebFetch(domain:ai.google.dev)",
       "Bash(grep:*)",
-      "WebFetch(domain:www.cursor-ide.com)"
+      "WebFetch(domain:www.cursor-ide.com)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []
