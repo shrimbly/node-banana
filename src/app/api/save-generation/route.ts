@@ -1,13 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { logger } from "@/utils/logger";
 
 // POST: Save a generated image to the generations folder
 export async function POST(request: NextRequest) {
+  let directoryPath: string | undefined;
   try {
-    const { directoryPath, image, prompt } = await request.json();
+    const body = await request.json();
+    directoryPath = body.directoryPath;
+    const image = body.image;
+    const prompt = body.prompt;
+
+    logger.info('file.save', 'Generation auto-save request received', {
+      directoryPath,
+      hasImage: !!image,
+      prompt,
+    });
 
     if (!directoryPath || !image) {
+      logger.warn('file.save', 'Generation save validation failed: missing fields', {
+        hasDirectoryPath: !!directoryPath,
+        hasImage: !!image,
+      });
       return NextResponse.json(
         { success: false, error: "Missing required fields" },
         { status: 400 }
@@ -18,12 +33,18 @@ export async function POST(request: NextRequest) {
     try {
       const stats = await fs.stat(directoryPath);
       if (!stats.isDirectory()) {
+        logger.warn('file.error', 'Generation save failed: path is not a directory', {
+          directoryPath,
+        });
         return NextResponse.json(
           { success: false, error: "Path is not a directory" },
           { status: 400 }
         );
       }
-    } catch {
+    } catch (dirError) {
+      logger.warn('file.error', 'Generation save failed: directory does not exist', {
+        directoryPath,
+      });
       return NextResponse.json(
         { success: false, error: "Directory does not exist" },
         { status: 400 }
@@ -50,13 +71,21 @@ export async function POST(request: NextRequest) {
     // Write the image file
     await fs.writeFile(filePath, buffer);
 
+    logger.info('file.save', 'Generation auto-saved successfully', {
+      filePath,
+      filename,
+      fileSize: buffer.length,
+    });
+
     return NextResponse.json({
       success: true,
       filePath,
       filename,
     });
   } catch (error) {
-    console.error("Failed to save generation:", error);
+    logger.error('file.error', 'Failed to save generation', {
+      directoryPath,
+    }, error instanceof Error ? error : undefined);
     return NextResponse.json(
       {
         success: false,

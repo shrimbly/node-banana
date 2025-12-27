@@ -37,5 +37,8 @@ next-env.d.ts
 # renders
 renders/
 
+# logs
+logs/*.json
+
 # .claude
 .claude/settings.local.json

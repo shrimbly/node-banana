@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { LLMGenerateRequest, LLMGenerateResponse, LLMModelType } from "@/types";
+import { logger } from "@/utils/logger";
 
 export const maxDuration = 60; // 1 minute timeout
+
+// Generate a unique request ID for tracking
+function generateRequestId(): string {
+  return `llm-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+}
 
 // Map model types to actual API model IDs
 const GOOGLE_MODEL_MAP: Record<string, string> = {
@@ -21,15 +27,26 @@ async function generateWithGoogle(
   model: LLMModelType,
   temperature: number,
   maxTokens: number,
-  images?: string[]
+  images?: string[],
+  requestId?: string
 ): Promise<string> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
+    logger.error('api.error', 'GEMINI_API_KEY not configured', { requestId });
     throw new Error("GEMINI_API_KEY not configured");
   }
 
   const ai = new GoogleGenAI({ apiKey });
   const modelId = GOOGLE_MODEL_MAP[model];
+
+  logger.info('api.llm', 'Calling Google AI API', {
+    requestId,
+    model: modelId,
+    temperature,
+    maxTokens,
+    imageCount: images?.length || 0,
+    promptLength: prompt.length,
+  });
 
   // Build multimodal content if images are provided
   let contents: string | Array<{ inlineData: { mimeType: string; data: string } } | { text: string }>;
@@ -60,6 +77,7 @@ async function generateWithGoogle(
     contents = prompt;
   }
 
+  const startTime = Date.now();
   const response = await ai.models.generateContent({
     model: modelId,
     contents,
@@ -68,12 +86,20 @@ async function generateWithGoogle(
       maxOutputTokens: maxTokens,
     },
   });
+  const duration = Date.now() - startTime;
 
   // Use the convenient .text property that concatenates all text parts
   const text = response.text;
   if (!text) {
+    logger.error('api.error', 'No text in Google AI response', { requestId });
     throw new Error("No text in Google AI response");
   }
+
+  logger.info('api.llm', 'Google AI API response received', {
+    requestId,
+    duration,
+    responseLength: text.length,
+  });
 
   return text;
 }
@@ -83,14 +109,25 @@ async function generateWithOpenAI(
   model: LLMModelType,
   temperature: number,
   maxTokens: number,
-  images?: string[]
+  images?: string[],
+  requestId?: string
 ): Promise<string> {
   const apiKey = process.env.OPENAI_API_KEY;
   if (!apiKey) {
+    logger.error('api.error', 'OPENAI_API_KEY not configured', { requestId });
     throw new Error("OPENAI_API_KEY not configured");
   }
 
   const modelId = OPENAI_MODEL_MAP[model];
+
+  logger.info('api.llm', 'Calling OpenAI API', {
+    requestId,
+    model: modelId,
+    temperature,
+    maxTokens,
+    imageCount: images?.length || 0,
+    promptLength: prompt.length,
+  });
 
   // Build content array for vision if images are provided
   let content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
@@ -106,6 +143,7 @@ async function generateWithOpenAI(
     content = prompt;
   }
 
+  const startTime = Date.now();
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -119,9 +157,15 @@ async function generateWithOpenAI(
       max_tokens: maxTokens,
     }),
   });
+  const duration = Date.now() - startTime;
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
+    logger.error('api.error', 'OpenAI API request failed', {
+      requestId,
+      status: response.status,
+      error: error.error?.message,
+    });
     throw new Error(error.error?.message || `OpenAI API error: ${response.status}`);
   }
 
@@ -129,13 +173,22 @@ async function generateWithOpenAI(
   const text = data.choices?.[0]?.message?.content;
 
   if (!text) {
+    logger.error('api.error', 'No text in OpenAI response', { requestId });
     throw new Error("No text in OpenAI response");
   }
+
+  logger.info('api.llm', 'OpenAI API response received', {
+    requestId,
+    duration,
+    responseLength: text.length,
+  });
 
   return text;
 }
 
 export async function POST(request: NextRequest) {
+  const requestId = generateRequestId();
+
   try {
     const body: LLMGenerateRequest = await request.json();
     const {
@@ -147,7 +200,19 @@ export async function POST(request: NextRequest) {
       maxTokens = 1024
     } = body;
 
+    logger.info('api.llm', 'LLM generation request received', {
+      requestId,
+      provider,
+      model,
+      temperature,
+      maxTokens,
+      hasImages: !!(images && images.length > 0),
+      imageCount: images?.length || 0,
+      prompt,
+    });
+
     if (!prompt) {
+      logger.warn('api.llm', 'LLM request validation failed: missing prompt', { requestId });
       return NextResponse.json<LLMGenerateResponse>(
         { success: false, error: "Prompt is required" },
         { status: 400 }
@@ -157,22 +222,28 @@ export async function POST(request: NextRequest) {
     let text: string;
 
     if (provider === "google") {
-      text = await generateWithGoogle(prompt, model, temperature, maxTokens, images);
+      text = await generateWithGoogle(prompt, model, temperature, maxTokens, images, requestId);
     } else if (provider === "openai") {
-      text = await generateWithOpenAI(prompt, model, temperature, maxTokens, images);
+      text = await generateWithOpenAI(prompt, model, temperature, maxTokens, images, requestId);
     } else {
+      logger.warn('api.llm', 'Unknown provider requested', { requestId, provider });
       return NextResponse.json<LLMGenerateResponse>(
         { success: false, error: `Unknown provider: ${provider}` },
         { status: 400 }
       );
     }
 
+    logger.info('api.llm', 'LLM generation successful', {
+      requestId,
+      responseLength: text.length,
+    });
+
     return NextResponse.json<LLMGenerateResponse>({
       success: true,
       text,
     });
   } catch (error) {
-    console.error("LLM generation error:", error);
+    logger.error('api.error', 'LLM generation error', { requestId }, error instanceof Error ? error : undefined);
 
     // Handle rate limiting
     if (error instanceof Error && error.message.includes("429")) {

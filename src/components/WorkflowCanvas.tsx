@@ -34,6 +34,7 @@ import { GlobalImageHistory } from "./GlobalImageHistory";
 import { GroupBackgroundsPortal, GroupControlsOverlay } from "./GroupsOverlay";
 import { NodeType, NanoBananaNodeData } from "@/types";
 import { detectAndSplitGrid } from "@/utils/gridSplitter";
+import { logger } from "@/utils/logger";
 
 const nodeTypes: NodeTypes = {
   imageInput: ImageInputNode,
@@ -61,9 +62,23 @@ const isValidConnection = (connection: Edge | Connection): boolean => {
 
   // Strict type matching: image <-> image, text <-> text
   if (sourceHandle === "image" && targetHandle !== "image") {
+    logger.warn('connection.validation', 'Connection validation failed: type mismatch', {
+      source: connection.source,
+      target: connection.target,
+      sourceHandle,
+      targetHandle,
+      reason: 'Cannot connect image handle to non-image handle',
+    });
     return false;
   }
   if (sourceHandle === "text" && targetHandle !== "text") {
+    logger.warn('connection.validation', 'Connection validation failed: type mismatch', {
+      source: connection.source,
+      target: connection.target,
+      sourceHandle,
+      targetHandle,
+      reason: 'Cannot connect text handle to non-text handle',
+    });
     return false;
   }
 
@@ -172,7 +187,7 @@ const findScrollableAncestor = (target: HTMLElement, deltaX: number, deltaY: num
 };
 
 export function WorkflowCanvas() {
-  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId } =
+  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId, executeWorkflow } =
     useWorkflowStore();
   const { screenToFlowPosition, getViewport, zoomIn, zoomOut, setViewport } = useReactFlow();
   const [isDragOver, setIsDragOver] = useState(false);
@@ -643,22 +658,28 @@ export function WorkflowCanvas() {
   }, []);
 
   // Keyboard shortcuts for copy/paste and stacking selected nodes
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Ignore if user is typing in an input field
-      if (
-        event.target instanceof HTMLInputElement ||
-        event.target instanceof HTMLTextAreaElement
-      ) {
-        return;
-      }
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    // Ignore if user is typing in an input field
+    if (
+      event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLTextAreaElement
+    ) {
+      return;
+    }
 
-      // Handle copy (Ctrl/Cmd + C)
-      if ((event.ctrlKey || event.metaKey) && event.key === "c") {
-        event.preventDefault();
-        copySelectedNodes();
-        return;
-      }
+    // Handle workflow execution (Ctrl/Cmd + Enter)
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      executeWorkflow();
+      return;
+    }
+
+    // Handle copy (Ctrl/Cmd + C)
+    if ((event.ctrlKey || event.metaKey) && event.key === "c") {
+      event.preventDefault();
+      copySelectedNodes();
+      return;
+    }
 
       // Helper to get viewport center position in flow coordinates
       const getViewportCenter = () => {
@@ -863,11 +884,12 @@ export function WorkflowCanvas() {
           ]);
         });
       }
-    };
+  }, [nodes, onNodesChange, copySelectedNodes, pasteNodes, clearClipboard, clipboard, getViewport, addNode, updateNodeData, executeWorkflow]);
 
+  useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [nodes, onNodesChange, copySelectedNodes, pasteNodes, clearClipboard, clipboard, getViewport, addNode, updateNodeData]);
+  }, [handleKeyDown]);
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();

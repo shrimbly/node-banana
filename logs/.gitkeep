@@ -1,0 +1,2 @@
+# This file ensures the logs directory is tracked by git
+# Actual log files (*.json) are ignored via .gitignore
