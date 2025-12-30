@@ -79,7 +79,9 @@ The `/examples` directory contains some example workflow files from my personal 
    - **Hotkeys**:
      - `H`: Switch to **Pan Mode** (Hand tool)
      - `V`: Switch to **Selection Mode** (Pointer tool)
+     - `Shift + V`: Force return to Selection Mode (regardless of selection)
      - `Space`: Hold to pan temporarily while in any mode
+     - *Note: `H` and `V` perform node stacking when 2+ nodes are selected (see below)*
 3. **Connect nodes** - Drag from output handles to input handles (matching types only)
 4. **Configure nodes** - Adjust settings like model, aspect ratio, or drawing tools
 5. **Run workflow** - Click the Run button to execute the pipeline

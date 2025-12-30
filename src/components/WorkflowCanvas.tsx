@@ -666,6 +666,13 @@ export function WorkflowCanvas() {
     // Handle tool switching (H for Hand/Pan, V for Selection/Pointer)
     // Only if not using modifiers and not stacking nodes
     const selectedNodes = nodes.filter((node) => node.selected);
+
+    // Force return to Selection Mode with Shift + V (escape hatch if many nodes are selected)
+    if (event.shiftKey && event.key.toLowerCase() === "v" && !event.ctrlKey && !event.metaKey) {
+      setIsPanMode(false);
+      return;
+    }
+
     if (!event.ctrlKey && !event.metaKey && !event.shiftKey && selectedNodes.length < 2) {
       if (event.key.toLowerCase() === "h") {
         setIsPanMode(true);
@@ -1099,7 +1106,7 @@ export function WorkflowCanvas() {
         onWheel={isModalOpen ? undefined : handleWheel}
         nodesDraggable={!isModalOpen && !isPanMode}
         nodesConnectable={!isModalOpen && !isPanMode}
-        elementsSelectable={!isModalOpen && !isPanMode}
+        elementsSelectable={!isModalOpen}
         className="bg-neutral-900"
         defaultEdgeOptions={{
           type: "editable",
