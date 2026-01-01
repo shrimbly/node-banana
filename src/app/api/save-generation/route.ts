@@ -1,13 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { logger } from "@/utils/logger";
 
 // POST: Save a generated image to the generations folder
 export async function POST(request: NextRequest) {
+  let directoryPath: string | undefined;
   try {
-    const { directoryPath, image, prompt } = await request.json();
+    const body = await request.json();
+    directoryPath = body.directoryPath;
+    const image = body.image;
+    const prompt = body.prompt;
+    const imageId = body.imageId; // Optional ID for carousel support
+
+    logger.info('file.save', 'Generation auto-save request received', {
+      directoryPath,
+      hasImage: !!image,
+      prompt,
+    });
 
     if (!directoryPath || !image) {
+      logger.warn('file.save', 'Generation save validation failed: missing fields', {
+        hasDirectoryPath: !!directoryPath,
+        hasImage: !!image,
+      });
       return NextResponse.json(
         { success: false, error: "Missing required fields" },
         { status: 400 }
@@ -18,29 +34,40 @@ export async function POST(request: NextRequest) {
     try {
       const stats = await fs.stat(directoryPath);
       if (!stats.isDirectory()) {
+        logger.warn('file.error', 'Generation save failed: path is not a directory', {
+          directoryPath,
+        });
         return NextResponse.json(
           { success: false, error: "Path is not a directory" },
           { status: 400 }
         );
       }
-    } catch {
+    } catch (dirError) {
+      logger.warn('file.error', 'Generation save failed: directory does not exist', {
+        directoryPath,
+      });
       return NextResponse.json(
         { success: false, error: "Directory does not exist" },
         { status: 400 }
       );
     }
 
-    // Generate filename: timestamp + sanitized prompt snippet
-    const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
-    const promptSnippet = prompt
-      ? prompt
-          .slice(0, 30)
-          .replace(/[^a-zA-Z0-9]/g, "_")
-          .replace(/_+/g, "_")
-          .replace(/^_|_$/g, "")
-          .toLowerCase()
-      : "generation";
-    const filename = `${timestamp}_${promptSnippet}.png`;
+    // Generate filename: use imageId if provided, otherwise timestamp + sanitized prompt snippet
+    let filename: string;
+    if (imageId) {
+      filename = `${imageId}.png`;
+    } else {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const promptSnippet = prompt
+        ? prompt
+            .slice(0, 30)
+            .replace(/[^a-zA-Z0-9]/g, "_")
+            .replace(/_+/g, "_")
+            .replace(/^_|_$/g, "")
+            .toLowerCase()
+        : "generation";
+      filename = `${timestamp}_${promptSnippet}.png`;
+    }
     const filePath = path.join(directoryPath, filename);
 
     // Extract base64 data and convert to buffer
@@ -50,13 +77,22 @@ export async function POST(request: NextRequest) {
     // Write the image file
     await fs.writeFile(filePath, buffer);
 
+    logger.info('file.save', 'Generation auto-saved successfully', {
+      filePath,
+      filename,
+      fileSize: buffer.length,
+    });
+
     return NextResponse.json({
       success: true,
       filePath,
       filename,
+      imageId: imageId || filename.replace('.png', ''), // Return ID for carousel tracking
     });
   } catch (error) {
-    console.error("Failed to save generation:", error);
+    logger.error('file.error', 'Failed to save generation', {
+      directoryPath,
+    }, error instanceof Error ? error : undefined);
     return NextResponse.json(
       {
         success: false,

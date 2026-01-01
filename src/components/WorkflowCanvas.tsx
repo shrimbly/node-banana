@@ -34,6 +34,7 @@ import { GlobalImageHistory } from "./GlobalImageHistory";
 import { GroupBackgroundsPortal, GroupControlsOverlay } from "./GroupsOverlay";
 import { NodeType, NanoBananaNodeData } from "@/types";
 import { detectAndSplitGrid } from "@/utils/gridSplitter";
+import { logger } from "@/utils/logger";
 
 const nodeTypes: NodeTypes = {
   imageInput: ImageInputNode,
@@ -61,9 +62,23 @@ const isValidConnection = (connection: Edge | Connection): boolean => {
 
   // Strict type matching: image <-> image, text <-> text
   if (sourceHandle === "image" && targetHandle !== "image") {
+    logger.warn('connection.validation', 'Connection validation failed: type mismatch', {
+      source: connection.source,
+      target: connection.target,
+      sourceHandle,
+      targetHandle,
+      reason: 'Cannot connect image handle to non-image handle',
+    });
     return false;
   }
   if (sourceHandle === "text" && targetHandle !== "text") {
+    logger.warn('connection.validation', 'Connection validation failed: type mismatch', {
+      source: connection.source,
+      target: connection.target,
+      sourceHandle,
+      targetHandle,
+      reason: 'Cannot connect text handle to non-text handle',
+    });
     return false;
   }
 
@@ -172,7 +187,7 @@ const findScrollableAncestor = (target: HTMLElement, deltaX: number, deltaY: num
 };
 
 export function WorkflowCanvas() {
-  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId } =
+  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId, executeWorkflow, isModalOpen } =
     useWorkflowStore();
   const { screenToFlowPosition, getViewport, zoomIn, zoomOut, setViewport } = useReactFlow();
   const [isDragOver, setIsDragOver] = useState(false);
@@ -622,23 +637,49 @@ export function WorkflowCanvas() {
   // Get copy/paste functions and clipboard from store
   const { copySelectedNodes, pasteNodes, clearClipboard, clipboard } = useWorkflowStore();
 
-  // Keyboard shortcuts for copy/paste and stacking selected nodes
+  // Add non-passive wheel listener to prevent Chrome swipe navigation on macOS
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      // Ignore if user is typing in an input field
-      if (
-        event.target instanceof HTMLInputElement ||
-        event.target instanceof HTMLTextAreaElement
-      ) {
-        return;
-      }
-
-      // Handle copy (Ctrl/Cmd + C)
-      if ((event.ctrlKey || event.metaKey) && event.key === "c") {
+    const handleWheelCapture = (event: WheelEvent) => {
+      // Always preventDefault on horizontal wheel to block browser back/forward navigation
+      // But let the event propagate so React Flow and other handlers can still process it
+      if (event.deltaX !== 0) {
         event.preventDefault();
-        copySelectedNodes();
-        return;
       }
+    };
+
+    // Add listener with passive: false and capture phase to catch events early
+    const wrapper = reactFlowWrapper.current;
+    if (wrapper && isMacOS) {
+      wrapper.addEventListener('wheel', handleWheelCapture, { passive: false, capture: true });
+      return () => {
+        wrapper.removeEventListener('wheel', handleWheelCapture, true);
+      };
+    }
+  }, []);
+
+  // Keyboard shortcuts for copy/paste and stacking selected nodes
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    // Ignore if user is typing in an input field
+    if (
+      event.target instanceof HTMLInputElement ||
+      event.target instanceof HTMLTextAreaElement
+    ) {
+      return;
+    }
+
+    // Handle workflow execution (Ctrl/Cmd + Enter)
+    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+      event.preventDefault();
+      executeWorkflow();
+      return;
+    }
+
+    // Handle copy (Ctrl/Cmd + C)
+    if ((event.ctrlKey || event.metaKey) && event.key === "c") {
+      event.preventDefault();
+      copySelectedNodes();
+      return;
+    }
 
       // Helper to get viewport center position in flow coordinates
       const getViewportCenter = () => {
@@ -843,11 +884,12 @@ export function WorkflowCanvas() {
           ]);
         });
       }
-    };
+  }, [nodes, onNodesChange, copySelectedNodes, pasteNodes, clearClipboard, clipboard, getViewport, addNode, updateNodeData, executeWorkflow]);
 
+  useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [nodes, onNodesChange, copySelectedNodes, pasteNodes, clearClipboard, clipboard, getViewport, addNode, updateNodeData]);
+  }, [handleKeyDown]);
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -1049,17 +1091,20 @@ export function WorkflowCanvas() {
         fitView
         deleteKeyCode={["Backspace", "Delete"]}
         multiSelectionKeyCode="Shift"
-        selectionOnDrag={isMacOS}
-        panOnDrag={!isMacOS}
+        selectionOnDrag={isMacOS && !isModalOpen}
+        panOnDrag={!isMacOS && !isModalOpen}
         selectNodesOnDrag={false}
         nodeDragThreshold={5}
         zoomOnScroll={false}
-        zoomOnPinch={true}
+        zoomOnPinch={!isModalOpen}
         minZoom={0.1}
         maxZoom={4}
         defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-        panActivationKeyCode="Space"
-        onWheel={handleWheel}
+        panActivationKeyCode={isModalOpen ? null : "Space"}
+        onWheel={isModalOpen ? undefined : handleWheel}
+        nodesDraggable={!isModalOpen}
+        nodesConnectable={!isModalOpen}
+        elementsSelectable={!isModalOpen}
         className="bg-neutral-900"
         defaultEdgeOptions={{
           type: "editable",

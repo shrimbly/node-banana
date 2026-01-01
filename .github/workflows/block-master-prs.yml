@@ -1,0 +1,16 @@
+name: Enforce Develop Branch
+on:
+  pull_request:
+    branches:
+      - master # Triggers only on PRs targeting master
+
+jobs:
+  guard-master:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check base branch
+        # logic: If the PR is NOT coming from a release or hotfix branch, block it.
+        if: "!startsWith(github.head_ref, 'release/') && !startsWith(github.head_ref, 'hotfix/')"
+        run: |
+          echo "::error::⛔ WRONG BRANCH: You are trying to merge into 'master'. Please change the base branch of this PR to 'develop'."
+          exit 1

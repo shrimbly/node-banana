@@ -1,8 +1,10 @@
 # Node Banana
 
-> **Important note:** This is in early development and hasn't been tested off my machines,it probably has some issues. Use Chrome. 
+> **Important note:** This is in early development, it probably has some issues. Use Chrome. For support or raising any issues join the [discord](https://discord.gg/zBzGbtfDfB).
 
 Node Banana is node-based workflow application for generating images with NBP. Build image generation pipelines by connecting nodes on a visual canvas. Built mainly with Opus 4.5.
+
+![Node Banana Screenshot](public/node-banana.png)
 
 ## Features
 
@@ -82,6 +84,9 @@ The `/examples` directory contains some example workflow files from my personal 
 - **Text** handles connect to **Text** handles only
 - Image inputs on generation nodes accept multiple connections
 - Text inputs accept single connections
+
+## Contributions
+PRs are welcome, please pull the latest changes from develop before creating a PR and make it to the develop branch, not master. Not that I'm primarily making this for my own workflows, if the PR conflicts with my own plans I'll politely reject it. If you want to collaborate, consider joining the Discord and we can hash something out. 
 
 ## License
 

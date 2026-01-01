@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { useWorkflowStore, saveNanoBananaDefaults } from "@/store/workflowStore";
@@ -22,6 +22,8 @@ type NanoBananaNodeType = Node<NanoBananaNodeData, "nanoBanana">;
 export function NanoBananaNode({ id, data, selected }: NodeProps<NanoBananaNodeType>) {
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
+  const generationsPath = useWorkflowStore((state) => state.generationsPath);
+  const [isLoadingCarouselImage, setIsLoadingCarouselImage] = useState(false);
 
   const handleAspectRatioChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -70,13 +72,89 @@ export function NanoBananaNode({ id, data, selected }: NodeProps<NanoBananaNodeT
     regenerateNode(id);
   }, [id, regenerateNode]);
 
+  const loadImageById = useCallback(async (imageId: string) => {
+    if (!generationsPath) {
+      console.error("Generations path not configured");
+      return null;
+    }
+
+    try {
+      const response = await fetch("/api/load-generation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          directoryPath: generationsPath,
+          imageId,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("Failed to load image:", await response.text());
+        return null;
+      }
+
+      const result = await response.json();
+      return result.success ? result.image : null;
+    } catch (error) {
+      console.error("Error loading image:", error);
+      return null;
+    }
+  }, [generationsPath]);
+
+  const handleCarouselPrevious = useCallback(async () => {
+    const history = nodeData.imageHistory || [];
+    if (history.length === 0 || isLoadingCarouselImage) return;
+
+    const currentIndex = nodeData.selectedHistoryIndex || 0;
+    const newIndex = currentIndex === 0 ? history.length - 1 : currentIndex - 1;
+    const imageItem = history[newIndex];
+
+    setIsLoadingCarouselImage(true);
+    const image = await loadImageById(imageItem.id);
+    setIsLoadingCarouselImage(false);
+
+    if (image) {
+      updateNodeData(id, {
+        outputImage: image,
+        selectedHistoryIndex: newIndex,
+      });
+    }
+  }, [id, nodeData.imageHistory, nodeData.selectedHistoryIndex, isLoadingCarouselImage, loadImageById, updateNodeData]);
+
+  const handleCarouselNext = useCallback(async () => {
+    const history = nodeData.imageHistory || [];
+    if (history.length === 0 || isLoadingCarouselImage) return;
+
+    const currentIndex = nodeData.selectedHistoryIndex || 0;
+    const newIndex = (currentIndex + 1) % history.length;
+    const imageItem = history[newIndex];
+
+    setIsLoadingCarouselImage(true);
+    const image = await loadImageById(imageItem.id);
+    setIsLoadingCarouselImage(false);
+
+    if (image) {
+      updateNodeData(id, {
+        outputImage: image,
+        selectedHistoryIndex: newIndex,
+      });
+    }
+  }, [id, nodeData.imageHistory, nodeData.selectedHistoryIndex, isLoadingCarouselImage, loadImageById, updateNodeData]);
+
   const isNanoBananaPro = nodeData.model === "nano-banana-pro";
+  const hasCarouselImages = (nodeData.imageHistory || []).length > 1;
 
   return (
     <BaseNode
       id={id}
       title="Generate"
+      customTitle={nodeData.customTitle}
+      comment={nodeData.comment}
+      onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
+      onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
+      onRun={handleRegenerate}
       selected={selected}
+      isExecuting={isRunning}
       hasError={nodeData.status === "error"}
     >
       {/* Image input - accepts multiple connections */}
@@ -107,58 +185,103 @@ export function NanoBananaNode({ id, data, selected }: NodeProps<NanoBananaNodeT
       <div className="flex-1 flex flex-col min-h-0 gap-2">
         {/* Preview area */}
         {nodeData.outputImage ? (
-          <div className="relative w-full flex-1 min-h-0">
-            <img
-              src={nodeData.outputImage}
-              alt="Generated"
-              className="w-full h-full object-contain rounded"
-            />
-            {/* Loading overlay */}
-            {nodeData.status === "loading" && (
-              <div className="absolute inset-0 bg-neutral-900/70 rounded flex items-center justify-center">
-                <svg
-                  className="w-6 h-6 animate-spin text-white"
-                  fill="none"
-                  viewBox="0 0 24 24"
+          <>
+            <div className="relative w-full flex-1 min-h-0">
+              <img
+                src={nodeData.outputImage}
+                alt="Generated"
+                className="w-full h-full object-contain rounded"
+              />
+              {/* Loading overlay for generation */}
+              {nodeData.status === "loading" && (
+                <div className="absolute inset-0 bg-neutral-900/70 rounded flex items-center justify-center">
+                  <svg
+                    className="w-6 h-6 animate-spin text-white"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                </div>
+              )}
+              {/* Loading overlay for carousel navigation */}
+              {isLoadingCarouselImage && (
+                <div className="absolute inset-0 bg-neutral-900/50 rounded flex items-center justify-center">
+                  <svg
+                    className="w-4 h-4 animate-spin text-white"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                    />
+                  </svg>
+                </div>
+              )}
+              <div className="absolute top-1 right-1">
+                <button
+                  onClick={handleClearImage}
+                  className="w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
+                  title="Clear image"
                 >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* Carousel controls - only show if there are multiple images */}
+            {hasCarouselImages && (
+              <div className="flex items-center justify-center gap-2 shrink-0">
+                <button
+                  onClick={handleCarouselPrevious}
+                  disabled={isLoadingCarouselImage}
+                  className="w-5 h-5 rounded bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
+                  title="Previous image"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+                  </svg>
+                </button>
+                <span className="text-[10px] text-neutral-400 min-w-[32px] text-center">
+                  {(nodeData.selectedHistoryIndex || 0) + 1} / {(nodeData.imageHistory || []).length}
+                </span>
+                <button
+                  onClick={handleCarouselNext}
+                  disabled={isLoadingCarouselImage}
+                  className="w-5 h-5 rounded bg-neutral-800 hover:bg-neutral-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
+                  title="Next image"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
               </div>
             )}
-            <div className="absolute top-1 right-1 flex gap-1">
-              <button
-                onClick={handleRegenerate}
-                disabled={isRunning}
-                className="w-5 h-5 bg-neutral-900/80 hover:bg-blue-600/80 disabled:opacity-50 disabled:cursor-not-allowed rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-                title="Regenerate"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
-              <button
-                onClick={handleClearImage}
-                className="w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-                title="Clear image"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-          </div>
+          </>
         ) : (
           <div className="w-full flex-1 min-h-[112px] border border-dashed border-neutral-600 rounded flex flex-col items-center justify-center">
             {nodeData.status === "loading" ? (

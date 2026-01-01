@@ -1,13 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { logger } from "@/utils/logger";
 
 // POST: Save workflow to file
 export async function POST(request: NextRequest) {
+  let directoryPath: string | undefined;
+  let filename: string | undefined;
   try {
-    const { directoryPath, filename, workflow } = await request.json();
+    const body = await request.json();
+    directoryPath = body.directoryPath;
+    filename = body.filename;
+    const workflow = body.workflow;
+
+    logger.info('file.save', 'Workflow save request received', {
+      directoryPath,
+      filename,
+      hasWorkflow: !!workflow,
+      nodeCount: workflow?.nodes?.length,
+      edgeCount: workflow?.edges?.length,
+    });
 
     if (!directoryPath || !filename || !workflow) {
+      logger.warn('file.save', 'Workflow save validation failed: missing fields', {
+        hasDirectoryPath: !!directoryPath,
+        hasFilename: !!filename,
+        hasWorkflow: !!workflow,
+      });
       return NextResponse.json(
         { success: false, error: "Missing required fields" },
         { status: 400 }
@@ -18,12 +37,18 @@ export async function POST(request: NextRequest) {
     try {
       const stats = await fs.stat(directoryPath);
       if (!stats.isDirectory()) {
+        logger.warn('file.error', 'Workflow save failed: path is not a directory', {
+          directoryPath,
+        });
         return NextResponse.json(
           { success: false, error: "Path is not a directory" },
           { status: 400 }
         );
       }
-    } catch {
+    } catch (dirError) {
+      logger.warn('file.error', 'Workflow save failed: directory does not exist', {
+        directoryPath,
+      });
       return NextResponse.json(
         { success: false, error: "Directory does not exist" },
         { status: 400 }
@@ -38,12 +63,20 @@ export async function POST(request: NextRequest) {
     const json = JSON.stringify(workflow, null, 2);
     await fs.writeFile(filePath, json, "utf-8");
 
+    logger.info('file.save', 'Workflow saved successfully', {
+      filePath,
+      fileSize: json.length,
+    });
+
     return NextResponse.json({
       success: true,
       filePath,
     });
   } catch (error) {
-    console.error("Failed to save workflow:", error);
+    logger.error('file.error', 'Failed to save workflow', {
+      directoryPath,
+      filename,
+    }, error instanceof Error ? error : undefined);
     return NextResponse.json(
       {
         success: false,
@@ -58,7 +91,12 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   const directoryPath = request.nextUrl.searchParams.get("path");
 
+  logger.info('file.load', 'Directory validation request received', {
+    directoryPath,
+  });
+
   if (!directoryPath) {
+    logger.warn('file.load', 'Directory validation failed: missing path parameter');
     return NextResponse.json(
       { success: false, error: "Path parameter required" },
       { status: 400 }
@@ -67,12 +105,21 @@ export async function GET(request: NextRequest) {
 
   try {
     const stats = await fs.stat(directoryPath);
+    const isDirectory = stats.isDirectory();
+    logger.info('file.load', 'Directory validation successful', {
+      directoryPath,
+      exists: true,
+      isDirectory,
+    });
     return NextResponse.json({
       success: true,
       exists: true,
-      isDirectory: stats.isDirectory(),
+      isDirectory,
     });
-  } catch {
+  } catch (error) {
+    logger.info('file.load', 'Directory does not exist', {
+      directoryPath,
+    });
     return NextResponse.json({
       success: true,
       exists: false,

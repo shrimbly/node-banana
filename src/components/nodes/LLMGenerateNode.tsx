@@ -76,15 +76,27 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
     <BaseNode
       id={id}
       title="LLM Generate"
+      customTitle={nodeData.customTitle}
+      comment={nodeData.comment}
+      onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
+      onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
       selected={selected}
       hasError={nodeData.status === "error"}
     >
+      {/* Image input - optional */}
+      <Handle
+        type="target"
+        position={Position.Left}
+        id="image"
+        style={{ top: "35%" }}
+        data-handletype="image"
+      />
       {/* Text input */}
       <Handle
         type="target"
         position={Position.Left}
         id="text"
-        style={{ top: "50%" }}
+        style={{ top: "65%" }}
         data-handletype="text"
       />
       {/* Text output */}

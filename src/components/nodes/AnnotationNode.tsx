@@ -87,7 +87,15 @@ export function AnnotationNode({ id, data, selected }: NodeProps<AnnotationNodeT
   const displayImage = nodeData.outputImage || nodeData.sourceImage;
 
   return (
-    <BaseNode id={id} title="Annotate" selected={selected}>
+    <BaseNode
+      id={id}
+      title="Annotate"
+      customTitle={nodeData.customTitle}
+      comment={nodeData.comment}
+      onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
+      onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
+      selected={selected}
+    >
       <input
         ref={fileInputRef}
         type="file"

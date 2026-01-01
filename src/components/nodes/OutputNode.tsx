@@ -3,12 +3,14 @@
 import { useCallback, useState } from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
+import { useWorkflowStore } from "@/store/workflowStore";
 import { OutputNodeData } from "@/types";
 
 type OutputNodeType = Node<OutputNodeData, "output">;
 
 export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
   const nodeData = data;
+  const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const [showLightbox, setShowLightbox] = useState(false);
 
   const handleDownload = useCallback(() => {
@@ -24,7 +26,16 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
 
   return (
     <>
-      <BaseNode id={id} title="Output" selected={selected} className="min-w-[200px]">
+      <BaseNode
+        id={id}
+        title="Output"
+        customTitle={nodeData.customTitle}
+        comment={nodeData.comment}
+        onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
+        onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
+        selected={selected}
+        className="min-w-[200px]"
+      >
         <Handle
           type="target"
           position={Position.Left}

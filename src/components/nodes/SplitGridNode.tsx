@@ -11,6 +11,9 @@ type SplitGridNodeType = Node<SplitGridNodeData, "splitGrid">;
 
 export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeType>) {
   const nodeData = data;
+  const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
+  const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
+  const isRunning = useWorkflowStore((state) => state.isRunning);
   const [showSettings, setShowSettings] = useState(false);
 
   // Show settings modal on first creation (when not configured)
@@ -28,10 +31,18 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
     setShowSettings(false);
   }, []);
 
+  const handleSplit = useCallback(() => {
+    regenerateNode(id);
+  }, [id, regenerateNode]);
+
   return (
     <BaseNode
       id={id}
       title="Split Grid"
+      customTitle={nodeData.customTitle}
+      comment={nodeData.comment}
+      onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
+      onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
       selected={selected}
       hasError={nodeData.status === "error"}
     >
@@ -123,15 +134,27 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
         </div>
 
         {/* Child node count / status */}
-        {nodeData.isConfigured ? (
-          <div className="text-[10px] text-neutral-500 shrink-0">
-            {nodeData.childNodeIds.length} generate sets created
-          </div>
-        ) : (
-          <div className="text-[10px] text-amber-400 shrink-0">
-            Not configured - click Settings
-          </div>
-        )}
+        <div className="flex items-center justify-between shrink-0">
+          {nodeData.isConfigured ? (
+            <div className="text-[10px] text-neutral-500">
+              {nodeData.childNodeIds.length} generate sets created
+            </div>
+          ) : (
+            <div className="text-[10px] text-amber-400">
+              Not configured - click Settings
+            </div>
+          )}
+
+          {/* Split button */}
+          <button
+            onClick={handleSplit}
+            disabled={isRunning || !nodeData.isConfigured}
+            className="px-2 py-0.5 text-[10px] border border-white hover:bg-white hover:text-neutral-900 disabled:border-neutral-600 disabled:text-neutral-600 disabled:cursor-not-allowed text-white rounded transition-colors"
+            title={!nodeData.isConfigured ? "Configure node first" : "Split grid"}
+          >
+            Split
+          </button>
+        </div>
       </div>
 
       {/* Settings Modal */}

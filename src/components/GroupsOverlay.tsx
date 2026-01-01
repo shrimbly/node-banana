@@ -62,7 +62,7 @@ interface GroupControlsProps {
 
 // Renders the group header and resize handles - displayed above nodes (z-index 5)
 function GroupControls({ groupId, zoom }: GroupControlsProps) {
-  const { groups, updateGroup, deleteGroup, moveGroupNodes } = useWorkflowStore();
+  const { groups, updateGroup, deleteGroup, moveGroupNodes, toggleGroupLock } = useWorkflowStore();
   const group = groups[groupId];
 
   const [isEditing, setIsEditing] = useState(false);
@@ -134,6 +134,10 @@ function GroupControls({ groupId, zoom }: GroupControlsProps) {
   const handleDelete = useCallback(() => {
     deleteGroup(groupId);
   }, [groupId, deleteGroup]);
+
+  const handleToggleLock = useCallback(() => {
+    toggleGroupLock(groupId);
+  }, [groupId, toggleGroupLock]);
 
   // Header drag handlers
   const handleHeaderMouseDown = useCallback(
@@ -376,6 +380,23 @@ function GroupControls({ groupId, zoom }: GroupControlsProps) {
             </>
           )}
         </div>
+
+        {/* Lock/Unlock Button */}
+        <button
+          onClick={handleToggleLock}
+          className="p-0.5 rounded hover:bg-white/20 text-white/70 hover:text-white transition-colors"
+          title={group.locked ? "Unlock group" : "Lock group"}
+        >
+          {group.locked ? (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+            </svg>
+          )}
+        </button>
 
         {/* Delete Button */}
         <button

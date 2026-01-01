@@ -36,6 +36,8 @@ export type NodeStatus = "idle" | "loading" | "complete" | "error";
 // Base node data - using Record to satisfy React Flow's type constraints
 export interface BaseNodeData extends Record<string, unknown> {
   label?: string;
+  customTitle?: string;
+  comment?: string;
 }
 
 // Image Input Node Data
@@ -118,6 +120,15 @@ export interface ImageHistoryItem {
   model: ModelType;
 }
 
+// Carousel Image Item (for per-node history)
+export interface CarouselImageItem {
+  id: string;
+  timestamp: number;
+  prompt: string;
+  aspectRatio: AspectRatio;
+  model: ModelType;
+}
+
 // Nano Banana Node Data (Image Generation)
 export interface NanoBananaNodeData extends BaseNodeData {
   inputImages: string[]; // Now supports multiple images
@@ -129,11 +140,14 @@ export interface NanoBananaNodeData extends BaseNodeData {
   useGoogleSearch: boolean; // Only available for Nano Banana Pro
   status: NodeStatus;
   error: string | null;
+  imageHistory: CarouselImageItem[]; // Carousel history (IDs only)
+  selectedHistoryIndex: number; // Currently selected image in carousel
 }
 
 // LLM Generate Node Data (Text Generation)
 export interface LLMGenerateNodeData extends BaseNodeData {
   inputPrompt: string | null;
+  inputImages: string[];
   outputText: string | null;
   provider: LLMProvider;
   model: LLMModelType;
@@ -216,6 +230,7 @@ export interface GenerateResponse {
 // API Request/Response types for LLM Text Generation
 export interface LLMGenerateRequest {
   prompt: string;
+  images?: string[];
   provider: LLMProvider;
   model: LLMModelType;
   temperature?: number;
@@ -249,6 +264,13 @@ export interface WorkflowSaveConfig {
   lastSavedAt: number | null;
 }
 
+// Cost tracking data stored per-workflow in localStorage
+export interface WorkflowCostData {
+  workflowId: string;
+  incurredCost: number;
+  lastUpdated: number;
+}
+
 // Group background color options (dark mode tints)
 export type GroupColor =
   | "neutral"
@@ -265,4 +287,5 @@ export interface NodeGroup {
   color: GroupColor;
   position: { x: number; y: number };
   size: { width: number; height: number };
+  locked?: boolean;
 }

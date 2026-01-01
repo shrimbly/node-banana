@@ -9,13 +9,29 @@
   --foreground: #fafafa;
 }
 
+html {
+  /* Required for overscroll-behavior to work in Chrome on macOS */
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+}
+
 body {
   color: var(--foreground);
   background: var(--background);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  /* Prevent browser back/forward swipe navigation on macOS */
+  overscroll-behavior-x: none;
+  /* Prevent touch gestures from triggering navigation */
+  touch-action: pan-y pinch-zoom;
 }
 
 /* React Flow customizations */
+.react-flow {
+  /* Prevent browser back/forward swipe navigation when panning */
+  overscroll-behavior-x: none;
+  touch-action: none;
+}
+
 .react-flow__node {
   font-family: inherit;
 }
