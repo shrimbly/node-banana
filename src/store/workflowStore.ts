@@ -90,8 +90,10 @@ interface WorkflowStore {
   // UI State
   openModalCount: number;
   isModalOpen: boolean;
+  showQuickstart: boolean;
   incrementModalCount: () => void;
   decrementModalCount: () => void;
+  setShowQuickstart: (show: boolean) => void;
 
   // Execution
   isRunning: boolean;
@@ -326,6 +328,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   groups: {},
   openModalCount: 0,
   isModalOpen: false,
+  showQuickstart: true,
   isRunning: false,
   currentNodeId: null,
   pausedAtNodeId: null,
@@ -360,6 +363,10 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       const newCount = Math.max(0, state.openModalCount - 1);
       return { openModalCount: newCount, isModalOpen: newCount > 0 };
     });
+  },
+
+  setShowQuickstart: (show: boolean) => {
+    set({ showQuickstart: show });
   },
 
   addNode: (type: NodeType, position: XYPosition) => {

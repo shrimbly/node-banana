@@ -8,12 +8,14 @@ Node Banana is node-based workflow application for generating images with NBP. B
 
 ## Features
 
+- **AI Quickstart** - Generate complete workflows from natural language descriptions or choose from preset templates
 - **Visual Node Editor** - Drag-and-drop nodes onto an infinite canvas with pan and zoom
 - **Image Annotation** - Full-screen editor with drawing tools (rectangles, circles, arrows, freehand, text)
 - **AI Image Generation** - Generate images using Google Gemini models
 - **Text Generation** - Generate text using Google Gemini or OpenAI models
 - **Workflow Chaining** - Connect multiple nodes to create complex pipelines
 - **Save/Load Workflows** - Export and import workflows as JSON files
+- **Group Locking** - Lock node groups to skip them during execution
 
 ## Tech Stack
 
@@ -78,12 +80,36 @@ The `/examples` directory contains some example workflow files from my personal 
 4. **Run workflow** - Click the Run button to execute the pipeline
 5. **Save/Load** - Use the header menu to save or load workflows
 
+## AI Quickstart
+
+When you open the app with an empty canvas, you'll see the AI Quickstart welcome screen. You can:
+
+1. **Choose a preset template** - Click one of 6 preset workflow templates:
+   - Product Shot, Model + Product, Color Variations, Background Swap, Style Transfer, Scene Composite
+2. **Describe your workflow** - Enter a natural language description and let Gemini generate a custom workflow
+3. **Select content level** - Choose how much detail to pre-fill:
+   - Empty: Blank nodes for you to fill in
+   - Minimal: Placeholder prompts as starting points
+   - Full: Complete example prompts demonstrating the workflow
+
+The generated workflow includes properly connected nodes with sample images ready to customize.
+
 ## Connection Rules
 
 - **Image** handles connect to **Image** handles only
 - **Text** handles connect to **Text** handles only
 - Image inputs on generation nodes accept multiple connections
 - Text inputs accept single connections
+
+## Testing
+
+Run the test suite with:
+
+```bash
+npm test              # Watch mode
+npm run test:run      # Single run
+npm run test:coverage # With coverage report
+```
 
 ## Contributions
 PRs are welcome, please pull the latest changes from develop before creating a PR and make it to the develop branch, not master. Not that I'm primarily making this for my own workflows, if the PR conflicts with my own plans I'll politely reject it. If you want to collaborate, consider joining the Discord and we can hash something out. 

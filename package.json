@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@google/genai": "^1.30.0",
@@ -23,9 +26,15 @@
     "zustand": "^5.0.9"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.1",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "typescript": "^5.9.3"
+    "@vitejs/plugin-react": "^4.7.0",
+    "@vitest/coverage-v8": "^4.0.16",
+    "jsdom": "^27.0.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.16"
   }
 }
