@@ -73,10 +73,23 @@ The `/examples` directory contains some example workflow files from my personal 
 ## Usage
 
 1. **Add nodes** - Click the floating action bar to add nodes to the canvas
-2. **Connect nodes** - Drag from output handles to input handles (matching types only)
-3. **Configure nodes** - Adjust settings like model, aspect ratio, or drawing tools
-4. **Run workflow** - Click the Run button to execute the pipeline
-5. **Save/Load** - Use the header menu to save or load workflows
+2. **Navigation** - 
+   - Use the **Mouse Wheel** to zoom in and out (targets your cursor)
+   - Use **Trackpad Scroll** to pan across the infinite canvas
+   - **Hotkeys**:
+     - `H`: Switch to **Pan Mode** (Hand tool)
+     - `V`: Switch to **Selection Mode** (Pointer tool)
+     - `Shift + V`: Force return to Selection Mode (regardless of selection)
+     - `Space`: Hold to pan temporarily while in any mode
+     - *Note: `H` and `V` perform node stacking when 2+ nodes are selected (see below)*
+3. **Connect nodes** - Drag from output handles to input handles (matching types only)
+4. **Configure nodes** - Adjust settings like model, aspect ratio, or drawing tools
+5. **Run workflow** - Click the Run button to execute the pipeline
+6. **Save/Load** - Use the header menu to save or load workflows
+7. **Node Management**:
+   - Select 2+ nodes and press `V` to stack them vertically
+   - Select 2+ nodes and press `H` to stack them horizontally
+   - Select 2+ nodes and press `G` to arrange them in a grid
 
 ## Connection Rules
 

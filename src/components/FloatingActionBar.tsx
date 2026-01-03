@@ -151,6 +151,8 @@ export function FloatingActionBar() {
     validateWorkflow,
     edgeStyle,
     setEdgeStyle,
+    isPanMode,
+    setIsPanMode,
   } = useWorkflowStore();
   const [runMenuOpen, setRunMenuOpen] = useState(false);
   const runMenuRef = useRef<HTMLDivElement>(null);
@@ -209,6 +211,41 @@ export function FloatingActionBar() {
   return (
     <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50">
       <div className="flex items-center gap-0.5 bg-neutral-800/95 backdrop-blur-sm rounded-lg shadow-lg border border-neutral-700/80 px-1.5 py-1">
+        <div className="flex items-center gap-0.5 mr-1.5">
+          <button
+            onClick={() => setIsPanMode(false)}
+            title="Selection Mode (V)"
+            className={`p-1.5 rounded transition-colors ${
+              !isPanMode
+                ? "bg-neutral-700 text-neutral-100"
+                : "text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700"
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 15l-2 5L9 9l5 2 5 2-4 2z" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setIsPanMode(true)}
+            title="Pan Mode (H)"
+            className={`p-1.5 rounded transition-colors ${
+              isPanMode
+                ? "bg-neutral-700 text-neutral-100"
+                : "text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700"
+            }`}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18 11.5V9a2 2 0 0 0-2-2a2 2 0 0 0-2 2v1.4" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M14 10V8a2 2 0 0 0-2-2a2 2 0 0 0-2 2v2" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10 9.9V9a2 2 0 0 0-2-2a2 2 0 0 0-2 2v5" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 14a2 2 0 0 0-2-2a2 2 0 0 0-2 2" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18 11a2 2 0 1 1 4 0v3a8 8 0 0 1-8 8h-4a8 8 0 0 1-8-8 2 2 0 1 1 4 0" />
+            </svg>
+          </button>
+        </div>
+
+        <div className="w-px h-5 bg-neutral-600 mr-1.5" />
+
         <NodeButton type="imageInput" label="Image" />
         <NodeButton type="annotation" label="Annotate" />
         <NodeButton type="prompt" label="Prompt" />

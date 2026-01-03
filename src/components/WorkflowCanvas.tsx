@@ -122,13 +122,15 @@ const isMacOS = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(
 // Detect if a wheel event is from a mouse (vs trackpad)
 const isMouseWheel = (event: WheelEvent): boolean => {
   // Mouse scroll wheel typically uses deltaMode 1 (lines) or has large discrete deltas
-  // Trackpad uses deltaMode 0 (pixels) with smaller, smoother deltas
-  if (event.deltaMode === 1) return true; // DOM_DELTA_LINE = mouse
+  if (event.deltaMode === 1) return true; 
 
-  // Fallback: large delta values suggest mouse wheel
-  const threshold = 50;
-  return Math.abs(event.deltaY) >= threshold &&
-         Math.abs(event.deltaY) % 40 === 0; // Mouse deltas often in multiples
+  // Fallback: larger, discrete delta values suggest a physical mouse wheel.
+  // 20px is chosen as a heuristic threshold to distinguish the smooth, small-delta
+  // scrolling of a macOS trackpad from the stepped deltas of a physical scroll wheel.
+  // Note: This is an approximation and might need tuning for specific hardware or 
+  // high-precision Windows trackpads which may emit different delta patterns.
+  const absDeltaY = Math.abs(event.deltaY);
+  return absDeltaY >= 20 && absDeltaY % 1 === 0;
 };
 
 // Check if an element can scroll and has room to scroll in the given direction
@@ -187,9 +189,9 @@ const findScrollableAncestor = (target: HTMLElement, deltaX: number, deltaY: num
 };
 
 export function WorkflowCanvas() {
-  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId, executeWorkflow, isModalOpen } =
+  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId, executeWorkflow, isModalOpen, isPanMode, setIsPanMode } =
     useWorkflowStore();
-  const { screenToFlowPosition, getViewport, zoomIn, zoomOut, setViewport } = useReactFlow();
+  const { screenToFlowPosition, getViewport, setViewport } = useReactFlow();
   const [isDragOver, setIsDragOver] = useState(false);
   const [dropType, setDropType] = useState<"image" | "workflow" | "node" | null>(null);
   const [connectionDrop, setConnectionDrop] = useState<ConnectionDropState | null>(null);
@@ -595,28 +597,15 @@ export function WorkflowCanvas() {
     const scrollableElement = findScrollableAncestor(target, event.deltaX, event.deltaY);
 
     if (scrollableElement) {
-      // Let the element handle its own scroll - don't prevent default or manipulate viewport
+      // Let the element handle its own scroll
       return;
     }
 
-    // Pinch gesture (ctrlKey) always zooms
-    if (event.ctrlKey) {
-      event.preventDefault();
-      if (event.deltaY < 0) zoomIn();
-      else zoomOut();
-      return;
-    }
-
-    // On macOS, differentiate trackpad from mouse
+    // On macOS, differentiate trackpad from mouse to support trackpad panning
     if (isMacOS) {
       const nativeEvent = event.nativeEvent;
-      if (isMouseWheel(nativeEvent)) {
-        // Mouse wheel → zoom
-        event.preventDefault();
-        if (event.deltaY < 0) zoomIn();
-        else zoomOut();
-      } else {
-        // Trackpad scroll → pan
+      if (!isMouseWheel(nativeEvent)) {
+        // Trackpad scroll -> pan the viewport
         event.preventDefault();
         const viewport = getViewport();
         setViewport({
@@ -624,15 +613,12 @@ export function WorkflowCanvas() {
           y: viewport.y - event.deltaY,
           zoom: viewport.zoom,
         });
+        return;
       }
-      return;
     }
 
-    // Non-macOS: default zoom behavior
-    event.preventDefault();
-    if (event.deltaY < 0) zoomIn();
-    else zoomOut();
-  }, [zoomIn, zoomOut, getViewport, setViewport]);
+    // For mice or non-macOS, let ReactFlow's zoomOnScroll={true} handle the zooming naturally
+  }, [getViewport, setViewport]);
 
   // Get copy/paste functions and clipboard from store
   const { copySelectedNodes, pasteNodes, clearClipboard, clipboard } = useWorkflowStore();
@@ -679,6 +665,27 @@ export function WorkflowCanvas() {
       event.preventDefault();
       copySelectedNodes();
       return;
+    }
+
+    // Handle tool switching (H for Hand/Pan, V for Selection/Pointer)
+    // Only if not using modifiers and not stacking nodes
+    const selectedNodes = nodes.filter((node) => node.selected);
+
+    // Force return to Selection Mode with Shift + V (escape hatch if many nodes are selected)
+    if (event.shiftKey && event.key.toLowerCase() === "v" && !event.ctrlKey && !event.metaKey) {
+      setIsPanMode(false);
+      return;
+    }
+
+    if (!event.ctrlKey && !event.metaKey && !event.shiftKey && selectedNodes.length < 2) {
+      if (event.key.toLowerCase() === "h") {
+        setIsPanMode(true);
+        return;
+      }
+      if (event.key.toLowerCase() === "v") {
+        setIsPanMode(false);
+        return;
+      }
     }
 
       // Helper to get viewport center position in flow coordinates
@@ -793,7 +800,6 @@ export function WorkflowCanvas() {
         return;
       }
 
-      const selectedNodes = nodes.filter((node) => node.selected);
       if (selectedNodes.length < 2) return;
 
       const STACK_GAP = 20;
@@ -1047,7 +1053,7 @@ export function WorkflowCanvas() {
   return (
     <div
       ref={reactFlowWrapper}
-      className={`flex-1 bg-canvas-bg relative ${isDragOver ? "ring-2 ring-inset ring-blue-500" : ""}`}
+      className={`flex-1 bg-canvas-bg relative ${isDragOver ? "ring-2 ring-inset ring-blue-500" : ""} ${isPanMode ? "cursor-grab" : ""}`}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
@@ -1091,19 +1097,19 @@ export function WorkflowCanvas() {
         fitView
         deleteKeyCode={["Backspace", "Delete"]}
         multiSelectionKeyCode="Shift"
-        selectionOnDrag={isMacOS && !isModalOpen}
-        panOnDrag={!isMacOS && !isModalOpen}
+        selectionOnDrag={!isPanMode && !isModalOpen}
+        panOnDrag={isPanMode && !isModalOpen}
         selectNodesOnDrag={false}
         nodeDragThreshold={5}
-        zoomOnScroll={false}
-        zoomOnPinch={!isModalOpen}
+    zoomOnScroll={true}
+    zoomOnPinch={!isModalOpen}
         minZoom={0.1}
         maxZoom={4}
         defaultViewport={{ x: 0, y: 0, zoom: 1 }}
         panActivationKeyCode={isModalOpen ? null : "Space"}
         onWheel={isModalOpen ? undefined : handleWheel}
-        nodesDraggable={!isModalOpen}
-        nodesConnectable={!isModalOpen}
+        nodesDraggable={!isModalOpen && !isPanMode}
+        nodesConnectable={!isModalOpen && !isPanMode}
         elementsSelectable={!isModalOpen}
         className="bg-neutral-900"
         defaultEdgeOptions={{
