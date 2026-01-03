@@ -16,12 +16,12 @@ interface EdgeData extends WorkflowEdgeData {
   offsetY?: number;
 }
 
-// Colors for different connection types
+// Colors for different connection types (dimmed for softer appearance)
 const EDGE_COLORS = {
-  image: "#10b981", // Green for image connections
-  prompt: "#3b82f6", // Blue for prompt connections
-  default: "#94a3b8", // Gray for unknown
-  pause: "#f97316", // Orange for paused edges
+  image: "#0d9668", // Dimmed green for image connections
+  prompt: "#2563eb", // Dimmed blue for prompt connections
+  default: "#64748b", // Dimmed gray for unknown
+  pause: "#ea580c", // Dimmed orange for paused edges
 };
 
 export function EditableEdge({
@@ -38,6 +38,7 @@ export function EditableEdge({
   data,
   sourceHandleId,
   targetHandleId,
+  source,
   target,
 }: EdgeProps) {
   const { setEdges } = useReactFlow();
@@ -45,6 +46,15 @@ export function EditableEdge({
   // Subscribe to nodes array to get updates when node data changes
   const nodes = useWorkflowStore((state) => state.nodes);
   const [isDragging, setIsDragging] = useState(false);
+
+  // Check if any node is selected and if this edge is connected to it
+  const isConnectedToSelection = useMemo(() => {
+    const selectedNodes = nodes.filter((n) => n.selected);
+    if (selectedNodes.length === 0) return false; // No selection, show all dimmed
+
+    // Check if this edge connects to any selected node
+    return selectedNodes.some((n) => n.id === source || n.id === target);
+  }, [nodes, source, target]);
 
   const edgeData = data as EdgeData | undefined;
   const offsetX = edgeData?.offsetX ?? 0;
@@ -71,8 +81,12 @@ export function EditableEdge({
     return EDGE_COLORS.default;
   }, [hasPause, sourceHandleId, targetHandleId]);
 
-  // Generate a unique gradient ID for this edge
-  const gradientId = `pulse-gradient-${id}`;
+  // Generate a unique gradient ID based on edge color and selection state
+  const gradientId = useMemo(() => {
+    const colorKey = hasPause ? "pause" : (sourceHandleId || targetHandleId || "default");
+    const selectionKey = isConnectedToSelection ? "active" : "dimmed";
+    return `edge-gradient-${colorKey}-${selectionKey}-${id}`;
+  }, [hasPause, sourceHandleId, targetHandleId, isConnectedToSelection, id]);
 
   // Calculate the path based on edge style
   const [edgePath, labelX, labelY] = useMemo(() => {
@@ -167,13 +181,22 @@ export function EditableEdge({
 
   return (
     <>
+      {/* SVG gradient definition for bright-dim-bright effect */}
+      <defs>
+        <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+          <stop offset="0%" stopColor={edgeColor} stopOpacity={isConnectedToSelection ? 1 : 0.25} />
+          <stop offset="50%" stopColor={edgeColor} stopOpacity={isConnectedToSelection ? 0.55 : 0.1} />
+          <stop offset="100%" stopColor={edgeColor} stopOpacity={isConnectedToSelection ? 1 : 0.25} />
+        </linearGradient>
+      </defs>
+
       <BaseEdge
         id={id}
         path={edgePath}
         markerEnd={markerEnd}
         style={{
           ...style,
-          stroke: edgeColor,
+          stroke: `url(#${gradientId})`,
           strokeWidth: 3,
           strokeLinecap: "round",
           strokeLinejoin: "round",
@@ -187,7 +210,7 @@ export function EditableEdge({
           <path
             d={edgePath}
             fill="none"
-            stroke={edgeColor}
+            stroke={`url(#${gradientId})`}
             strokeWidth={10}
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -200,7 +223,7 @@ export function EditableEdge({
           <path
             d={edgePath}
             fill="none"
-            stroke={edgeColor}
+            stroke={`url(#${gradientId})`}
             strokeWidth={5}
             strokeLinecap="round"
             strokeLinejoin="round"

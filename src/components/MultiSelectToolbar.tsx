@@ -2,7 +2,14 @@
 
 import { useReactFlow } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
+import JSZip from "jszip";
+import type {
+  ImageInputNodeData,
+  AnnotationNodeData,
+  NanoBananaNodeData,
+  OutputNodeData,
+} from "@/types";
 
 const STACK_GAP = 20;
 
@@ -156,6 +163,58 @@ export function MultiSelectToolbar() {
     removeNodesFromGroup(nodeIds);
   };
 
+  const handleDownloadImages = useCallback(async () => {
+    // Extract images from selected nodes based on node type
+    const images: { data: string; name: string }[] = [];
+
+    selectedNodes.forEach((node, index) => {
+      let imageData: string | null = null;
+
+      switch (node.type) {
+        case "imageInput":
+          imageData = (node.data as ImageInputNodeData).image;
+          break;
+        case "annotation":
+          imageData = (node.data as AnnotationNodeData).outputImage;
+          break;
+        case "nanoBanana":
+          imageData = (node.data as NanoBananaNodeData).outputImage;
+          break;
+        case "output":
+          imageData = (node.data as OutputNodeData).image;
+          break;
+      }
+
+      if (imageData) {
+        images.push({
+          data: imageData,
+          name: `image-${index + 1}.png`,
+        });
+      }
+    });
+
+    if (images.length === 0) return;
+
+    // Create ZIP file
+    const zip = new JSZip();
+    images.forEach(({ data, name }) => {
+      // Remove data URL prefix to get raw base64
+      const base64Data = data.replace(/^data:image\/\w+;base64,/, "");
+      zip.file(name, base64Data, { base64: true });
+    });
+
+    // Generate and download
+    const blob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `images-${Date.now()}.zip`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [selectedNodes]);
+
   if (!toolbarPosition || selectedNodes.length < 2) return null;
 
   return (
@@ -220,6 +279,20 @@ export function MultiSelectToolbar() {
           </svg>
         </button>
       )}
+
+      {/* Separator */}
+      <div className="w-px h-4 bg-neutral-600 mx-0.5" />
+
+      {/* Download images button */}
+      <button
+        onClick={handleDownloadImages}
+        className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-neutral-100 transition-colors"
+        title="Download images as ZIP"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+        </svg>
+      </button>
     </div>
   );
 }
