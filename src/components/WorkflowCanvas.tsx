@@ -25,6 +25,13 @@ import {
   GenerateVideoNode,
   LLMGenerateNode,
   SplitGridNode,
+  ImageCompareNode,
+  MaskInpaintNode,
+  ImageFilterNode,
+  ColorPaletteNode,
+  LoopNode,
+  BatchVariationsNode,
+  ConditionalBranchNode,
   OutputNode,
 } from "./nodes";
 import { EditableEdge, ReferenceEdge } from "./edges";
@@ -46,6 +53,13 @@ const nodeTypes: NodeTypes = {
   generateVideo: GenerateVideoNode,
   llmGenerate: LLMGenerateNode,
   splitGrid: SplitGridNode,
+  imageCompare: ImageCompareNode,
+  maskInpaint: MaskInpaintNode,
+  imageFilter: ImageFilterNode,
+  colorPalette: ColorPaletteNode,
+  loop: LoopNode,
+  batchVariations: BatchVariationsNode,
+  conditionalBranch: ConditionalBranchNode,
   output: OutputNode,
 };
 
@@ -89,6 +103,20 @@ const getNodeHandles = (nodeType: string): { inputs: string[]; outputs: string[]
       return { inputs: ["text", "image"], outputs: ["text"] };
     case "splitGrid":
       return { inputs: ["image"], outputs: ["reference"] };
+    case "imageCompare":
+      return { inputs: ["imageA", "imageB"], outputs: [] };
+    case "maskInpaint":
+      return { inputs: ["image", "text"], outputs: ["image"] };
+    case "colorPalette":
+      return { inputs: ["image"], outputs: ["image"] };
+    case "imageFilter":
+      return { inputs: ["image"], outputs: ["image"] };
+    case "loop":
+      return { inputs: ["image", "text", "feedback"], outputs: ["image", "text", "gallery"] };
+    case "batchVariations":
+      return { inputs: ["image", "text"], outputs: ["image"] };
+    case "conditionalBranch":
+      return { inputs: ["image"], outputs: ["image-true", "image-false"] };
     case "output":
       return { inputs: ["image"], outputs: [] };
     default:
@@ -176,8 +204,31 @@ const findScrollableAncestor = (target: HTMLElement, deltaX: number, deltaY: num
 };
 
 export function WorkflowCanvas() {
-  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId, executeWorkflow, isModalOpen, showQuickstart, setShowQuickstart } =
-    useWorkflowStore();
+  const {
+    nodes,
+    edges,
+    groups,
+    onNodesChange,
+    onEdgesChange,
+    onConnect,
+    addNode,
+    updateNodeData,
+    loadWorkflow,
+    getNodeById,
+    addToGlobalHistory,
+    setNodeGroupId,
+    executeWorkflow,
+    isModalOpen,
+    showQuickstart,
+    setShowQuickstart,
+    // Undo/Redo from store (history is automatically tracked by store actions)
+    undo,
+    redo,
+    canUndo,
+    canRedo,
+    clearHistory,
+    pushToUndoStack,
+  } = useWorkflowStore();
   const { screenToFlowPosition, getViewport, zoomIn, zoomOut, setViewport } = useReactFlow();
   const [isDragOver, setIsDragOver] = useState(false);
   const [dropType, setDropType] = useState<"image" | "workflow" | "node" | null>(null);
@@ -195,6 +246,11 @@ export function WorkflowCanvas() {
 
 
   // Check if a node was dropped into a group and add it to that group
+  // Capture snapshot before node drag starts for undo
+  const handleNodeDragStart = useCallback(() => {
+    pushToUndoStack();
+  }, [pushToUndoStack]);
+
   const handleNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: Node) => {
       // Skip if it's a group node
@@ -228,6 +284,32 @@ export function WorkflowCanvas() {
       }
     },
     [groups, nodes, setNodeGroupId]
+  );
+
+  // Wrapper for onNodesChange that captures snapshots before delete operations
+  const handleNodesChange = useCallback(
+    (changes: import("@xyflow/react").NodeChange<import("@/types").WorkflowNode>[]) => {
+      // Capture snapshot before node deletions for undo
+      const hasRemoval = changes.some((change) => change.type === "remove");
+      if (hasRemoval) {
+        pushToUndoStack();
+      }
+      onNodesChange(changes);
+    },
+    [onNodesChange, pushToUndoStack]
+  );
+
+  // Wrapper for onEdgesChange that captures snapshots before delete operations
+  const handleEdgesChange = useCallback(
+    (changes: import("@xyflow/react").EdgeChange<import("@/types").WorkflowEdge>[]) => {
+      // Capture snapshot before edge deletions for undo
+      const hasRemoval = changes.some((change) => change.type === "remove");
+      if (hasRemoval) {
+        pushToUndoStack();
+      }
+      onEdgesChange(changes);
+    },
+    [onEdgesChange, pushToUndoStack]
   );
 
   // Connection validation - checks if a connection is valid based on handle types and node types
@@ -269,6 +351,9 @@ export function WorkflowCanvas() {
     (connection: Connection) => {
       if (!isValidConnection(connection)) return;
 
+      // Capture snapshot before connection for undo
+      pushToUndoStack();
+
       // Get all selected nodes
       const selectedNodes = nodes.filter((node) => node.selected);
       const sourceNode = nodes.find((node) => node.id === connection.source);
@@ -307,7 +392,7 @@ export function WorkflowCanvas() {
         onConnect(connection);
       }
     },
-    [onConnect, nodes]
+    [onConnect, nodes, pushToUndoStack]
   );
 
   // Handle connection dropped on empty space or on a node
@@ -737,6 +822,20 @@ export function WorkflowCanvas() {
       return;
     }
 
+    // Handle undo (Ctrl/Cmd + Z)
+    if ((event.ctrlKey || event.metaKey) && event.key === "z" && !event.shiftKey) {
+      event.preventDefault();
+      undo();
+      return;
+    }
+
+    // Handle redo (Ctrl/Cmd + Shift + Z or Ctrl/Cmd + Y)
+    if ((event.ctrlKey || event.metaKey) && ((event.key === "z" && event.shiftKey) || event.key === "y")) {
+      event.preventDefault();
+      redo();
+      return;
+    }
+
     // Handle copy (Ctrl/Cmd + C)
     if ((event.ctrlKey || event.metaKey) && event.key === "c") {
       event.preventDefault();
@@ -787,6 +886,13 @@ export function WorkflowCanvas() {
             generateVideo: { width: 300, height: 300 },
             llmGenerate: { width: 320, height: 360 },
             splitGrid: { width: 300, height: 320 },
+            imageCompare: { width: 400, height: 350 },
+            maskInpaint: { width: 320, height: 380 },
+            imageFilter: { width: 320, height: 420 },
+            colorPalette: { width: 300, height: 280 },
+            loop: { width: 340, height: 400 },
+            batchVariations: { width: 400, height: 480 },
+            conditionalBranch: { width: 360, height: 420 },
             output: { width: 320, height: 320 },
           };
           const dims = defaultDimensions[nodeType];
@@ -801,6 +907,7 @@ export function WorkflowCanvas() {
 
         // If we have nodes in the internal clipboard, prioritize pasting those
         if (clipboard && clipboard.nodes.length > 0) {
+          pushToUndoStack();
           pasteNodes();
           clearClipboard(); // Clear so next paste uses system clipboard
           return;
@@ -948,7 +1055,7 @@ export function WorkflowCanvas() {
           ]);
         });
       }
-  }, [nodes, onNodesChange, copySelectedNodes, pasteNodes, clearClipboard, clipboard, getViewport, addNode, updateNodeData, executeWorkflow]);
+  }, [nodes, onNodesChange, copySelectedNodes, pasteNodes, clearClipboard, clipboard, getViewport, addNode, updateNodeData, executeWorkflow, undo, redo, pushToUndoStack]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -1005,6 +1112,9 @@ export function WorkflowCanvas() {
       setIsDragOver(false);
       setDropType(null);
 
+      // Capture snapshot before adding nodes for undo
+      pushToUndoStack();
+
       // Check for node type drop from action bar
       const nodeType = event.dataTransfer.getData("application/node-type") as NodeType;
       if (nodeType) {
@@ -1056,6 +1166,7 @@ export function WorkflowCanvas() {
           try {
             const workflow = JSON.parse(e.target?.result as string) as WorkflowFile;
             if (workflow.version && workflow.nodes && workflow.edges) {
+              clearHistory();
               await loadWorkflow(workflow);
             } else {
               alert("Invalid workflow file format");
@@ -1105,7 +1216,7 @@ export function WorkflowCanvas() {
         reader.readAsDataURL(file);
       });
     },
-    [screenToFlowPosition, addNode, updateNodeData, loadWorkflow]
+    [screenToFlowPosition, addNode, updateNodeData, loadWorkflow, pushToUndoStack]
   );
 
   return (
@@ -1145,6 +1256,7 @@ export function WorkflowCanvas() {
       {isCanvasEmpty && showQuickstart && (
         <WelcomeModal
           onWorkflowGenerated={async (workflow) => {
+            clearHistory();
             await loadWorkflow(workflow);
             setShowQuickstart(false);
           }}
@@ -1155,10 +1267,11 @@ export function WorkflowCanvas() {
       <ReactFlow
         nodes={allNodes}
         edges={edges}
-        onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
+        onNodesChange={handleNodesChange}
+        onEdgesChange={handleEdgesChange}
         onConnect={handleConnect}
         onConnectEnd={handleConnectEnd}
+        onNodeDragStart={handleNodeDragStart}
         onNodeDragStop={handleNodeDragStop}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
@@ -1209,6 +1322,22 @@ export function WorkflowCanvas() {
                 return "#06b6d4";
               case "splitGrid":
                 return "#f59e0b";
+              case "imageCompare":
+                return "#14b8a6"; // teal-500 - for comparison
+              case "loop":
+                return "#a855f7"; // purple-500 - for loops/iteration
+              case "maskInpaint":
+                return "#d946ef";
+              case "colorPalette":
+                return "#ec4899"; // pink-500 - for color palette
+              case "imageFilter":
+                return "#14b8a6";
+              case "loop":
+                return "#a855f7"; // purple-500 - for loops/iteration
+              case "batchVariations":
+                return "#0891b2";
+              case "conditionalBranch":
+                return "#f59e0b"; // amber-500 - for conditional logic
               case "output":
                 return "#ef4444";
               default:

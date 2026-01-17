@@ -1761,6 +1761,187 @@ describe("workflowStore integration tests", () => {
     });
   });
 
+  describe("ConditionalBranchNode data flow", () => {
+    describe("getConnectedInputs for conditionalBranch outputs", () => {
+      it("should route image through TRUE output when lastEvaluationResult is true", () => {
+        const store = useWorkflowStore.getState();
+        const testImage = "data:image/png;base64,conditionalImage";
+
+        useWorkflowStore.setState({
+          nodes: [
+            createTestNode("conditionalBranch-1", "conditionalBranch", {
+              inputImage: testImage,
+              lastEvaluationResult: true,
+              conditionGroups: [],
+              groupLogic: "AND",
+            }),
+            createTestNode("output-true", "output", {}),
+          ],
+          edges: [
+            createTestEdge("conditionalBranch-1", "output-true", "image-true", "image"),
+          ],
+        });
+
+        const result = store.getConnectedInputs("output-true");
+        expect(result.images).toContain(testImage);
+        expect(result.images).toHaveLength(1);
+      });
+
+      it("should NOT route image through TRUE output when lastEvaluationResult is false", () => {
+        const store = useWorkflowStore.getState();
+        const testImage = "data:image/png;base64,conditionalImage";
+
+        useWorkflowStore.setState({
+          nodes: [
+            createTestNode("conditionalBranch-1", "conditionalBranch", {
+              inputImage: testImage,
+              lastEvaluationResult: false,
+              conditionGroups: [],
+              groupLogic: "AND",
+            }),
+            createTestNode("output-true", "output", {}),
+          ],
+          edges: [
+            createTestEdge("conditionalBranch-1", "output-true", "image-true", "image"),
+          ],
+        });
+
+        const result = store.getConnectedInputs("output-true");
+        expect(result.images).toHaveLength(0);
+      });
+
+      it("should route image through FALSE output when lastEvaluationResult is false", () => {
+        const store = useWorkflowStore.getState();
+        const testImage = "data:image/png;base64,conditionalImage";
+
+        useWorkflowStore.setState({
+          nodes: [
+            createTestNode("conditionalBranch-1", "conditionalBranch", {
+              inputImage: testImage,
+              lastEvaluationResult: false,
+              conditionGroups: [],
+              groupLogic: "AND",
+            }),
+            createTestNode("output-false", "output", {}),
+          ],
+          edges: [
+            createTestEdge("conditionalBranch-1", "output-false", "image-false", "image"),
+          ],
+        });
+
+        const result = store.getConnectedInputs("output-false");
+        expect(result.images).toContain(testImage);
+        expect(result.images).toHaveLength(1);
+      });
+
+      it("should NOT route image through FALSE output when lastEvaluationResult is true", () => {
+        const store = useWorkflowStore.getState();
+        const testImage = "data:image/png;base64,conditionalImage";
+
+        useWorkflowStore.setState({
+          nodes: [
+            createTestNode("conditionalBranch-1", "conditionalBranch", {
+              inputImage: testImage,
+              lastEvaluationResult: true,
+              conditionGroups: [],
+              groupLogic: "AND",
+            }),
+            createTestNode("output-false", "output", {}),
+          ],
+          edges: [
+            createTestEdge("conditionalBranch-1", "output-false", "image-false", "image"),
+          ],
+        });
+
+        const result = store.getConnectedInputs("output-false");
+        expect(result.images).toHaveLength(0);
+      });
+
+      it("should NOT route image through any output when lastEvaluationResult is null", () => {
+        const store = useWorkflowStore.getState();
+        const testImage = "data:image/png;base64,conditionalImage";
+
+        useWorkflowStore.setState({
+          nodes: [
+            createTestNode("conditionalBranch-1", "conditionalBranch", {
+              inputImage: testImage,
+              lastEvaluationResult: null, // Not yet evaluated
+              conditionGroups: [],
+              groupLogic: "AND",
+            }),
+            createTestNode("output-true", "output", {}),
+            createTestNode("output-false", "output", {}),
+          ],
+          edges: [
+            createTestEdge("conditionalBranch-1", "output-true", "image-true", "image"),
+            createTestEdge("conditionalBranch-1", "output-false", "image-false", "image"),
+          ],
+        });
+
+        const trueResult = store.getConnectedInputs("output-true");
+        const falseResult = store.getConnectedInputs("output-false");
+        expect(trueResult.images).toHaveLength(0);
+        expect(falseResult.images).toHaveLength(0);
+      });
+
+      it("should support branching to different workflows based on condition", () => {
+        const store = useWorkflowStore.getState();
+        const testImage = "data:image/png;base64,conditionalImage";
+
+        // True branch: goes to output-true
+        // False branch: goes to output-false
+        useWorkflowStore.setState({
+          nodes: [
+            createTestNode("conditionalBranch-1", "conditionalBranch", {
+              inputImage: testImage,
+              lastEvaluationResult: true,
+              conditionGroups: [],
+              groupLogic: "AND",
+            }),
+            createTestNode("output-true", "output", {}),
+            createTestNode("output-false", "output", {}),
+          ],
+          edges: [
+            createTestEdge("conditionalBranch-1", "output-true", "image-true", "image"),
+            createTestEdge("conditionalBranch-1", "output-false", "image-false", "image"),
+          ],
+        });
+
+        // True branch should receive image
+        const trueResult = store.getConnectedInputs("output-true");
+        expect(trueResult.images).toContain(testImage);
+
+        // False branch should NOT receive image
+        const falseResult = store.getConnectedInputs("output-false");
+        expect(falseResult.images).toHaveLength(0);
+
+        // Now flip the evaluation result
+        useWorkflowStore.setState({
+          nodes: [
+            createTestNode("conditionalBranch-1", "conditionalBranch", {
+              inputImage: testImage,
+              lastEvaluationResult: false,
+              conditionGroups: [],
+              groupLogic: "AND",
+            }),
+            createTestNode("output-true", "output", {}),
+            createTestNode("output-false", "output", {}),
+          ],
+          edges: [
+            createTestEdge("conditionalBranch-1", "output-true", "image-true", "image"),
+            createTestEdge("conditionalBranch-1", "output-false", "image-false", "image"),
+          ],
+        });
+
+        // Now false branch should receive image
+        const trueResult2 = store.getConnectedInputs("output-true");
+        const falseResult2 = store.getConnectedInputs("output-false");
+        expect(trueResult2.images).toHaveLength(0);
+        expect(falseResult2.images).toContain(testImage);
+      });
+    });
+  });
+
   describe("Connection validation integration", () => {
     describe("Handle type identification for data extraction", () => {
       it("should correctly identify image handles by ID pattern", () => {

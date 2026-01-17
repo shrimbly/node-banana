@@ -19,6 +19,13 @@ const VALID_NODE_TYPES: NodeType[] = [
   "generateVideo",
   "llmGenerate",
   "splitGrid",
+  "imageCompare",
+  "maskInpaint",
+  "imageFilter",
+  "colorPalette",
+  "loop",
+  "batchVariations",
+  "conditionalBranch",
   "output",
 ];
 
@@ -33,6 +40,13 @@ const DEFAULT_DIMENSIONS: Record<NodeType, { width: number; height: number }> = 
   generateVideo: { width: 300, height: 300 },
   llmGenerate: { width: 320, height: 360 },
   splitGrid: { width: 300, height: 320 },
+  imageCompare: { width: 400, height: 350 },
+  maskInpaint: { width: 320, height: 380 },
+  imageFilter: { width: 320, height: 420 },
+  colorPalette: { width: 300, height: 280 },
+  loop: { width: 340, height: 400 },
+  batchVariations: { width: 400, height: 480 },
+  conditionalBranch: { width: 360, height: 420 },
   output: { width: 320, height: 320 },
 };
 
@@ -257,6 +271,103 @@ function createDefaultNodeData(type: NodeType): WorkflowNodeData {
         gridRows: 2,
         gridCols: 3,
         isConfigured: false,
+        status: "idle",
+        error: null,
+      };
+    case "imageCompare":
+      return {
+        imageA: null,
+        imageB: null,
+        sliderPosition: 50,
+        zoomLevel: 1,
+        panPosition: { x: 0, y: 0 },
+        syncZoom: true,
+      };
+    case "maskInpaint":
+      return {
+        sourceImage: null,
+        maskStrokes: [],
+        maskImage: null,
+        outputImage: null,
+        inputPrompt: null,
+        brushSize: 30,
+        maskFeather: 5,
+        maskExpansion: 0,
+        status: "idle",
+        error: null,
+        imageHistory: [],
+        selectedHistoryIndex: 0,
+      };
+    case "imageFilter":
+      return {
+        sourceImage: null,
+        outputImage: null,
+        filterSettings: {
+          brightness: 0,
+          contrast: 0,
+          saturation: 0,
+          hueRotate: 0,
+          blur: 0,
+          sharpen: 0,
+          opacity: 100,
+          invert: 0,
+          grayscale: 0,
+        },
+        activePreset: "none",
+        status: "idle",
+        error: null,
+      };
+    case "colorPalette":
+      return {
+        sourceImage: null,
+        targetImage: null,
+        outputImage: null,
+        extractedPalette: [],
+        colorCount: 8,
+        mode: "extract",
+        mappingMethod: "closest",
+        status: "idle",
+        error: null,
+      };
+    case "loop":
+      return {
+        iterationCount: 3,
+        loopMode: "count",
+        inputImages: [],
+        inputText: null,
+        currentIteration: 0,
+        isLooping: false,
+        iterationResults: [],
+        currentImage: null,
+        currentText: null,
+        galleryImages: [],
+        selectedGalleryIndex: 0,
+        status: "idle",
+        error: null,
+      };
+    case "batchVariations":
+      return {
+        inputImage: null,
+        inputPrompt: null,
+        variationCount: 4,
+        variations: [],
+        selectedVariationIndex: 0,
+        outputImage: null,
+        aspectRatio: "1:1",
+        resolution: "1K",
+        model: "nano-banana-pro",
+        useGoogleSearch: false,
+        generationProgress: 0,
+        status: "idle",
+        error: null,
+      };
+    case "conditionalBranch":
+      return {
+        inputImage: null,
+        conditionGroups: [],
+        groupLogic: "AND",
+        lastEvaluationResult: null,
+        analysisResults: null,
         status: "idle",
         error: null,
       };

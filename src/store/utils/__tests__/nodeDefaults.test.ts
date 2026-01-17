@@ -182,6 +182,38 @@ describe("nodeDefaults utilities", () => {
       expect(data).toHaveProperty("image", null);
     });
 
+    it("creates correct structure for conditionalBranch", () => {
+      const data = createDefaultNodeData("conditionalBranch");
+
+      // Core properties
+      expect(data).toHaveProperty("inputImage", null);
+      expect(data).toHaveProperty("groupLogic", "AND");
+      expect(data).toHaveProperty("lastEvaluationResult", null);
+      expect(data).toHaveProperty("analysisResults", null);
+      expect(data).toHaveProperty("status", "idle");
+      expect(data).toHaveProperty("error", null);
+
+      // Condition groups structure
+      expect(data).toHaveProperty("conditionGroups");
+      expect(Array.isArray((data as any).conditionGroups)).toBe(true);
+      expect((data as any).conditionGroups.length).toBe(1);
+
+      // First condition group structure
+      const firstGroup = (data as any).conditionGroups[0];
+      expect(firstGroup).toHaveProperty("id");
+      expect(firstGroup).toHaveProperty("logic", "AND");
+      expect(firstGroup).toHaveProperty("conditions");
+      expect(Array.isArray(firstGroup.conditions)).toBe(true);
+      expect(firstGroup.conditions.length).toBe(1);
+
+      // First condition structure
+      const firstCondition = firstGroup.conditions[0];
+      expect(firstCondition).toHaveProperty("id");
+      expect(firstCondition).toHaveProperty("property", "width");
+      expect(firstCondition).toHaveProperty("operator", "greater_than");
+      expect(firstCondition).toHaveProperty("value", 512);
+    });
+
     it("uses stored defaults for nanoBanana when available", () => {
       const customSettings = {
         aspectRatio: "16:9",

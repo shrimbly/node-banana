@@ -7,6 +7,13 @@ import {
   GenerateVideoNodeData,
   LLMGenerateNodeData,
   SplitGridNodeData,
+  MaskInpaintNodeData,
+  ImageCompareNodeData,
+  ImageFilterNodeData,
+  ColorPaletteNodeData,
+  LoopNodeData,
+  BatchVariationsNodeData,
+  ConditionalBranchNodeData,
   OutputNodeData,
   WorkflowNodeData,
   GroupColor,
@@ -26,6 +33,13 @@ export const defaultNodeDimensions: Record<NodeType, { width: number; height: nu
   generateVideo: { width: 300, height: 300 },
   llmGenerate: { width: 320, height: 360 },
   splitGrid: { width: 300, height: 320 },
+  imageCompare: { width: 400, height: 350 },
+  maskInpaint: { width: 320, height: 380 },
+  imageFilter: { width: 320, height: 420 },
+  colorPalette: { width: 300, height: 280 },
+  loop: { width: 340, height: 400 },
+  batchVariations: { width: 400, height: 480 },
+  conditionalBranch: { width: 360, height: 420 },
   output: { width: 320, height: 320 },
 };
 
@@ -133,6 +147,118 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         status: "idle",
         error: null,
       } as SplitGridNodeData;
+    case "imageCompare":
+      return {
+        imageA: null,
+        imageB: null,
+        sliderPosition: 50,
+        zoomLevel: 1,
+        panPosition: { x: 0, y: 0 },
+        syncZoom: true,
+      } as ImageCompareNodeData;
+    case "maskInpaint":
+      return {
+        sourceImage: null,
+        maskStrokes: [],
+        maskImage: null,
+        outputImage: null,
+        inputPrompt: null,
+        brushSize: 30,
+        maskFeather: 5,
+        maskExpansion: 0,
+        status: "idle",
+        error: null,
+        imageHistory: [],
+        selectedHistoryIndex: 0,
+      } as MaskInpaintNodeData;
+    case "imageFilter":
+      return {
+        sourceImage: null,
+        outputImage: null,
+        filterSettings: {
+          brightness: 0,
+          contrast: 0,
+          saturation: 0,
+          hueRotate: 0,
+          blur: 0,
+          sharpen: 0,
+          opacity: 100,
+          invert: 0,
+          grayscale: 0,
+        },
+        activePreset: "none",
+        status: "idle",
+        error: null,
+      } as ImageFilterNodeData;
+    case "colorPalette":
+      return {
+        sourceImage: null,
+        targetImage: null,
+        outputImage: null,
+        extractedPalette: [],
+        colorCount: 8,
+        mode: "extract",
+        mappingMethod: "closest",
+        status: "idle",
+        error: null,
+      } as ColorPaletteNodeData;
+    case "loop":
+      return {
+        iterationCount: 3,
+        loopMode: "count",
+        inputImages: [],
+        inputText: null,
+        currentIteration: 0,
+        isLooping: false,
+        iterationResults: [],
+        currentImage: null,
+        currentText: null,
+        galleryImages: [],
+        selectedGalleryIndex: 0,
+        status: "idle",
+        error: null,
+      } as LoopNodeData;
+    case "batchVariations": {
+      const defaults = loadGenerateImageDefaults();
+      return {
+        inputImage: null,
+        inputPrompt: null,
+        variationCount: 4,
+        variations: [],
+        selectedVariationIndex: 0,
+        outputImage: null,
+        aspectRatio: defaults.aspectRatio,
+        resolution: defaults.resolution,
+        model: defaults.model,
+        useGoogleSearch: defaults.useGoogleSearch,
+        generationProgress: 0,
+        status: "idle",
+        error: null,
+      } as BatchVariationsNodeData;
+    }
+    case "conditionalBranch":
+      return {
+        inputImage: null,
+        conditionGroups: [
+          {
+            id: crypto.randomUUID(),
+            logic: "AND",
+            conditions: [
+              {
+                id: crypto.randomUUID(),
+                property: "width",
+                operator: "greater_than",
+                value: 512,
+              },
+            ],
+          },
+        ],
+        groupLogic: "AND",
+        lastEvaluationResult: null,
+        analysisResults: null,
+        status: "idle",
+        error: null,
+      } as ConditionalBranchNodeData;
     case "output":
       return {
         image: null,

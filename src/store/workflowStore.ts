@@ -19,6 +19,12 @@ import {
   GenerateVideoNodeData,
   LLMGenerateNodeData,
   SplitGridNodeData,
+  MaskInpaintNodeData,
+  ImageFilterNodeData,
+  ColorPaletteNodeData,
+  LoopNodeData,
+  BatchVariationsNodeData,
+  ConditionalBranchNodeData,
   WorkflowNodeData,
   ImageHistoryItem,
   NodeGroup,
@@ -31,6 +37,7 @@ import { useToast } from "@/components/Toast";
 import { calculateGenerationCost } from "@/utils/costCalculator";
 import { logger } from "@/utils/logger";
 import { externalizeWorkflowImages, hydrateWorkflowImages } from "@/utils/imageStorage";
+import { analyzeImage, colorMatches, ImageAnalysisResult } from "@/utils/imageAnalysis";
 import {
   loadSaveConfigs,
   saveSaveConfig,
@@ -49,7 +56,6 @@ import {
   GROUP_COLORS,
   GROUP_COLOR_ORDER,
 } from "./utils/nodeDefaults";
-
 export type EdgeStyle = "angular" | "curved";
 
 // Workflow file format
@@ -68,6 +74,16 @@ interface ClipboardData {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
 }
+
+// Undo/Redo history snapshot - captures the state that can be undone/redone
+interface HistorySnapshot {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  groups: Record<string, NodeGroup>;
+}
+
+// Maximum number of undo/redo steps to keep in history
+const MAX_HISTORY_SIZE = 50;
 
 interface WorkflowStore {
   nodes: WorkflowNode[];
@@ -189,6 +205,18 @@ interface WorkflowStore {
 
   // Recent models actions
   trackModelUsage: (model: { provider: ProviderType; modelId: string; displayName: string }) => void;
+
+  // Undo/Redo state
+  undoStack: HistorySnapshot[];
+  redoStack: HistorySnapshot[];
+  canUndo: boolean;
+  canRedo: boolean;
+
+  // Undo/Redo actions
+  undo: () => void;
+  redo: () => void;
+  pushToUndoStack: () => void;
+  clearHistory: () => void;
 }
 
 let nodeIdCounter = 0;
@@ -237,6 +265,12 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   // Recent models initial state
   recentModels: getRecentModels(),
 
+  // Undo/Redo initial state
+  undoStack: [],
+  redoStack: [],
+  canUndo: false,
+  canRedo: false,
+
   setEdgeStyle: (style: EdgeStyle) => {
     set({ edgeStyle: style });
   },
@@ -260,6 +294,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   addNode: (type: NodeType, position: XYPosition, initialData?: Partial<WorkflowNodeData>) => {
+    // Push current state to undo stack before making changes
+    get().pushToUndoStack();
+
     const id = `${type}-${++nodeIdCounter}`;
 
     const { width, height } = defaultNodeDimensions[type];
@@ -298,6 +335,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   removeNode: (nodeId: string) => {
+    // Push current state to undo stack before making changes
+    get().pushToUndoStack();
+
     set((state) => ({
       nodes: state.nodes.filter((node) => node.id !== nodeId),
       edges: state.edges.filter(
@@ -312,6 +352,13 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     const hasMeaningfulChange = changes.some(
       (c) => c.type !== "select" && c.type !== "dimensions"
     );
+
+    // Push to undo stack before node removal (destructive change)
+    const hasNodeRemoval = changes.some((c) => c.type === "remove");
+    if (hasNodeRemoval) {
+      get().pushToUndoStack();
+    }
+
     set((state) => ({
       nodes: applyNodeChanges(changes, state.nodes),
       ...(hasMeaningfulChange ? { hasUnsavedChanges: true } : {}),
@@ -321,6 +368,13 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   onEdgesChange: (changes: EdgeChange<WorkflowEdge>[]) => {
     // Only mark as unsaved for meaningful changes (not selection changes)
     const hasMeaningfulChange = changes.some((c) => c.type !== "select");
+
+    // Push to undo stack before edge removal (destructive change)
+    const hasEdgeRemoval = changes.some((c) => c.type === "remove");
+    if (hasEdgeRemoval) {
+      get().pushToUndoStack();
+    }
+
     set((state) => ({
       edges: applyEdgeChanges(changes, state.edges),
       ...(hasMeaningfulChange ? { hasUnsavedChanges: true } : {}),
@@ -328,6 +382,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   onConnect: (connection: Connection) => {
+    // Push current state to undo stack before making changes
+    get().pushToUndoStack();
+
     set((state) => ({
       edges: addEdge(
         {
@@ -341,6 +398,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   addEdgeWithType: (connection: Connection, edgeType: string) => {
+    // Push current state to undo stack before making changes
+    get().pushToUndoStack();
+
     set((state) => ({
       edges: addEdge(
         {
@@ -355,6 +415,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   removeEdge: (edgeId: string) => {
+    // Push current state to undo stack before making changes
+    get().pushToUndoStack();
+
     set((state) => ({
       edges: state.edges.filter((edge) => edge.id !== edgeId),
       hasUnsavedChanges: true,
@@ -362,6 +425,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   toggleEdgePause: (edgeId: string) => {
+    // Push current state to undo stack before making changes
+    get().pushToUndoStack();
     set((state) => ({
       edges: state.edges.map((edge) =>
         edge.id === edgeId
@@ -396,6 +461,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     const { clipboard, nodes, edges } = get();
 
     if (!clipboard || clipboard.nodes.length === 0) return;
+
+    // Push current state to undo stack before making changes
+    get().pushToUndoStack();
 
     // Create a mapping from old node IDs to new node IDs
     const idMapping = new Map<string, string>();
@@ -448,6 +516,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     const { nodes, groups } = get();
 
     if (nodeIds.length === 0) return "";
+
+    // Push current state to undo stack before making changes
+    get().pushToUndoStack();
 
     // Get the nodes to group
     const nodesToGroup = nodes.filter((n) => nodeIds.includes(n.id));
@@ -513,6 +584,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   deleteGroup: (groupId: string) => {
+    // Push current state to undo stack before making changes
+    get().pushToUndoStack();
+
     set((state) => {
       const { [groupId]: _, ...remainingGroups } = state.groups;
       return {
@@ -526,6 +600,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   addNodesToGroup: (nodeIds: string[], groupId: string) => {
+    // Push current state to undo stack before making changes
+    get().pushToUndoStack();
     set((state) => ({
       nodes: state.nodes.map((node) =>
         nodeIds.includes(node.id) ? { ...node, groupId } : node
@@ -535,6 +611,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   removeNodesFromGroup: (nodeIds: string[]) => {
+    // Push current state to undo stack before making changes
+    get().pushToUndoStack();
     set((state) => ({
       nodes: state.nodes.map((node) =>
         nodeIds.includes(node.id) ? { ...node, groupId: undefined } : node
@@ -554,6 +632,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   },
 
   toggleGroupLock: (groupId: string) => {
+    // Push current state to undo stack before making changes
+    get().pushToUndoStack();
     set((state) => ({
       groups: {
         ...state.groups,
@@ -648,13 +728,20 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     };
 
     // Helper to extract output from source node
-    const getSourceOutput = (sourceNode: WorkflowNode): { type: "image" | "text" | "video"; value: string | null } => {
+    // Note: For conditional branch nodes, we need the sourceHandle to determine which output (true/false)
+    const getSourceOutput = (sourceNode: WorkflowNode, sourceHandle?: string | null): { type: "image" | "text" | "video"; value: string | null } => {
       if (sourceNode.type === "imageInput") {
         return { type: "image", value: (sourceNode.data as ImageInputNodeData).image };
       } else if (sourceNode.type === "annotation") {
         return { type: "image", value: (sourceNode.data as AnnotationNodeData).outputImage };
       } else if (sourceNode.type === "nanoBanana") {
         return { type: "image", value: (sourceNode.data as NanoBananaNodeData).outputImage };
+      } else if (sourceNode.type === "maskInpaint") {
+        return { type: "image", value: (sourceNode.data as MaskInpaintNodeData).outputImage };
+      } else if (sourceNode.type === "imageFilter") {
+        return { type: "image", value: (sourceNode.data as ImageFilterNodeData).outputImage };
+      } else if (sourceNode.type === "colorPalette") {
+        return { type: "image", value: (sourceNode.data as ColorPaletteNodeData).outputImage };
       } else if (sourceNode.type === "generateVideo") {
         // Return video type - generateVideo and output nodes handle this appropriately
         return { type: "video", value: (sourceNode.data as GenerateVideoNodeData).outputVideo };
@@ -662,6 +749,25 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         return { type: "text", value: (sourceNode.data as PromptNodeData).prompt };
       } else if (sourceNode.type === "llmGenerate") {
         return { type: "text", value: (sourceNode.data as LLMGenerateNodeData).outputText };
+      } else if (sourceNode.type === "loop") {
+        // Loop node can output image, text, or gallery (multiple images)
+        const loopData = sourceNode.data as LoopNodeData;
+        return { type: "image", value: loopData.currentImage };
+      } else if (sourceNode.type === "batchVariations") {
+        return { type: "image", value: (sourceNode.data as BatchVariationsNodeData).outputImage };
+      } else if (sourceNode.type === "conditionalBranch") {
+        // Conditional branch routes image based on evaluation result
+        const branchData = sourceNode.data as ConditionalBranchNodeData;
+        const evaluationResult = branchData.lastEvaluationResult;
+        // Only return value if connected to the correct output handle
+        // image-true outputs when result is true, image-false when result is false
+        if (sourceHandle === "image-true" && evaluationResult === true) {
+          return { type: "image", value: branchData.inputImage };
+        } else if (sourceHandle === "image-false" && evaluationResult === false) {
+          return { type: "image", value: branchData.inputImage };
+        }
+        // Return null if connected to wrong output for current evaluation
+        return { type: "image", value: null };
       }
       return { type: "image", value: null };
     };
@@ -673,7 +779,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         if (!sourceNode) return;
 
         const handleId = edge.targetHandle;
-        const { value } = getSourceOutput(sourceNode);
+        const { value } = getSourceOutput(sourceNode, edge.sourceHandle);
 
         if (!value) return;
 
@@ -1524,6 +1630,468 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             break;
           }
 
+          case "maskInpaint": {
+            const { images, text } = getConnectedInputs(node.id);
+            const sourceImage = images[0] || null;
+            const promptText = text || null;
+
+            // Get node data for mask info
+            const nodeData = node.data as MaskInpaintNodeData;
+
+            if (!sourceImage) {
+              logger.error('node.error', 'maskInpaint node missing source image', {
+                nodeId: node.id,
+              });
+              updateNodeData(node.id, {
+                status: "error",
+                error: "No source image connected",
+              });
+              set({ isRunning: false, currentNodeId: null });
+              await logger.endSession();
+              return;
+            }
+
+            if (!nodeData.maskImage && nodeData.maskStrokes.length === 0) {
+              logger.error('node.error', 'maskInpaint node missing mask', {
+                nodeId: node.id,
+              });
+              updateNodeData(node.id, {
+                status: "error",
+                error: "No mask defined - paint a mask first",
+              });
+              set({ isRunning: false, currentNodeId: null });
+              await logger.endSession();
+              return;
+            }
+
+            if (!promptText) {
+              logger.error('node.error', 'maskInpaint node missing prompt', {
+                nodeId: node.id,
+              });
+              updateNodeData(node.id, {
+                status: "error",
+                error: "No prompt connected - describe what to generate",
+              });
+              set({ isRunning: false, currentNodeId: null });
+              await logger.endSession();
+              return;
+            }
+
+            updateNodeData(node.id, {
+              sourceImage,
+              inputPrompt: promptText,
+              status: "loading",
+              error: null,
+            });
+
+            try {
+              const providerSettingsState = get().providerSettings;
+
+              // Build headers with API keys
+              const headers: Record<string, string> = {
+                "Content-Type": "application/json",
+              };
+              const geminiConfig = providerSettingsState.providers.gemini;
+              if (geminiConfig?.apiKey) {
+                headers["X-Gemini-API-Key"] = geminiConfig.apiKey;
+              }
+
+              // Build inpainting prompt that instructs model to edit masked area
+              // Gemini models support editing with masks via text instructions
+              const inpaintPrompt = `Edit this image. In the white/bright areas of the mask image, ${promptText}. Keep all other areas unchanged.`;
+
+              // Send source image and mask to the API
+              // The mask is interpreted as: white = edit area, black = preserve
+              const imagesToSend = nodeData.maskImage
+                ? [sourceImage, nodeData.maskImage]
+                : [sourceImage];
+
+              logger.info('api.inpaint', 'Calling inpaint API', {
+                nodeId: node.id,
+                hasSourceImage: !!sourceImage,
+                hasMask: !!nodeData.maskImage,
+                maskStrokesCount: nodeData.maskStrokes.length,
+                prompt: promptText,
+              });
+
+              const response = await fetch("/api/generate", {
+                method: "POST",
+                headers,
+                body: JSON.stringify({
+                  images: imagesToSend,
+                  prompt: inpaintPrompt,
+                  aspectRatio: "1:1", // Preserve aspect ratio for inpainting
+                  model: "nano-banana-pro", // Use pro model for better inpainting
+                }),
+              });
+
+              if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || "API call failed");
+              }
+
+              const result = await response.json();
+
+              if (result.image) {
+                // Add to node history
+                const historyItem = {
+                  id: `inpaint-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                  timestamp: Date.now(),
+                  prompt: promptText,
+                  aspectRatio: "1:1" as const,
+                  model: "nano-banana-pro" as const,
+                };
+
+                const updatedHistory = [...(nodeData.imageHistory || []), historyItem];
+
+                updateNodeData(node.id, {
+                  outputImage: result.image,
+                  status: "complete",
+                  error: null,
+                  imageHistory: updatedHistory,
+                  selectedHistoryIndex: updatedHistory.length - 1,
+                });
+
+                // Track cost
+                if (result.cost) {
+                  get().addIncurredCost(result.cost);
+                }
+
+                logger.info('node.complete', 'maskInpaint generation successful', {
+                  nodeId: node.id,
+                  cost: result.cost,
+                });
+              } else {
+                throw new Error("No image in response");
+              }
+            } catch (error) {
+              logger.error('node.error', 'maskInpaint node execution failed', {
+                nodeId: node.id,
+              }, error instanceof Error ? error : undefined);
+              updateNodeData(node.id, {
+                status: "error",
+                error: error instanceof Error ? error.message : "Inpainting failed",
+              });
+              set({ isRunning: false, currentNodeId: null });
+              await logger.endSession();
+              return;
+            }
+            break;
+          }
+
+          case "imageCompare": {
+            // Get connected images for comparison by specific handle
+            const connectedEdges = edges.filter(e => e.target === node.id);
+            let imageAValue: string | null = null;
+            let imageBValue: string | null = null;
+
+            connectedEdges.forEach(edge => {
+              const sourceNode = nodes.find(n => n.id === edge.source);
+              if (!sourceNode) return;
+
+              // Get output value from source node
+              let value: string | null = null;
+              if (sourceNode.type === "imageInput") {
+                value = (sourceNode.data as ImageInputNodeData).image;
+              } else if (sourceNode.type === "annotation") {
+                value = (sourceNode.data as AnnotationNodeData).outputImage;
+              } else if (sourceNode.type === "nanoBanana") {
+                value = (sourceNode.data as NanoBananaNodeData).outputImage;
+              } else if (sourceNode.type === "maskInpaint") {
+                value = (sourceNode.data as MaskInpaintNodeData).outputImage;
+              }
+
+              if (value) {
+                if (edge.targetHandle === "imageA") {
+                  imageAValue = value;
+                } else if (edge.targetHandle === "imageB") {
+                  imageBValue = value;
+                }
+              }
+            });
+
+            updateNodeData(node.id, {
+              imageA: imageAValue,
+              imageB: imageBValue,
+            });
+            break;
+          }
+
+          case "colorPalette": {
+            const { images } = getConnectedInputs(node.id);
+            const sourceImage = images[0] || null;
+
+            if (sourceImage) {
+              updateNodeData(node.id, { sourceImage });
+            }
+            // Color extraction is handled by the node component itself
+            // This just ensures the source image is passed through during execution
+            break;
+          }
+
+
+          case "imageFilter": {
+            // Get connected input image
+            const { images } = getConnectedInputs(node.id);
+            const sourceImage = images[0] || null;
+
+            if (sourceImage) {
+              // Update source image - filter application handled by component
+              updateNodeData(node.id, { sourceImage });
+            }
+            break;
+          }
+
+          case "batchVariations": {
+            const { images, text } = getConnectedInputs(node.id);
+
+            if (!text) {
+              logger.error('node.error', 'batchVariations node missing text input', {
+                nodeId: node.id,
+              });
+              updateNodeData(node.id, {
+                status: "error",
+                error: "Missing text input (prompt required)",
+              });
+              set({ isRunning: false, currentNodeId: null });
+              await logger.endSession();
+              return;
+            }
+
+            const freshNode = get().nodes.find((n) => n.id === node.id);
+            const nodeData = (freshNode?.data || node.data) as BatchVariationsNodeData;
+            const variationCount = nodeData.variationCount;
+
+            updateNodeData(node.id, {
+              inputImage: images[0] || null,
+              inputPrompt: text,
+              status: "loading",
+              error: null,
+              generationProgress: 0,
+              variations: [],
+            });
+
+            try {
+              const providerSettingsState = get().providerSettings;
+              const headers: Record<string, string> = {
+                "Content-Type": "application/json",
+              };
+              const geminiConfig = providerSettingsState.providers.gemini;
+              if (geminiConfig?.apiKey) {
+                headers["X-Gemini-API-Key"] = geminiConfig.apiKey;
+              }
+
+              const variations: Array<{ id: string; image: string; timestamp: number; isFavorite: boolean }> = [];
+
+              for (let i = 0; i < variationCount; i++) {
+                const requestPayload = {
+                  images: images.length > 0 ? images : [],
+                  prompt: text,
+                  aspectRatio: nodeData.aspectRatio,
+                  resolution: nodeData.resolution,
+                  model: nodeData.model,
+                  useGoogleSearch: nodeData.useGoogleSearch,
+                };
+
+                logger.info('node.execution', `Generating variation ${i + 1}/${variationCount}`, {
+                  nodeId: node.id,
+                });
+
+                const response = await fetch("/api/generate", {
+                  method: "POST",
+                  headers,
+                  body: JSON.stringify(requestPayload),
+                });
+
+                if (!response.ok) {
+                  const errorText = await response.text();
+                  let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                  try {
+                    const errorJson = JSON.parse(errorText);
+                    errorMessage = errorJson.error || errorMessage;
+                  } catch {
+                    if (errorText) errorMessage += ` - ${errorText.substring(0, 200)}`;
+                  }
+                  throw new Error(errorMessage);
+                }
+
+                const result = await response.json();
+
+                if (result.success && result.image) {
+                  variations.push({
+                    id: crypto.randomUUID(),
+                    image: result.image,
+                    timestamp: Date.now(),
+                    isFavorite: false,
+                  });
+
+                  // Update progress
+                  const progress = Math.round(((i + 1) / variationCount) * 100);
+                  updateNodeData(node.id, {
+                    variations: [...variations],
+                    generationProgress: progress,
+                    outputImage: variations[0]?.image || null,
+                  });
+                } else {
+                  throw new Error(result.error || `Variation ${i + 1} generation failed`);
+                }
+              }
+
+              // Final update with all variations complete
+              updateNodeData(node.id, {
+                status: "complete",
+                error: null,
+                selectedVariationIndex: 0,
+                outputImage: variations[0]?.image || null,
+              });
+
+              logger.info('node.execution', `Generated ${variations.length} variations successfully`, {
+                nodeId: node.id,
+              });
+            } catch (error) {
+              let errorMessage = "Batch variations generation failed";
+              if (error instanceof Error) {
+                errorMessage = error.message;
+              }
+
+              logger.error('node.error', 'BatchVariations node execution failed', {
+                nodeId: node.id,
+                errorMessage,
+              }, error instanceof Error ? error : undefined);
+
+              updateNodeData(node.id, {
+                status: "error",
+                error: errorMessage,
+              });
+              set({ isRunning: false, currentNodeId: null });
+              await logger.endSession();
+              return;
+            }
+            break;
+          }
+
+          case "conditionalBranch": {
+            const { images } = getConnectedInputs(node.id);
+            const inputImage = images[0] || null;
+
+            if (!inputImage) {
+              logger.error('node.error', 'conditionalBranch node missing image input', {
+                nodeId: node.id,
+              });
+              updateNodeData(node.id, {
+                status: "error",
+                error: "Missing image input",
+                lastEvaluationResult: null,
+              });
+              break;
+            }
+
+            updateNodeData(node.id, {
+              inputImage,
+              status: "loading",
+              error: null,
+            });
+
+            try {
+              // Analyze the image
+              const analysisResults = await analyzeImage(inputImage);
+
+              const freshNode = get().nodes.find((n) => n.id === node.id);
+              const nodeData = (freshNode?.data || node.data) as ConditionalBranchNodeData;
+
+              // Evaluate condition groups
+              const evaluateCondition = (
+                property: keyof ImageAnalysisResult,
+                operator: string,
+                value: string | number | boolean
+              ): boolean => {
+                const actualValue = analysisResults[property];
+
+                switch (operator) {
+                  case "equals":
+                    return actualValue === value;
+                  case "not_equals":
+                    return actualValue !== value;
+                  case "greater_than":
+                    return typeof actualValue === "number" && actualValue > Number(value);
+                  case "less_than":
+                    return typeof actualValue === "number" && actualValue < Number(value);
+                  case "greater_or_equal":
+                    return typeof actualValue === "number" && actualValue >= Number(value);
+                  case "less_or_equal":
+                    return typeof actualValue === "number" && actualValue <= Number(value);
+                  case "contains":
+                    if (property === "dominant_color") {
+                      return colorMatches(String(actualValue), String(value));
+                    }
+                    return String(actualValue).includes(String(value));
+                  case "not_contains":
+                    if (property === "dominant_color") {
+                      return !colorMatches(String(actualValue), String(value));
+                    }
+                    return !String(actualValue).includes(String(value));
+                  default:
+                    return false;
+                }
+              };
+
+              // Evaluate a single condition group (AND/OR logic within group)
+              const evaluateGroup = (group: typeof nodeData.conditionGroups[0]): boolean => {
+                if (group.conditions.length === 0) return true;
+
+                if (group.logic === "AND") {
+                  return group.conditions.every((c) =>
+                    evaluateCondition(c.property, c.operator, c.value)
+                  );
+                } else {
+                  return group.conditions.some((c) =>
+                    evaluateCondition(c.property, c.operator, c.value)
+                  );
+                }
+              };
+
+              // Evaluate all groups with group-level logic
+              let result: boolean;
+              if (nodeData.conditionGroups.length === 0) {
+                result = true;
+              } else if (nodeData.groupLogic === "AND") {
+                result = nodeData.conditionGroups.every(evaluateGroup);
+              } else {
+                result = nodeData.conditionGroups.some(evaluateGroup);
+              }
+
+              updateNodeData(node.id, {
+                status: "complete",
+                error: null,
+                lastEvaluationResult: result,
+                analysisResults,
+              });
+
+              logger.info('node.execution', `Conditional branch evaluated to ${result}`, {
+                nodeId: node.id,
+                result,
+                analysisResults,
+              });
+            } catch (error) {
+              let errorMessage = "Image analysis failed";
+              if (error instanceof Error) {
+                errorMessage = error.message;
+              }
+
+              logger.error('node.error', 'conditionalBranch node execution failed', {
+                nodeId: node.id,
+                errorMessage,
+              }, error instanceof Error ? error : undefined);
+
+              updateNodeData(node.id, {
+                status: "error",
+                error: errorMessage,
+                lastEvaluationResult: null,
+              });
+            }
+            break;
+          }
+
           case "output": {
             const { images } = getConnectedInputs(node.id);
             const content = images[0] || null;
@@ -2166,6 +2734,144 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           await logger.endSession();
           return;
         }
+      } else if (node.type === "maskInpaint") {
+        const nodeData = node.data as MaskInpaintNodeData;
+        const providerSettingsState = get().providerSettings;
+
+        // Get fresh connected inputs
+        const inputs = getConnectedInputs(nodeId);
+        const sourceImage = inputs.images[0] || nodeData.sourceImage;
+        const promptText = inputs.text || nodeData.inputPrompt;
+
+        if (!sourceImage) {
+          logger.error('node.error', 'maskInpaint regeneration failed: no source image', {
+            nodeId,
+          });
+          updateNodeData(nodeId, {
+            status: "error",
+            error: "No source image connected",
+          });
+          set({ isRunning: false, currentNodeId: null });
+          await logger.endSession();
+          return;
+        }
+
+        if (!nodeData.maskImage && nodeData.maskStrokes.length === 0) {
+          logger.error('node.error', 'maskInpaint regeneration failed: no mask', {
+            nodeId,
+          });
+          updateNodeData(nodeId, {
+            status: "error",
+            error: "No mask defined - paint a mask first",
+          });
+          set({ isRunning: false, currentNodeId: null });
+          await logger.endSession();
+          return;
+        }
+
+        if (!promptText) {
+          logger.error('node.error', 'maskInpaint regeneration failed: no prompt', {
+            nodeId,
+          });
+          updateNodeData(nodeId, {
+            status: "error",
+            error: "No prompt connected - describe what to generate",
+          });
+          set({ isRunning: false, currentNodeId: null });
+          await logger.endSession();
+          return;
+        }
+
+        updateNodeData(nodeId, {
+          sourceImage,
+          inputPrompt: promptText,
+          status: "loading",
+          error: null,
+        });
+
+        try {
+          // Build headers with API keys
+          const headers: Record<string, string> = {
+            "Content-Type": "application/json",
+          };
+          const geminiConfig = providerSettingsState.providers.gemini;
+          if (geminiConfig?.apiKey) {
+            headers["X-Gemini-API-Key"] = geminiConfig.apiKey;
+          }
+
+          const inpaintPrompt = `Edit this image. In the white/bright areas of the mask image, ${promptText}. Keep all other areas unchanged.`;
+
+          const imagesToSend = nodeData.maskImage
+            ? [sourceImage, nodeData.maskImage]
+            : [sourceImage];
+
+          logger.info('api.inpaint', 'Calling inpaint API for regeneration', {
+            nodeId,
+            hasSourceImage: !!sourceImage,
+            hasMask: !!nodeData.maskImage,
+            prompt: promptText,
+          });
+
+          const response = await fetch("/api/generate", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              images: imagesToSend,
+              prompt: inpaintPrompt,
+              aspectRatio: "1:1",
+              model: "nano-banana-pro",
+            }),
+          });
+
+          if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || "API call failed");
+          }
+
+          const result = await response.json();
+
+          if (result.image) {
+            const historyItem = {
+              id: `inpaint-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              timestamp: Date.now(),
+              prompt: promptText,
+              aspectRatio: "1:1" as const,
+              model: "nano-banana-pro" as const,
+            };
+
+            const updatedHistory = [...(nodeData.imageHistory || []), historyItem];
+
+            updateNodeData(nodeId, {
+              outputImage: result.image,
+              status: "complete",
+              error: null,
+              imageHistory: updatedHistory,
+              selectedHistoryIndex: updatedHistory.length - 1,
+            });
+
+            if (result.cost) {
+              get().addIncurredCost(result.cost);
+            }
+
+            logger.info('node.complete', 'maskInpaint regeneration successful', {
+              nodeId,
+              cost: result.cost,
+            });
+          } else {
+            throw new Error("No image in response");
+          }
+        } catch (error) {
+          logger.error('node.error', 'maskInpaint regeneration failed', {
+            nodeId,
+          }, error instanceof Error ? error : undefined);
+          updateNodeData(nodeId, {
+            status: "error",
+            error: error instanceof Error ? error.message : "Inpainting failed",
+          });
+          set({ isRunning: false, currentNodeId: null });
+          await logger.endSession();
+          return;
+        }
       }
 
       logger.info('node.execution', 'Node regeneration completed successfully', { nodeId });
@@ -2317,6 +3023,11 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       hasUnsavedChanges: false,
       // Restore cost data
       incurredCost: costData?.incurredCost || 0,
+      // Clear undo/redo history when loading a new workflow
+      undoStack: [],
+      redoStack: [],
+      canUndo: false,
+      canRedo: false,
     });
   },
 
@@ -2336,6 +3047,11 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       hasUnsavedChanges: false,
       // Reset cost tracking
       incurredCost: 0,
+      // Clear undo/redo history when clearing workflow
+      undoStack: [],
+      redoStack: [],
+      canUndo: false,
+      canRedo: false,
     });
   },
 
@@ -2586,5 +3302,92 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     // Save to localStorage and update state
     saveRecentModels(updated);
     set({ recentModels: updated });
+  },
+
+  // Undo/Redo actions
+  pushToUndoStack: () => {
+    const { nodes, edges, groups, undoStack } = get();
+
+    // Create a snapshot of the current state (deep clone to avoid reference issues)
+    const snapshot: HistorySnapshot = {
+      nodes: JSON.parse(JSON.stringify(nodes)),
+      edges: JSON.parse(JSON.stringify(edges)),
+      groups: JSON.parse(JSON.stringify(groups)),
+    };
+
+    // Add to undo stack, limiting size
+    const newUndoStack = [snapshot, ...undoStack].slice(0, MAX_HISTORY_SIZE);
+
+    set({
+      undoStack: newUndoStack,
+      redoStack: [], // Clear redo stack when new action is performed
+      canUndo: true,
+      canRedo: false,
+    });
+  },
+
+  undo: () => {
+    const { nodes, edges, groups, undoStack, redoStack } = get();
+
+    if (undoStack.length === 0) return;
+
+    // Save current state to redo stack before undoing
+    const currentSnapshot: HistorySnapshot = {
+      nodes: JSON.parse(JSON.stringify(nodes)),
+      edges: JSON.parse(JSON.stringify(edges)),
+      groups: JSON.parse(JSON.stringify(groups)),
+    };
+
+    // Get the previous state from undo stack
+    const [previousState, ...remainingUndo] = undoStack;
+
+    // Restore the previous state
+    set({
+      nodes: previousState.nodes,
+      edges: previousState.edges,
+      groups: previousState.groups,
+      undoStack: remainingUndo,
+      redoStack: [currentSnapshot, ...redoStack].slice(0, MAX_HISTORY_SIZE),
+      canUndo: remainingUndo.length > 0,
+      canRedo: true,
+      hasUnsavedChanges: true,
+    });
+  },
+
+  redo: () => {
+    const { nodes, edges, groups, undoStack, redoStack } = get();
+
+    if (redoStack.length === 0) return;
+
+    // Save current state to undo stack before redoing
+    const currentSnapshot: HistorySnapshot = {
+      nodes: JSON.parse(JSON.stringify(nodes)),
+      edges: JSON.parse(JSON.stringify(edges)),
+      groups: JSON.parse(JSON.stringify(groups)),
+    };
+
+    // Get the next state from redo stack
+    const [nextState, ...remainingRedo] = redoStack;
+
+    // Restore the next state
+    set({
+      nodes: nextState.nodes,
+      edges: nextState.edges,
+      groups: nextState.groups,
+      undoStack: [currentSnapshot, ...undoStack].slice(0, MAX_HISTORY_SIZE),
+      redoStack: remainingRedo,
+      canUndo: true,
+      canRedo: remainingRedo.length > 0,
+      hasUnsavedChanges: true,
+    });
+  },
+
+  clearHistory: () => {
+    set({
+      undoStack: [],
+      redoStack: [],
+      canUndo: false,
+      canRedo: false,
+    });
   },
 }));
