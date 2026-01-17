@@ -38,49 +38,6 @@ import {
 const REPLICATE_API_BASE = "https://api.replicate.com/v1";
 const FAL_API_BASE = "https://api.fal.ai/v1";
 
-// ... (在 RELEVANT_CATEGORIES 后面插入) ...
-
-// 🟢 [新增] 仅针对 Veo 3.1 的 UI 补丁
-const UI_PATCHES: Record<string, any> = {
-  "fal-ai/veo3.1": {
-    "image_url": { 
-      "type": "string", 
-      "format": "uri", // 变身：上传按钮
-      "title": "First Frame" // 改名
-    },
-    "end_frame_url": { 
-      "type": "string", 
-      "format": "uri", // 变身：上传按钮
-      "title": "End Frame" // 改名
-    }
-  },
-  "fal-ai/veo3.1/fast": {
-    "image_url": { "type": "string", "format": "uri", "title": "First Frame" },
-    "end_frame_url": { "type": "string", "format": "uri", "title": "End Frame" }
-  }
-};
-
-// 🟢 [新增] 应用补丁工具
-function applyUIPatch(model: ProviderModel): ProviderModel {
-  const patch = UI_PATCHES[model.id];
-  if (patch) {
-    // 获取原始 schema，如果没有就初始化一个空的
-    const originalSchema = (model as any).input_schema || { type: "object", properties: {} };
-    
-    return {
-      ...model,
-      input_schema: {
-        ...originalSchema,
-        properties: {
-          ...originalSchema.properties,
-          ...patch // 🔥 强制覆盖官方定义的参数
-        }
-      }
-    } as any;
-  }
-  return model;
-}
-
 // Categories we care about for image/video generation (fal.ai)
 const RELEVANT_CATEGORIES = [
   "text-to-image",
@@ -488,13 +445,8 @@ export async function GET(
             ? filterModelsBySearch(allReplicateModels, searchQuery)
             : allReplicateModels;
         } else if (provider === "fal") {
-          // 1. 先抓取原始数据
-          const rawModels = await fetchFalModels(falKey, searchQuery);
-          
-          // 2. 🟢 应用 Veo 补丁 (在此处修改了 Schema)
-          models = rawModels.map(applyUIPatch);
-          
-          // 3. 存入缓存
+          models = await fetchFalModels(falKey, searchQuery);
+          // Cache the results (fal.ai handles search server-side)
           setCachedModels(cacheKey, models);
         } else {
           models = [];

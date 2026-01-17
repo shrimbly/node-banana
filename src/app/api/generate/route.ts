@@ -1349,6 +1349,10 @@ const MODEL_MAPPINGS: Record<string, RouteConfig> = {
   // === sora ===
   "fal-ai/sora-2/text-to-video":     { type: "yunwu_video_unified", targetId: "sora-2-all" },
   "fal-ai/sora-2/image-to-video": { type: "yunwu_video_unified", targetId: "sora-2-all" },
+
+  // 🟢 [新增] 即梦 Jimeng 4.5
+  // 注意：如果您前端传来的 ID 是其他名字（比如 "fal-ai/jimeng-4.5"），请把 key 改成对应的
+  "fal-ai/bytedance/seedream/v4.5/text-to-image": { type: "yunwu_image_openai", targetId: "jimeng-4.5" },
 };
 
 // ==============================================================================
@@ -1409,75 +1413,148 @@ async function generateWithYunwu(
 // ==============================================================================
 
 // 🟢 处理器 A: 云雾统一视频接口 (/v1/video/create)
-// 修正点：查询 URL 改为 Query 参数格式
+// 🟢 处理器: 云雾视频接口 (Sora-2 + Veo/Kling 全能兼容版 - 修复红线版)
 async function handleYunwuVideo(
   reqId: string, apiKey: string, baseUrl: string, config: RouteConfig, input: GenerationInput
 ): Promise<GenerationOutput> {
   const url = `${baseUrl}/v1/video/create`;
 
-  // 1. 获取动态参数
-  const params = input.parameters || {};
-  // 优先使用前端传的比例，如果没有则默认 16:9
-  const finalAspectRatio = params.aspect_ratio || params.aspectRatio || "16:9";
-  // 持续时长 (Sora 可能支持更长)
-  const duration = params.duration || "5";
+  // 🛡️ 修复红线关键步骤：确保 modelId 永远是字符串，不是 undefined
+  const modelId = config.targetId || ""; 
   
+  // 1. 获取前端参数
+  const p = input.parameters || {};
+  const rawRatio = p.aspectRatio || p.aspect_ratio || "16:9"; 
+  const rawDuration = p.duration || 10;
+  
+  // 2. 初始化 Body
   const body: any = {
-    model: config.targetId,
+    model: modelId, // 使用安全的变量
     prompt: input.prompt,
-    enhance_prompt: true, // Veo 特有优化
-    aspect_ratio: finalAspectRatio, // 🟢 变成动态的了
-    enable_upsample: true,
-    ...config.extraParams
+    watermark: false,
   };
 
-  const images = extractImages(input);
-  if (images.length > 0) body.images = images;
+  // ---------------------------------------------------------
+  // 🔀 分支 A: 如果是 Sora-2
+  // ---------------------------------------------------------
+  if (modelId.includes("sora")) { // 👈 这里使用 modelId 就不报错了
+    
+    // 1. 翻译画幅
+    const ratioStr = String(rawRatio).toLowerCase();
+    if (ratioStr.includes("9:") || ratioStr.includes("port") || ratioStr === "1:1") {
+      body.orientation = "portrait";
+    } else {
+      body.orientation = "landscape";
+    }
 
+    // 2. 翻译分辨率
+    const rawSize = p.resolution || p.size || "1080p";
+    if (String(rawSize).includes("720") || String(rawSize).includes("small")) {
+      body.size = "small";
+    } else {
+      body.size = "large";
+    }
+
+    // 3. 翻译时长
+    body.duration = parseInt(String(rawDuration)) || 10;
+    body.private = false;
+
+    // 4. 图片处理
+    const imgs = extractImages(input);
+    if (imgs.length > 0) body.images = imgs;
+
+  } 
+  // ---------------------------------------------------------
+  // 🔀 分支 B: 如果是 Veo / Kling
+  // ---------------------------------------------------------
+  else {
+    body.enhance_prompt = true;
+    body.aspect_ratio = rawRatio;
+    
+    const dynamicParams = input.dynamicInputs || {};
+    const startImg = dynamicParams["image_url"] || p["image_url"] || p["image"];
+    if (startImg) body.image_url = startImg;
+    
+    const endImg = dynamicParams["reference_image"] || p["end_frame_url"];
+    if (endImg) body.end_frame_url = endImg;
+
+    // Kling 兼容逻辑
+    if (modelId.includes("kling")) { // 👈 这里也修复了
+        const imgs = extractImages(input);
+        if (imgs.length > 0) body.images = imgs;
+    }
+  }
+
+  // 3. 发送请求
   return await sendAndPoll(reqId, url, apiKey, body, (data) => {
-    // 🔥【关键修复】根据文档，这里必须用 ?id= 的格式，而不是 /tasks/
     return data.id ? `${baseUrl}/v1/video/query?id=${data.id}` : null;
   });
 }
 
 // 🟢 处理器 B: OpenAI 绘图接口
+// src/app/api/generate/route.ts
+
+// 🟢 处理器 B: OpenAI 绘图接口 (已升级兼容 Jimeng)
 async function handleYunwuImage(
   reqId: string, apiKey: string, baseUrl: string, config: RouteConfig, input: GenerationInput
 ): Promise<GenerationOutput> {
   const url = `${baseUrl}/v1/images/generations`;
+  
+  // 1. 基础参数构造
   const body: any = {
-    model: config.targetId,
+    model: config.targetId, // 例如 "jimeng-4.5"
     prompt: input.prompt,
     n: 1,
-    size: "1024x1024",
+    size: "1024x1024", // 默认兜底
     ...config.extraParams
   };
   
-  // 🟢 修复方案：加上 "as any" 来绕过类型检查
-  if (input.parameters?.image_size) {
-      const size = input.parameters.image_size as any; // <--- 关键修改：加上 as any
-      
-      if (typeof size === 'string') {
-          body.size = size;
-      } else if (size.width && size.height) {
-          body.size = `${size.width}x${size.height}`;
+  // 2. 🟢 智能参数提取 (兼容 Jimeng/OpenAI/Fal 各种写法)
+  const p = input.parameters || {};
+
+  // 优先级：size (标准) > aspect_ratio (Fal常用) > image_size (Fal旧版) > aspectRatio
+  const userSize = p.size || p.aspect_ratio || p.image_size || p.aspectRatio;
+
+  if (userSize) {
+      // 情况 A: 字符串直接透传 (例如 "1024x1024" 或 Jimeng 支持的 "2:3")
+      if (typeof userSize === 'string') {
+          body.size = userSize;
+      } 
+      // 情况 B: 对象格式 {width: 1024, height: 768} -> 转字符串
+      else if ((userSize as any).width && (userSize as any).height) {
+          body.size = `${(userSize as any).width}x${(userSize as any).height}`;
       }
   }
 
-  console.log(`[API:${reqId}] POST Image: ${url}`);
+  console.log(`[API:${reqId}] POST Image: ${url} | Model: ${body.model} | Size: ${body.size}`);
+
   const res = await fetch(url, {
     method: "POST",
     headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify(body)
   });
 
-  if (!res.ok) throw new Error(await res.text());
+  if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[API:${reqId}] Image Error:`, errText);
+      throw new Error(errText);
+  }
+  
   const data = await res.json();
 
+  // 3. 解析结果 (标准 OpenAI 格式)
   if (data.data?.[0]?.url) {
     return { success: true, outputs: [{ type: "image", data: data.data[0].url, url: data.data[0].url }] };
   }
-  throw new Error("Unknown image response format");
+  
+  // 4. 容错：如果返回的是 b64_json (部分 API 可能会返回这个)
+  if (data.data?.[0]?.b64_json) {
+      const base64 = data.data[0].b64_json;
+      const dataUrl = `data:image/png;base64,${base64}`;
+      return { success: true, outputs: [{ type: "image", data: dataUrl, url: dataUrl }] };
+  }
+
+  throw new Error("Unknown image response format: " + JSON.stringify(data));
 }
 
 // 🟢 [新增] 处理器 D: 云雾 Gemini 原生协议专用
