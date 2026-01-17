@@ -8,11 +8,18 @@
 // Provider Types for multi-provider support (image/video generation)
 export type ProviderType = "gemini" | "openai" | "replicate" | "fal";
 
+// Model pricing info (stored when model is selected)
+export interface SelectedModelPricing {
+  type: 'per-run' | 'per-second';
+  amount: number;
+}
+
 // Selected model for image/video generation nodes
 export interface SelectedModel {
   provider: ProviderType;
   modelId: string;
   displayName: string;
+  pricing?: SelectedModelPricing;  // Optional pricing info from provider API
 }
 
 export interface ProviderConfig {

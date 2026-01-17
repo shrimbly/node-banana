@@ -1,4 +1,13 @@
-import { WorkflowSaveConfig, WorkflowCostData, ProviderSettings, RecentModel } from "@/types";
+import {
+  WorkflowSaveConfig,
+  WorkflowCostData,
+  ProviderSettings,
+  RecentModel,
+  NodeDefaultsConfig,
+  GenerateImageNodeDefaults,
+  GenerateVideoNodeDefaults,
+  LLMNodeDefaults,
+} from "@/types";
 
 // Storage keys
 export const STORAGE_KEY = "node-banana-workflow-configs";
@@ -6,6 +15,7 @@ export const COST_DATA_STORAGE_KEY = "node-banana-workflow-costs";
 export const GENERATE_IMAGE_DEFAULTS_KEY = "node-banana-nanoBanana-defaults";
 export const PROVIDER_SETTINGS_KEY = "node-banana-provider-settings";
 export const RECENT_MODELS_KEY = "node-banana-recent-models";
+export const NODE_DEFAULTS_KEY = "node-banana-node-defaults";
 
 // Maximum recent models to store (show 4 in UI, keep 8 for persistence)
 export const MAX_RECENT_MODELS = 8;
@@ -143,6 +153,40 @@ export const getRecentModels = (): RecentModel[] => {
 export const saveRecentModels = (models: RecentModel[]): void => {
   if (typeof window === "undefined") return;
   localStorage.setItem(RECENT_MODELS_KEY, JSON.stringify(models));
+};
+
+// Node defaults helpers
+export const loadNodeDefaults = (): NodeDefaultsConfig => {
+  if (typeof window === "undefined") return {};
+  const stored = localStorage.getItem(NODE_DEFAULTS_KEY);
+  if (stored) {
+    try {
+      return JSON.parse(stored) as NodeDefaultsConfig;
+    } catch {
+      return {};
+    }
+  }
+  return {};
+};
+
+export const saveNodeDefaults = (config: NodeDefaultsConfig): void => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(NODE_DEFAULTS_KEY, JSON.stringify(config));
+};
+
+export const getGenerateImageDefaults = (): GenerateImageNodeDefaults | undefined => {
+  const config = loadNodeDefaults();
+  return config.generateImage;
+};
+
+export const getGenerateVideoDefaults = (): GenerateVideoNodeDefaults | undefined => {
+  const config = loadNodeDefaults();
+  return config.generateVideo;
+};
+
+export const getLLMDefaults = (): LLMNodeDefaults | undefined => {
+  const config = loadNodeDefaults();
+  return config.llm;
 };
 
 // Workflow ID generator

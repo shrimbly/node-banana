@@ -767,6 +767,9 @@ export function WorkflowCanvas() {
           case "g":
             nodeType = "nanoBanana";
             break;
+          case "v":
+            nodeType = "generateVideo";
+            break;
           case "l":
             nodeType = "llmGenerate";
             break;

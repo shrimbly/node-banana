@@ -30,7 +30,7 @@ describe("CostDialog", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockConfirm.mockReturnValue(true); // Reset default return value
+    mockConfirm.mockReturnValue(true);
     mockUseWorkflowStore.mockImplementation((selector) => {
       const state = {
         resetIncurredCost: mockResetIncurredCost,
@@ -43,33 +43,108 @@ describe("CostDialog", () => {
     vi.restoreAllMocks();
   });
 
-  const createPredictedCost = (overrides: Partial<PredictedCostResult> = {}): PredictedCostResult => ({
-    totalCost: 0.50,
+  /**
+   * Helper to create a PredictedCostResult with Gemini models only
+   */
+  const createGeminiOnlyCost = (overrides: Partial<PredictedCostResult> = {}): PredictedCostResult => ({
+    totalCost: 0.463,
     breakdown: [
       {
-        model: "nano-banana",
-        resolution: "1K",
+        provider: "gemini",
+        modelId: "nano-banana",
+        modelName: "Nano Banana",
         count: 5,
         unitCost: 0.039,
+        unit: "image",
         subtotal: 0.195,
       },
       {
-        model: "nano-banana-pro",
-        resolution: "2K",
+        provider: "gemini",
+        modelId: "nano-banana-pro",
+        modelName: "Nano Banana Pro",
         count: 2,
         unitCost: 0.134,
+        unit: "image",
         subtotal: 0.268,
       },
     ],
     nodeCount: 7,
+    unknownPricingCount: 0,
     ...overrides,
+  });
+
+  /**
+   * Helper to create a multi-provider PredictedCostResult with fal.ai and Replicate
+   */
+  const createMultiProviderCost = (): PredictedCostResult => ({
+    totalCost: 0.55,
+    breakdown: [
+      {
+        provider: "gemini",
+        modelId: "nano-banana",
+        modelName: "Nano Banana",
+        count: 3,
+        unitCost: 0.039,
+        unit: "image",
+        subtotal: 0.117,
+      },
+      {
+        provider: "fal",
+        modelId: "fal-ai/fast-sdxl",
+        modelName: "Fast SDXL",
+        count: 2,
+        unitCost: 0.10,
+        unit: "image",
+        subtotal: 0.20,
+      },
+      {
+        provider: "replicate",
+        modelId: "stability-ai/sdxl",
+        modelName: "Stability SDXL",
+        count: 2,
+        unitCost: null,
+        unit: "image",
+        subtotal: null,
+      },
+    ],
+    nodeCount: 7,
+    unknownPricingCount: 2,
+  });
+
+  /**
+   * Helper to create external-only cost (no Gemini)
+   */
+  const createExternalOnlyCost = (): PredictedCostResult => ({
+    totalCost: 0,
+    breakdown: [
+      {
+        provider: "fal",
+        modelId: "fal-ai/flux-dev",
+        modelName: "FLUX.1 Dev",
+        count: 2,
+        unitCost: null,
+        unit: "image",
+        subtotal: null,
+      },
+      {
+        provider: "replicate",
+        modelId: "stability-ai/sdxl",
+        modelName: "Stability SDXL",
+        count: 1,
+        unitCost: null,
+        unit: "image",
+        subtotal: null,
+      },
+    ],
+    nodeCount: 3,
+    unknownPricingCount: 3,
   });
 
   describe("Basic Rendering", () => {
     it("should render dialog with title", () => {
       render(
         <CostDialog
-          predictedCost={createPredictedCost()}
+          predictedCost={createGeminiOnlyCost()}
           incurredCost={0}
           onClose={vi.fn()}
         />
@@ -81,33 +156,20 @@ describe("CostDialog", () => {
     it("should render close button", () => {
       const { container } = render(
         <CostDialog
-          predictedCost={createPredictedCost()}
+          predictedCost={createGeminiOnlyCost()}
           incurredCost={0}
           onClose={vi.fn()}
         />
       );
 
-      // Close button has an SVG with X icon
       const closeButton = container.querySelector("button");
       expect(closeButton).toBeInTheDocument();
-    });
-
-    it("should render Predicted Cost section", () => {
-      render(
-        <CostDialog
-          predictedCost={createPredictedCost()}
-          incurredCost={0}
-          onClose={vi.fn()}
-        />
-      );
-
-      expect(screen.getByText("Predicted Cost")).toBeInTheDocument();
     });
 
     it("should render Incurred Cost section", () => {
       render(
         <CostDialog
-          predictedCost={createPredictedCost()}
+          predictedCost={createGeminiOnlyCost()}
           incurredCost={0}
           onClose={vi.fn()}
         />
@@ -115,37 +177,290 @@ describe("CostDialog", () => {
 
       expect(screen.getByText("Incurred Cost")).toBeInTheDocument();
     });
+  });
 
-    it("should render Pricing Reference section", () => {
+  describe("Gemini Cost Section", () => {
+    it("should render Gemini Cost section when Gemini models exist", () => {
       render(
         <CostDialog
-          predictedCost={createPredictedCost()}
+          predictedCost={createGeminiOnlyCost()}
           incurredCost={0}
           onClose={vi.fn()}
         />
       );
 
-      expect(screen.getByText("Pricing Reference:")).toBeInTheDocument();
+      expect(screen.getByText("Gemini Cost")).toBeInTheDocument();
+    });
+
+    it("should display formatted Gemini cost total", () => {
+      render(
+        <CostDialog
+          predictedCost={createGeminiOnlyCost()}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText("$0.46")).toBeInTheDocument();
+    });
+
+    it("should render per-model cost rows with counts", () => {
+      render(
+        <CostDialog
+          predictedCost={createGeminiOnlyCost()}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText(/5x Nano Banana$/)).toBeInTheDocument();
+      expect(screen.getByText(/2x Nano Banana Pro/)).toBeInTheDocument();
+    });
+
+    it("should display subtotal for each model type", () => {
+      render(
+        <CostDialog
+          predictedCost={createGeminiOnlyCost()}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText("$0.20")).toBeInTheDocument(); // 0.195 rounded
+      expect(screen.getByText("$0.27")).toBeInTheDocument(); // 0.268 rounded
+    });
+
+    it("should render Gemini provider icon", () => {
+      render(
+        <CostDialog
+          predictedCost={createGeminiOnlyCost()}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText("G")).toBeInTheDocument();
+    });
+
+    it("should not show Gemini Cost section when no Gemini models", () => {
+      render(
+        <CostDialog
+          predictedCost={createExternalOnlyCost()}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByText("Gemini Cost")).not.toBeInTheDocument();
     });
   });
 
-  describe("Cost Display", () => {
-    it("should display formatted predicted cost", () => {
+  describe("External Providers Section", () => {
+    it("should render External Providers section when external models exist", () => {
       render(
         <CostDialog
-          predictedCost={createPredictedCost({ totalCost: 1.25 })}
+          predictedCost={createMultiProviderCost()}
           incurredCost={0}
           onClose={vi.fn()}
         />
       );
 
-      expect(screen.getByText("$1.25")).toBeInTheDocument();
+      expect(screen.getByText("External Providers")).toBeInTheDocument();
     });
 
+    it("should show node count in External Providers header", () => {
+      render(
+        <CostDialog
+          predictedCost={createMultiProviderCost()}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      // 2 fal + 2 replicate = 4 nodes
+      expect(screen.getByText("4 nodes")).toBeInTheDocument();
+    });
+
+    it("should show singular node when only 1 external node", () => {
+      render(
+        <CostDialog
+          predictedCost={{
+            totalCost: 0,
+            breakdown: [{
+              provider: "replicate",
+              modelId: "stability-ai/sdxl",
+              modelName: "Stability SDXL",
+              count: 1,
+              unitCost: null,
+              unit: "image",
+              subtotal: null,
+            }],
+            nodeCount: 1,
+            unknownPricingCount: 1,
+          }}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText("1 node")).toBeInTheDocument();
+    });
+
+    it("should render provider icons for external providers", () => {
+      render(
+        <CostDialog
+          predictedCost={createMultiProviderCost()}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText("f")).toBeInTheDocument(); // fal.ai
+      expect(screen.getByText("R")).toBeInTheDocument(); // Replicate
+    });
+
+    it("should show provider names", () => {
+      render(
+        <CostDialog
+          predictedCost={createMultiProviderCost()}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText("fal.ai")).toBeInTheDocument();
+      expect(screen.getByText("Replicate")).toBeInTheDocument();
+    });
+
+    it("should show models grouped under their provider", () => {
+      render(
+        <CostDialog
+          predictedCost={createMultiProviderCost()}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText(/2x Fast SDXL/)).toBeInTheDocument();
+      expect(screen.getByText(/2x Stability SDXL/)).toBeInTheDocument();
+    });
+
+    it("should show View model links for external providers", () => {
+      render(
+        <CostDialog
+          predictedCost={createMultiProviderCost()}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      const viewModelLinks = screen.getAllByRole("link", { name: /View model/i });
+      expect(viewModelLinks.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it("should link to correct fal.ai model page", () => {
+      render(
+        <CostDialog
+          predictedCost={createMultiProviderCost()}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      const links = screen.getAllByRole("link", { name: /View model/i });
+      const falLink = links.find(link => link.getAttribute("href")?.includes("fal.ai"));
+      expect(falLink).toHaveAttribute("href", "https://fal.ai/models/fal-ai/fast-sdxl");
+    });
+
+    it("should link to correct Replicate model page", () => {
+      render(
+        <CostDialog
+          predictedCost={createMultiProviderCost()}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      const links = screen.getAllByRole("link", { name: /View model/i });
+      const replicateLink = links.find(link => link.getAttribute("href")?.includes("replicate.com"));
+      expect(replicateLink).toHaveAttribute("href", "https://replicate.com/stability-ai/sdxl");
+    });
+
+    it("should strip version from Replicate model URL", () => {
+      render(
+        <CostDialog
+          predictedCost={{
+            totalCost: 0,
+            breakdown: [{
+              provider: "replicate",
+              modelId: "stability-ai/sdxl:abc123",
+              modelName: "Stability SDXL",
+              count: 1,
+              unitCost: null,
+              unit: "image",
+              subtotal: null,
+            }],
+            nodeCount: 1,
+            unknownPricingCount: 1,
+          }}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      const link = screen.getByRole("link", { name: /View model/i });
+      expect(link).toHaveAttribute("href", "https://replicate.com/stability-ai/sdxl");
+    });
+
+    it("should show pricing varies message", () => {
+      render(
+        <CostDialog
+          predictedCost={createMultiProviderCost()}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText(/Pricing varies by model, hardware, and usage/)).toBeInTheDocument();
+    });
+
+    it("should not show External Providers section when no external models", () => {
+      render(
+        <CostDialog
+          predictedCost={createGeminiOnlyCost()}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByText("External Providers")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Empty State", () => {
+    it("should show empty state when no generation nodes exist", () => {
+      render(
+        <CostDialog
+          predictedCost={{
+            totalCost: 0,
+            breakdown: [],
+            nodeCount: 0,
+            unknownPricingCount: 0,
+          }}
+          incurredCost={0}
+          onClose={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText("No generation nodes in workflow")).toBeInTheDocument();
+    });
+  });
+
+  describe("Incurred Cost Section", () => {
     it("should display formatted incurred cost", () => {
       render(
         <CostDialog
-          predictedCost={createPredictedCost()}
+          predictedCost={createGeminiOnlyCost()}
           incurredCost={2.50}
           onClose={vi.fn()}
         />
@@ -154,95 +469,30 @@ describe("CostDialog", () => {
       expect(screen.getByText("$2.50")).toBeInTheDocument();
     });
 
-    it("should display $0.00 for zero costs", () => {
+    it("should display $0.00 for zero incurred cost", () => {
       render(
         <CostDialog
-          predictedCost={createPredictedCost({ totalCost: 0 })}
+          predictedCost={createGeminiOnlyCost()}
           incurredCost={0}
           onClose={vi.fn()}
         />
       );
 
-      // Should have two $0.00 - one for predicted, one for incurred
+      // Find the incurred cost $0.00 (there may be multiple)
       const zeroValues = screen.getAllByText("$0.00");
-      expect(zeroValues.length).toBe(2);
+      expect(zeroValues.length).toBeGreaterThanOrEqual(1);
     });
-  });
 
-  describe("Cost Breakdown", () => {
-    it("should render per-model cost rows", () => {
+    it("should display description for incurred costs", () => {
       render(
         <CostDialog
-          predictedCost={createPredictedCost()}
+          predictedCost={createGeminiOnlyCost()}
           incurredCost={0}
           onClose={vi.fn()}
         />
       );
 
-      // Check for model count and name
-      expect(screen.getByText(/5x Nano Banana/)).toBeInTheDocument();
-      expect(screen.getByText(/2x Nano Banana Pro/)).toBeInTheDocument();
-    });
-
-    it("should show resolution for Nano Banana Pro models", () => {
-      render(
-        <CostDialog
-          predictedCost={createPredictedCost()}
-          incurredCost={0}
-          onClose={vi.fn()}
-        />
-      );
-
-      // Nano Banana Pro should show resolution
-      expect(screen.getByText(/Nano Banana Pro.*\(2K\)/)).toBeInTheDocument();
-    });
-
-    it("should display subtotal for each model type", () => {
-      render(
-        <CostDialog
-          predictedCost={createPredictedCost()}
-          incurredCost={0}
-          onClose={vi.fn()}
-        />
-      );
-
-      // Check for subtotals
-      expect(screen.getByText("$0.20")).toBeInTheDocument(); // 0.195 rounded
-      expect(screen.getByText("$0.27")).toBeInTheDocument(); // 0.268 rounded
-    });
-  });
-
-  describe("Empty State", () => {
-    it("should show empty state when no generation nodes exist", () => {
-      render(
-        <CostDialog
-          predictedCost={createPredictedCost({
-            totalCost: 0,
-            breakdown: [],
-            nodeCount: 0
-          })}
-          incurredCost={0}
-          onClose={vi.fn()}
-        />
-      );
-
-      expect(screen.getByText("No generation nodes in workflow")).toBeInTheDocument();
-    });
-
-    it("should not show breakdown section when nodeCount is 0", () => {
-      render(
-        <CostDialog
-          predictedCost={createPredictedCost({
-            totalCost: 0,
-            breakdown: [],
-            nodeCount: 0
-          })}
-          incurredCost={0}
-          onClose={vi.fn()}
-        />
-      );
-
-      expect(screen.queryByText(/5x Nano Banana/)).not.toBeInTheDocument();
+      expect(screen.getByText("Actual API spend from Gemini generations")).toBeInTheDocument();
     });
   });
 
@@ -250,7 +500,7 @@ describe("CostDialog", () => {
     it("should not show reset button when incurredCost is 0", () => {
       render(
         <CostDialog
-          predictedCost={createPredictedCost()}
+          predictedCost={createGeminiOnlyCost()}
           incurredCost={0}
           onClose={vi.fn()}
         />
@@ -262,7 +512,7 @@ describe("CostDialog", () => {
     it("should show reset button when incurredCost is greater than 0", () => {
       render(
         <CostDialog
-          predictedCost={createPredictedCost()}
+          predictedCost={createGeminiOnlyCost()}
           incurredCost={1.00}
           onClose={vi.fn()}
         />
@@ -274,7 +524,7 @@ describe("CostDialog", () => {
     it("should show confirmation dialog when reset is clicked", () => {
       render(
         <CostDialog
-          predictedCost={createPredictedCost()}
+          predictedCost={createGeminiOnlyCost()}
           incurredCost={1.00}
           onClose={vi.fn()}
         />
@@ -290,7 +540,7 @@ describe("CostDialog", () => {
 
       render(
         <CostDialog
-          predictedCost={createPredictedCost()}
+          predictedCost={createGeminiOnlyCost()}
           incurredCost={1.00}
           onClose={vi.fn()}
         />
@@ -306,7 +556,7 @@ describe("CostDialog", () => {
 
       render(
         <CostDialog
-          predictedCost={createPredictedCost()}
+          predictedCost={createGeminiOnlyCost()}
           incurredCost={1.00}
           onClose={vi.fn()}
         />
@@ -324,13 +574,12 @@ describe("CostDialog", () => {
 
       const { container } = render(
         <CostDialog
-          predictedCost={createPredictedCost()}
+          predictedCost={createGeminiOnlyCost()}
           incurredCost={0}
           onClose={onClose}
         />
       );
 
-      // Click the close button (first button in the dialog)
       const closeButton = container.querySelector("button");
       fireEvent.click(closeButton!);
 
@@ -342,7 +591,7 @@ describe("CostDialog", () => {
 
       render(
         <CostDialog
-          predictedCost={createPredictedCost()}
+          predictedCost={createGeminiOnlyCost()}
           incurredCost={0}
           onClose={onClose}
         />
@@ -354,56 +603,18 @@ describe("CostDialog", () => {
     });
   });
 
-  describe("Pricing Reference", () => {
-    it("should display nano-banana pricing", () => {
+  describe("Pricing Note", () => {
+    it("should display Gemini pricing and external provider note", () => {
       render(
         <CostDialog
-          predictedCost={createPredictedCost()}
+          predictedCost={createGeminiOnlyCost()}
           incurredCost={0}
           onClose={vi.fn()}
         />
       );
 
-      expect(screen.getByText(/Nano Banana \(Flash\):/)).toBeInTheDocument();
-    });
-
-    it("should display nano-banana-pro pricing tiers", () => {
-      render(
-        <CostDialog
-          predictedCost={createPredictedCost()}
-          incurredCost={0}
-          onClose={vi.fn()}
-        />
-      );
-
-      expect(screen.getByText(/Nano Banana Pro 1K\/2K:/)).toBeInTheDocument();
-      expect(screen.getByText(/Nano Banana Pro 4K:/)).toBeInTheDocument();
-    });
-
-    it("should display currency note", () => {
-      render(
-        <CostDialog
-          predictedCost={createPredictedCost()}
-          incurredCost={0}
-          onClose={vi.fn()}
-        />
-      );
-
-      expect(screen.getByText("All prices in USD")).toBeInTheDocument();
-    });
-  });
-
-  describe("Incurred Cost Description", () => {
-    it("should display description for incurred costs", () => {
-      render(
-        <CostDialog
-          predictedCost={createPredictedCost()}
-          incurredCost={0}
-          onClose={vi.fn()}
-        />
-      );
-
-      expect(screen.getByText("Actual API spend from successful generations")).toBeInTheDocument();
+      expect(screen.getByText(/Gemini pricing: \$0\.039-\$0\.24\/image/)).toBeInTheDocument();
+      expect(screen.getByText(/External providers not tracked/)).toBeInTheDocument();
     });
   });
 });

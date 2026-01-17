@@ -1,4 +1,5 @@
 import { WorkflowFile } from "@/store/workflowStore";
+import { TemplateCategory, TemplateMetadata } from "@/types/quickstart";
 
 export type ContentLevel = "empty" | "minimal" | "full";
 
@@ -7,6 +8,8 @@ export interface PresetTemplate {
   name: string;
   description: string;
   icon: string; // SVG path or emoji
+  category: TemplateCategory;
+  tags: string[]; // Provider tags (e.g., "Gemini", "Replicate")
   workflow: Omit<WorkflowFile, "id">;
 }
 
@@ -21,7 +24,7 @@ export const SAMPLE_IMAGES = {
   shoes: "/sample-images/shoes.jpg",
   rayban: "/sample-images/rayban.jpg",
   // Models
-  model: "/sample-images/model.jpg",
+  model: "/sample-images/model.png",
   model2: "/sample-images/model-2.jpg",
   model3: "/sample-images/model-3.jpg",
   model4: "/sample-images/model-4.jpg",
@@ -45,6 +48,9 @@ export const SAMPLE_IMAGES = {
   // Animals
   donkey: "/sample-images/donkey.jpg",
   owl: "/sample-images/owl.jpg",
+  // Reference images for templates
+  newBgModelProduct: "/sample-images/new-bg-model-product.png",
+  styleTransferReference: "/sample-images/style-transfer-reference.png",
 };
 
 // Default node dimensions for consistent layouts
@@ -148,9 +154,9 @@ const TEMPLATE_CONTENT: Record<string, Record<ContentLevel, TemplateContent>> = 
         "prompt-1": "Create a fashion advertisement showing the model wearing the Ray-Ban sunglasses. The model should be in a confident, stylish pose with the sunglasses naturally positioned. Use the urban street scene as the background. Match the lighting to create a cohesive lifestyle shot. The result should look like a high-end eyewear campaign photo.",
       },
       images: {
-        "imageInput-1": { url: SAMPLE_IMAGES.model, filename: "model.jpg" },
+        "imageInput-1": { url: SAMPLE_IMAGES.model, filename: "model.png" },
         "imageInput-2": { url: SAMPLE_IMAGES.rayban, filename: "rayban.jpg" },
-        "imageInput-3": { url: SAMPLE_IMAGES.streetScene, filename: "street-scene.jpg" },
+        "imageInput-3": { url: SAMPLE_IMAGES.newBgModelProduct, filename: "new-bg-model-product.png" },
       },
     },
   },
@@ -210,10 +216,10 @@ const TEMPLATE_CONTENT: Record<string, Record<ContentLevel, TemplateContent>> = 
     },
     full: {
       prompts: {
-        "prompt-1": "Apply the warm, rustic color palette and painterly texture from the house by the lake image to the owl portrait. Maintain the owl's detailed features and pose, but transform it into an artistic interpretation that feels like it belongs in the same visual world as the landscape. The result should have the warm earth tones, soft lighting, and dreamy quality of the reference.",
+        "prompt-1": "Transform the uploaded owl photo into a soft watercolor children's book illustration, matching a delicate hand-painted storybook style. Show me only the owl with no background",
       },
       images: {
-        "imageInput-1": { url: SAMPLE_IMAGES.houseLake, filename: "house-lake.jpg" },
+        "imageInput-1": { url: SAMPLE_IMAGES.styleTransferReference, filename: "style-transfer-reference.png" },
         "imageInput-2": { url: SAMPLE_IMAGES.owl, filename: "owl.jpg" },
       },
     },
@@ -249,6 +255,8 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
     name: "Product Shot",
     description: "Place product in a new scene or environment",
     icon: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4",
+    category: "simple",
+    tags: ["Gemini"],
     workflow: {
       version: 1,
       name: "Product Shot",
@@ -327,6 +335,8 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
     name: "Model + Product",
     description: "Combine model, product, and scene",
     icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z",
+    category: "simple",
+    tags: ["Gemini"],
     workflow: {
       version: 1,
       name: "Model + Product",
@@ -419,6 +429,8 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
     name: "Color Variations",
     description: "Generate product color variants from references",
     icon: "M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01",
+    category: "simple",
+    tags: ["Gemini"],
     workflow: {
       version: 1,
       name: "Color Variations",
@@ -511,6 +523,8 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
     name: "Background Swap",
     description: "Place subject in a new background",
     icon: "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z",
+    category: "simple",
+    tags: ["Gemini"],
     workflow: {
       version: 1,
       name: "Background Swap",
@@ -589,6 +603,8 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
     name: "Style Transfer",
     description: "Apply style from one image to another",
     icon: "M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42",
+    category: "simple",
+    tags: ["Gemini"],
     workflow: {
       version: 1,
       name: "Style Transfer",
@@ -667,6 +683,8 @@ export const PRESET_TEMPLATES: PresetTemplate[] = [
     name: "Scene Composite",
     description: "Combine elements from multiple scenes",
     icon: "M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10",
+    category: "simple",
+    tags: ["Gemini"],
     workflow: {
       version: 1,
       name: "Scene Composite",
@@ -810,13 +828,40 @@ export function getPresetTemplate(
 /**
  * Get all preset templates for display
  */
-export function getAllPresets(): Pick<PresetTemplate, "id" | "name" | "description" | "icon">[] {
-  return PRESET_TEMPLATES.map(({ id, name, description, icon }) => ({
+export function getAllPresets(): Pick<PresetTemplate, "id" | "name" | "description" | "icon" | "category" | "tags">[] {
+  return PRESET_TEMPLATES.map(({ id, name, description, icon, category, tags }) => ({
     id,
     name,
     description,
     icon,
+    category,
+    tags,
   }));
+}
+
+/**
+ * Get metadata for a template, extracting node count from workflow
+ */
+export function getTemplateMetadata(template: PresetTemplate): TemplateMetadata {
+  return {
+    nodeCount: template.workflow.nodes.length,
+    category: template.category,
+    tags: template.tags,
+  };
+}
+
+/**
+ * Get a preset template with full data including metadata
+ */
+export function getPresetWithMetadata(templateId: string): (PresetTemplate & { metadata: TemplateMetadata }) | null {
+  const template = PRESET_TEMPLATES.find((t) => t.id === templateId);
+  if (!template) {
+    return null;
+  }
+  return {
+    ...template,
+    metadata: getTemplateMetadata(template),
+  };
 }
 
 /**

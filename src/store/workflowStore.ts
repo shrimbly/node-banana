@@ -195,6 +195,75 @@ let nodeIdCounter = 0;
 let groupIdCounter = 0;
 let autoSaveIntervalId: ReturnType<typeof setInterval> | null = null;
 
+// Track pending save-generation syncs to ensure IDs are resolved before workflow save
+const pendingImageSyncs = new Map<string, Promise<void>>();
+
+// Helper to save a generation and sync the history ID
+// Returns immediately but tracks the async operation for later awaiting
+function trackSaveGeneration(
+  genPath: string,
+  content: { image?: string; video?: string },
+  prompt: string | null,
+  tempId: string,
+  nodeId: string,
+  historyType: 'image' | 'video',
+  get: () => WorkflowStore,
+  updateNodeData: (nodeId: string, data: Partial<WorkflowNodeData>) => void
+): void {
+  const syncPromise = fetch("/api/save-generation", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      directoryPath: genPath,
+      image: content.image,
+      video: content.video,
+      prompt,
+      imageId: tempId,
+    }),
+  })
+    .then((res) => res.json())
+    .then((saveResult) => {
+      // Update history with actual saved ID for carousel loading
+      if (saveResult.success && saveResult.imageId && saveResult.imageId !== tempId) {
+        const currentNode = get().nodes.find((n) => n.id === nodeId);
+        if (currentNode) {
+          if (historyType === 'image') {
+            const currentData = currentNode.data as NanoBananaNodeData;
+            const updatedHistory = [...(currentData.imageHistory || [])];
+            const entryIndex = updatedHistory.findIndex((h) => h.id === tempId);
+            if (entryIndex !== -1) {
+              updatedHistory[entryIndex] = { ...updatedHistory[entryIndex], id: saveResult.imageId };
+              updateNodeData(nodeId, { imageHistory: updatedHistory });
+            }
+          } else {
+            const currentData = currentNode.data as GenerateVideoNodeData;
+            const updatedHistory = [...(currentData.videoHistory || [])];
+            const entryIndex = updatedHistory.findIndex((h) => h.id === tempId);
+            if (entryIndex !== -1) {
+              updatedHistory[entryIndex] = { ...updatedHistory[entryIndex], id: saveResult.imageId };
+              updateNodeData(nodeId, { videoHistory: updatedHistory });
+            }
+          }
+        }
+      }
+    })
+    .catch((err) => {
+      console.error(`Failed to save ${historyType === 'video' ? 'video' : ''} generation:`, err);
+    })
+    .finally(() => {
+      // Remove from pending syncs when done (success or failure)
+      pendingImageSyncs.delete(tempId);
+    });
+
+  pendingImageSyncs.set(tempId, syncPromise);
+}
+
+// Wait for all pending image syncs to complete
+async function waitForPendingImageSyncs(): Promise<void> {
+  if (pendingImageSyncs.size === 0) return;
+  await Promise.all(pendingImageSyncs.values());
+}
+
 // Re-export for backward compatibility
 export { generateWorkflowId, saveGenerateImageDefaults, saveNanoBananaDefaults } from "./utils/localStorage";
 export { GROUP_COLORS } from "./utils/nodeDefaults";
@@ -1021,24 +1090,21 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
                 });
 
                 // Track cost
-                const generationCost = calculateGenerationCost(nodeData.model, nodeData.resolution);
-                get().addIncurredCost(generationCost);
+                // Cost tracking: Gemini (hardcoded), fal.ai (from API). Replicate excluded (no pricing API).
+                if (nodeData.selectedModel?.provider === "fal" && nodeData.selectedModel?.pricing) {
+                  // External fal.ai provider - use pricing from selectedModel
+                  get().addIncurredCost(nodeData.selectedModel.pricing.amount);
+                } else if (!nodeData.selectedModel || nodeData.selectedModel.provider === "gemini") {
+                  // Legacy Gemini or Gemini via selectedModel - use hardcoded pricing
+                  const generationCost = calculateGenerationCost(nodeData.model, nodeData.resolution);
+                  get().addIncurredCost(generationCost);
+                }
+                // Note: Replicate has no pricing API, so costs are not tracked
 
                 // Auto-save to generations folder if configured
                 const genPath = get().generationsPath;
                 if (genPath) {
-                  fetch("/api/save-generation", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      directoryPath: genPath,
-                      image: result.image,
-                      prompt: text,
-                      imageId,
-                    }),
-                  }).catch((err) => {
-                    console.error("Failed to save generation:", err);
-                  });
+                  trackSaveGeneration(genPath, { image: result.image }, text, imageId, node.id, 'image', get, updateNodeData);
                 }
               } else {
                 logger.error('api.error', `${provider} API generation failed`, {
@@ -1226,21 +1292,17 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
                   selectedVideoHistoryIndex: 0,
                 });
 
+                // Track cost for video generation
+                // Cost tracking: fal.ai (from API). Replicate excluded (no pricing API).
+                if (nodeData.selectedModel?.provider === "fal" && nodeData.selectedModel?.pricing) {
+                  get().addIncurredCost(nodeData.selectedModel.pricing.amount);
+                }
+                // Note: Replicate has no pricing API, so video costs are not tracked
+
                 // Auto-save video to generations folder if configured
                 const genPath = get().generationsPath;
                 if (genPath) {
-                  fetch("/api/save-generation", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      directoryPath: genPath,
-                      video: videoData,
-                      prompt: text,
-                      imageId: videoId,
-                    }),
-                  }).catch((err) => {
-                    console.error("Failed to save video generation:", err);
-                  });
+                  trackSaveGeneration(genPath, { video: videoData }, text, videoId, node.id, 'video', get, updateNodeData);
                 }
               } else if (result.success && result.image) {
                 // Some models might return an image preview; treat as video for now
@@ -1264,21 +1326,16 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
                   selectedVideoHistoryIndex: 0,
                 });
 
+                // Track cost for video generation (image fallback case)
+                // Cost tracking: fal.ai (from API). Replicate excluded (no pricing API).
+                if (nodeData.selectedModel?.provider === "fal" && nodeData.selectedModel?.pricing) {
+                  get().addIncurredCost(nodeData.selectedModel.pricing.amount);
+                }
+
                 // Auto-save image preview to generations folder if configured
                 const genPath = get().generationsPath;
                 if (genPath) {
-                  fetch("/api/save-generation", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      directoryPath: genPath,
-                      image: result.image,
-                      prompt: text,
-                      imageId: videoId,
-                    }),
-                  }).catch((err) => {
-                    console.error("Failed to save video generation:", err);
-                  });
+                  trackSaveGeneration(genPath, { image: result.image }, text, videoId, node.id, 'video', get, updateNodeData);
                 }
               } else {
                 logger.error('api.error', `${provider} API video generation failed`, {
@@ -1750,24 +1807,18 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           });
 
           // Track cost
-          const generationCost = calculateGenerationCost(nodeData.model, nodeData.resolution);
-          get().addIncurredCost(generationCost);
+          // Cost tracking: Gemini (hardcoded), fal.ai (from API). Replicate excluded (no pricing API).
+          if (nodeData.selectedModel?.provider === "fal" && nodeData.selectedModel?.pricing) {
+            get().addIncurredCost(nodeData.selectedModel.pricing.amount);
+          } else if (!nodeData.selectedModel || nodeData.selectedModel.provider === "gemini") {
+            const generationCost = calculateGenerationCost(nodeData.model, nodeData.resolution);
+            get().addIncurredCost(generationCost);
+          }
 
           // Auto-save to generations folder if configured
           const genPath = get().generationsPath;
           if (genPath) {
-            fetch("/api/save-generation", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                directoryPath: genPath,
-                image: result.image,
-                prompt: text,
-                imageId,
-              }),
-            }).catch((err) => {
-              console.error("Failed to save generation:", err);
-            });
+            trackSaveGeneration(genPath, { image: result.image }, text, imageId, nodeId, 'image', get, updateNodeData);
           }
         } else {
           updateNodeData(nodeId, {
@@ -2009,21 +2060,16 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             selectedVideoHistoryIndex: 0,
           });
 
+          // Track cost for video regeneration
+          // Cost tracking: fal.ai (from API). Replicate excluded (no pricing API).
+          if (nodeData.selectedModel?.provider === "fal" && nodeData.selectedModel?.pricing) {
+            get().addIncurredCost(nodeData.selectedModel.pricing.amount);
+          }
+
           // Auto-save video to generations folder if configured
           const genPath = get().generationsPath;
           if (genPath) {
-            fetch("/api/save-generation", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                directoryPath: genPath,
-                video: videoData,
-                prompt: text,
-                imageId: videoId,
-              }),
-            }).catch((err) => {
-              console.error("Failed to save video generation:", err);
-            });
+            trackSaveGeneration(genPath, { video: videoData }, text, videoId, nodeId, 'video', get, updateNodeData);
           }
         } else if (result.success && result.image) {
           const timestamp = Date.now();
@@ -2046,21 +2092,16 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             selectedVideoHistoryIndex: 0,
           });
 
+          // Track cost for video regeneration (image fallback case)
+          // Cost tracking: fal.ai (from API). Replicate excluded (no pricing API).
+          if (nodeData.selectedModel?.provider === "fal" && nodeData.selectedModel?.pricing) {
+            get().addIncurredCost(nodeData.selectedModel.pricing.amount);
+          }
+
           // Auto-save image preview to generations folder if configured
           const genPath = get().generationsPath;
           if (genPath) {
-            fetch("/api/save-generation", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                directoryPath: genPath,
-                image: result.image,
-                prompt: text,
-                imageId: videoId,
-              }),
-            }).catch((err) => {
-              console.error("Failed to save video generation:", err);
-            });
+            trackSaveGeneration(genPath, { image: result.image }, text, videoId, nodeId, 'video', get, updateNodeData);
           }
         } else {
           logger.error('api.error', `${provider} API video regeneration failed`, {
@@ -2412,11 +2453,18 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     set({ isSaving: true });
 
     try {
+      // Wait for any pending image/video saves to complete so their IDs are synced
+      // This prevents saving workflows with temporary IDs that don't match saved files
+      await waitForPendingImageSyncs();
+
+      // Re-fetch nodes after waiting, as imageHistory IDs may have been updated
+      const currentNodes = get().nodes;
+
       let workflow: WorkflowFile = {
         version: 1,
         id: workflowId,
         name: workflowName,
-        nodes,
+        nodes: currentNodes,
         edges,
         edgeStyle,
         groups: Object.keys(groups).length > 0 ? groups : undefined,
@@ -2441,11 +2489,52 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
       if (result.success) {
         const timestamp = Date.now();
-        set({
-          lastSavedAt: timestamp,
-          hasUnsavedChanges: false,
-          isSaving: false,
-        });
+
+        // If we externalized images, update store nodes with the refs
+        // This prevents duplicate images on subsequent saves
+        if (useExternalImageStorage && workflow.nodes !== currentNodes) {
+          // Merge refs from externalized nodes into current nodes (keeping image data)
+          const nodesWithRefs = currentNodes.map((node, index) => {
+            const externalizedNode = workflow.nodes[index];
+            if (!externalizedNode || node.id !== externalizedNode.id) {
+              return node; // Safety check - nodes should match
+            }
+
+            // Copy refs from externalized node while keeping current image data
+            // Use type assertion to access ref fields that may exist on various node types
+            const mergedData = { ...node.data } as Record<string, unknown>;
+            const extData = externalizedNode.data as Record<string, unknown>;
+
+            // Copy ref fields based on node type
+            if (extData.imageRef && typeof extData.imageRef === 'string') {
+              mergedData.imageRef = extData.imageRef;
+            }
+            if (extData.sourceImageRef && typeof extData.sourceImageRef === 'string') {
+              mergedData.sourceImageRef = extData.sourceImageRef;
+            }
+            if (extData.outputImageRef && typeof extData.outputImageRef === 'string') {
+              mergedData.outputImageRef = extData.outputImageRef;
+            }
+            if (extData.inputImageRefs && Array.isArray(extData.inputImageRefs)) {
+              mergedData.inputImageRefs = extData.inputImageRefs;
+            }
+
+            return { ...node, data: mergedData as WorkflowNodeData } as WorkflowNode;
+          });
+
+          set({
+            nodes: nodesWithRefs,
+            lastSavedAt: timestamp,
+            hasUnsavedChanges: false,
+            isSaving: false,
+          });
+        } else {
+          set({
+            lastSavedAt: timestamp,
+            hasUnsavedChanges: false,
+            isSaving: false,
+          });
+        }
 
         // Update localStorage
         saveSaveConfig({

@@ -104,7 +104,7 @@ describe("templates", () => {
     it("should return only display properties", () => {
       const presets = getAllPresets();
       presets.forEach((preset) => {
-        expect(Object.keys(preset)).toEqual(["id", "name", "description", "icon"]);
+        expect(Object.keys(preset)).toEqual(["id", "name", "description", "icon", "category", "tags"]);
       });
     });
 

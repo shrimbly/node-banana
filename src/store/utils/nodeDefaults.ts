@@ -12,7 +12,7 @@ import {
   GroupColor,
   SelectedModel,
 } from "@/types";
-import { loadGenerateImageDefaults } from "./localStorage";
+import { loadGenerateImageDefaults, loadNodeDefaults } from "./localStorage";
 
 /**
  * Default dimensions for each node type.
@@ -70,51 +70,70 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         prompt: "",
       } as PromptNodeData;
     case "nanoBanana": {
-      const defaults = loadGenerateImageDefaults();
-      const modelDisplayName = defaults.model === "nano-banana" ? "Nano Banana" : "Nano Banana Pro";
-      const defaultSelectedModel: SelectedModel = {
-        provider: "gemini",
-        modelId: defaults.model,
-        displayName: modelDisplayName,
-      };
+      const nodeDefaults = loadNodeDefaults();
+      const legacyDefaults = loadGenerateImageDefaults();
+
+      // Determine selectedModel: prefer new nodeDefaults, fallback to legacy
+      let selectedModel: SelectedModel;
+      if (nodeDefaults.generateImage?.selectedModel) {
+        selectedModel = nodeDefaults.generateImage.selectedModel;
+      } else {
+        const modelDisplayName = legacyDefaults.model === "nano-banana" ? "Nano Banana" : "Nano Banana Pro";
+        selectedModel = {
+          provider: "gemini",
+          modelId: legacyDefaults.model,
+          displayName: modelDisplayName,
+        };
+      }
+
+      // Merge settings: new nodeDefaults override legacy defaults
+      const aspectRatio = nodeDefaults.generateImage?.aspectRatio ?? legacyDefaults.aspectRatio;
+      const resolution = nodeDefaults.generateImage?.resolution ?? legacyDefaults.resolution;
+      const useGoogleSearch = nodeDefaults.generateImage?.useGoogleSearch ?? legacyDefaults.useGoogleSearch;
+
       return {
         inputImages: [],
         inputPrompt: null,
         outputImage: null,
-        aspectRatio: defaults.aspectRatio,
-        resolution: defaults.resolution,
-        model: defaults.model,
-        selectedModel: defaultSelectedModel,
-        useGoogleSearch: defaults.useGoogleSearch,
+        aspectRatio,
+        resolution,
+        model: legacyDefaults.model, // Keep legacy model field for backward compat
+        selectedModel,
+        useGoogleSearch,
         status: "idle",
         error: null,
         imageHistory: [],
         selectedHistoryIndex: 0,
       } as NanoBananaNodeData;
     }
-    case "generateVideo":
+    case "generateVideo": {
+      const nodeDefaults = loadNodeDefaults();
       return {
         inputImages: [],
         inputPrompt: null,
         outputVideo: null,
-        selectedModel: undefined,
+        selectedModel: nodeDefaults.generateVideo?.selectedModel,
         status: "idle",
         error: null,
         videoHistory: [],
         selectedVideoHistoryIndex: 0,
       } as GenerateVideoNodeData;
-    case "llmGenerate":
+    }
+    case "llmGenerate": {
+      const nodeDefaults = loadNodeDefaults();
+      const llmDefaults = nodeDefaults.llm;
       return {
         inputPrompt: null,
         inputImages: [],
         outputText: null,
-        provider: "google",
-        model: "gemini-3-flash-preview",
-        temperature: 0.7,
-        maxTokens: 8192,
+        provider: llmDefaults?.provider ?? "google",
+        model: llmDefaults?.model ?? "gemini-3-flash-preview",
+        temperature: llmDefaults?.temperature ?? 0.7,
+        maxTokens: llmDefaults?.maxTokens ?? 8192,
         status: "idle",
         error: null,
       } as LLMGenerateNodeData;
+    }
     case "splitGrid":
       return {
         sourceImage: null,

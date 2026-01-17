@@ -4,6 +4,7 @@ import {
   COST_DATA_STORAGE_KEY,
   GENERATE_IMAGE_DEFAULTS_KEY,
   PROVIDER_SETTINGS_KEY,
+  NODE_DEFAULTS_KEY,
   loadSaveConfigs,
   saveSaveConfig,
   loadWorkflowCostData,
@@ -14,6 +15,11 @@ import {
   saveProviderSettings,
   defaultProviderSettings,
   generateWorkflowId,
+  loadNodeDefaults,
+  saveNodeDefaults,
+  getGenerateImageDefaults,
+  getGenerateVideoDefaults,
+  getLLMDefaults,
 } from "../localStorage";
 
 // Mock localStorage
@@ -277,6 +283,114 @@ describe("localStorage utilities", () => {
       const id = generateWorkflowId();
 
       expect(id).toMatch(/^wf_\d+_[a-z0-9]+$/);
+    });
+  });
+
+  describe("loadNodeDefaults", () => {
+    it("returns empty object when localStorage is empty", () => {
+      const result = loadNodeDefaults();
+      expect(result).toEqual({});
+    });
+
+    it("returns stored config when data exists", () => {
+      const config = {
+        generateImage: {
+          selectedModel: { provider: "fal", modelId: "test-model", displayName: "Test Model" },
+          aspectRatio: "16:9",
+        },
+        llm: {
+          provider: "openai",
+          model: "gpt-4.1-mini",
+        },
+      };
+      localStorageMock.setItem(NODE_DEFAULTS_KEY, JSON.stringify(config));
+
+      const result = loadNodeDefaults();
+      expect(result).toEqual(config);
+    });
+
+    it("returns empty object on invalid JSON", () => {
+      localStorageMock.setItem(NODE_DEFAULTS_KEY, "not valid json");
+
+      const result = loadNodeDefaults();
+      expect(result).toEqual({});
+    });
+  });
+
+  describe("saveNodeDefaults", () => {
+    it("stores config to localStorage", () => {
+      const config = {
+        generateVideo: {
+          selectedModel: { provider: "replicate", modelId: "video-model", displayName: "Video Model" },
+        },
+      };
+
+      saveNodeDefaults(config);
+
+      const stored = JSON.parse(localStorageMock.getItem(NODE_DEFAULTS_KEY)!);
+      expect(stored).toEqual(config);
+    });
+  });
+
+  describe("getGenerateImageDefaults", () => {
+    it("returns undefined when not configured", () => {
+      const result = getGenerateImageDefaults();
+      expect(result).toBeUndefined();
+    });
+
+    it("returns stored generateImage defaults when configured", () => {
+      const config = {
+        generateImage: {
+          selectedModel: { provider: "gemini", modelId: "nano-banana-pro", displayName: "Nano Banana Pro" },
+          aspectRatio: "4:3",
+          useGoogleSearch: true,
+        },
+      };
+      localStorageMock.setItem(NODE_DEFAULTS_KEY, JSON.stringify(config));
+
+      const result = getGenerateImageDefaults();
+      expect(result).toEqual(config.generateImage);
+    });
+  });
+
+  describe("getGenerateVideoDefaults", () => {
+    it("returns undefined when not configured", () => {
+      const result = getGenerateVideoDefaults();
+      expect(result).toBeUndefined();
+    });
+
+    it("returns stored generateVideo defaults when configured", () => {
+      const config = {
+        generateVideo: {
+          selectedModel: { provider: "fal", modelId: "kling-video", displayName: "Kling Video" },
+        },
+      };
+      localStorageMock.setItem(NODE_DEFAULTS_KEY, JSON.stringify(config));
+
+      const result = getGenerateVideoDefaults();
+      expect(result).toEqual(config.generateVideo);
+    });
+  });
+
+  describe("getLLMDefaults", () => {
+    it("returns undefined when not configured", () => {
+      const result = getLLMDefaults();
+      expect(result).toBeUndefined();
+    });
+
+    it("returns stored llm defaults when configured", () => {
+      const config = {
+        llm: {
+          provider: "openai",
+          model: "gpt-4.1-nano",
+          temperature: 0.5,
+          maxTokens: 4096,
+        },
+      };
+      localStorageMock.setItem(NODE_DEFAULTS_KEY, JSON.stringify(config));
+
+      const result = getLLMDefaults();
+      expect(result).toEqual(config.llm);
     });
   });
 });

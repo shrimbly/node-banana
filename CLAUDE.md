@@ -116,6 +116,7 @@ Returns `{ images: string[], text: string | null }`.
 - `Shift + P` - Add prompt node at center
 - `Shift + I` - Add image input node
 - `Shift + G` - Add generate (nanoBanana) node
+- `Shift + V` - Add video (generateVideo) node
 - `Shift + L` - Add LLM node
 - `Shift + A` - Add annotation node
 - `H` - Stack selected nodes horizontally
