@@ -138,15 +138,28 @@ function mapToProviderModel(model: FalModel): ProviderModel {
 
 /**
  * Build authorization headers for fal.ai API
+ * 修改版：优先使用传入的 Key (来自客户端)，如果没有，则尝试读取服务端的只读 Key
  */
 function buildHeaders(apiKey: string | null): HeadersInit {
   const headers: HeadersInit = {};
+  
+  // 1. 优先使用传入的 Key
   if (apiKey) {
     headers["Authorization"] = `Key ${apiKey}`;
+    return headers;
   }
+
+  // 2. 调试模式：暂时硬编码写死 Key
+  // 请把你的 FAL_READ_ONLY_KEY (sk-fal-...) 填在下面引号里
+  const hardcodedKey = "0b81bc63-205f-43b1-bf8d-56a9efc89b73:7337c42ba26d72561e8863d9b7f2ef06"; 
+  
+  if (hardcodedKey) {
+    console.log("[Debug] Using Hardcoded Key for Fal List");
+    headers["Authorization"] = `Key ${hardcodedKey}`;
+  }
+
   return headers;
 }
-
 /**
  * fal.ai provider implementation
  */
