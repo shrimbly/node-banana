@@ -15,4 +15,10 @@ export interface CommunityWorkflowMeta {
   filename: string;
   author: string;
   size: number;
+  description: string;
+  nodeCount: number;
+  tags: string[];
+  previewImage?: string;
+  hoverImage?: string;
+  sortOrder?: number;
 }

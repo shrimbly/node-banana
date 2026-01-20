@@ -133,22 +133,32 @@ export function TemplateExplorerView({
         const searchLower = debouncedSearch.toLowerCase();
         const matchesSearch =
           workflow.name.toLowerCase().includes(searchLower) ||
-          workflow.author.toLowerCase().includes(searchLower);
+          workflow.author.toLowerCase().includes(searchLower) ||
+          workflow.description.toLowerCase().includes(searchLower);
         if (!matchesSearch) return false;
+      }
+
+      // Tags filter (OR logic - match ANY selected tag)
+      if (selectedTags.size > 0) {
+        const hasMatchingTag = workflow.tags.some((tag) => selectedTags.has(tag));
+        if (!hasMatchingTag) return false;
       }
 
       return true;
     });
-  }, [communityWorkflows, debouncedSearch, categoryFilter]);
+  }, [communityWorkflows, debouncedSearch, categoryFilter, selectedTags]);
 
-  // Collect all unique tags from presets
+  // Collect all unique tags from presets and community workflows
   const availableTags = useMemo(() => {
     const tags = new Set<string>();
     presets.forEach((preset) => {
       preset.tags.forEach((tag) => tags.add(tag));
     });
+    communityWorkflows.forEach((workflow) => {
+      workflow.tags.forEach((tag) => tags.add(tag));
+    });
     return Array.from(tags).sort();
-  }, [presets]);
+  }, [presets, communityWorkflows]);
 
   // Toggle tag selection
   const toggleTag = useCallback((tag: string) => {
@@ -454,87 +464,25 @@ export function TemplateExplorerView({
                   </svg>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3">
                   {filteredCommunity.map((workflow) => (
-                    <button
+                    <TemplateCard
                       key={workflow.id}
-                      onClick={() => handleCommunitySelect(workflow.id)}
-                      disabled={isLoading}
-                      className={`
-                        group w-full text-left rounded-lg border p-4 transition-all
-                        ${
-                          loadingWorkflowId === workflow.id
-                            ? "bg-purple-600/20 border-purple-500/50"
-                            : "bg-neutral-900/50 border-neutral-700 hover:border-neutral-500 hover:bg-neutral-900/70"
-                        }
-                        ${isLoading && loadingWorkflowId !== workflow.id ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}
-                      `}
-                    >
-                      {/* Icon */}
-                      <div
-                        className={`
-                          w-12 h-12 rounded-lg flex items-center justify-center mb-3
-                          ${
-                            loadingWorkflowId === workflow.id
-                              ? "bg-purple-500/30"
-                              : "bg-neutral-700/50 group-hover:bg-neutral-700"
-                          }
-                        `}
-                      >
-                        {loadingWorkflowId === workflow.id ? (
-                          <svg
-                            className="w-5 h-5 text-purple-400 animate-spin"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                          >
-                            <circle
-                              className="opacity-25"
-                              cx="12"
-                              cy="12"
-                              r="10"
-                              stroke="currentColor"
-                              strokeWidth="4"
-                            />
-                            <path
-                              className="opacity-75"
-                              fill="currentColor"
-                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                            />
-                          </svg>
-                        ) : (
-                          <svg
-                            className="w-6 h-6 text-neutral-400 group-hover:text-neutral-300 transition-colors"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={1.5}
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
-                            />
-                          </svg>
-                        )}
-                      </div>
-
-                      {/* Name */}
-                      <h3 className="text-sm font-medium text-neutral-200 mb-1">
-                        {workflow.name}
-                      </h3>
-
-                      {/* Author */}
-                      <p className="text-xs text-purple-400/80">
-                        @{workflow.author}
-                      </p>
-
-                      {/* Community badge */}
-                      <div className="mt-3">
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/20 text-amber-300">
-                          Community
-                        </span>
-                      </div>
-                    </button>
+                      template={{
+                        id: workflow.id,
+                        name: workflow.name,
+                        description: workflow.description,
+                        icon: "M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z",
+                        category: "community",
+                        tags: workflow.tags,
+                      }}
+                      nodeCount={workflow.nodeCount}
+                      previewImage={workflow.previewImage}
+                      hoverImage={workflow.hoverImage}
+                      isLoading={loadingWorkflowId === workflow.id}
+                      onUseWorkflow={() => handleCommunitySelect(workflow.id)}
+                      disabled={isLoading && loadingWorkflowId !== workflow.id}
+                    />
                   ))}
                 </div>
               )}

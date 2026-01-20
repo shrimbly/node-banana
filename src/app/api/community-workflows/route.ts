@@ -1,49 +1,11 @@
 import { NextResponse } from "next/server";
 import fs from "fs/promises";
 import path from "path";
-
-export interface CommunityWorkflowMeta {
-  id: string;
-  name: string;
-  filename: string;
-  author: string;
-  size: number;
-}
-
-/**
- * Derive a readable name from a workflow filename
- * Examples:
- * - contact-sheet-billsSupra.json → "Bills Supra"
- * - contact-sheet-ChrisWalkman.json → "Chris Walkman"
- * - workflow-2025-12-07.json → "Workflow 2025-12-07"
- */
-function deriveNameFromFilename(filename: string): string {
-  // Remove .json extension
-  const nameWithoutExt = filename.replace(/\.json$/, "");
-
-  // Handle contact-sheet- prefix
-  if (nameWithoutExt.startsWith("contact-sheet-")) {
-    const namePart = nameWithoutExt.replace("contact-sheet-", "");
-    // Split camelCase and capitalize
-    return namePart
-      .replace(/([a-z])([A-Z])/g, "$1 $2")
-      .replace(/^./, (s) => s.toUpperCase());
-  }
-
-  // Handle workflow- prefix
-  if (nameWithoutExt.startsWith("workflow-")) {
-    return nameWithoutExt
-      .split("-")
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
-  }
-
-  // Default: capitalize words
-  return nameWithoutExt
-    .split("-")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
-}
+import { CommunityWorkflowMeta } from "@/types/quickstart";
+import {
+  getCommunityWorkflowConfig,
+  getDefaultCommunityConfig,
+} from "@/lib/quickstart/communityWorkflows";
 
 /**
  * GET: List all community workflows from the examples directory
@@ -73,16 +35,39 @@ export async function GET() {
       jsonFiles.map(async (filename) => {
         const filePath = path.join(examplesDir, filename);
         const stats = await fs.stat(filePath);
+        const id = filename.replace(/\.json$/, "");
+
+        // Get config or generate default
+        const config = getCommunityWorkflowConfig(id) ?? getDefaultCommunityConfig(id, filename);
+
+        // Parse workflow to get node count
+        let nodeCount = 0;
+        try {
+          const content = await fs.readFile(filePath, "utf-8");
+          const workflow = JSON.parse(content);
+          nodeCount = workflow.nodes?.length ?? 0;
+        } catch {
+          // If parsing fails, default to 0
+        }
 
         return {
-          id: filename.replace(/\.json$/, ""),
-          name: deriveNameFromFilename(filename),
+          id,
+          name: config.name,
           filename,
-          author: "Willie",
+          author: config.author,
           size: stats.size,
+          description: config.description,
+          nodeCount,
+          tags: config.tags,
+          previewImage: config.previewImage,
+          hoverImage: config.hoverImage,
+          sortOrder: config.sortOrder,
         };
       })
     );
+
+    // Sort by sortOrder (ascending)
+    workflows.sort((a, b) => (a.sortOrder ?? 999) - (b.sortOrder ?? 999));
 
     return NextResponse.json({
       success: true,
