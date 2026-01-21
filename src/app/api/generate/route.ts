@@ -18,7 +18,7 @@ import { GenerationInput, GenerationOutput, ProviderModel } from "@/lib/provider
 import { uploadImageForUrl, shouldUseImageUrl, deleteImages } from "@/lib/images";
 import { annotateDynamicAccess } from "next/dist/server/app-render/dynamic-rendering";
 
-export const maxDuration = 600; // 10 minute timeout for video generation (Vercel only)
+export const maxDuration = 1800; // 10 minute timeout for video generation (Vercel only)
 export const dynamic = 'force-dynamic'; // Ensure this route is always dynamic
 
 // Map model types to Gemini model IDs
@@ -1266,7 +1266,7 @@ async function generateWithFalQueue(
 // 1. 类型定义与全量配置
 // ==============================================================================
 
-type HandlerType = "yunwu_video_unified" | "yunwu_image_openai" | "kling_native" | "yunwu_gemini_native";
+type HandlerType = "yunwu_video_unified" | "yunwu_image_openai" | "kling_native" | "yunwu_gemini_native" | "yunwu_image_edit";
 
 interface RouteConfig {
   type: HandlerType;
@@ -1353,6 +1353,8 @@ const MODEL_MAPPINGS: Record<string, RouteConfig> = {
   // 🟢 [新增] 即梦 Jimeng 4.5
   // 注意：如果您前端传来的 ID 是其他名字（比如 "fal-ai/jimeng-4.5"），请把 key 改成对应的
   "fal-ai/bytedance/seedream/v4.5/text-to-image": { type: "yunwu_image_openai", targetId: "jimeng-4.5" },
+  "fal-ai/bytedance/seedream/v4.5/edit": { type: "yunwu_image_edit", targetId: "jimeng-4.5" },
+
 };
 
 // ==============================================================================
@@ -1394,10 +1396,12 @@ async function generateWithYunwu(
         return await handleYunwuImage(requestId, apiKey, YUNWU_BASE, config, input);
       case "kling_native":
         return await handleKling(requestId, apiKey, YUNWU_BASE, config, input);
-
-      // ✅✅✅ [新增] Gemini 原生协议分支
       case "yunwu_gemini_native":
         return await handleYunwuGeminiNative(requestId, apiKey, YUNWU_BASE, config, input);
+
+        // 🟢 [新增] 编辑/重绘 分支
+      case "yunwu_image_edit":
+        return await handleYunwuEdit(requestId, apiKey, YUNWU_BASE, config, input);
 
       default:
         throw new Error(`Unknown handler type: ${config.type}`);
@@ -1464,25 +1468,54 @@ async function handleYunwuVideo(
     if (imgs.length > 0) body.images = imgs;
 
   } 
+
   // ---------------------------------------------------------
-  // 🔀 分支 B: 如果是 Veo / Kling
+  // 🔀 分支 B: Veo 全能适配 (支持 3图参考 & 首尾帧)
   // ---------------------------------------------------------
   else {
     body.enhance_prompt = true;
     body.aspect_ratio = rawRatio;
-    
-    const dynamicParams = input.dynamicInputs || {};
-    const startImg = dynamicParams["image_url"] || p["image_url"] || p["image"];
-    if (startImg) body.image_url = startImg;
-    
-    const endImg = dynamicParams["reference_image"] || p["end_frame_url"];
-    if (endImg) body.end_frame_url = endImg;
+    body.enable_upsample = true;
 
-    // Kling 兼容逻辑
-    if (modelId.includes("kling")) { // 👈 这里也修复了
-        const imgs = extractImages(input);
-        if (imgs.length > 0) body.images = imgs;
+    const dynamicParams = input.dynamicInputs || {};
+    
+    // 1. 判断是否为“强指定”的首尾帧任务
+    // 只有当前端明确传了 first_frame_url 或 last_frame_url 时，才进入严格排序模式
+    const explicitFirst = dynamicParams["first_frame_url"] || (p["first_frame_url"] as string);
+    const explicitLast = dynamicParams["last_frame_url"] || (p["last_frame_url"] as string);
+    
+    // 兼容旧参数名 (如果您的旧节点还在用 end_frame_url)
+    const legacyEnd = dynamicParams["end_frame_url"] || (p["end_frame_url"] as string);
+
+    const imgs: string[] = [];
+
+    if (explicitFirst || explicitLast || legacyEnd) {
+        // 🅰️ 严格首尾帧模式 (Strict Frames Mode)
+        // 场景：视频生视频、首尾帧插值
+        // 逻辑：必须保证数组顺序是 [首帧, 尾帧]
+        
+        // 获取首帧 (优先用明确的 first_frame，没有则尝试通用的 image_url)
+        const startImg = explicitFirst || dynamicParams["image_url"] || (p["image_url"] as string) || (p["image"] as string);
+        
+        // 获取尾帧
+        const endImg = explicitLast || legacyEnd || dynamicParams["reference_image"];
+
+        if (startImg) imgs.push(startImg);
+        if (endImg) imgs.push(endImg);
+        
+    } else {
+        // 🅱️ 通用多图模式 (Universal Mode) - ✅ 支持 3 张图
+        // 场景：Veo 参考图生成 (Reference Elements)、文生视频(无图)、图生视频(单图)
+        // 逻辑：抓取所有能找到的图片，不限制数量，按提取顺序排列
+        imgs.push(...extractImages(input));
     }
+
+    // 赋值
+    if (imgs.length > 0) {
+        // Veo/Kling 都支持 images 数组
+        body.images = imgs;
+    }
+    // 🗑️ 已删除冗余代码
   }
 
   // 3. 发送请求
@@ -1490,9 +1523,6 @@ async function handleYunwuVideo(
     return data.id ? `${baseUrl}/v1/video/query?id=${data.id}` : null;
   });
 }
-
-// 🟢 处理器 B: OpenAI 绘图接口
-// src/app/api/generate/route.ts
 
 // 🟢 处理器 B: OpenAI 绘图接口 (已升级兼容 Jimeng)
 async function handleYunwuImage(
@@ -1557,8 +1587,109 @@ async function handleYunwuImage(
   throw new Error("Unknown image response format: " + JSON.stringify(data));
 }
 
+// 🟢 [新增] 处理器 E: 图片编辑/重绘 (Multipart Form-Data)
+async function handleYunwuEdit(
+  reqId: string, apiKey: string, baseUrl: string, config: RouteConfig, input: GenerationInput
+): Promise<GenerationOutput> {
+  const url = `${baseUrl}/v1/images/edits`;
+  
+  // 1. 获取原图 (必须有)
+  const images = extractImages(input);
+  if (images.length === 0) {
+      throw new Error("Image editing requires an input image.");
+  }
+  const imageUrl = images[0]; // 第一张作为原图
+  
+  // 2. 尝试获取遮罩 (Mask) - 如果前端传了第二张图，通常是遮罩
+  // 或者从 parameters.mask_url 获取
+  let maskUrl = images[1] || input.parameters?.mask_url || input.parameters?.mask;
+
+  console.log(`[API:${reqId}] POST Edit: ${url} | Image: ${imageUrl.substring(0,30)}...`);
+
+  // 3. 构建 FormData (Node.js 原生支持)
+  const formData = new FormData();
+  formData.append("model", config.targetId || "jimeng-4.5");
+  formData.append("prompt", input.prompt || "Edit this image");
+  formData.append("n", "1");
+  // 🟢 修复开始：智能解析 Size
+  let sizeStr = "1024x1024"; // 默认兜底
+  const p = input.parameters || {};
+  // 尝试读取各种可能的尺寸字段
+  const rawSize = p.size || p.aspect_ratio || p.image_size;
+
+  if (rawSize) {
+      if (typeof rawSize === 'string') {
+          // 如果本来就是字符串 "1024x1024" 或 "3:4"
+          sizeStr = rawSize; 
+      } else if (typeof rawSize === 'object' && rawSize !== null) {
+          // 🚨 如果是对象 {width: 1024, height: 1024}，手动拼接！
+          const w = (rawSize as any).width;
+          const h = (rawSize as any).height;
+          if (w && h) {
+              sizeStr = `${w}x${h}`;
+          }
+      }
+  }
+  formData.append("size", sizeStr); // 🟢 这样就绝对安全了
+
+  // 4. 下载并添加原图 (二进制流)
+  // ⚠️ 关键点：必须把 URL 变成 Blob 才能作为文件上传
+  try {
+      const imgRes = await fetch(imageUrl);
+      if (!imgRes.ok) throw new Error(`Failed to fetch source image: ${imgRes.statusText}`);
+      const imgBlob = await imgRes.blob();
+      formData.append("image", imgBlob, "image.png");
+
+      // 5. 如果有遮罩，也下载并添加
+      if (maskUrl && typeof maskUrl === 'string') {
+          console.log(`[API:${reqId}] Adding Mask...`);
+          const maskRes = await fetch(maskUrl);
+          if (maskRes.ok) {
+              const maskBlob = await maskRes.blob();
+              formData.append("mask", maskBlob, "mask.png");
+          }
+      }
+  } catch (e) {
+      console.error("Failed to prepare images for upload:", e);
+      throw new Error("Failed to download input image for editing.");
+  }
+
+  // 6. 发送请求 (fetch 会自动设置 multipart/form-data 的 boundary)
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+        "Authorization": `Bearer ${apiKey}`,
+        // ❌ 千万不要手动设置 'Content-Type': 'multipart/form-data'
+        // 浏览器/Node会自动设置正确的 Boundary
+    },
+    body: formData
+  });
+
+  if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[API:${reqId}] Edit Error:`, errText);
+      throw new Error(`Edit Failed: ${errText}`);
+  }
+
+  const data = await res.json();
+
+  // 7. 解析结果
+  if (data.data?.[0]?.url) {
+    return { success: true, outputs: [{ type: "image", data: data.data[0].url, url: data.data[0].url }] };
+  }
+  
+  if (data.data?.[0]?.b64_json) {
+      const base64 = data.data[0].b64_json;
+      const dataUrl = `data:image/png;base64,${base64}`;
+      return { success: true, outputs: [{ type: "image", data: dataUrl, url: dataUrl }] };
+  }
+
+  throw new Error("Unknown edit response format");
+}
+
 // 🟢 [新增] 处理器 D: 云雾 Gemini 原生协议专用
-// 专门处理 gemini-3-pro-image-preview 模型，支持原生 aspectRatio 和 resolution
+// 🟢 处理器 D: Gemini 原生协议 (支持图片/视频理解与编辑)
+// 🟢 处理器 D: 云雾 Gemini 原生协议专用 (已修复：支持图片传输)
 async function handleYunwuGeminiNative(
   reqId: string, 
   apiKey: string, 
@@ -1567,41 +1698,64 @@ async function handleYunwuGeminiNative(
   input: GenerationInput
 ): Promise<GenerationOutput> {
   // 1. 构造精确的 URL
-  // 您的文档端点: /v1beta/models/gemini-3-pro-image-preview:generateContent
-  // config.targetId 稍后会在映射表里填 "gemini-3-pro-image-preview"
-  const url = `${baseUrl}/v1beta/models/${config.targetId}:generateContent`;
+  const url = `${baseUrl}/v1beta/models/${config.targetId}:generateContent?key=${apiKey}`;
 
   console.log(`[API:${reqId}] POST Yunwu-Gemini Native: ${url}`);
 
-  // 2. 提取参数
+  // 2. 提取并处理图片 (这是之前缺失的关键步骤！)
+  const imageUrls = extractImages(input);
+  const parts: any[] = [];
+
+  // A. 先放入文本 Prompt
+  if (input.prompt) {
+      parts.push({ text: input.prompt });
+  }
+
+  // B. 再放入图片 (转换为 inlineData)
+  if (imageUrls.length > 0) {
+      console.log(`[API:${reqId}] 🔄 Gemini: Converting ${imageUrls.length} images to Base64...`);
+      
+      for (const imgUrl of imageUrls) {
+          try {
+              // 调用文件底部的辅助函数
+              const base64Data = await imageUrlToBase64(imgUrl);
+              
+              parts.push({
+                  inlineData: {
+                      mimeType: "image/jpeg", // 默认声明为 jpeg，兼容性最好
+                      data: base64Data
+                  }
+              });
+          } catch (e) {
+              console.error(`[API:${reqId}] Failed to process image: ${imgUrl}`, e);
+          }
+      }
+  }
+
+  // 3. 构造请求体
   // 我们稍后会在 POST 函数里把 aspectRatio 和 resolution 塞进 parameters 里
   const params = input.parameters || {};
   const aspectRatio = params.aspect_ratio || params.aspectRatio; 
-  const resolution = params.resolution; // 例如 "4K", "1K"
+  const resolution = params.resolution; 
 
-  console.log(`[API:${reqId}] Gemini Config: Ratio=${aspectRatio || "Default"}, Res=${resolution || "Default"}`);
+  console.log(`[API:${reqId}] Gemini Config: Ratio=${aspectRatio || "Default"}, Res=${resolution || "Default"}, Parts=${parts.length}`);
 
-  // 3. 构造 Google 原生请求体 (严格遵守 Google REST API 标准)
   const body: any = {
     contents: [
       {
-        parts: [{ text: input.prompt }]
+        parts: parts // 🔥 这里现在包含了文本 + 图片
       }
     ],
     generationConfig: {
-      responseModalities: ["IMAGE"], // 🔥 关键：告诉模型我们要生成图片
+      responseModalities: ["IMAGE"], 
       imageConfig: {} 
     }
   };
 
-  // 4. 注入参数 (透传给云雾)
-  // 如果有宽高比 (如 "16:9")
+  // 4. 注入参数
   if (aspectRatio) {
       body.generationConfig.imageConfig.aspectRatio = aspectRatio;
   }
-  
-  // 如果有分辨率 (如 "4K")
-  // Google 原生支持 "imageSize" 字段来接收 "4K" 这种字符串
   if (resolution) {
        body.generationConfig.imageConfig.imageSize = resolution;
   }
@@ -1610,7 +1764,7 @@ async function handleYunwuGeminiNative(
   const res = await fetch(url, {
     method: "POST",
     headers: {
-        "Authorization": `Bearer ${apiKey}`, // 云雾验证通常用 Bearer
+        // "Authorization": `Bearer ${apiKey}`, // Google 原生协议 Key 在 URL 里，通常不需要 Header Auth，但如果云雾网关需要，保留也无妨
         "Content-Type": "application/json"
     },
     body: JSON.stringify(body)
@@ -1624,29 +1778,34 @@ async function handleYunwuGeminiNative(
 
   const data = await res.json();
   
-  // 6. 解析 Google 原生返回结构 (Base64)
-  // 结构路径: candidates[0].content.parts[0].inlineData.data
+  // 6. 解析结果 (包含刚才的 text/image 修复)
   try {
       const candidate = data.candidates?.[0];
       const part = candidate?.content?.parts?.[0];
       
-      // 检查是否有图片数据
+      // A. 检查是否有图片
       if (part?.inlineData?.data) {
           const base64Data = part.inlineData.data;
           const mimeType = part.inlineData.mimeType || "image/png";
-          
-          // 构造完整的 Data URL 返回给前端
           const dataUrl = `data:${mimeType};base64,${base64Data}`;
           return { success: true, outputs: [{ type: "image", data: dataUrl, url: dataUrl }] };
       }
-  } catch (e) {
+
+      // B. 检查是否有文本 (报错处理)
+      if (part?.text) {
+          console.warn(`[API:${reqId}] Gemini returned text:`, part.text);
+          throw new Error(`Model returned text instead of image: "${part.text}"`);
+      }
+
+  } catch (e: any) {
       console.error(`[API:${reqId}] Parse Error:`, e);
+      throw e;
   }
 
   throw new Error("Unknown Gemini native response format");
 }
 
-// 🟢 处理器 C: Kling 专用 (v2.6 纯净版：无前缀 Base64 + 严格文档结构)
+// 🟢 处理器 C: Kling 专用 (v2.6 纯净版：支持首尾帧 + 纯Base64)
 async function handleKling(
   reqId: string, apiKey: string, baseUrl: string, config: RouteConfig, input: GenerationInput
 ): Promise<GenerationOutput> {
@@ -1657,70 +1816,70 @@ async function handleKling(
   const typePath = isI2V ? "image2video" : "text2video";
   const url = `${baseUrl}/kling/v1/videos/${typePath}`;
 
-  // 2. 准备 Duration
+  // 2. 准备参数
+  const p = input.parameters || {};
   let duration = "5"; 
-  if (input.parameters?.duration) {
-      const d = String(input.parameters.duration);
-      if (d === "10" || d.includes("10")) duration = "10";
+  if (p.duration && (String(p.duration) === "10" || String(p.duration).includes("10"))) {
+      duration = "10";
   }
 
-  // 3. 准备 Mode (必填)
   let mode = "std";
   const modelIdLower = (config.targetId || "").toLowerCase();
   if (modelIdLower.includes("pro") || config.targetId === "kling-v2-6") {
       mode = "pro";
   }
 
-  // 4. 构造基础请求体
+  // 3. 构造基础请求体
   const body: any = {
     model_name: config.targetId || "kling-v2-6", 
     mode: mode,
     duration: duration,
-    prompt: input.prompt,
+    prompt: input.prompt || "",
     cfg_scale: 0.5,
     ...config.extraParams
   };
 
-  // 5. 处理图片 (纯净 Base64)
+  // 4. 图片处理 (首帧 + 尾帧)
   if (isI2V) {
-    const imageUrl = images[0];
-    console.log(`[API:${reqId}] 🔄 Converting Image URL to Pure Base64...`);
-    
-    try {
-        let base64Str = "";
-        
-        if (imageUrl.startsWith("http")) {
-            base64Str = await imageUrlToBase64(imageUrl);
-        } else if (imageUrl.startsWith("data:")) {
-            // 如果已经是 data URI，去掉前缀
-            base64Str = imageUrl.split(",")[1];
+    // === 辅助函数：转纯 Base64 (无前缀) ===
+    const toBase64 = async (imgUrl: string) => {
+        let b64 = "";
+        if (imgUrl.startsWith("http")) {
+            b64 = await imageUrlToBase64(imgUrl);
+        } else if (imgUrl.startsWith("data:")) {
+            b64 = imgUrl.split(",")[1];
         } else {
-            base64Str = imageUrl;
+            b64 = imgUrl;
+        }
+        return b64.replace(/\s/g, ""); // 清洗空格
+    };
+
+    try {
+        // A. 处理首帧 (Image)
+        console.log(`[API:${reqId}] 🔄 Kling: Processing Start Frame...`);
+        body.image = await toBase64(images[0]);
+
+        // B. 处理尾帧 (Image Tail)
+        // 尝试从数组第二个位置 或 参数中获取
+        const tailImgUrl = images[1] || (p.image_tail as string) || (p.end_frame_url as string);
+        if (tailImgUrl) {
+            console.log(`[API:${reqId}] 🔄 Kling: Processing Tail Frame...`);
+            body.image_tail = await toBase64(tailImgUrl);
         }
 
-        // 🧹 彻底清洗：去掉可能存在的空格或换行符
-        base64Str = base64Str.replace(/\s/g, "");
-        
-        // ❌ 移除所有 data:image 前缀，只保留纯字符
-        // 很多后端只能解析纯字符
-        body.image = base64Str; 
-        
-        // 🔍 调试：确保是以字符开头，不是 data:
-        console.log(`[API:${reqId}] Base64 Start: "${base64Str.substring(0, 15)}..."`);
-
     } catch (e) {
-        throw new Error(`Failed to process image: ${e}`);
+        throw new Error(`Failed to process Kling images: ${e}`);
     }
   }
 
-  console.log(`[API:${reqId}] POST Kling Pure-Base64: ${url}`);
-  console.log(`[API:${reqId}] Params: mode=${mode}, duration=${duration}`);
+  console.log(`[API:${reqId}] POST Kling: ${url} | Mode: ${mode} | Duration: ${duration}`);
 
-  // 6. 发送并轮询
+  // 5. 发送并轮询
   return await sendAndPoll(reqId, url, apiKey, body, (data) => {
-    const tid = data.task_id || data.id || data.data?.task_id;
+    // 兼容各种返回结构的 task_id
+    const tid = data.data?.task_id || data.task_id || data.id;
     if (!tid) {
-        console.error(`[API:${reqId}] ❌ Submission Failed. Response:`, JSON.stringify(data));
+        console.error(`[API:${reqId}] ❌ Kling Submit Failed:`, JSON.stringify(data));
         return null;
     }
     return `${baseUrl}/kling/v1/videos/${typePath}/${tid}`;
@@ -1760,7 +1919,7 @@ async function sendAndPoll(
   if (!queryUrl) throw new Error(`No polling URL determined from: ${JSON.stringify(data)}`);
 
   console.log(`[API:${reqId}] Polling Start: ${queryUrl}`);
-  const maxTime = 10 * 60 * 1000;
+  const maxTime = 30 * 60 * 1000;
   const start = Date.now();
 
   while (Date.now() - start < maxTime) {
@@ -1819,15 +1978,36 @@ async function sendAndPoll(
 }
 
 // 辅助函数
+// src/app/api/generate/route.ts (文件最底部)
+
 function extractImages(input: GenerationInput): string[] {
   const imgs: string[] = [];
-  if (input.images) imgs.push(...input.images);
+  
+  // 1. 标准通道 (Image Urls 节点通常走这里)
+  if (input.images) {
+      imgs.push(...input.images);
+  }
+
+  // 2. 动态通道 (防止有漏网之鱼)
   if (input.dynamicInputs) {
     for (const val of Object.values(input.dynamicInputs)) {
-      if (typeof val === 'string' && val.startsWith('http')) imgs.push(val);
+      // 情况 A: 字符串 URL
+      if (typeof val === 'string' && val.startsWith('http')) {
+          imgs.push(val);
+      } 
+      // 情况 B: 字符串数组 (防止前端把一组图放进了 dynamicInputs)
+      else if (Array.isArray(val)) {
+          val.forEach(v => {
+              if (typeof v === 'string' && v.startsWith('http')) {
+                  imgs.push(v);
+              }
+          });
+      }
     }
   }
-  return imgs;
+  
+  // 3. 去重 (防止同一张图被重复添加)
+  return Array.from(new Set(imgs));
 }
 
 function extractModelName(falId: string): string {
