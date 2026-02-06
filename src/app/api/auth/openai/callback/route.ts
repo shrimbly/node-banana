@@ -51,7 +51,7 @@ export async function GET(request: Request) {
   }
 
   try {
-    const redirectUri = `${url.origin}/api/auth/openai/callback`;
+    const redirectUri = process.env.OPENAI_OAUTH_REDIRECT_URI || `${url.origin}/api/auth/openai/callback`;
     const tokenResponse = await exchangeAuthorizationCode({
       code,
       codeVerifier: handshake.codeVerifier,

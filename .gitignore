@@ -48,3 +48,5 @@ logs/*.json
 
 # auth token storage
 data/
+
+opencode-openai-codex-auth/

@@ -32,6 +32,7 @@ export interface GenerateResponse {
 export interface LLMGenerateRequest {
   prompt: string;
   images?: string[];
+  systemPrompt?: string;
   provider: LLMProvider;
   model: LLMModelType;
   temperature?: number;

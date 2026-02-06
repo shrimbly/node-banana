@@ -42,6 +42,7 @@ export type LLMModelType =
   | "gemini-2.5-flash"
   | "gemini-3-flash-preview"
   | "gemini-3-pro-preview"
+  | "gpt-5.2"
   | "gpt-4.1-mini"
   | "gpt-4.1-nano";
 

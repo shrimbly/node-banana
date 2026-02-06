@@ -150,6 +150,7 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         inputPrompt: null,
         inputImages: [],
         outputText: null,
+        systemPrompt: llmDefaults?.systemPrompt ?? "",
         provider: llmDefaults?.provider ?? "google",
         model: llmDefaults?.model ?? "gemini-3-flash-preview",
         temperature: llmDefaults?.temperature ?? 0.7,

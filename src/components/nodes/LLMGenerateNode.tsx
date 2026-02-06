@@ -20,10 +20,12 @@ const MODELS: Record<LLMProvider, { value: LLMModelType; label: string }[]> = {
     { value: "gemini-3-pro-preview", label: "Gemini 3.0 Pro" },
   ],
   openai: [
+    { value: "gpt-5.2", label: "GPT-5.2" },
     { value: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
     { value: "gpt-4.1-nano", label: "GPT-4.1 Nano" },
   ],
   "openai-auth": [
+    { value: "gpt-5.2", label: "GPT-5.2" },
     { value: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
     { value: "gpt-4.1-nano", label: "GPT-4.1 Nano" },
   ],
@@ -66,6 +68,13 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
   const handleMaxTokensChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       updateNodeData(id, { maxTokens: parseInt(e.target.value, 10) });
+    },
+    [id, updateNodeData]
+  );
+
+  const handleSystemPromptChange = useCallback(
+    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+      updateNodeData(id, { systemPrompt: e.target.value });
     },
     [id, updateNodeData]
   );
@@ -278,6 +287,15 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
           </button>
           {showParams && (
             <div className="flex flex-col gap-2 pt-1 border-t border-neutral-700/50">
+              <div className="flex flex-col gap-0.5">
+                <label className="text-[9px] text-neutral-500">System Prompt</label>
+                <textarea
+                  value={nodeData.systemPrompt || ""}
+                  onChange={handleSystemPromptChange}
+                  placeholder="Leave empty to use the default system prompt"
+                  className="nodrag w-full min-h-[60px] text-[10px] bg-neutral-900/50 border border-neutral-700 rounded p-1 text-neutral-300 focus:outline-none focus:ring-1 focus:ring-neutral-600"
+                />
+              </div>
               {/* Temperature slider */}
               <div className="flex flex-col gap-0.5">
                 <label className="text-[9px] text-neutral-500">Temperature: {nodeData.temperature.toFixed(1)}</label>

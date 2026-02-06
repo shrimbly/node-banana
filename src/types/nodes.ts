@@ -181,6 +181,7 @@ export interface LLMGenerateNodeData extends BaseNodeData {
   inputImages: string[];
   inputImageRefs?: string[]; // External image references for storage optimization
   outputText: string | null;
+  systemPrompt?: string;
   provider: LLMProvider;
   model: LLMModelType;
   temperature: number;
@@ -338,6 +339,7 @@ export interface LLMNodeDefaults {
   model?: LLMModelType;
   temperature?: number;
   maxTokens?: number;
+  systemPrompt?: string;
 }
 
 export interface NodeDefaultsConfig {

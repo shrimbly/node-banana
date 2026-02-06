@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const origin = url.origin;
-  const redirectUri = `${origin}/api/auth/openai/callback`;
+  const redirectUri = process.env.OPENAI_OAUTH_REDIRECT_URI || `${origin}/api/auth/openai/callback`;
 
   const state = generateRandomString(24);
   const codeVerifier = generateRandomString(48);
