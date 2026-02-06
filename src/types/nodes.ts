@@ -36,7 +36,9 @@ export type NodeType =
   | "outputGallery"
   | "imageCompare"
   | "videoStitch"
-  | "easeCurve";
+  | "easeCurve"
+  | "webhookTrigger"
+  | "webhookResponse";
 
 /**
  * Node execution status
@@ -281,6 +283,27 @@ export interface SplitGridNodeData extends BaseNodeData {
 }
 
 /**
+ * Webhook Trigger node - receives external data via webhook API
+ */
+export interface WebhookTriggerNodeData extends BaseNodeData {
+  imageCount: number; // 1-10, number of image outputs
+  hasTextOutput: boolean; // whether to include text output handle
+  images: (string | null)[]; // Injected base64 data URLs during webhook execution
+  text: string | null; // Injected text during webhook execution
+  webhookSecret?: string; // Optional auth token
+}
+
+/**
+ * Webhook Response node - captures output to return via webhook API
+ */
+export interface WebhookResponseNodeData extends BaseNodeData {
+  image: string | null;
+  video?: string | null;
+  text?: string | null;
+  contentType?: "image" | "video" | "text";
+}
+
+/**
  * Union of all node data types
  */
 export type WorkflowNodeData =
@@ -297,7 +320,9 @@ export type WorkflowNodeData =
   | OutputGalleryNodeData
   | ImageCompareNodeData
   | VideoStitchNodeData
-  | EaseCurveNodeData;
+  | EaseCurveNodeData
+  | WebhookTriggerNodeData
+  | WebhookResponseNodeData;
 
 /**
  * Workflow node with typed data (extended with optional groupId)

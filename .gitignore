@@ -45,3 +45,6 @@ logs/*.json
 
 # planning docs
 .planning/
+
+# local files
+Flujo correcto Git Push:Pull.md

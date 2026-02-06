@@ -24,6 +24,7 @@ export interface GenerateResponse {
   image?: string;
   video?: string;
   videoUrl?: string; // For large videos, return URL directly
+  sourceUrl?: string; // Original provider URL before base64 conversion
   contentType?: "image" | "video";
   error?: string;
 }

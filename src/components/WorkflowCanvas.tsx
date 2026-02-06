@@ -34,6 +34,8 @@ import {
   ImageCompareNode,
   VideoStitchNode,
   EaseCurveNode,
+  WebhookTriggerNode,
+  WebhookResponseNode,
 } from "./nodes";
 import { EditableEdge, ReferenceEdge } from "./edges";
 import { ConnectionDropMenu, MenuAction } from "./ConnectionDropMenu";
@@ -66,6 +68,8 @@ const nodeTypes: NodeTypes = {
   imageCompare: ImageCompareNode,
   videoStitch: VideoStitchNode,
   easeCurve: EaseCurveNode,
+  webhookTrigger: WebhookTriggerNode,
+  webhookResponse: WebhookResponseNode,
 };
 
 const edgeTypes: EdgeTypes = {
@@ -125,6 +129,10 @@ const getNodeHandles = (nodeType: string): { inputs: string[]; outputs: string[]
       return { inputs: ["video", "audio"], outputs: ["video"] };
     case "easeCurve":
       return { inputs: ["video", "easeCurve"], outputs: ["video", "easeCurve"] };
+    case "webhookTrigger":
+      return { inputs: [], outputs: ["image", "text"] };
+    case "webhookResponse":
+      return { inputs: ["image", "video", "text"], outputs: [] };
     default:
       return { inputs: [], outputs: [] };
   }
@@ -315,7 +323,7 @@ export function WorkflowCanvas() {
         if (!targetNode) return false;
 
         const targetNodeType = targetNode.type;
-        if (targetNodeType === "generateVideo" || targetNodeType === "videoStitch" || targetNodeType === "easeCurve" || targetNodeType === "output") {
+        if (targetNodeType === "generateVideo" || targetNodeType === "videoStitch" || targetNodeType === "easeCurve" || targetNodeType === "output" || targetNodeType === "webhookResponse") {
           // For output node, we allow video even though its handle is typed as "image"
           // because output node can display both images and videos
           return true;
@@ -1034,23 +1042,7 @@ export function WorkflowCanvas() {
           event.preventDefault();
           const { centerX, centerY } = getViewportCenter();
           // Offset by half the default node dimensions to center it
-          const defaultDimensions: Record<NodeType, { width: number; height: number }> = {
-            imageInput: { width: 300, height: 280 },
-            audioInput: { width: 300, height: 200 },
-            annotation: { width: 300, height: 280 },
-            prompt: { width: 320, height: 220 },
-            promptConstructor: { width: 340, height: 280 },
-            nanoBanana: { width: 300, height: 300 },
-            generateVideo: { width: 300, height: 300 },
-            llmGenerate: { width: 320, height: 360 },
-            splitGrid: { width: 300, height: 320 },
-            output: { width: 320, height: 320 },
-            outputGallery: { width: 320, height: 360 },
-            imageCompare: { width: 400, height: 360 },
-            videoStitch: { width: 400, height: 280 },
-            easeCurve: { width: 340, height: 480 },
-          };
-          const dims = defaultDimensions[nodeType];
+          const dims = defaultNodeDimensions[nodeType];
           addNode(nodeType, { x: centerX - dims.width / 2, y: centerY - dims.height / 2 });
           return;
         }
@@ -1603,6 +1595,10 @@ export function WorkflowCanvas() {
                 return "#f97316";
               case "easeCurve":
                 return "#bef264"; // lime-300 (easy-peasy-ease)
+              case "webhookTrigger":
+                return "#10b981"; // emerald-500
+              case "webhookResponse":
+                return "#f43f5e"; // rose-500
               default:
                 return "#94a3b8";
             }

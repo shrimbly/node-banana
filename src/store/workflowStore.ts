@@ -33,12 +33,19 @@ import {
   OutputGalleryNodeData,
   VideoStitchNodeData,
   EaseCurveNodeData,
+  WebhookTriggerNodeData,
+  WebhookResponseNodeData,
 } from "@/types";
 import { useToast } from "@/components/Toast";
 import { calculateGenerationCost } from "@/utils/costCalculator";
 import { logger } from "@/utils/logger";
 import { externalizeWorkflowImages, hydrateWorkflowImages } from "@/utils/imageStorage";
 import { EditOperation, applyEditOperations as executeEditOps } from "@/lib/chat/editOperations";
+import {
+  groupNodesByLevel as groupNodesByLevelPure,
+  chunk as chunkPure,
+  getConnectedInputsPure,
+} from "@/lib/executor/graphUtils";
 import {
   loadSaveConfigs,
   saveSaveConfig,
@@ -344,74 +351,12 @@ const saveConcurrencySetting = (value: number): void => {
   localStorage.setItem(CONCURRENCY_SETTINGS_KEY, String(value));
 };
 
-// Level grouping for parallel execution
-export interface LevelGroup {
-  level: number;
-  nodeIds: string[];
-}
+// Re-export from graphUtils for backward compatibility
+export type { LevelGroup } from "@/lib/executor/graphUtils";
 
-/**
- * Groups nodes by dependency level using Kahn's algorithm variant.
- * Nodes at the same level can be executed in parallel.
- * Level 0 = nodes with no incoming edges (roots)
- * Level N = nodes whose dependencies are all at levels < N
- */
-function groupNodesByLevel(
-  nodes: WorkflowNode[],
-  edges: WorkflowEdge[]
-): LevelGroup[] {
-  // Calculate in-degree for each node
-  const inDegree = new Map<string, number>();
-  const adjList = new Map<string, string[]>();
-
-  nodes.forEach((n) => {
-    inDegree.set(n.id, 0);
-    adjList.set(n.id, []);
-  });
-
-  edges.forEach((e) => {
-    inDegree.set(e.target, (inDegree.get(e.target) || 0) + 1);
-    adjList.get(e.source)?.push(e.target);
-  });
-
-  // BFS with level tracking (Kahn's algorithm variant)
-  const levels: LevelGroup[] = [];
-  let currentLevel = nodes
-    .filter((n) => inDegree.get(n.id) === 0)
-    .map((n) => n.id);
-
-  let levelNum = 0;
-  while (currentLevel.length > 0) {
-    levels.push({ level: levelNum, nodeIds: [...currentLevel] });
-
-    const nextLevel: string[] = [];
-    for (const nodeId of currentLevel) {
-      for (const child of adjList.get(nodeId) || []) {
-        const newDegree = (inDegree.get(child) || 1) - 1;
-        inDegree.set(child, newDegree);
-        if (newDegree === 0) {
-          nextLevel.push(child);
-        }
-      }
-    }
-
-    currentLevel = nextLevel;
-    levelNum++;
-  }
-
-  return levels;
-}
-
-/**
- * Chunk an array into smaller arrays of specified size
- */
-function chunk<T>(array: T[], size: number): T[][] {
-  const chunks: T[][] = [];
-  for (let i = 0; i < array.length; i += size) {
-    chunks.push(array.slice(i, i + size));
-  }
-  return chunks;
-}
+// Use pure functions from graphUtils
+const groupNodesByLevel = groupNodesByLevelPure;
+const chunk = chunkPure;
 
 // Clear all imageRefs from nodes (used when saving to a different directory)
 /** Revoke a blob URL if the value is one, to free the underlying memory. */
@@ -953,6 +898,21 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
       return { type: "image", value: null };
     };
 
+    // Helper to get webhook trigger output based on source handle
+    const getWebhookTriggerOutput = (sourceNode: WorkflowNode, sourceHandle: string | null | undefined): { type: "image" | "text"; value: string | null } => {
+      const data = sourceNode.data as WebhookTriggerNodeData;
+      if (!sourceHandle) return { type: "image", value: null };
+      if (sourceHandle === "text") {
+        return { type: "text", value: data.text };
+      }
+      const match = sourceHandle.match(/^image-(\d+)$/);
+      if (match) {
+        const index = parseInt(match[1], 10);
+        return { type: "image", value: data.images[index] ?? null };
+      }
+      return { type: "image", value: null };
+    };
+
     edges
       .filter((edge) => edge.target === nodeId)
       .forEach((edge) => {
@@ -960,7 +920,19 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
         if (!sourceNode) return;
 
         const handleId = edge.targetHandle;
-        const { type, value } = getSourceOutput(sourceNode);
+
+        // Special handling for webhookTrigger - output depends on sourceHandle
+        let type: "image" | "text" | "video" | "audio";
+        let value: string | null;
+        if (sourceNode.type === "webhookTrigger") {
+          const result = getWebhookTriggerOutput(sourceNode, edge.sourceHandle);
+          type = result.type;
+          value = result.value;
+        } else {
+          const result = getSourceOutput(sourceNode);
+          type = result.type;
+          value = result.value;
+        }
 
         if (!value) return;
 
@@ -1160,6 +1132,33 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           case "audioInput":
             // Audio input is a data source - no execution needed
             break;
+
+          case "webhookTrigger":
+            // Data is injected by webhook API - nothing to execute in browser
+            break;
+
+          case "webhookResponse": {
+            // Capture connected inputs for display (acts like output node in browser)
+            const { images, videos, text: responseText } = getConnectedInputs(node.id);
+            if (videos.length > 0) {
+              updateNodeData(node.id, {
+                image: videos[0],
+                video: videos[0],
+                contentType: "video",
+              } as Partial<WebhookResponseNodeData>);
+            } else if (images.length > 0) {
+              updateNodeData(node.id, {
+                image: images[0],
+                contentType: "image",
+              } as Partial<WebhookResponseNodeData>);
+            }
+            if (responseText) {
+              updateNodeData(node.id, {
+                text: responseText,
+              } as Partial<WebhookResponseNodeData>);
+            }
+            break;
+          }
 
           case "annotation": {
             try {

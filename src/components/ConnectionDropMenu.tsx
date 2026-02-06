@@ -88,6 +88,15 @@ const IMAGE_TARGET_OPTIONS: MenuOption[] = [
       </svg>
     ),
   },
+  {
+    type: "webhookResponse",
+    label: "Webhook Response",
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 3.75H6.912a2.25 2.25 0 00-2.15 1.588L2.35 13.177a2.25 2.25 0 00-.1.661V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 00-2.15-1.588H15M2.25 13.5h3.86a2.25 2.25 0 012.012 1.244l.256.512a2.25 2.25 0 002.013 1.244h3.218a2.25 2.25 0 002.013-1.244l.256-.512a2.25 2.25 0 012.013-1.244h3.859M12 3v8.25m0 0l-3-3m3 3l3-3" />
+      </svg>
+    ),
+  },
 ];
 
 const TEXT_TARGET_OPTIONS: MenuOption[] = [
@@ -150,6 +159,15 @@ const IMAGE_SOURCE_OPTIONS: MenuOption[] = [
     ),
   },
   {
+    type: "webhookTrigger",
+    label: "Webhook Trigger",
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+      </svg>
+    ),
+  },
+  {
     type: "annotation",
     label: "Annotate",
     icon: (
@@ -170,6 +188,15 @@ const IMAGE_SOURCE_OPTIONS: MenuOption[] = [
 ];
 
 const TEXT_SOURCE_OPTIONS: MenuOption[] = [
+  {
+    type: "webhookTrigger",
+    label: "Webhook Trigger",
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+      </svg>
+    ),
+  },
   {
     type: "prompt",
     label: "Prompt",
@@ -234,6 +261,15 @@ const VIDEO_TARGET_OPTIONS: MenuOption[] = [
     icon: (
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+      </svg>
+    ),
+  },
+  {
+    type: "webhookResponse",
+    label: "Webhook Response",
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
       </svg>
     ),
   },
