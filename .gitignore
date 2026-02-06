@@ -45,3 +45,6 @@ logs/*.json
 
 # planning docs
 .planning/
+
+# auth token storage
+data/

@@ -35,7 +35,7 @@ export interface ProviderSettings {
 }
 
 // LLM Provider Options
-export type LLMProvider = "google" | "openai";
+export type LLMProvider = "google" | "openai" | "openai-auth";
 
 // LLM Model Options
 export type LLMModelType =
