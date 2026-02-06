@@ -1,0 +1,10 @@
+{
+  "tokens": {
+    "accessToken": "eyxxxxxxxxx",
+    "refreshToken": "rt_xxxxxxxxx",
+    "expiresAt": 177xxxxxx,
+    "accountId": "xxxxxx-xxxx-xxxx-xxxx-xxxxxxxx",
+    "createdAt": 177xxxxxx,
+    "updatedAt": 177xxxxxx
+  }
+}
