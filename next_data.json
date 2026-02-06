@@ -3,7 +3,7 @@
     "msg": "success",
     "data": {
         "id": 482636,
-        "email": "admin@samville.studio",
+        "email": "redacted@example.com",
         "nickname": "Samville Studio",
         "avatar": "https://lh3.googleusercontent.com/a/ACg8ocLBdR1cjxeLhL9E3lMICZ-iwk-5HBsW4eN1xY6mEaAALcUncMRD=s96-c",
         "credits": 6539.68,
@@ -294,7 +294,7 @@
             "Market_hailuo_02-image-to-video-pro": 57.0,
             "Market_bytedance_v1-lite-image-to-video_1080p_10": 100.0
         },
-        "apiKey": "43e722806103fdfd6bcdcfca02f7640b",
+        "apiKey": "REDACTED",
         "payproPayFlag": 0,
         "paypalPayFlag": 0,
         "lastPaymentMethod": "checkout",
