@@ -13,21 +13,21 @@ Phase 2 - Types and Provider Options
 [x] T2.4 Ensure model lists for `openai-auth` match OpenAI model options.
 
 Phase 3 - Server-Side Token Storage
-[ ] T3.1 Create `src/lib/auth/openaiAuthStore.ts` to read/write tokens in `data/openai-auth.json`.
-[ ] T3.2 Store fields: access_token, refresh_token, expires_at, scope, account_id, created_at, updated_at, state, code_verifier.
-[ ] T3.3 Add helper to check expiry and refresh with OpenAI token endpoint.
+[x] T3.1 Create `src/lib/auth/openaiAuthStore.ts` to read/write tokens in `data/openai-auth.json`.
+[x] T3.2 Store fields: access_token, refresh_token, expires_at, scope, account_id, created_at, updated_at, state, code_verifier.
+[x] T3.3 Add helper to check expiry and refresh with OpenAI token endpoint.
 
 Phase 4 - OAuth Routes
-[ ] T4.1 Implement `GET /api/auth/openai/start` to generate PKCE + state and return auth URL.
-[ ] T4.2 Implement `GET /api/auth/openai/callback` to exchange code, persist tokens, and redirect to success UI.
-[ ] T4.3 Implement `GET /api/auth/openai/status` to report connection state and expiry.
-[ ] T4.4 Implement `POST /api/auth/openai/disconnect` to clear stored tokens.
+[x] T4.1 Implement `GET /api/auth/openai/start` to generate PKCE + state and return auth URL.
+[x] T4.2 Implement `GET /api/auth/openai/callback` to exchange code, persist tokens, and redirect to success UI.
+[x] T4.3 Implement `GET /api/auth/openai/status` to report connection state and expiry.
+[x] T4.4 Implement `POST /api/auth/openai/disconnect` to clear stored tokens.
 
 Phase 5 - LLM Request Integration
-[ ] T5.1 Update `src/app/api/llm/route.ts` to accept `openai-auth` provider.
-[ ] T5.2 Load and refresh tokens from `data/openai-auth.json` as needed.
-[ ] T5.3 Send OpenAI requests with `Authorization: Bearer <access_token>`.
-[ ] T5.4 Preserve existing API-key flow for `openai` and `google` providers.
+[x] T5.1 Update `src/app/api/llm/route.ts` to accept `openai-auth` provider.
+[x] T5.2 Load and refresh tokens from `data/openai-auth.json` as needed.
+[x] T5.3 Send OpenAI requests with `Authorization: Bearer <access_token>`.
+[x] T5.4 Preserve existing API-key flow for `openai` and `google` providers.
 
 Phase 6 - UI Integration
 [ ] T6.1 Add Connect/Disconnect buttons for OpenAI Auth in `src/components/ProjectSetupModal.tsx`.

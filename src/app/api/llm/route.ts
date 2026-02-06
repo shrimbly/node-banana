@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 import { LLMGenerateRequest, LLMGenerateResponse, LLMModelType } from "@/types";
 import { logger } from "@/utils/logger";
+import {
+  buildTokenPayload,
+  getOAuthTokens,
+  isTokenExpired,
+  refreshAccessToken,
+  setOAuthTokens,
+} from "@/lib/auth/openaiAuthStore";
 
 export const maxDuration = 60; // 1 minute timeout
 
@@ -190,6 +197,34 @@ async function generateWithOpenAI(
   return text;
 }
 
+async function getOpenAIOAuthAccessToken(requestId?: string) {
+  const tokens = await getOAuthTokens();
+  if (!tokens?.accessToken) {
+    logger.error('api.error', 'OpenAI OAuth tokens not configured', { requestId });
+    throw new Error("OpenAI Auth not connected. Connect it in Settings.");
+  }
+
+  if (!isTokenExpired(tokens)) {
+    return tokens.accessToken;
+  }
+
+  if (!tokens.refreshToken) {
+    logger.error('api.error', 'OpenAI OAuth refresh token missing', { requestId });
+    throw new Error("OpenAI Auth session expired. Reconnect in Settings.");
+  }
+
+  const clientId = process.env.OPENAI_OAUTH_CLIENT_ID;
+  if (!clientId) {
+    logger.error('api.error', 'OPENAI_OAUTH_CLIENT_ID not configured', { requestId });
+    throw new Error("OPENAI_OAUTH_CLIENT_ID not configured. Add it to .env.local.");
+  }
+
+  const refreshResponse = await refreshAccessToken(tokens.refreshToken, clientId);
+  const updatedTokens = buildTokenPayload(refreshResponse, tokens);
+  await setOAuthTokens(updatedTokens);
+  return updatedTokens.accessToken;
+}
+
 export async function POST(request: NextRequest) {
   const requestId = generateRequestId();
 
@@ -233,6 +268,9 @@ export async function POST(request: NextRequest) {
       text = await generateWithGoogle(prompt, model, temperature, maxTokens, images, requestId, geminiApiKey);
     } else if (provider === "openai") {
       text = await generateWithOpenAI(prompt, model, temperature, maxTokens, images, requestId, openaiApiKey);
+    } else if (provider === "openai-auth") {
+      const accessToken = await getOpenAIOAuthAccessToken(requestId);
+      text = await generateWithOpenAI(prompt, model, temperature, maxTokens, images, requestId, accessToken);
     } else {
       logger.warn('api.llm', 'Unknown provider requested', { requestId, provider });
       return NextResponse.json<LLMGenerateResponse>(
