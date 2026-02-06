@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { useCommentNavigation } from "@/hooks/useCommentNavigation";
@@ -35,6 +35,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
   const nodeData = data;
   const commentNavigation = useCommentNavigation(id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
+  const [openaiAuthStatus, setOpenaiAuthStatus] = useState<{ connected: boolean; expired?: boolean } | null>(null);
 
   const handleProviderChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -101,6 +102,14 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
   const model = availableModels.some(m => m.value === nodeData.model)
     ? nodeData.model
     : availableModels[0].value;
+
+  useEffect(() => {
+    if (provider !== "openai-auth") return;
+    fetch("/api/auth/openai/status")
+      .then((res) => res.json())
+      .then((data) => setOpenaiAuthStatus(data))
+      .catch(() => setOpenaiAuthStatus(null));
+  }, [provider]);
 
   return (
     <BaseNode
@@ -230,6 +239,12 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
             </option>
           ))}
         </select>
+
+        {provider === "openai-auth" && (!openaiAuthStatus?.connected || openaiAuthStatus.expired) && (
+          <div className="text-[9px] text-yellow-400">
+            {openaiAuthStatus?.expired ? "OpenAI Auth expired. Reconnect in Settings." : "OpenAI Auth not connected."}
+          </div>
+        )}
 
         {/* Model selector */}
         <select

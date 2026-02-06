@@ -30,9 +30,9 @@ Phase 5 - LLM Request Integration
 [x] T5.4 Preserve existing API-key flow for `openai` and `google` providers.
 
 Phase 6 - UI Integration
-[ ] T6.1 Add Connect/Disconnect buttons for OpenAI Auth in `src/components/ProjectSetupModal.tsx`.
-[ ] T6.2 Show connection status in Providers tab via `/api/auth/openai/status`.
-[ ] T6.3 Add warning or badge in `LLMGenerateNode` if `openai-auth` selected but not connected.
+[x] T6.1 Add Connect/Disconnect buttons for OpenAI Auth in `src/components/ProjectSetupModal.tsx`.
+[x] T6.2 Show connection status in Providers tab via `/api/auth/openai/status`.
+[x] T6.3 Add warning or badge in `LLMGenerateNode` if `openai-auth` selected but not connected.
 
 Phase 7 - Validation
 [ ] T7.1 Manual test: connect -> generate -> disconnect.

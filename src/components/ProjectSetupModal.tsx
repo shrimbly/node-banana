@@ -131,6 +131,8 @@ export function ProjectSetupModal({
     wavespeed: false,
   });
   const [envStatus, setEnvStatus] = useState<EnvStatusResponse | null>(null);
+  const [openaiAuthStatus, setOpenaiAuthStatus] = useState<{ connected: boolean; expired?: boolean; expiresAt?: number } | null>(null);
+  const [isOpenAIOAuthBusy, setIsOpenAIOAuthBusy] = useState(false);
 
   // Node defaults tab state
   const [localNodeDefaults, setLocalNodeDefaults] = useState<NodeDefaultsConfig>({});
@@ -179,8 +181,41 @@ export function ProjectSetupModal({
         .then((res) => res.json())
         .then((data: EnvStatusResponse) => setEnvStatus(data))
         .catch(() => setEnvStatus(null));
+
+      fetch("/api/auth/openai/status")
+        .then((res) => res.json())
+        .then((data) => setOpenaiAuthStatus(data))
+        .catch(() => setOpenaiAuthStatus(null));
     }
   }, [isOpen, mode, workflowName, saveDirectoryPath, useExternalImageStorage, providerSettings]);
+
+  const handleConnectOpenAI = async () => {
+    setIsOpenAIOAuthBusy(true);
+    try {
+      const response = await fetch("/api/auth/openai/start");
+      const result = await response.json();
+      if (result?.url) {
+        window.open(result.url, "_blank", "noopener,noreferrer");
+      }
+    } catch {
+      setOpenaiAuthStatus(null);
+    } finally {
+      setIsOpenAIOAuthBusy(false);
+    }
+  };
+
+  const handleDisconnectOpenAI = async () => {
+    setIsOpenAIOAuthBusy(true);
+    try {
+      await fetch("/api/auth/openai/disconnect", { method: "POST" });
+      const status = await fetch("/api/auth/openai/status").then((res) => res.json());
+      setOpenaiAuthStatus(status);
+    } catch {
+      setOpenaiAuthStatus(null);
+    } finally {
+      setIsOpenAIOAuthBusy(false);
+    }
+  };
 
   const handleBrowse = async () => {
     setIsBrowsing(true);
@@ -518,6 +553,35 @@ export function ProjectSetupModal({
                     )}
                   </div>
                 )}
+              </div>
+              <div className="flex items-center justify-between mt-2">
+                <span className="text-xs text-neutral-400">OpenAI (Auth)</span>
+                <div className="flex items-center gap-2">
+                  {openaiAuthStatus?.connected ? (
+                    <>
+                      <span className={`text-xs ${openaiAuthStatus.expired ? "text-yellow-400" : "text-green-400"}`}>
+                        {openaiAuthStatus.expired ? "Session expired" : "Connected"}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleDisconnectOpenAI}
+                        disabled={isOpenAIOAuthBusy}
+                        className="px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors disabled:opacity-60"
+                      >
+                        Disconnect
+                      </button>
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleConnectOpenAI}
+                      disabled={isOpenAIOAuthBusy}
+                      className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-200 rounded transition-colors disabled:opacity-60"
+                    >
+                      Connect
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
 
