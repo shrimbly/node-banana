@@ -13,6 +13,8 @@ import {
   OutputGalleryNodeData,
   ImageCompareNodeData,
   EaseCurveNodeData,
+  WebhookTriggerNodeData,
+  WebhookResponseNodeData,
   WorkflowNodeData,
   GroupColor,
   SelectedModel,
@@ -38,6 +40,8 @@ export const defaultNodeDimensions: Record<NodeType, { width: number; height: nu
   imageCompare: { width: 400, height: 360 },
   videoStitch: { width: 400, height: 280 },
   easeCurve: { width: 340, height: 480 },
+  webhookTrigger: { width: 320, height: 420 },
+  webhookResponse: { width: 320, height: 320 },
 };
 
 /**
@@ -212,5 +216,18 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         progress: 0,
         encoderSupported: null,
       } as EaseCurveNodeData;
+    case "webhookTrigger":
+      return {
+        imageCount: 1,
+        hasTextOutput: true,
+        images: [null],
+        text: null,
+      } as WebhookTriggerNodeData;
+    case "webhookResponse":
+      return {
+        image: null,
+        video: null,
+        text: null,
+      } as WebhookResponseNodeData;
   }
 };

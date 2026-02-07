@@ -1,5 +1,6 @@
 import { WorkflowFile } from "@/store/workflowStore";
 import { NodeType, WorkflowNodeData } from "@/types";
+import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 
 interface ValidationError {
   path: string;
@@ -24,23 +25,8 @@ const VALID_NODE_TYPES: NodeType[] = [
 
 const VALID_HANDLE_TYPES = ["image", "text", "reference"];
 
-// Default node dimensions
-const DEFAULT_DIMENSIONS: Record<NodeType, { width: number; height: number }> = {
-  imageInput: { width: 300, height: 280 },
-  audioInput: { width: 300, height: 200 },
-  annotation: { width: 300, height: 280 },
-  prompt: { width: 320, height: 220 },
-  promptConstructor: { width: 340, height: 280 },
-  nanoBanana: { width: 300, height: 300 },
-  generateVideo: { width: 300, height: 300 },
-  llmGenerate: { width: 320, height: 360 },
-  splitGrid: { width: 300, height: 320 },
-  output: { width: 320, height: 320 },
-  outputGallery: { width: 320, height: 360 },
-  imageCompare: { width: 400, height: 360 },
-  videoStitch: { width: 400, height: 280 },
-  easeCurve: { width: 340, height: 480 },
-};
+// Default node dimensions - use centralized source
+const DEFAULT_DIMENSIONS = defaultNodeDimensions;
 
 /**
  * Validate a workflow JSON object
@@ -313,6 +299,19 @@ function createDefaultNodeData(type: NodeType): WorkflowNodeData {
         error: null,
         progress: 0,
         encoderSupported: null,
+      };
+    case "webhookTrigger":
+      return {
+        imageCount: 1,
+        hasTextOutput: true,
+        images: [null],
+        text: null,
+      };
+    case "webhookResponse":
+      return {
+        image: null,
+        video: null,
+        text: null,
       };
   }
 }

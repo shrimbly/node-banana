@@ -2486,6 +2486,7 @@ export async function POST(request: NextRequest) {
           success: true,
           video: isUrl ? undefined : output.data,
           videoUrl: isUrl ? output.data : undefined,
+          ...(output.url && { sourceUrl: output.url }),
           contentType: "video",
         });
       }
@@ -2493,6 +2494,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json<GenerateResponse>({
         success: true,
         image: output.data,
+        ...(output.url && { sourceUrl: output.url }),
         contentType: "image",
       });
     }
@@ -2573,6 +2575,7 @@ export async function POST(request: NextRequest) {
           success: true,
           video: isUrl ? undefined : output.data,
           videoUrl: isUrl ? output.data : undefined,
+          ...(output.url && { sourceUrl: output.url }),
           contentType: "video",
         });
       }
@@ -2580,6 +2583,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json<GenerateResponse>({
         success: true,
         image: output.data,
+        ...(output.url && { sourceUrl: output.url }),
         contentType: "image",
       });
     }
@@ -2664,6 +2668,7 @@ export async function POST(request: NextRequest) {
           success: true,
           video: isUrl ? undefined : output.data,
           videoUrl: isUrl ? output.data : undefined,
+          ...(output.url && { sourceUrl: output.url }),
           contentType: "video",
         });
       }
@@ -2671,6 +2676,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json<GenerateResponse>({
         success: true,
         image: output.data,
+        ...(output.url && { sourceUrl: output.url }),
         contentType: "image",
       });
     }
@@ -2754,6 +2760,7 @@ export async function POST(request: NextRequest) {
           success: true,
           video: isUrl ? undefined : output.data,
           videoUrl: isUrl ? output.data : undefined,
+          ...(output.url && { sourceUrl: output.url }),
           contentType: "video",
         });
       }
@@ -2761,6 +2768,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json<GenerateResponse>({
         success: true,
         image: output.data,
+        ...(output.url && { sourceUrl: output.url }),
         contentType: "image",
       });
     }

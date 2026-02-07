@@ -12,4 +12,6 @@ export { OutputGalleryNode } from "./OutputGalleryNode";
 export { ImageCompareNode } from "./ImageCompareNode";
 export { VideoStitchNode } from "./VideoStitchNode";
 export { EaseCurveNode } from "./EaseCurveNode";
+export { WebhookTriggerNode } from "./WebhookTriggerNode";
+export { WebhookResponseNode } from "./WebhookResponseNode";
 export { GroupNode } from "./GroupNode";

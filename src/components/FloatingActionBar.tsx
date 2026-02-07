@@ -55,6 +55,104 @@ function NodeButton({ type, label }: NodeButtonProps) {
   );
 }
 
+function InOutComboButton() {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const addNode = useWorkflowStore((state) => state.addNode);
+  const { screenToFlowPosition } = useReactFlow();
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const handleAddNode = (type: NodeType) => {
+    const center = getPaneCenter();
+    const position = screenToFlowPosition({
+      x: center.x + Math.random() * 100 - 50,
+      y: center.y + Math.random() * 100 - 50,
+    });
+
+    addNode(type, position);
+    setIsOpen(false);
+  };
+
+  const handleDragStart = (event: React.DragEvent, type: NodeType) => {
+    event.dataTransfer.setData("application/node-type", type);
+    event.dataTransfer.effectAllowed = "copy";
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors flex items-center gap-1"
+      >
+        In/Out
+        <svg
+          className={`w-3 h-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute bottom-full left-0 mb-2 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-[170px]">
+          <button
+            onClick={() => handleAddNode("webhookTrigger")}
+            draggable
+            onDragStart={(e) => handleDragStart(e, "webhookTrigger")}
+            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.348 14.652a3.75 3.75 0 010-5.304m5.304 0a3.75 3.75 0 010 5.304m-7.425 2.121a6.75 6.75 0 010-9.546m9.546 0a6.75 6.75 0 010 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+            </svg>
+            Webhook Trigger
+          </button>
+          <button
+            onClick={() => handleAddNode("webhookResponse")}
+            draggable
+            onDragStart={(e) => handleDragStart(e, "webhookResponse")}
+            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+            </svg>
+            Webhook Response
+          </button>
+          <button
+            onClick={() => handleAddNode("output")}
+            draggable
+            onDragStart={(e) => handleDragStart(e, "output")}
+            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 8.25H7.5a2.25 2.25 0 00-2.25 2.25v9a2.25 2.25 0 002.25 2.25h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25H15m0-3l-3-3m0 0l-3 3m3-3V15" />
+            </svg>
+            Output
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function GenerateComboButton() {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -241,7 +339,7 @@ export function FloatingActionBar() {
         <NodeButton type="annotation" label="Annotate" />
         <NodeButton type="prompt" label="Prompt" />
         <GenerateComboButton />
-        <NodeButton type="output" label="Output" />
+        <InOutComboButton />
 
         {/* Browse models button */}
         <div className="w-px h-5 bg-neutral-600 mx-1.5" />
