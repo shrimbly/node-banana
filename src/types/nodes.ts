@@ -233,6 +233,7 @@ export interface VideoStitchNodeData extends BaseNodeData {
   clips: VideoStitchClip[];       // Ordered clip sequence for filmstrip
   clipOrder: string[];            // Edge IDs in user-defined order (drag reorder)
   outputVideo: string | null;     // Stitched video blob URL or data URL
+  loopCount: 1 | 2 | 3;          // How many times to repeat the clip sequence (1 = no loop)
   status: NodeStatus;
   error: string | null;
   progress: number;               // 0-100 processing progress

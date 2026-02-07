@@ -2036,6 +2036,15 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
                 inputs.videos.map((v) => fetch(v).then((r) => r.blob()))
               );
 
+              // Duplicate blobs based on loopCount (2x or 3x repeats the sequence)
+              // Each copy must be a new Blob so BlobSource can read it independently
+              const loopCount = nodeData.loopCount || 1;
+              const loopedBlobs = loopCount > 1
+                ? Array.from({ length: loopCount }, () =>
+                    videoBlobs.map((b) => new Blob([b], { type: b.type }))
+                  ).flat()
+                : videoBlobs;
+
               // Prepare audio if connected
               let audioData = null;
               if (inputs.audio.length > 0 && inputs.audio[0]) {
@@ -2053,7 +2062,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
               // Stitch videos
               const { stitchVideosAsync } = await import('@/hooks/useStitchVideos');
               const outputBlob = await stitchVideosAsync(
-                videoBlobs,
+                loopedBlobs,
                 audioData,
                 (progress) => {
                   updateNodeData(node.id, { progress: progress.progress });
@@ -2962,6 +2971,14 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
             inputs.videos.map((v) => fetch(v).then((r) => r.blob()))
           );
 
+          // Duplicate blobs based on loopCount (2x or 3x repeats the sequence)
+          const loopCount = nodeData.loopCount || 1;
+          const loopedBlobs = loopCount > 1
+            ? Array.from({ length: loopCount }, () =>
+                videoBlobs.map((b) => new Blob([b], { type: b.type }))
+              ).flat()
+            : videoBlobs;
+
           let audioData = null;
           if (inputs.audio.length > 0 && inputs.audio[0]) {
             const { prepareAudioAsync } = await import('@/hooks/useAudioMixing');
@@ -2976,7 +2993,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
           const { stitchVideosAsync } = await import('@/hooks/useStitchVideos');
           const outputBlob = await stitchVideosAsync(
-            videoBlobs,
+            loopedBlobs,
             audioData,
             (progress) => {
               updateNodeData(nodeId, { progress: progress.progress });
