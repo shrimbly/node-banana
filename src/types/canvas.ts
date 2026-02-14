@@ -6,7 +6,7 @@
 
 export type PanMode = "space" | "middleMouse" | "always";
 export type ZoomMode = "scroll" | "altScroll" | "ctrlScroll";
-export type SelectionMode = "click" | "altDrag";
+export type SelectionMode = "click" | "altDrag" | "shiftDrag";
 
 export interface CanvasNavigationSettings {
   panMode: PanMode;

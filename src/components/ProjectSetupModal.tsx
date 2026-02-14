@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { generateWorkflowId, useWorkflowStore } from "@/store/workflowStore";
 import { ProviderType, ProviderSettings, NodeDefaultsConfig, LLMProvider, LLMModelType } from "@/types";
+import { CanvasNavigationSettings, PanMode, ZoomMode, SelectionMode } from "@/types/canvas";
 import { EnvStatusResponse } from "@/app/api/env-status/route";
 import { loadNodeDefaults, saveNodeDefaults } from "@/store/utils/localStorage";
 import { ProviderModel } from "@/lib/providers/types";
@@ -94,10 +95,12 @@ export function ProjectSetupModal({
     toggleProvider,
     maxConcurrentCalls,
     setMaxConcurrentCalls,
+    canvasNavigationSettings,
+    updateCanvasNavigationSettings,
   } = useWorkflowStore();
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<"project" | "providers" | "nodeDefaults">("project");
+  const [activeTab, setActiveTab] = useState<"project" | "providers" | "nodeDefaults" | "canvas">("project");
 
   // Project tab state
   const [name, setName] = useState("");
@@ -131,6 +134,9 @@ export function ProjectSetupModal({
   const [localNodeDefaults, setLocalNodeDefaults] = useState<NodeDefaultsConfig>({});
   const [showImageModelDialog, setShowImageModelDialog] = useState(false);
   const [showVideoModelDialog, setShowVideoModelDialog] = useState(false);
+
+  // Canvas tab state
+  const [localCanvasSettings, setLocalCanvasSettings] = useState<CanvasNavigationSettings>(canvasNavigationSettings);
 
   // Pre-fill when opening in settings mode
   useEffect(() => {
@@ -169,13 +175,16 @@ export function ProjectSetupModal({
       setShowImageModelDialog(false);
       setShowVideoModelDialog(false);
 
+      // Sync canvas settings
+      setLocalCanvasSettings(canvasNavigationSettings);
+
       // Fetch env status
       fetch("/api/env-status")
         .then((res) => res.json())
         .then((data: EnvStatusResponse) => setEnvStatus(data))
         .catch(() => setEnvStatus(null));
     }
-  }, [isOpen, mode, workflowName, saveDirectoryPath, useExternalImageStorage, providerSettings]);
+  }, [isOpen, mode, workflowName, saveDirectoryPath, useExternalImageStorage, providerSettings, canvasNavigationSettings]);
 
   const handleBrowse = async () => {
     setIsBrowsing(true);
@@ -285,11 +294,18 @@ export function ProjectSetupModal({
     onClose();
   };
 
+  const handleSaveCanvas = () => {
+    updateCanvasNavigationSettings(localCanvasSettings);
+    onClose();
+  };
+
   const handleSave = () => {
     if (activeTab === "project") {
       handleSaveProject();
     } else if (activeTab === "providers") {
       handleSaveProviders();
+    } else if (activeTab === "canvas") {
+      handleSaveCanvas();
     } else {
       handleSaveNodeDefaults();
     }
@@ -324,15 +340,16 @@ export function ProjectSetupModal({
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50">
       <div
-        className="bg-neutral-800 rounded-lg p-6 w-[480px] border border-neutral-700 shadow-xl"
+        className="bg-neutral-800 rounded-lg w-[480px] border border-neutral-700 shadow-xl flex flex-col max-h-[80vh]"
         onKeyDown={handleKeyDown}
       >
-        <h2 className="text-lg font-semibold text-neutral-100 mb-4">
-          {mode === "new" ? "New Project" : "Project Settings"}
-        </h2>
+        <div className="px-6 pt-6 pb-0 shrink-0">
+          <h2 className="text-lg font-semibold text-neutral-100 mb-4">
+            {mode === "new" ? "New Project" : "Project Settings"}
+          </h2>
 
-        {/* Tab Bar */}
-        <div className="flex gap-4 border-b border-neutral-700 mb-4">
+          {/* Tab Bar */}
+          <div className="flex gap-4 border-b border-neutral-700">
           <button
             onClick={() => setActiveTab("project")}
             className={`pb-2 text-sm ${activeTab === "project" ? "text-neutral-100 border-b-2 border-white" : "text-neutral-400"}`}
@@ -351,7 +368,17 @@ export function ProjectSetupModal({
           >
             Node Defaults
           </button>
+          <button
+            onClick={() => setActiveTab("canvas")}
+            className={`pb-2 text-sm ${activeTab === "canvas" ? "text-neutral-100 border-b-2 border-white" : "text-neutral-400"}`}
+          >
+            Canvas
+          </button>
+          </div>
         </div>
+
+        {/* Scrollable tab content area */}
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-4">
 
         {/* Project Tab Content */}
         {activeTab === "project" && (
@@ -961,7 +988,117 @@ export function ProjectSetupModal({
           </div>
         )}
 
-        <div className="flex justify-end gap-2 mt-6">
+        {/* Canvas Tab Content */}
+        {activeTab === "canvas" && (
+          <div className="space-y-5">
+            {/* Pan Mode */}
+            <div>
+              <h3 className="text-sm font-medium text-neutral-200 mb-2">Pan Mode</h3>
+              <div className="space-y-1.5">
+                {([
+                  { value: "space" as PanMode, label: "Space + Drag", description: "Hold Space and drag to pan (default)" },
+                  { value: "middleMouse" as PanMode, label: "Middle Mouse", description: "Click and drag with middle mouse button" },
+                  { value: "always" as PanMode, label: "Always On", description: "Pan without holding any keys" },
+                ] as const).map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex items-start p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                      localCanvasSettings.panMode === option.value
+                        ? "border-blue-500 bg-blue-500/10"
+                        : "border-neutral-700 hover:border-neutral-600 bg-neutral-900/50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="panMode"
+                      value={option.value}
+                      checked={localCanvasSettings.panMode === option.value}
+                      onChange={(e) => setLocalCanvasSettings({ ...localCanvasSettings, panMode: e.target.value as PanMode })}
+                      className="mt-0.5 mr-3"
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-neutral-200">{option.label}</div>
+                      <div className="text-xs text-neutral-400 mt-0.5">{option.description}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Zoom Mode */}
+            <div>
+              <h3 className="text-sm font-medium text-neutral-200 mb-2">Zoom Mode</h3>
+              <div className="space-y-1.5">
+                {([
+                  { value: "altScroll" as ZoomMode, label: "Alt + Scroll", description: "Hold Alt and scroll to zoom (default)" },
+                  { value: "ctrlScroll" as ZoomMode, label: "Ctrl + Scroll", description: "Hold Ctrl/Cmd and scroll to zoom" },
+                  { value: "scroll" as ZoomMode, label: "Scroll", description: "Scroll to zoom without holding any keys" },
+                ] as const).map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex items-start p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                      localCanvasSettings.zoomMode === option.value
+                        ? "border-blue-500 bg-blue-500/10"
+                        : "border-neutral-700 hover:border-neutral-600 bg-neutral-900/50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="zoomMode"
+                      value={option.value}
+                      checked={localCanvasSettings.zoomMode === option.value}
+                      onChange={(e) => setLocalCanvasSettings({ ...localCanvasSettings, zoomMode: e.target.value as ZoomMode })}
+                      className="mt-0.5 mr-3"
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-neutral-200">{option.label}</div>
+                      <div className="text-xs text-neutral-400 mt-0.5">{option.description}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Selection Mode */}
+            <div>
+              <h3 className="text-sm font-medium text-neutral-200 mb-2">Selection Mode</h3>
+              <div className="space-y-1.5">
+                {([
+                  { value: "click" as SelectionMode, label: "Click", description: "Click to select nodes (default)" },
+                  { value: "altDrag" as SelectionMode, label: "Alt + Drag", description: "Hold Alt and drag to select multiple nodes" },
+                  { value: "shiftDrag" as SelectionMode, label: "Shift + Drag", description: "Hold Shift and drag to select multiple nodes" },
+                ] as const).map((option) => (
+                  <label
+                    key={option.value}
+                    className={`flex items-start p-2.5 rounded-lg border cursor-pointer transition-colors ${
+                      localCanvasSettings.selectionMode === option.value
+                        ? "border-blue-500 bg-blue-500/10"
+                        : "border-neutral-700 hover:border-neutral-600 bg-neutral-900/50"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="selectionMode"
+                      value={option.value}
+                      checked={localCanvasSettings.selectionMode === option.value}
+                      onChange={(e) => setLocalCanvasSettings({ ...localCanvasSettings, selectionMode: e.target.value as SelectionMode })}
+                      className="mt-0.5 mr-3"
+                    />
+                    <div className="flex-1">
+                      <div className="text-sm font-medium text-neutral-200">{option.label}</div>
+                      <div className="text-xs text-neutral-400 mt-0.5">{option.description}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        </div>
+
+        {/* Fixed footer */}
+        <div className="flex justify-end gap-2 px-6 py-4 border-t border-neutral-700 shrink-0">
           <button
             onClick={onClose}
             className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-100 transition-colors"

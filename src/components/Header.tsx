@@ -4,7 +4,6 @@ import { useState, useRef, useMemo, useCallback } from "react";
 import { useWorkflowStore, WorkflowFile } from "@/store/workflowStore";
 import { ProjectSetupModal } from "./ProjectSetupModal";
 import { CostIndicator } from "./CostIndicator";
-import { CanvasSettingsModal } from "./CanvasSettingsModal";
 
 function CommentsNavigationIcon() {
   // Subscribe to nodes so we re-render when comments change
@@ -74,7 +73,6 @@ export function Header() {
 
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [projectModalMode, setProjectModalMode] = useState<"new" | "settings">("new");
-  const [showCanvasSettings, setShowCanvasSettings] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const isProjectConfigured = !!workflowName;
@@ -196,25 +194,6 @@ export function Header() {
           />
         </svg>
       </button>
-      <button
-        onClick={() => setShowCanvasSettings(true)}
-        className="p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded transition-colors"
-        title="Canvas navigation settings"
-      >
-        <svg
-          className="w-4 h-4"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M3.75 3.75v4.5m0-4.5h4.5m-4.5 0L9 9M3.75 20.25v-4.5m0 4.5h4.5m-4.5 0L9 15M20.25 3.75h-4.5m4.5 0v4.5m0-4.5L15 9m5.25 11.25h-4.5m4.5 0v-4.5m0 4.5L15 15"
-          />
-        </svg>
-      </button>
     </div>
   );
 
@@ -225,10 +204,6 @@ export function Header() {
         onClose={() => setShowProjectModal(false)}
         onSave={handleProjectSave}
         mode={projectModalMode}
-      />
-      <CanvasSettingsModal
-        isOpen={showCanvasSettings}
-        onClose={() => setShowCanvasSettings(false)}
       />
       <input
         ref={fileInputRef}

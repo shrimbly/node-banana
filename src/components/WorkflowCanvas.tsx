@@ -1567,16 +1567,17 @@ export function WorkflowCanvas() {
         deleteKeyCode={["Backspace", "Delete"]}
         multiSelectionKeyCode="Shift"
         selectionOnDrag={
-          canvasNavigationSettings.selectionMode === "altDrag"
+          canvasNavigationSettings.selectionMode === "altDrag" || canvasNavigationSettings.selectionMode === "shiftDrag"
             ? false
             : canvasNavigationSettings.panMode === "always"
             ? false
             : isMacOS && !isModalOpen
         }
         selectionKeyCode={
-          canvasNavigationSettings.selectionMode === "altDrag" && !isModalOpen
-            ? "Alt"
-            : isModalOpen ? null : "Shift"
+          isModalOpen ? null
+            : canvasNavigationSettings.selectionMode === "altDrag" ? "Alt"
+            : canvasNavigationSettings.selectionMode === "shiftDrag" ? "Shift"
+            : "Shift"
         }
         panOnDrag={
           isModalOpen
