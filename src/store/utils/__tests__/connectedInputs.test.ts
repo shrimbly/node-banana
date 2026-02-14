@@ -167,6 +167,26 @@ describe("getConnectedInputsPure", () => {
     });
   });
 
+  it("should extract capturedImage from glbViewer source", () => {
+    const nodes = [
+      makeNode("glb", "glbViewer", { capturedImage: "data:image/png;base64,snap" }),
+      makeNode("gen", "nanoBanana"),
+    ];
+    const edges = [makeEdge("glb", "gen", "image")];
+    const result = getConnectedInputsPure("gen", nodes, edges);
+    expect(result.images).toEqual(["data:image/png;base64,snap"]);
+  });
+
+  it("should return empty images when glbViewer has no capture", () => {
+    const nodes = [
+      makeNode("glb", "glbViewer", { capturedImage: null }),
+      makeNode("gen", "nanoBanana"),
+    ];
+    const edges = [makeEdge("glb", "gen", "image")];
+    const result = getConnectedInputsPure("gen", nodes, edges);
+    expect(result.images).toEqual([]);
+  });
+
   it("should extract audio from audioInput source", () => {
     const nodes = [
       makeNode("aud", "audioInput", { audioFile: "data:audio/wav;base64,abc" }),

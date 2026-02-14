@@ -13,6 +13,7 @@ import {
   OutputGalleryNodeData,
   ImageCompareNodeData,
   EaseCurveNodeData,
+  GLBViewerNodeData,
   WorkflowNodeData,
   GroupColor,
   SelectedModel,
@@ -38,6 +39,7 @@ export const defaultNodeDimensions: Record<NodeType, { width: number; height: nu
   imageCompare: { width: 400, height: 360 },
   videoStitch: { width: 400, height: 280 },
   easeCurve: { width: 340, height: 480 },
+  glbViewer: { width: 360, height: 380 },
 };
 
 /**
@@ -119,6 +121,7 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         inputImages: [],
         inputPrompt: null,
         outputImage: null,
+        output3dUrl: null,
         aspectRatio,
         resolution,
         model: legacyDefaults.model, // Keep legacy model field for backward compat
@@ -213,5 +216,11 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         progress: 0,
         encoderSupported: null,
       } as EaseCurveNodeData;
+    case "glbViewer":
+      return {
+        glbUrl: null,
+        filename: null,
+        capturedImage: null,
+      } as GLBViewerNodeData;
   }
 };

@@ -88,6 +88,7 @@ export async function generateWithWaveSpeed(
   console.log(`[API:${requestId}] Dynamic inputs: ${hasDynamicInputs ? Object.keys(input.dynamicInputs!).join(", ") : "none"}`);
 
   // Determine output type from model capabilities
+  const is3DModel = input.model.capabilities.some(c => c.includes("3d"));
   const isVideoModel = input.model.capabilities.includes("text-to-video") ||
                        input.model.capabilities.includes("image-to-video");
 
@@ -343,6 +344,21 @@ export async function generateWithWaveSpeed(
     return { success: false, error: `Media too large: ${(outputArrayBuffer.byteLength / (1024 * 1024)).toFixed(0)}MB > 500MB limit` };
   }
   const outputSizeMB = outputArrayBuffer.byteLength / (1024 * 1024);
+
+  // For 3D models, return URL directly (GLB files are binary — don't base64 encode)
+  if (is3DModel) {
+    console.log(`[API:${requestId}] SUCCESS - Returning 3D model URL`);
+    return {
+      success: true,
+      outputs: [
+        {
+          type: "3d",
+          data: "",
+          url: outputUrl,
+        },
+      ],
+    };
+  }
 
   const rawContentType = outputResponse.headers.get("content-type");
   const contentType =

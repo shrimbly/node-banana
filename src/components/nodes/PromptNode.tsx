@@ -34,15 +34,23 @@ export function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
     return edges.some((edge) => edge.target === id && edge.targetHandle === "text");
   }, [edges, id]);
 
-  // Get connected text input and update prompt when connection provides text
+  // Track the last received text from connected LLM node to detect when it changes
+  const [lastReceivedText, setLastReceivedText] = useState<string | null>(null);
+
+  // Get connected text input and update prompt when LLM output changes
   useEffect(() => {
     if (hasIncomingTextConnection) {
       const { text } = getConnectedInputs(id);
-      if (text !== null && text !== nodeData.prompt) {
+      // Only update if the incoming text changed (LLM node ran again)
+      if (text !== null && text !== lastReceivedText) {
+        setLastReceivedText(text);
         updateNodeData(id, { prompt: text });
       }
+    } else {
+      // Clear tracking when connection is removed
+      setLastReceivedText(null);
     }
-  }, [hasIncomingTextConnection, id, getConnectedInputs, updateNodeData, nodeData.prompt]);
+  }, [hasIncomingTextConnection, id, getConnectedInputs, updateNodeData, lastReceivedText]);
 
   // Sync from props when not actively editing
   useEffect(() => {
@@ -150,9 +158,8 @@ export function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
             onChange={handleChange}
             onFocus={handleFocus}
             onBlur={handleBlur}
-            placeholder={hasIncomingTextConnection ? "Receiving text from connected node..." : "Describe what to generate..."}
+            placeholder={hasIncomingTextConnection ? "Text from connected node (editable)..." : "Describe what to generate..."}
             className="nodrag nopan nowheel w-full flex-1 min-h-[70px] p-2 text-xs leading-relaxed text-neutral-100 border border-neutral-700 rounded bg-neutral-900/50 resize-none focus:outline-none focus:ring-1 focus:ring-neutral-600 focus:border-neutral-600 placeholder:text-neutral-500"
-            readOnly={hasIncomingTextConnection}
           />
           {nodeData.variableName && (
             <div className="mt-1 text-[10px] text-blue-400 px-2">

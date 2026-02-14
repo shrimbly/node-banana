@@ -10,6 +10,7 @@
   /* Handle colors (used by labels) */
   --handle-color-image: #10b981;
   --handle-color-text: #3b82f6;
+  --handle-color-3d: #f97316;
 }
 
 html {
@@ -85,6 +86,11 @@ body {
 /* Text handles - soft blue */
 .react-flow__handle[data-handletype="text"] {
   background: #3b82f6;
+}
+
+/* 3D handles - orange */
+.react-flow__handle[data-handletype="3d"] {
+  background: #f97316;
 }
 
 .react-flow__edge-path {

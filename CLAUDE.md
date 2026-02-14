@@ -82,6 +82,7 @@ LLM models:
 | `nanoBanana` | AI image generation | image, text | image |
 | `llmGenerate` | AI text generation | text, image | text |
 | `splitGrid` | Split image into grid cells | image | reference |
+| `glbViewer` | Load/display 3D GLB models | none | image |
 | `output` | Display final result | image | none |
 
 ## Node Connection System
@@ -125,6 +126,7 @@ Returns `{ images: string[], text: string | null }`.
 - `H` - Stack selected nodes horizontally
 - `V` - Stack selected nodes vertically
 - `G` - Arrange selected nodes in grid
+- `?` - Show keyboard shortcuts
 
 ## Adding New Node Types
 

@@ -456,10 +456,17 @@ export async function generateWithFalQueue(
 
       const result = await resultResponse.json();
 
-      // Extract video URL from result
+      // Extract media URL from result
       let mediaUrl: string | null = null;
 
-      if (result.video && result.video.url) {
+      // Check for 3D model output (GLB mesh) — must check before images
+      if (result.model_mesh?.url) {
+        mediaUrl = result.model_mesh.url;
+      } else if (result.mesh?.url) {
+        mediaUrl = result.mesh.url;
+      } else if (result.glb?.url) {
+        mediaUrl = result.glb.url;
+      } else if (result.video && result.video.url) {
         mediaUrl = result.video.url;
       } else if (result.images && Array.isArray(result.images) && result.images.length > 0) {
         mediaUrl = result.images[0].url;
@@ -494,7 +501,24 @@ export async function generateWithFalQueue(
         };
       }
 
+      const is3DModel = input.model.capabilities.some(c => c.includes("3d"));
       const isVideoModel = input.model.capabilities.some(c => c.includes("video"));
+
+      // For 3D models, return URL directly (GLB files are binary — don't base64 encode)
+      if (is3DModel) {
+        console.log(`[API:${requestId}] SUCCESS - Returning 3D model URL`);
+        return {
+          success: true,
+          outputs: [
+            {
+              type: "3d",
+              data: "",
+              url: mediaUrl,
+            },
+          ],
+        };
+      }
+
       const contentType = mediaResponse.headers.get("content-type") || (isVideoModel ? "video/mp4" : "image/png");
       const isVideo = contentType.startsWith("video/");
 

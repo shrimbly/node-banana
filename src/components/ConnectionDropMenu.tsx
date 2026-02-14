@@ -150,6 +150,15 @@ const IMAGE_SOURCE_OPTIONS: MenuOption[] = [
     ),
   },
   {
+    type: "glbViewer",
+    label: "3D Viewer",
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-2.25-1.313M21 7.5v2.25m0-2.25l-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3l2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75l2.25-1.313M12 21.75V19.5m0 2.25l-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
+      </svg>
+    ),
+  },
+  {
     type: "annotation",
     label: "Annotate",
     icon: (
@@ -296,9 +305,35 @@ const AUDIO_SOURCE_OPTIONS: MenuOption[] = [
   },
 ];
 
+// 3D target options (nodes that accept 3D input)
+const THREE_D_TARGET_OPTIONS: MenuOption[] = [
+  {
+    type: "glbViewer",
+    label: "3D Viewer",
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-2.25-1.313M21 7.5v2.25m0-2.25l-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3l2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75l2.25-1.313M12 21.75V19.5m0 2.25l-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
+      </svg>
+    ),
+  },
+];
+
+// 3D source options (nodes that produce 3D output)
+const THREE_D_SOURCE_OPTIONS: MenuOption[] = [
+  {
+    type: "nanoBanana",
+    label: "Generate Image",
+    icon: (
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+      </svg>
+    ),
+  },
+];
+
 interface ConnectionDropMenuProps {
   position: { x: number; y: number };
-  handleType: "image" | "text" | "video" | "audio" | "easeCurve" | null;
+  handleType: "image" | "text" | "video" | "audio" | "3d" | "easeCurve" | null;
   connectionType: "source" | "target"; // source = dragging from output, target = dragging from input
   onSelect: (selection: { type: NodeType | MenuAction; isAction: boolean }) => void;
   onClose: () => void;
@@ -322,11 +357,13 @@ export function ConnectionDropMenu({
       // Dragging from a source handle (output), need nodes with target handles (inputs)
       if (handleType === "video") return VIDEO_TARGET_OPTIONS;
       if (handleType === "audio") return AUDIO_TARGET_OPTIONS;
+      if (handleType === "3d") return THREE_D_TARGET_OPTIONS;
       return handleType === "image" ? IMAGE_TARGET_OPTIONS : TEXT_TARGET_OPTIONS;
     } else {
       // Dragging from a target handle (input), need nodes with source handles (outputs)
       if (handleType === "video") return VIDEO_SOURCE_OPTIONS;
       if (handleType === "audio") return AUDIO_SOURCE_OPTIONS;
+      if (handleType === "3d") return THREE_D_SOURCE_OPTIONS;
       return handleType === "image" ? IMAGE_SOURCE_OPTIONS : TEXT_SOURCE_OPTIONS;
     }
   }, [handleType, connectionType]);

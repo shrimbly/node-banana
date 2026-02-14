@@ -19,6 +19,7 @@ import "@xyflow/react/dist/style.css";
 
 import { useWorkflowStore, WorkflowFile } from "@/store/workflowStore";
 import { useToast } from "@/components/Toast";
+import dynamic from "next/dynamic";
 import {
   ImageInputNode,
   AudioInputNode,
@@ -35,6 +36,9 @@ import {
   VideoStitchNode,
   EaseCurveNode,
 } from "./nodes";
+
+// Lazy-load GLBViewerNode to avoid bundling three.js for users who don't use 3D nodes
+const GLBViewerNode = dynamic(() => import("./nodes/GLBViewerNode").then(mod => ({ default: mod.GLBViewerNode })), { ssr: false });
 import { EditableEdge, ReferenceEdge } from "./edges";
 import { ConnectionDropMenu, MenuAction } from "./ConnectionDropMenu";
 import { MultiSelectToolbar } from "./MultiSelectToolbar";
@@ -66,6 +70,7 @@ const nodeTypes: NodeTypes = {
   imageCompare: ImageCompareNode,
   videoStitch: VideoStitchNode,
   easeCurve: EaseCurveNode,
+  glbViewer: GLBViewerNode,
 };
 
 const edgeTypes: EdgeTypes = {
@@ -79,10 +84,12 @@ const edgeTypes: EdgeTypes = {
 // - Video handles can only connect to generateVideo or output nodes
 // Helper to determine handle type from handle ID
 // For dynamic handles, we use naming convention: image inputs contain "image", text inputs are "prompt" or "negative_prompt"
-const getHandleType = (handleId: string | null | undefined): "image" | "text" | "video" | "audio" | "easeCurve" | null => {
+const getHandleType = (handleId: string | null | undefined): "image" | "text" | "video" | "audio" | "3d" | "easeCurve" | null => {
   if (!handleId) return null;
   // EaseCurve handles (must check before other types)
   if (handleId === "easeCurve") return "easeCurve";
+  // 3D handles
+  if (handleId === "3d") return "3d";
   // Standard handles
   if (handleId === "video") return "video";
   if (handleId === "audio" || handleId.startsWith("audio")) return "audio";
@@ -125,6 +132,8 @@ const getNodeHandles = (nodeType: string): { inputs: string[]; outputs: string[]
       return { inputs: ["video", "audio"], outputs: ["video"] };
     case "easeCurve":
       return { inputs: ["video", "easeCurve"], outputs: ["video", "easeCurve"] };
+    case "glbViewer":
+      return { inputs: ["3d"], outputs: ["image"] };
     default:
       return { inputs: [], outputs: [] };
   }
@@ -133,7 +142,7 @@ const getNodeHandles = (nodeType: string): { inputs: string[]; outputs: string[]
 interface ConnectionDropState {
   position: { x: number; y: number };
   flowPosition: { x: number; y: number };
-  handleType: "image" | "text" | "video" | "audio" | "easeCurve" | null;
+  handleType: "image" | "text" | "video" | "audio" | "3d" | "easeCurve" | null;
   connectionType: "source" | "target";
   sourceNodeId: string | null;
   sourceHandleId: string | null;
@@ -210,7 +219,7 @@ const findScrollableAncestor = (target: HTMLElement, deltaX: number, deltaY: num
 };
 
 export function WorkflowCanvas() {
-  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId, executeWorkflow, isModalOpen, showQuickstart, setShowQuickstart, navigationTarget, setNavigationTarget, captureSnapshot, applyEditOperations, setWorkflowMetadata, canvasNavigationSettings } =
+  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId, executeWorkflow, isModalOpen, showQuickstart, setShowQuickstart, navigationTarget, setNavigationTarget, captureSnapshot, applyEditOperations, setWorkflowMetadata, canvasNavigationSettings, setShortcutsDialogOpen } =
     useWorkflowStore();
   const { screenToFlowPosition, getViewport, zoomIn, zoomOut, setViewport, setCenter } = useReactFlow();
   const { show: showToast } = useToast();
@@ -322,6 +331,11 @@ export function WorkflowCanvas() {
         }
         // Video cannot connect to other node types
         return false;
+      }
+
+      // 3D connections: 3d handles can only connect to matching 3d handles
+      if (sourceType === "3d" || targetType === "3d") {
+        return sourceType === "3d" && targetType === "3d";
       }
 
       // Audio connections: audio handles can only connect to audio handles
@@ -448,7 +462,7 @@ export function WorkflowCanvas() {
       // Helper to find a compatible handle on a node by type
       const findCompatibleHandle = (
         node: Node,
-        handleType: "image" | "text" | "video" | "audio" | "easeCurve",
+        handleType: "image" | "text" | "video" | "audio" | "3d" | "easeCurve",
         needInput: boolean,
         batchUsed?: Set<string>
       ): string | null => {
@@ -824,6 +838,12 @@ export function WorkflowCanvas() {
           // VideoStitch accepts audio
           targetHandleId = "audio";
         }
+      } else if (handleType === "3d") {
+        if (nodeType === "glbViewer") {
+          targetHandleId = "3d";
+        } else if (nodeType === "nanoBanana") {
+          sourceHandleIdForNewNode = "3d";
+        }
       } else if (handleType === "easeCurve") {
         if (nodeType === "easeCurve") {
           targetHandleId = "easeCurve";
@@ -1002,6 +1022,13 @@ export function WorkflowCanvas() {
       return;
     }
 
+    // Handle keyboard shortcuts dialog (? key)
+    if (event.key === "?" && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault();
+      setShortcutsDialogOpen(true);
+      return;
+    }
+
     // Handle workflow execution (Ctrl/Cmd + Enter)
     if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
       event.preventDefault();
@@ -1069,6 +1096,7 @@ export function WorkflowCanvas() {
             imageCompare: { width: 400, height: 360 },
             videoStitch: { width: 400, height: 280 },
             easeCurve: { width: 340, height: 480 },
+            glbViewer: { width: 360, height: 380 },
           };
           const dims = defaultDimensions[nodeType];
           addNode(nodeType, { x: centerX - dims.width / 2, y: centerY - dims.height / 2 });
@@ -1245,7 +1273,7 @@ export function WorkflowCanvas() {
           ]);
         });
       }
-  }, [nodes, onNodesChange, copySelectedNodes, pasteNodes, clearClipboard, clipboard, getViewport, addNode, updateNodeData, executeWorkflow]);
+  }, [nodes, onNodesChange, copySelectedNodes, pasteNodes, clearClipboard, clipboard, getViewport, addNode, updateNodeData, executeWorkflow, setShortcutsDialogOpen]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -1649,6 +1677,8 @@ export function WorkflowCanvas() {
                 return "#f97316";
               case "easeCurve":
                 return "#bef264"; // lime-300 (easy-peasy-ease)
+              case "glbViewer":
+                return "#38bdf8"; // sky-400 (3D viewport)
               default:
                 return "#94a3b8";
             }

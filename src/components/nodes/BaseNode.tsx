@@ -26,6 +26,7 @@ interface BaseNodeProps {
   isExecuting?: boolean;
   hasError?: boolean;
   className?: string;
+  contentClassName?: string;
   minWidth?: number;
   minHeight?: number;
   headerAction?: ReactNode;
@@ -48,6 +49,7 @@ export function BaseNode({
   isExecuting = false,
   hasError = false,
   className = "",
+  contentClassName,
   minWidth = 180,
   minHeight = 100,
   headerAction,
@@ -251,14 +253,14 @@ export function BaseNode({
       />
       <div
         className={`
-          bg-neutral-800 rounded-md shadow-lg border h-full w-full
+          bg-neutral-800 rounded-md shadow-lg border h-full w-full flex flex-col
           ${isCurrentlyExecuting || isExecuting ? "border-blue-500 ring-1 ring-blue-500/20" : "border-neutral-700"}
           ${hasError ? "border-red-500" : ""}
           ${selected ? "border-blue-500 ring-2 ring-blue-500/40 shadow-lg shadow-blue-500/25" : ""}
           ${className}
         `}
       >
-        <div className="px-3 pt-2 pb-1 flex items-center justify-between">
+        <div className="px-3 pt-2 pb-1 flex items-center justify-between shrink-0">
           {/* Title Section */}
           <div className="flex-1 min-w-0 flex items-center gap-1.5">
             {titlePrefix}
@@ -452,7 +454,7 @@ export function BaseNode({
             </div>
           )}
         </div>
-        <div className="px-3 pb-4 h-[calc(100%-28px)] overflow-hidden flex flex-col">{children}</div>
+        <div className={contentClassName ?? "px-3 pb-4 flex-1 min-h-0 overflow-hidden flex flex-col"}>{children}</div>
       </div>
     </>
   );

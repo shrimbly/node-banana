@@ -43,12 +43,14 @@ const REPLICATE_API_BASE = "https://api.replicate.com/v1";
 const FAL_API_BASE = "https://api.fal.ai/v1";
 const WAVESPEED_API_BASE = "https://api.wavespeed.ai/api/v3";
 
-// Categories we care about for image/video generation (fal.ai)
+// Categories we care about for image/video/3D generation (fal.ai)
 const RELEVANT_CATEGORIES = [
   "text-to-image",
   "image-to-image",
   "text-to-video",
   "image-to-video",
+  "text-to-3d",
+  "image-to-3d",
 ];
 
 // Kie.ai models (hardcoded - no discovery API available)
@@ -420,7 +422,32 @@ function inferReplicateCapabilities(model: ReplicateModel): ModelCapability[] {
   const capabilities: ModelCapability[] = [];
   const searchText = `${model.name} ${model.description ?? ""}`.toLowerCase();
 
-  // Check for video-related keywords first
+  // Check for 3D-related keywords first
+  const is3DModel =
+    searchText.includes("3d") ||
+    searchText.includes("mesh") ||
+    searchText.includes("triposr") ||
+    searchText.includes("tripo") ||
+    searchText.includes("hunyuan3d") ||
+    searchText.includes("instant-mesh") ||
+    searchText.includes("point-e") ||
+    searchText.includes("shap-e");
+
+  if (is3DModel) {
+    // 3D model - determine if image-to-3d or text-to-3d
+    const hasImageInput =
+      searchText.includes("image") ||
+      searchText.includes("img") ||
+      searchText.includes("photo");
+    if (hasImageInput) {
+      capabilities.push("image-to-3d");
+    } else {
+      capabilities.push("text-to-3d");
+    }
+    return capabilities;
+  }
+
+  // Check for video-related keywords
   const isVideoModel =
     searchText.includes("video") ||
     searchText.includes("animate") ||
@@ -558,6 +585,27 @@ function inferWaveSpeedCapabilities(model: WaveSpeedModel): ModelCapability[] {
   const description = (model.description || "").toLowerCase();
   const category = (model.category || model.type || "").toLowerCase();
   const searchText = `${modelId} ${name} ${description} ${category}`;
+
+  // Check for 3D-related keywords first
+  const is3DModel =
+    searchText.includes("3d") ||
+    searchText.includes("mesh") ||
+    searchText.includes("tripo") ||
+    searchText.includes("hunyuan3d") ||
+    category.includes("3d");
+
+  if (is3DModel) {
+    const hasImageInput =
+      searchText.includes("image") ||
+      searchText.includes("img") ||
+      searchText.includes("photo");
+    if (hasImageInput) {
+      capabilities.push("image-to-3d");
+    } else {
+      capabilities.push("text-to-3d");
+    }
+    return capabilities;
+  }
 
   // Check for video-related keywords
   const isVideoModel =

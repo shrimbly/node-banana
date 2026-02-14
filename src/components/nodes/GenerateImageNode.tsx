@@ -61,7 +61,7 @@ const GEMINI_IMAGE_MODELS: { value: ModelType; label: string }[] = [
 ];
 
 // Image generation capabilities
-const IMAGE_CAPABILITIES: ModelCapability[] = ["text-to-image", "image-to-image"];
+const IMAGE_CAPABILITIES: ModelCapability[] = ["text-to-image", "image-to-image", "text-to-3d", "image-to-3d"];
 
 type NanoBananaNodeType = Node<NanoBananaNodeData, "nanoBanana">;
 
@@ -210,9 +210,10 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
           provider: currentProvider,
           modelId: model.id,
           displayName: model.name,
+          capabilities: model.capabilities,
         };
-        // Clear parameters when changing models (different models have different schemas)
-        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+        // Clear parameters and 3D output when changing models (different models have different schemas)
+        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {}, output3dUrl: null });
       }
     },
     [id, currentProvider, externalModels, updateNodeData]
@@ -383,8 +384,9 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
       provider: model.provider,
       modelId: model.id,
       displayName: model.name,
+      capabilities: model.capabilities,
     };
-    updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+    updateNodeData(id, { selectedModel: newSelectedModel, parameters: {}, output3dUrl: null });
     setIsBrowseDialogOpen(false);
   }, [id, updateNodeData]);
 
@@ -530,13 +532,13 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
       >
         Prompt
       </div>
-      {/* Image output */}
+      {/* Output handle — switches to 3d when a 3D model is selected */}
       <Handle
         type="source"
         position={Position.Right}
-        id="image"
+        id={nodeData.selectedModel?.capabilities?.some((c: string) => c.includes("3d")) ? "3d" : "image"}
         style={{ top: "50%" }}
-        data-handletype="image"
+        data-handletype={nodeData.selectedModel?.capabilities?.some((c: string) => c.includes("3d")) ? "3d" : "image"}
       />
       {/* Output label */}
       <div
@@ -544,15 +546,23 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
         style={{
           left: `calc(100% + 8px)`,
           top: "calc(50% - 18px)",
-          color: "var(--handle-color-image)",
+          color: nodeData.selectedModel?.capabilities?.some((c: string) => c.includes("3d")) ? "var(--handle-color-3d)" : "var(--handle-color-image)",
         }}
       >
-        Image
+        {nodeData.selectedModel?.capabilities?.some((c: string) => c.includes("3d")) ? "3D" : "Image"}
       </div>
 
       <div className="flex-1 flex flex-col min-h-0 gap-2">
         {/* Preview area */}
-        {nodeData.outputImage ? (
+        {nodeData.output3dUrl ? (
+          <div className="w-full flex-1 min-h-[80px] flex flex-col items-center justify-center gap-2 bg-neutral-800 rounded border border-neutral-700 p-3">
+            <svg className="w-8 h-8 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 7.5l-2.25-1.313M21 7.5v2.25m0-2.25l-2.25 1.313M3 7.5l2.25-1.313M3 7.5l2.25 1.313M3 7.5v2.25m9 3l2.25-1.313M12 12.75l-2.25-1.313M12 12.75V15m0 6.75l2.25-1.313M12 21.75V19.5m0 2.25l-2.25-1.313m0-16.875L12 2.25l2.25 1.313M21 14.25v2.25l-2.25 1.313m-13.5 0L3 16.5v-2.25" />
+            </svg>
+            <span className="text-[11px] text-orange-400 font-medium">3D Model Generated</span>
+            <span className="text-[10px] text-neutral-500 truncate max-w-full">Connect to 3D Viewer</span>
+          </div>
+        ) : nodeData.outputImage ? (
           <>
             <div className="relative w-full flex-1 min-h-0">
               <img

@@ -259,6 +259,22 @@ export async function generateWithReplicate(
     };
   }
 
+  // Check if this is a 3D model — return URL directly (GLB files are binary)
+  const is3DModel = input.model.capabilities.some(c => c.includes("3d"));
+  if (is3DModel) {
+    console.log(`[API:${requestId}] SUCCESS - Returning 3D model URL`);
+    return {
+      success: true,
+      outputs: [
+        {
+          type: "3d",
+          data: "",
+          url: mediaUrl,
+        },
+      ],
+    };
+  }
+
   // Determine MIME type from response
   const contentType = mediaResponse.headers.get("content-type") || "image/png";
   const isVideo = contentType.startsWith("video/");

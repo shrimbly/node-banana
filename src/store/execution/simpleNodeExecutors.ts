@@ -221,3 +221,31 @@ export async function executeImageCompare(ctx: NodeExecutionContext): Promise<vo
     imageB: images[1] || null,
   });
 }
+
+/**
+ * GLB Viewer node: receives 3D model URL from upstream, fetches and loads it.
+ */
+export async function executeGlbViewer(ctx: NodeExecutionContext): Promise<void> {
+  const { node, getConnectedInputs, updateNodeData } = ctx;
+  const { model3d } = getConnectedInputs(node.id);
+  if (model3d) {
+    // Fetch the GLB URL and create a blob URL for the viewer
+    try {
+      const response = await fetch(model3d);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch 3D model: ${response.status}`);
+      }
+      const blob = await response.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      updateNodeData(node.id, {
+        glbUrl: blobUrl,
+        filename: "generated.glb",
+        capturedImage: null,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`[Workflow] GLB Viewer node ${node.id} failed:`, message);
+      updateNodeData(node.id, { error: message });
+    }
+  }
+}

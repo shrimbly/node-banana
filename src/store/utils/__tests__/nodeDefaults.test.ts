@@ -41,6 +41,7 @@ describe("nodeDefaults utilities", () => {
         "generateVideo",
         "llmGenerate",
         "splitGrid",
+        "glbViewer",
         "output",
       ];
 
@@ -174,6 +175,14 @@ describe("nodeDefaults utilities", () => {
       expect(data).toHaveProperty("isConfigured", false);
       expect(data).toHaveProperty("status", "idle");
       expect(data).toHaveProperty("error", null);
+    });
+
+    it("creates correct structure for glbViewer", () => {
+      const data = createDefaultNodeData("glbViewer");
+
+      expect(data).toHaveProperty("glbUrl", null);
+      expect(data).toHaveProperty("filename", null);
+      expect(data).toHaveProperty("capturedImage", null);
     });
 
     it("creates correct structure for output", () => {

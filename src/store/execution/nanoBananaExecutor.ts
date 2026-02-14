@@ -80,6 +80,9 @@ export async function executeNanoBanana(
   const provider = nodeData.selectedModel?.provider || "gemini";
   const headers = buildGenerateHeaders(provider, providerSettings);
 
+  // Determine mediaType from model capabilities
+  const is3DModel = nodeData.selectedModel?.capabilities?.some((c: string) => c.includes("3d"));
+
   const requestPayload = {
     images,
     prompt: promptText,
@@ -90,6 +93,7 @@ export async function executeNanoBanana(
     selectedModel: nodeData.selectedModel,
     parameters: nodeData.parameters,
     dynamicInputs,
+    ...(is3DModel ? { mediaType: "3d" as const } : {}),
   };
 
   try {
@@ -119,6 +123,22 @@ export async function executeNanoBanana(
 
     const result = await response.json();
 
+    // Handle 3D model response
+    if (result.success && result.model3dUrl) {
+      updateNodeData(node.id, {
+        output3dUrl: result.model3dUrl,
+        outputImage: null,
+        status: "complete",
+        error: null,
+      });
+
+      // Track cost if applicable
+      if (nodeData.selectedModel?.provider === "fal" && nodeData.selectedModel?.pricing) {
+        addIncurredCost(nodeData.selectedModel.pricing.amount);
+      }
+      return;
+    }
+
     if (result.success && result.image) {
       const timestamp = Date.now();
       const imageId = `${timestamp}`;
@@ -144,6 +164,7 @@ export async function executeNanoBanana(
 
       updateNodeData(node.id, {
         outputImage: result.image,
+        output3dUrl: null,
         status: "complete",
         error: null,
         imageHistory: updatedHistory,

@@ -20,6 +20,7 @@ export interface SelectedModel {
   modelId: string;
   displayName: string;
   pricing?: SelectedModelPricing;  // Optional pricing info from provider API
+  capabilities?: string[];  // Model capabilities (e.g., "text-to-image", "image-to-3d")
 }
 
 export interface ProviderConfig {

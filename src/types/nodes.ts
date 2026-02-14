@@ -36,7 +36,8 @@ export type NodeType =
   | "outputGallery"
   | "imageCompare"
   | "videoStitch"
-  | "easeCurve";
+  | "easeCurve"
+  | "glbViewer";
 
 /**
  * Node execution status
@@ -149,6 +150,7 @@ export interface NanoBananaNodeData extends BaseNodeData {
   useGoogleSearch: boolean; // Only available for Nano Banana Pro
   parameters?: Record<string, unknown>; // Model-specific parameters for external providers
   inputSchema?: ModelInputDef[]; // Model's input schema for dynamic handles
+  output3dUrl?: string | null; // URL to generated 3D GLB model
   status: NodeStatus;
   error: string | null;
   imageHistory: CarouselImageItem[]; // Carousel history (IDs only)
@@ -282,6 +284,15 @@ export interface SplitGridNodeData extends BaseNodeData {
 }
 
 /**
+ * GLB 3D Viewer node - loads and displays 3D models, captures viewport as image
+ */
+export interface GLBViewerNodeData extends BaseNodeData {
+  glbUrl: string | null;       // Object URL for the loaded GLB file
+  filename: string | null;     // Original filename for display
+  capturedImage: string | null; // Base64 PNG snapshot of the 3D viewport
+}
+
+/**
  * Union of all node data types
  */
 export type WorkflowNodeData =
@@ -298,7 +309,8 @@ export type WorkflowNodeData =
   | OutputGalleryNodeData
   | ImageCompareNodeData
   | VideoStitchNodeData
-  | EaseCurveNodeData;
+  | EaseCurveNodeData
+  | GLBViewerNodeData;
 
 /**
  * Workflow node with typed data (extended with optional groupId)
@@ -310,7 +322,7 @@ export type WorkflowNode = Node<WorkflowNodeData, NodeType> & {
 /**
  * Handle types for node connections
  */
-export type HandleType = "image" | "text" | "audio" | "video" | "easeCurve";
+export type HandleType = "image" | "text" | "audio" | "video" | "3d" | "easeCurve";
 
 /**
  * Default settings for node types - stored in localStorage
