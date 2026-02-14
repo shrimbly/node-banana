@@ -1568,17 +1568,24 @@ export function WorkflowCanvas() {
         multiSelectionKeyCode="Shift"
         selectionOnDrag={
           canvasNavigationSettings.selectionMode === "altDrag"
-            ? !isModalOpen
-            : canvasNavigationSettings.panMode === "always" && !isModalOpen
+            ? false
+            : canvasNavigationSettings.panMode === "always"
             ? false
             : isMacOS && !isModalOpen
         }
+        selectionKeyCode={
+          canvasNavigationSettings.selectionMode === "altDrag" && !isModalOpen
+            ? "Alt"
+            : isModalOpen ? null : "Shift"
+        }
         panOnDrag={
-          canvasNavigationSettings.panMode === "always"
-            ? !isModalOpen
+          isModalOpen
+            ? false
+            : canvasNavigationSettings.panMode === "always"
+            ? true
             : canvasNavigationSettings.panMode === "middleMouse"
             ? [2]
-            : !isMacOS && !isModalOpen
+            : !isMacOS
         }
         selectNodesOnDrag={false}
         nodeDragThreshold={5}

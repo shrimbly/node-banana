@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { CanvasNavigationSettings, PanMode, ZoomMode, SelectionMode } from "@/types";
 
@@ -12,6 +12,10 @@ interface CanvasSettingsModalProps {
 export function CanvasSettingsModal({ isOpen, onClose }: CanvasSettingsModalProps) {
   const { canvasNavigationSettings, updateCanvasNavigationSettings } = useWorkflowStore();
   const [settings, setSettings] = useState<CanvasNavigationSettings>(canvasNavigationSettings);
+
+  useEffect(() => {
+    if (isOpen) setSettings(canvasNavigationSettings);
+  }, [isOpen, canvasNavigationSettings]);
 
   if (!isOpen) return null;
 

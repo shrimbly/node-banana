@@ -138,6 +138,10 @@ const createDefaultState = (overrides = {}) => ({
   setNavigationTarget: vi.fn(),
   getNodesWithComments: vi.fn(() => []),
   markCommentViewed: vi.fn(),
+  canvasNavigationSettings: { panMode: "space", zoomMode: "altScroll", selectionMode: "click" },
+  captureSnapshot: vi.fn(),
+  applyEditOperations: vi.fn(() => ({ applied: 0, skipped: [] })),
+  setWorkflowMetadata: vi.fn(),
   ...overrides,
 });
 

@@ -2439,6 +2439,39 @@ describe("workflowStore integration tests", () => {
     });
   });
 
+  describe("Canvas navigation settings", () => {
+    it("updateCanvasNavigationSettings updates store state", () => {
+      const store = useWorkflowStore.getState();
+      store.updateCanvasNavigationSettings({
+        panMode: "always",
+        zoomMode: "scroll",
+        selectionMode: "altDrag",
+      });
+
+      const state = useWorkflowStore.getState();
+      expect(state.canvasNavigationSettings).toEqual({
+        panMode: "always",
+        zoomMode: "scroll",
+        selectionMode: "altDrag",
+      });
+    });
+
+    it("updateCanvasNavigationSettings persists to localStorage", () => {
+      const store = useWorkflowStore.getState();
+      const settings = {
+        panMode: "middleMouse" as const,
+        zoomMode: "ctrlScroll" as const,
+        selectionMode: "click" as const,
+      };
+      store.updateCanvasNavigationSettings(settings);
+
+      // Verify persistence by reading back from localStorage
+      const stored = localStorage.getItem("node-banana-canvas-navigation");
+      expect(stored).not.toBeNull();
+      expect(JSON.parse(stored!)).toEqual(settings);
+    });
+  });
+
   describe("Group operations with non-standard node types", () => {
     describe("createGroup bounding box calculation", () => {
       it("should correctly calculate bounding box for easeCurve nodes (340x480)", () => {
