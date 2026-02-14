@@ -7,6 +7,8 @@ import {
   GenerateImageNodeDefaults,
   GenerateVideoNodeDefaults,
   LLMNodeDefaults,
+  CanvasNavigationSettings,
+  defaultCanvasNavigationSettings,
 } from "@/types";
 
 // Storage keys
@@ -16,6 +18,7 @@ export const GENERATE_IMAGE_DEFAULTS_KEY = "node-banana-nanoBanana-defaults";
 export const PROVIDER_SETTINGS_KEY = "node-banana-provider-settings";
 export const RECENT_MODELS_KEY = "node-banana-recent-models";
 export const NODE_DEFAULTS_KEY = "node-banana-node-defaults";
+export const CANVAS_NAVIGATION_KEY = "node-banana-canvas-navigation";
 
 // Maximum recent models to store (show 4 in UI, keep 8 for persistence)
 export const MAX_RECENT_MODELS = 8;
@@ -189,6 +192,25 @@ export const getGenerateVideoDefaults = (): GenerateVideoNodeDefaults | undefine
 export const getLLMDefaults = (): LLMNodeDefaults | undefined => {
   const config = loadNodeDefaults();
   return config.llm;
+};
+
+// Canvas navigation settings helpers
+export const getCanvasNavigationSettings = (): CanvasNavigationSettings => {
+  if (typeof window === "undefined") return defaultCanvasNavigationSettings;
+  const stored = localStorage.getItem(CANVAS_NAVIGATION_KEY);
+  if (stored) {
+    try {
+      return JSON.parse(stored) as CanvasNavigationSettings;
+    } catch {
+      return defaultCanvasNavigationSettings;
+    }
+  }
+  return defaultCanvasNavigationSettings;
+};
+
+export const saveCanvasNavigationSettings = (settings: CanvasNavigationSettings): void => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(CANVAS_NAVIGATION_KEY, JSON.stringify(settings));
 };
 
 // Workflow ID generator

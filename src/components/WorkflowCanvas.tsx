@@ -210,7 +210,7 @@ const findScrollableAncestor = (target: HTMLElement, deltaX: number, deltaY: num
 };
 
 export function WorkflowCanvas() {
-  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId, executeWorkflow, isModalOpen, showQuickstart, setShowQuickstart, navigationTarget, setNavigationTarget, captureSnapshot, applyEditOperations, setWorkflowMetadata } =
+  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId, executeWorkflow, isModalOpen, showQuickstart, setShowQuickstart, navigationTarget, setNavigationTarget, captureSnapshot, applyEditOperations, setWorkflowMetadata, canvasNavigationSettings } =
     useWorkflowStore();
   const { screenToFlowPosition, getViewport, zoomIn, zoomOut, setViewport, setCenter } = useReactFlow();
   const { show: showToast } = useToast();
@@ -932,8 +932,16 @@ export function WorkflowCanvas() {
       const scrollableElement = findScrollableAncestor(target, event.deltaX, event.deltaY);
       if (scrollableElement) return;
 
-      // Pinch gesture (ctrlKey) always zooms
-      if (event.ctrlKey) {
+      const { zoomMode } = canvasNavigationSettings;
+
+      // Check if zoom should be triggered based on settings
+      const shouldZoom =
+        zoomMode === "scroll" ||
+        (zoomMode === "altScroll" && event.altKey) ||
+        (zoomMode === "ctrlScroll" && (event.ctrlKey || event.metaKey));
+
+      // Pinch gesture (ctrlKey + trackpad) always zooms regardless of settings
+      if (event.ctrlKey && !event.altKey) {
         event.preventDefault();
         if (event.deltaY < 0) zoomIn();
         else zoomOut();
@@ -943,34 +951,46 @@ export function WorkflowCanvas() {
       // On macOS, differentiate trackpad from mouse
       if (isMacOS) {
         if (isMouseWheel(event)) {
-          // Mouse wheel → zoom
-          event.preventDefault();
-          if (event.deltaY < 0) zoomIn();
-          else zoomOut();
+          // Mouse wheel → zoom if settings allow
+          if (shouldZoom) {
+            event.preventDefault();
+            if (event.deltaY < 0) zoomIn();
+            else zoomOut();
+          }
         } else {
-          // Trackpad scroll → pan (also prevent horizontal swipe navigation)
-          event.preventDefault();
-          const viewport = getViewport();
-          setViewport({
-            x: viewport.x - event.deltaX,
-            y: viewport.y - event.deltaY,
-            zoom: viewport.zoom,
-          });
+          // Trackpad scroll
+          if (shouldZoom) {
+            // Zoom
+            event.preventDefault();
+            if (event.deltaY < 0) zoomIn();
+            else zoomOut();
+          } else {
+            // Pan (also prevent horizontal swipe navigation)
+            event.preventDefault();
+            const viewport = getViewport();
+            setViewport({
+              x: viewport.x - event.deltaX,
+              y: viewport.y - event.deltaY,
+              zoom: viewport.zoom,
+            });
+          }
         }
         return;
       }
 
-      // Non-macOS: default zoom behavior
-      event.preventDefault();
-      if (event.deltaY < 0) zoomIn();
-      else zoomOut();
+      // Non-macOS
+      if (shouldZoom) {
+        event.preventDefault();
+        if (event.deltaY < 0) zoomIn();
+        else zoomOut();
+      }
     };
 
     wrapper.addEventListener('wheel', handleWheelNonPassive, { passive: false });
     return () => {
       wrapper.removeEventListener('wheel', handleWheelNonPassive);
     };
-  }, [isModalOpen, zoomIn, zoomOut, getViewport, setViewport]);
+  }, [isModalOpen, zoomIn, zoomOut, getViewport, setViewport, canvasNavigationSettings]);
 
   // Keyboard shortcuts for copy/paste and stacking selected nodes
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -1546,8 +1566,20 @@ export function WorkflowCanvas() {
         fitView
         deleteKeyCode={["Backspace", "Delete"]}
         multiSelectionKeyCode="Shift"
-        selectionOnDrag={isMacOS && !isModalOpen}
-        panOnDrag={!isMacOS && !isModalOpen}
+        selectionOnDrag={
+          canvasNavigationSettings.selectionMode === "altDrag"
+            ? !isModalOpen
+            : canvasNavigationSettings.panMode === "always" && !isModalOpen
+            ? false
+            : isMacOS && !isModalOpen
+        }
+        panOnDrag={
+          canvasNavigationSettings.panMode === "always"
+            ? !isModalOpen
+            : canvasNavigationSettings.panMode === "middleMouse"
+            ? [2]
+            : !isMacOS && !isModalOpen
+        }
         selectNodesOnDrag={false}
         nodeDragThreshold={5}
         zoomOnScroll={false}
@@ -1555,7 +1587,13 @@ export function WorkflowCanvas() {
         minZoom={0.1}
         maxZoom={4}
         defaultViewport={{ x: 0, y: 0, zoom: 1 }}
-        panActivationKeyCode={isModalOpen ? null : "Space"}
+        panActivationKeyCode={
+          isModalOpen
+            ? null
+            : canvasNavigationSettings.panMode === "space"
+            ? "Space"
+            : null
+        }
         nodesDraggable={!isModalOpen}
         nodesConnectable={!isModalOpen}
         elementsSelectable={!isModalOpen}

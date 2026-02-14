@@ -208,6 +208,14 @@ All routes in `src/app/api/`:
 - `node-banana-workflow-costs` - Cost tracking per workflow
 - `node-banana-nanoBanana-defaults` - Sticky generation settings
 
+## Git Workflow
+
+- The primary development branch is `develop`, NOT `main` or `master`
+- Always checkout `develop` before creating feature branches: `git checkout develop`
+- Create feature branches from `develop` using: `feature/<short-description>` or `fix/<short-description>`
+- All PRs MUST target `develop`: use `gh pr create --base develop`
+- Never push directly to `main`, `master`, or `develop`
+
 ## Commits
 
 - The .planning directory is untracked, do not attempt to commit any changes to the files in this directory.

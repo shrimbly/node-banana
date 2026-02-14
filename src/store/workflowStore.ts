@@ -22,6 +22,7 @@ import {
   ProviderType,
   ProviderSettings,
   RecentModel,
+  CanvasNavigationSettings,
 } from "@/types";
 import { useToast } from "@/components/Toast";
 import { logger } from "@/utils/logger";
@@ -39,6 +40,8 @@ import {
   saveRecentModels,
   MAX_RECENT_MODELS,
   generateWorkflowId,
+  getCanvasNavigationSettings,
+  saveCanvasNavigationSettings,
 } from "./utils/localStorage";
 import {
   createDefaultNodeData,
@@ -246,6 +249,12 @@ interface WorkflowStore {
   clearSnapshot: () => void;
   incrementManualChangeCount: () => void;
   applyEditOperations: (operations: EditOperation[]) => { applied: number; skipped: string[] };
+
+  // Canvas navigation settings state
+  canvasNavigationSettings: CanvasNavigationSettings;
+
+  // Canvas navigation settings actions
+  updateCanvasNavigationSettings: (settings: CanvasNavigationSettings) => void;
 }
 
 let nodeIdCounter = 0;
@@ -331,6 +340,9 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   // AI change snapshot initial state
   previousWorkflowSnapshot: null,
   manualChangeCount: 0,
+
+  // Canvas navigation settings initial state
+  canvasNavigationSettings: getCanvasNavigationSettings(),
 
   setEdgeStyle: (style: EdgeStyle) => {
     set({ edgeStyle: style });
@@ -1695,6 +1707,12 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
     });
 
     return { applied: result.applied, skipped: result.skipped };
+  },
+
+  // Canvas navigation settings actions
+  updateCanvasNavigationSettings: (settings: CanvasNavigationSettings) => {
+    set({ canvasNavigationSettings: settings });
+    saveCanvasNavigationSettings(settings);
   },
 }));
 
