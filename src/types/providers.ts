@@ -5,8 +5,8 @@
  * providers and LLM providers.
  */
 
-// Provider Types for multi-provider support (image/video generation)
-export type ProviderType = "gemini" | "openai" | "replicate" | "fal" | "kie" | "wavespeed";
+// Provider Types for multi-provider support (image/video/audio generation)
+export type ProviderType = "gemini" | "openai" | "replicate" | "fal" | "kie" | "wavespeed" | "elevenlabs" | "deepgram" | "cartesia" | "google" | "azure";
 
 // Model pricing info (stored when model is selected)
 export interface SelectedModelPricing {

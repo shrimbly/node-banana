@@ -7,6 +7,7 @@ import {
   PromptConstructorNodeData,
   NanoBananaNodeData,
   GenerateVideoNodeData,
+  GenerateAudioNodeData,
   LLMGenerateNodeData,
   SplitGridNodeData,
   OutputNodeData,
@@ -31,6 +32,7 @@ export const defaultNodeDimensions: Record<NodeType, { width: number; height: nu
   promptConstructor: { width: 340, height: 280 },
   nanoBanana: { width: 300, height: 300 },
   generateVideo: { width: 300, height: 300 },
+  generateAudio: { width: 300, height: 280 },
   llmGenerate: { width: 320, height: 360 },
   splitGrid: { width: 300, height: 320 },
   output: { width: 320, height: 320 },
@@ -201,6 +203,24 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         progress: 0,
         encoderSupported: null,
       };
+    case "generateAudio": {
+      return {
+        inputText: null,
+        outputAudio: null,
+        selectedModel: {
+          provider: "openai",
+          modelId: "openai/tts-1",
+          displayName: "OpenAI TTS-1",
+        },
+        parameters: {
+          voice: "alloy",
+          speed: 1.0,
+          format: "mp3",
+        },
+        status: "idle",
+        error: null,
+      } as GenerateAudioNodeData;
+    }
     case "easeCurve":
       return {
         bezierHandles: [0.445, 0.05, 0.55, 0.95], // easeInOutSine preset

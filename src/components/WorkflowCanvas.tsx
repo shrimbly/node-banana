@@ -27,6 +27,7 @@ import {
   PromptConstructorNode,
   GenerateImageNode,
   GenerateVideoNode,
+  GenerateAudioNode,
   LLMGenerateNode,
   SplitGridNode,
   OutputNode,
@@ -59,6 +60,7 @@ const nodeTypes: NodeTypes = {
   promptConstructor: PromptConstructorNode,
   nanoBanana: GenerateImageNode,
   generateVideo: GenerateVideoNode,
+  generateAudio: GenerateAudioNode,
   llmGenerate: LLMGenerateNode,
   splitGrid: SplitGridNode,
   output: OutputNode,
@@ -1042,6 +1044,7 @@ export function WorkflowCanvas() {
             promptConstructor: { width: 340, height: 280 },
             nanoBanana: { width: 300, height: 300 },
             generateVideo: { width: 300, height: 300 },
+            generateAudio: { width: 300, height: 280 },
             llmGenerate: { width: 320, height: 360 },
             splitGrid: { width: 300, height: 320 },
             output: { width: 320, height: 320 },
@@ -1589,6 +1592,8 @@ export function WorkflowCanvas() {
                 return "#22c55e";
               case "generateVideo":
                 return "#9333ea";
+              case "generateAudio":
+                return "#8b5cf6";
               case "llmGenerate":
                 return "#06b6d4";
               case "splitGrid":

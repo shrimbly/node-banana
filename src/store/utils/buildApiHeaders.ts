@@ -17,6 +17,11 @@ const PROVIDER_HEADER_MAP: Record<ProviderType, string> = {
   kie: "X-Kie-Key",
   wavespeed: "X-WaveSpeed-Key",
   openai: "X-OpenAI-API-Key",
+  elevenlabs: "X-ElevenLabs-API-Key",
+  deepgram: "X-Deepgram-API-Key",
+  cartesia: "X-Cartesia-API-Key",
+  google: "X-Google-API-Key",
+  azure: "X-Azure-API-Key",
 };
 
 /**

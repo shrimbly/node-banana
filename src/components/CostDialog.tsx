@@ -22,6 +22,11 @@ function ProviderIcon({ provider }: { provider: ProviderType }) {
     openai: { bg: "bg-teal-500/20", text: "text-teal-300" },
     kie: { bg: "bg-orange-500/20", text: "text-orange-300" },
     wavespeed: { bg: "bg-purple-500/20", text: "text-purple-300" },
+    elevenlabs: { bg: "bg-violet-500/20", text: "text-violet-300" },
+    deepgram: { bg: "bg-indigo-500/20", text: "text-indigo-300" },
+    cartesia: { bg: "bg-fuchsia-500/20", text: "text-fuchsia-300" },
+    google: { bg: "bg-lime-500/20", text: "text-lime-300" },
+    azure: { bg: "bg-sky-500/20", text: "text-sky-300" },
   };
 
   const labels: Record<ProviderType, string> = {
@@ -31,6 +36,11 @@ function ProviderIcon({ provider }: { provider: ProviderType }) {
     openai: "O",
     kie: "K",
     wavespeed: "W",
+    elevenlabs: "E",
+    deepgram: "D",
+    cartesia: "C",
+    google: "G",
+    azure: "A",
   };
 
   const color = colors[provider] || colors.gemini;
@@ -53,6 +63,11 @@ function getProviderDisplayName(provider: ProviderType): string {
     openai: "OpenAI",
     kie: "Kie.ai",
     wavespeed: "WaveSpeed",
+    elevenlabs: "ElevenLabs",
+    deepgram: "Deepgram",
+    cartesia: "Cartesia",
+    google: "Google Cloud",
+    azure: "Azure",
   };
   return names[provider] || provider;
 }

@@ -15,7 +15,8 @@ export type ModelCapability =
   | "text-to-image"
   | "image-to-image"
   | "text-to-video"
-  | "image-to-video";
+  | "image-to-video"
+  | "text-to-audio";
 
 /**
  * Model parameter schema for dynamic UI generation

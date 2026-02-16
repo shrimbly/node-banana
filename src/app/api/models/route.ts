@@ -331,6 +331,115 @@ const GEMINI_IMAGE_MODELS: ProviderModel[] = [
   },
 ];
 
+// TTS models (hardcoded - aggregated from multiple providers)
+const TTS_MODELS: ProviderModel[] = [
+  // OpenAI TTS Models
+  {
+    id: "openai/tts-1",
+    name: "OpenAI TTS-1",
+    description: "Fast, affordable text-to-speech with 13 built-in voices (alloy, ash, ballad, coral, echo, fable, onyx, nova, sage, shimmer, verse, marin, cedar). Supports multiple output formats.",
+    provider: "openai",
+    capabilities: ["text-to-audio"],
+    coverImage: undefined,
+    pricing: { type: "per-run", amount: 0.015, currency: "USD" },
+    pageUrl: "https://platform.openai.com/docs/guides/text-to-speech",
+  },
+  {
+    id: "openai/tts-1-hd",
+    name: "OpenAI TTS-1 HD",
+    description: "High-quality text-to-speech with enhanced audio fidelity. Supports 13 voices and multiple output formats including mp3, opus, aac, flac, wav, and pcm.",
+    provider: "openai",
+    capabilities: ["text-to-audio"],
+    coverImage: undefined,
+    pricing: { type: "per-run", amount: 0.030, currency: "USD" },
+    pageUrl: "https://platform.openai.com/docs/guides/text-to-speech",
+  },
+  {
+    id: "openai/gpt-4o-mini-tts",
+    name: "GPT-4o Mini TTS",
+    description: "Latest OpenAI TTS model with voice instructions support for controlling voice characteristics. Does not support voice instructions with tts-1/tts-1-hd.",
+    provider: "openai",
+    capabilities: ["text-to-audio"],
+    coverImage: undefined,
+    pageUrl: "https://platform.openai.com/docs/models/gpt-4o-mini-tts",
+  },
+
+  // ElevenLabs Models
+  {
+    id: "elevenlabs/eleven_multilingual_v2",
+    name: "ElevenLabs Multilingual v2",
+    description: "Highest quality multilingual text-to-speech. Supports multiple languages with advanced voice customization (stability, similarity_boost, style, speed).",
+    provider: "elevenlabs",
+    capabilities: ["text-to-audio"],
+    coverImage: undefined,
+    pageUrl: "https://elevenlabs.io/docs/overview/models",
+  },
+  {
+    id: "elevenlabs/eleven_flash_v2_5",
+    name: "ElevenLabs Flash v2.5",
+    description: "Ultra-low 75ms latency text-to-speech optimized for real-time applications. Ideal for conversational AI and interactive experiences.",
+    provider: "elevenlabs",
+    capabilities: ["text-to-audio"],
+    coverImage: undefined,
+    pageUrl: "https://elevenlabs.io/docs/overview/models",
+  },
+
+  // Deepgram Aura Models
+  {
+    id: "deepgram/aura-asteria-en",
+    name: "Deepgram Aura Asteria",
+    description: "Enterprise-grade English TTS with sub-200ms baseline latency. Optimized for business-appropriate, natural speech.",
+    provider: "deepgram",
+    capabilities: ["text-to-audio"],
+    coverImage: undefined,
+    pricing: { type: "per-run", amount: 0.030, currency: "USD" },
+    pageUrl: "https://developers.deepgram.com/docs/tts-models",
+  },
+  {
+    id: "deepgram/aura-2",
+    name: "Deepgram Aura-2",
+    description: "Latest Aura model with 40+ English voices and 10+ Spanish voices. Supports 7 languages with localized accents and sub-200ms TTFB.",
+    provider: "deepgram",
+    capabilities: ["text-to-audio"],
+    coverImage: undefined,
+    pricing: { type: "per-run", amount: 0.030, currency: "USD" },
+    pageUrl: "https://deepgram.com/learn/introducing-aura-2-enterprise-text-to-speech",
+  },
+
+  // Cartesia Sonic Models
+  {
+    id: "cartesia/sonic-3",
+    name: "Cartesia Sonic-3",
+    description: "Streaming TTS with 40-90ms time-to-first-audio. Supports emotional expressiveness including laughter, breathing, and inflections in 40+ languages.",
+    provider: "cartesia",
+    capabilities: ["text-to-audio"],
+    coverImage: undefined,
+    pageUrl: "https://cartesia.ai/sonic",
+  },
+
+  // Google Cloud TTS
+  {
+    id: "google/cloud-tts-wavenet",
+    name: "Google Cloud Wavenet",
+    description: "Google Cloud Text-to-Speech with WaveNet voices. Supports multiple languages, SSML formatting, and audio profiles for different playback devices.",
+    provider: "google",
+    capabilities: ["text-to-audio"],
+    coverImage: undefined,
+    pageUrl: "https://cloud.google.com/text-to-speech",
+  },
+
+  // Azure Cognitive Services TTS
+  {
+    id: "azure/neural-tts",
+    name: "Azure Neural TTS",
+    description: "Microsoft Azure Text-to-Speech with neural voices. Supports SSML, prosody control (rate, pitch, volume), and multiple speaking styles.",
+    provider: "azure",
+    capabilities: ["text-to-audio"],
+    coverImage: undefined,
+    pageUrl: "https://learn.microsoft.com/en-us/azure/ai-services/speech-service/rest-text-to-speech",
+  },
+];
+
 // WaveSpeed models are now fetched dynamically from https://api.wavespeed.ai/api/v3/models
 
 // ============ Replicate Types ============
@@ -862,6 +971,19 @@ export async function GET(
       cached: true, // Hardcoded models are effectively "cached"
     };
     anyFromCache = true;
+  }
+
+  // Add TTS models (hardcoded - always available)
+  let ttsModels = TTS_MODELS;
+  if (searchQuery) {
+    ttsModels = filterModelsBySearch(ttsModels, searchQuery);
+  }
+  // Filter by capabilities if specified
+  if (capabilitiesFilter?.includes("text-to-audio")) {
+    allModels.push(...ttsModels);
+  } else if (!capabilitiesFilter) {
+    // If no capability filter specified, include TTS models
+    allModels.push(...ttsModels);
   }
 
   // Fetch from each provider (replicate, fal, wavespeed)

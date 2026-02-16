@@ -116,6 +116,11 @@ export function ProjectSetupModal({
     fal: false,
     kie: false,
     wavespeed: false,
+    elevenlabs: false,
+    deepgram: false,
+    cartesia: false,
+    google: false,
+    azure: false,
   });
   const [overrideActive, setOverrideActive] = useState<Record<ProviderType, boolean>>({
     gemini: false,
@@ -124,6 +129,11 @@ export function ProjectSetupModal({
     fal: false,
     kie: false,
     wavespeed: false,
+    elevenlabs: false,
+    deepgram: false,
+    cartesia: false,
+    google: false,
+    azure: false,
   });
   const [envStatus, setEnvStatus] = useState<EnvStatusResponse | null>(null);
 
@@ -152,7 +162,7 @@ export function ProjectSetupModal({
 
       // Sync local providers state
       setLocalProviders(providerSettings);
-      setShowApiKey({ gemini: false, openai: false, replicate: false, fal: false, kie: false, wavespeed: false });
+      setShowApiKey({ gemini: false, openai: false, replicate: false, fal: false, kie: false, wavespeed: false, elevenlabs: false, deepgram: false, cartesia: false, google: false, azure: false });
       // Initialize override as active if user already has a key set
       setOverrideActive({
         gemini: !!providerSettings.providers.gemini?.apiKey,
@@ -161,6 +171,11 @@ export function ProjectSetupModal({
         fal: !!providerSettings.providers.fal?.apiKey,
         kie: !!providerSettings.providers.kie?.apiKey,
         wavespeed: !!providerSettings.providers.wavespeed?.apiKey,
+        elevenlabs: false,
+        deepgram: false,
+        cartesia: false,
+        google: false,
+        azure: false,
       });
       setError(null);
 

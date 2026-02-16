@@ -23,6 +23,10 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Use the audio visualization hook
   const { waveformData, isLoading } = useAudioVisualization(audioBlob);
@@ -275,6 +279,77 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
     return `${mins}:${secs.toString().padStart(2, "0")}`;
   };
 
+  const handleStartRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+
+      const chunks: Blob[] = [];
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunks.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: "audio/webm" });
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const base64 = event.target?.result as string;
+          const audio = new Audio(base64);
+          audio.onloadedmetadata = () => {
+            updateNodeData(id, {
+              audioFile: base64,
+              filename: `recording-${Date.now()}.webm`,
+              format: "audio/webm",
+              duration: audio.duration,
+            });
+          };
+        };
+        reader.readAsDataURL(blob);
+
+        // Stop all tracks
+        stream.getTracks().forEach((track) => track.stop());
+        if (recordingTimerRef.current) {
+          clearInterval(recordingTimerRef.current);
+          recordingTimerRef.current = null;
+        }
+        setRecordingTime(0);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+
+      // Start recording timer
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingTime((prev) => prev + 1);
+      }, 1000);
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
+      alert("Could not access microphone. Please check permissions.");
+    }
+  }, [id, updateNodeData]);
+
+  const handleStopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  }, [isRecording]);
+
+  // Cleanup recording on unmount
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && isRecording) {
+        mediaRecorderRef.current.stop();
+      }
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+    };
+  }, [isRecording]);
+
   return (
     <BaseNode
       id={id}
@@ -296,7 +371,21 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
         className="hidden"
       />
 
-      {nodeData.audioFile ? (
+      {isRecording ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-3 min-h-[112px] bg-red-950/30 border border-red-500/50 rounded">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse" />
+            <span className="text-sm text-red-400 font-medium">Recording...</span>
+          </div>
+          <span className="text-2xl text-neutral-200 font-mono">{formatTime(recordingTime)}</span>
+          <button
+            onClick={handleStopRecording}
+            className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded transition-colors text-sm"
+          >
+            Stop Recording
+          </button>
+        </div>
+      ) : nodeData.audioFile ? (
         <div className="relative group flex-1 flex flex-col min-h-0 gap-2">
           {/* Filename and duration */}
           <div className="flex items-center justify-between shrink-0">
@@ -374,18 +463,30 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
           </button>
         </div>
       ) : (
-        <div
-          onClick={() => fileInputRef.current?.click()}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
-          className="w-full flex-1 min-h-[112px] border border-dashed border-neutral-600 rounded flex flex-col items-center justify-center cursor-pointer hover:border-neutral-500 hover:bg-neutral-700/50 transition-colors"
-        >
-          <svg className="w-6 h-6 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
-          </svg>
-          <span className="text-[10px] text-neutral-400 mt-1">
-            Drop audio or click
-          </span>
+        <div className="w-full flex-1 min-h-[112px] flex flex-col gap-2">
+          <div
+            onClick={() => fileInputRef.current?.click()}
+            onDrop={handleDrop}
+            onDragOver={handleDragOver}
+            className="flex-1 border border-dashed border-neutral-600 rounded flex flex-col items-center justify-center cursor-pointer hover:border-neutral-500 hover:bg-neutral-700/50 transition-colors"
+          >
+            <svg className="w-6 h-6 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 9l10.5-3m0 6.553v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0V2.25L9 5.25v10.303m0 0v3.75a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 01-.99-3.467l2.31-.66A2.25 2.25 0 009 15.553z" />
+            </svg>
+            <span className="text-[10px] text-neutral-400 mt-1">
+              Drop audio or click
+            </span>
+          </div>
+          <button
+            onClick={handleStartRecording}
+            className="w-full py-2 bg-violet-600 hover:bg-violet-500 text-white rounded transition-colors text-xs flex items-center justify-center gap-1.5"
+          >
+            <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+              <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+            </svg>
+            Record Audio
+          </button>
         </div>
       )}
 

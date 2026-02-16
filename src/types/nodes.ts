@@ -30,6 +30,7 @@ export type NodeType =
   | "promptConstructor"
   | "nanoBanana"
   | "generateVideo"
+  | "generateAudio"
   | "llmGenerate"
   | "splitGrid"
   | "output"
@@ -174,6 +175,18 @@ export interface GenerateVideoNodeData extends BaseNodeData {
 }
 
 /**
+ * Generate Audio node - AI text-to-speech generation
+ */
+export interface GenerateAudioNodeData extends BaseNodeData {
+  inputText: string | null;
+  outputAudio: string | null; // Audio data URL
+  selectedModel?: SelectedModel; // TTS model selection
+  parameters?: Record<string, unknown>; // Model-specific parameters (voice, speed, format, etc.)
+  status: NodeStatus;
+  error: string | null;
+}
+
+/**
  * LLM Generate node - AI text generation
  */
 export interface LLMGenerateNodeData extends BaseNodeData {
@@ -292,6 +305,7 @@ export type WorkflowNodeData =
   | PromptConstructorNodeData
   | NanoBananaNodeData
   | GenerateVideoNodeData
+  | GenerateAudioNodeData
   | LLMGenerateNodeData
   | SplitGridNodeData
   | OutputNodeData
