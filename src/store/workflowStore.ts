@@ -1855,6 +1855,23 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           });
         }
 
+        // Compute summary metadata for dashboard
+        const currentNodesSnap = get().nodes;
+        const nodeTypeSummary: Record<string, number> = {};
+        let primaryModel: string | undefined;
+        const modelCounts: Record<string, number> = {};
+        for (const node of currentNodesSnap) {
+          const t = node.type || "unknown";
+          nodeTypeSummary[t] = (nodeTypeSummary[t] || 0) + 1;
+          const data = node.data as Record<string, unknown>;
+          const sel = data.selectedModel as { displayName?: string } | undefined;
+          if (sel?.displayName) {
+            modelCounts[sel.displayName] = (modelCounts[sel.displayName] || 0) + 1;
+          }
+        }
+        const topModel = Object.entries(modelCounts).sort((a, b) => b[1] - a[1])[0];
+        if (topModel) primaryModel = topModel[0];
+
         // Update localStorage
         saveSaveConfig({
           workflowId,
@@ -1863,8 +1880,10 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           generationsPath: get().generationsPath,
           lastSavedAt: timestamp,
           useExternalImageStorage,
-          nodeCount: get().nodes.length,
+          nodeCount: currentNodesSnap.length,
           edgeCount: get().edges.length,
+          nodeTypeSummary,
+          primaryModel,
         });
 
         return true;

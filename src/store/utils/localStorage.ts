@@ -95,6 +95,8 @@ export interface DashboardProject {
   updatedAt?: number;
   nodeCount?: number;
   edgeCount?: number;
+  nodeTypeSummary?: Record<string, number>;
+  primaryModel?: string;
   incurredCost: number;
 }
 
@@ -117,6 +119,8 @@ export const getAllProjectsForDashboard = (): DashboardProject[] => {
       updatedAt: config.updatedAt,
       nodeCount: config.nodeCount,
       edgeCount: config.edgeCount,
+      nodeTypeSummary: config.nodeTypeSummary,
+      primaryModel: config.primaryModel,
       incurredCost: allCosts[config.workflowId]?.incurredCost ?? 0,
     }))
     .sort((a, b) => (b.updatedAt ?? b.lastSavedAt ?? 0) - (a.updatedAt ?? a.lastSavedAt ?? 0));
