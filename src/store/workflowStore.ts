@@ -31,6 +31,7 @@ import { EditOperation, applyEditOperations as executeEditOps } from "@/lib/chat
 import {
   loadSaveConfigs,
   saveSaveConfig,
+  deleteSaveConfig,
   loadWorkflowCostData,
   saveWorkflowCostData,
   getProviderSettings,
@@ -209,9 +210,15 @@ interface WorkflowStore {
   openModalCount: number;
   isModalOpen: boolean;
   showQuickstart: boolean;
+  showDashboard: boolean;
   incrementModalCount: () => void;
   decrementModalCount: () => void;
   setShowQuickstart: (show: boolean) => void;
+  setShowDashboard: (show: boolean) => void;
+
+  // Dashboard actions
+  openProject: (workflowId: string) => Promise<void>;
+  deleteProject: (workflowId: string) => void;
 
   // Execution
   isRunning: boolean;
@@ -378,6 +385,7 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
   openModalCount: 0,
   isModalOpen: false,
   showQuickstart: true,
+  showDashboard: true,
   isRunning: false,
   currentNodeIds: [],  // Changed from currentNodeId for parallel execution
   pausedAtNodeId: null,
@@ -445,6 +453,47 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
 
   setShowQuickstart: (show: boolean) => {
     set({ showQuickstart: show });
+  },
+
+  setShowDashboard: (show: boolean) => {
+    set({ showDashboard: show });
+  },
+
+  openProject: async (workflowId: string) => {
+    const configs = loadSaveConfigs();
+    const config = configs[workflowId];
+    if (!config) return;
+
+    try {
+      const response = await fetch("/api/workflow-load", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          directoryPath: config.directoryPath,
+          filename: config.name,
+        }),
+      });
+      const result = await response.json();
+      if (result.success && result.workflow) {
+        await get().loadWorkflow(result.workflow, config.directoryPath);
+        set({ showDashboard: false, showQuickstart: false });
+      } else {
+        useToast.getState().show(`Failed to load project: ${result.error || "Unknown error"}`, "error");
+      }
+    } catch (error) {
+      useToast.getState().show(
+        `Failed to load project: ${error instanceof Error ? error.message : "Unknown error"}`,
+        "error"
+      );
+    }
+  },
+
+  deleteProject: (workflowId: string) => {
+    deleteSaveConfig(workflowId);
+    // If the deleted project is currently loaded, clear it
+    if (get().workflowId === workflowId) {
+      get().clearWorkflow();
+    }
   },
 
   addNode: (type: NodeType, position: XYPosition, initialData?: Partial<WorkflowNodeData>) => {
@@ -1814,6 +1863,8 @@ export const useWorkflowStore = create<WorkflowStore>((set, get) => ({
           generationsPath: get().generationsPath,
           lastSavedAt: timestamp,
           useExternalImageStorage,
+          nodeCount: get().nodes.length,
+          edgeCount: get().edges.length,
         });
 
         return true;

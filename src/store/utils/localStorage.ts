@@ -60,8 +60,66 @@ export const loadSaveConfigs = (): Record<string, WorkflowSaveConfig> => {
 export const saveSaveConfig = (config: WorkflowSaveConfig): void => {
   if (typeof window === "undefined") return;
   const configs = loadSaveConfigs();
-  configs[config.workflowId] = config;
+  const existing = configs[config.workflowId];
+  const now = Date.now();
+  configs[config.workflowId] = {
+    ...config,
+    createdAt: config.createdAt ?? existing?.createdAt ?? now,
+    updatedAt: now,
+  };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(configs));
+};
+
+export const deleteSaveConfig = (workflowId: string): void => {
+  if (typeof window === "undefined") return;
+  const configs = loadSaveConfigs();
+  delete configs[workflowId];
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(configs));
+  // Clean up cost data
+  const costStored = localStorage.getItem(COST_DATA_STORAGE_KEY);
+  if (costStored) {
+    try {
+      const allCosts: Record<string, WorkflowCostData> = JSON.parse(costStored);
+      delete allCosts[workflowId];
+      localStorage.setItem(COST_DATA_STORAGE_KEY, JSON.stringify(allCosts));
+    } catch { /* ignore */ }
+  }
+};
+
+export interface DashboardProject {
+  workflowId: string;
+  name: string;
+  directoryPath: string;
+  lastSavedAt: number | null;
+  createdAt?: number;
+  updatedAt?: number;
+  nodeCount?: number;
+  edgeCount?: number;
+  incurredCost: number;
+}
+
+export const getAllProjectsForDashboard = (): DashboardProject[] => {
+  if (typeof window === "undefined") return [];
+  const configs = loadSaveConfigs();
+  let allCosts: Record<string, WorkflowCostData> = {};
+  const costStored = localStorage.getItem(COST_DATA_STORAGE_KEY);
+  if (costStored) {
+    try { allCosts = JSON.parse(costStored); } catch { /* ignore */ }
+  }
+
+  return Object.values(configs)
+    .map((config) => ({
+      workflowId: config.workflowId,
+      name: config.name,
+      directoryPath: config.directoryPath,
+      lastSavedAt: config.lastSavedAt,
+      createdAt: config.createdAt,
+      updatedAt: config.updatedAt,
+      nodeCount: config.nodeCount,
+      edgeCount: config.edgeCount,
+      incurredCost: allCosts[config.workflowId]?.incurredCost ?? 0,
+    }))
+    .sort((a, b) => (b.updatedAt ?? b.lastSavedAt ?? 0) - (a.updatedAt ?? a.lastSavedAt ?? 0));
 };
 
 // Cost data helpers

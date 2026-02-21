@@ -56,6 +56,7 @@ import { detectAndSplitGrid } from "@/utils/gridSplitter";
 import { logger } from "@/utils/logger";
 import { WelcomeModal } from "./quickstart";
 import { ProjectSetupModal } from "./ProjectSetupModal";
+import { ProjectDashboard } from "./dashboard/ProjectDashboard";
 import { ChatPanel } from "./ChatPanel";
 import { EditOperation } from "@/lib/chat/editOperations";
 import { stripBinaryData } from "@/lib/chat/contextBuilder";
@@ -239,7 +240,7 @@ const findScrollableAncestor = (target: HTMLElement, deltaX: number, deltaY: num
 };
 
 export function WorkflowCanvas() {
-  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId, executeWorkflow, isModalOpen, showQuickstart, setShowQuickstart, navigationTarget, setNavigationTarget, captureSnapshot, applyEditOperations, setWorkflowMetadata, canvasNavigationSettings, setShortcutsDialogOpen } =
+  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId, executeWorkflow, isModalOpen, showQuickstart, setShowQuickstart, showDashboard, setShowDashboard, navigationTarget, setNavigationTarget, captureSnapshot, applyEditOperations, setWorkflowMetadata, canvasNavigationSettings, setShortcutsDialogOpen } =
     useWorkflowStore();
   const { screenToFlowPosition, getViewport, zoomIn, zoomOut, setViewport, setCenter } = useReactFlow();
   const { show: showToast } = useToast();
@@ -254,6 +255,13 @@ export function WorkflowCanvas() {
 
   // Detect if canvas is empty for showing quickstart
   const isCanvasEmpty = nodes.length === 0;
+
+  // Listen for dashboard:new-project event to open new project setup
+  useEffect(() => {
+    const handler = () => setShowNewProjectSetup(true);
+    window.addEventListener("dashboard:new-project", handler);
+    return () => window.removeEventListener("dashboard:new-project", handler);
+  }, []);
 
   // Handle comment navigation - center viewport on target node
   useEffect(() => {
@@ -1605,20 +1613,8 @@ export function WorkflowCanvas() {
         </div>
       )}
 
-      {/* Welcome Modal */}
-      {isCanvasEmpty && showQuickstart && (
-        <WelcomeModal
-          onWorkflowGenerated={async (workflow) => {
-            await loadWorkflow(workflow);
-            setShowQuickstart(false);
-          }}
-          onClose={() => setShowQuickstart(false)}
-          onNewProject={() => {
-            setShowQuickstart(false);
-            setShowNewProjectSetup(true);
-          }}
-        />
-      )}
+      {/* Project Dashboard */}
+      {showDashboard && <ProjectDashboard />}
 
       {/* New Project Setup Modal */}
       {showNewProjectSetup && (
@@ -1628,10 +1624,11 @@ export function WorkflowCanvas() {
           onSave={(id, name, directoryPath) => {
             setWorkflowMetadata(id, name, directoryPath);
             setShowNewProjectSetup(false);
+            setShowDashboard(false);
           }}
           onClose={() => {
             setShowNewProjectSetup(false);
-            setShowQuickstart(true);
+            setShowDashboard(true);
           }}
         />
       )}
