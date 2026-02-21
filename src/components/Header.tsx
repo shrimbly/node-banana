@@ -73,6 +73,7 @@ export function Header() {
     shortcutsDialogOpen,
     setShortcutsDialogOpen,
     setShowDashboard,
+    autoSaveEnabled,
   } = useWorkflowStore();
 
   const [showProjectModal, setShowProjectModal] = useState(false);
@@ -373,12 +374,18 @@ export function Header() {
             </button>
           )}
           <CommentsNavigationIcon />
-          <span className="text-neutral-400">
+          <span className="text-neutral-400 flex items-center gap-1.5">
             {isProjectConfigured ? (
               isSaving ? (
-                "Saving..."
+                <>
+                  <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+                  Saving...
+                </>
               ) : lastSavedAt ? (
-                `Saved ${formatTime(lastSavedAt)}`
+                <>
+                  {autoSaveEnabled && <span className="w-1.5 h-1.5 rounded-full bg-green-500" title="Auto-save enabled" />}
+                  Saved {formatTime(lastSavedAt)}
+                </>
               ) : (
                 "Not saved"
               )
