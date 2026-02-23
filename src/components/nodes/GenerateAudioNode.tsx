@@ -179,6 +179,9 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
       provider: model.provider,
       modelId: model.id,
       displayName: model.name,
+      ...(model.pricing && {
+        pricing: { type: model.pricing.type, amount: model.pricing.amount },
+      }),
     };
     updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
     setIsBrowseDialogOpen(false);
@@ -247,6 +250,7 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
         commentNavigation={commentNavigation ?? undefined}
         minWidth={300}
         minHeight={250}
+        lastCost={nodeData.lastGenerationCost}
       >
         {/* Model parameters */}
         {nodeData.selectedModel?.modelId && (

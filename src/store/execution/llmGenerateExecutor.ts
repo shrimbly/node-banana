@@ -56,6 +56,7 @@ export async function executeLlmGenerate(
     inputImages: images,
     status: "loading",
     error: null,
+    lastGenerationCost: null,
   });
 
   const headers = buildLlmHeaders(nodeData.provider, providerSettings);

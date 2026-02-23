@@ -7,7 +7,8 @@ import { useProviderApiKeys } from "@/store/workflowStore";
 import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
 
 // localStorage cache for model schemas (persists across dev server restarts)
-const SCHEMA_CACHE_KEY = "node-banana-schema-cache";
+// Bump version when schema extraction logic changes (e.g., $ref resolution)
+const SCHEMA_CACHE_KEY = "node-banana-schema-cache-v3";
 const SCHEMA_CACHE_TTL = 48 * 60 * 60 * 1000; // 48 hours
 
 interface SchemaCacheEntry {
@@ -47,6 +48,8 @@ interface ModelParametersProps {
   onParametersChange: (parameters: Record<string, unknown>) => void;
   onExpandChange?: (expanded: boolean, parameterCount: number) => void;
   onInputsLoaded?: (inputs: ModelInputDef[]) => void;
+  /** Names of inputs already handled as connection handles — these are filtered out from the parameter list */
+  inputNames?: string[];
 }
 
 /**
@@ -61,8 +64,10 @@ export function ModelParameters({
   onParametersChange,
   onExpandChange,
   onInputsLoaded,
+  inputNames,
 }: ModelParametersProps) {
   const [schema, setSchema] = useState<ModelParameter[]>([]);
+  const [fetchedInputs, setFetchedInputs] = useState<ModelInputDef[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(true);
@@ -73,6 +78,7 @@ export function ModelParameters({
   useEffect(() => {
     if (!modelId || provider === "gemini") {
       setSchema([]);
+      setFetchedInputs([]);
       onInputsLoaded?.([]);
       return;
     }
@@ -82,6 +88,7 @@ export function ModelParameters({
       const cached = getCachedSchema(modelId, provider);
       if (cached) {
         setSchema(cached.parameters);
+        setFetchedInputs(cached.inputs);
         onInputsLoaded?.(cached.inputs);
         return;
       }
@@ -119,6 +126,7 @@ export function ModelParameters({
         const params = data.parameters || [];
         const inputs = data.inputs || [];
         setSchema(params);
+        setFetchedInputs(inputs);
 
         // Cache the successful result
         setCachedSchema(modelId, provider, params, inputs);
@@ -163,13 +171,23 @@ export function ModelParameters({
     [parameters, onParametersChange]
   );
 
+  // Filter out parameters that are already handled as connection handles (e.g. image inputs like mask)
+  // Merges locally-fetched inputs (same render cycle, no race condition) with parent-provided inputNames (fallback)
+  const allInputNames = new Set([
+    ...fetchedInputs.map((i) => i.name),
+    ...(inputNames ?? []),
+  ]);
+  const filteredSchema = allInputNames.size > 0
+    ? schema.filter((param) => !allInputNames.has(param.name))
+    : schema;
+
   // Don't render anything for Gemini or if no model selected
   if (provider === "gemini" || !modelId) {
     return null;
   }
 
   // Don't render if no schema available and not loading
-  if (!isLoading && schema.length === 0 && !error) {
+  if (!isLoading && filteredSchema.length === 0 && !error) {
     return null;
   }
 
@@ -225,10 +243,10 @@ export function ModelParameters({
             <span className="text-[9px] text-red-400">{error}</span>
           ) : isLoading ? (
             <span className="text-[9px] text-neutral-500">Loading parameters...</span>
-          ) : schema.length === 0 ? (
+          ) : filteredSchema.length === 0 ? (
             <span className="text-[9px] text-neutral-500">No parameters available</span>
           ) : (
-            schema.map((param) => (
+            filteredSchema.map((param) => (
               <ParameterInput
                 key={param.name}
                 param={param}

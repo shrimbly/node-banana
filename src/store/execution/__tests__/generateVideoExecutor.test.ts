@@ -181,11 +181,11 @@ describe("executeGenerateVideo", () => {
 
   it("should track cost for fal provider", async () => {
     const node = makeNode({
-      selectedModel: { provider: "fal", modelId: "fal-vid", displayName: "Fal", pricing: { amount: 0.25 } },
+      selectedModel: { provider: "fal", modelId: "fal-vid", displayName: "Fal" },
     });
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ success: true, video: "data:video/mp4;base64,out" }),
+      json: () => Promise.resolve({ success: true, video: "data:video/mp4;base64,out", cost: 0.25 }),
     });
 
     const ctx = makeCtx(node, {

@@ -25,6 +25,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Group Locking** - Lock node groups to skip them during workflow execution
 - **Image Carousel** - Browse through image history on generation nodes
 
+- **WorldLabs 3D Integration**
+  - Panorama Generator node using Marble 0.1-mini for fast equirectangular panorama generation
+  - World Generator node using Marble 0.1-plus for full 3D Gaussian Splat world generation
+  - WorldLabs API proxy route with signed URL image upload, generation polling, and world retrieval
+
+- **Panorama Pipeline**
+  - Panorama Viewer node with interactive perspective crop capture
+  - Pano Crop node (auto-created by viewer) holding perspective snapshots with camera metadata
+  - Panorama Editor node for compositing edited perspective crops back onto equirectangular panoramas via WebGL shaders
+  - Equirectangular projection utilities for perspective-to-equirectangular conversion
+
+- **Mask Painter**
+  - Mask Painter node for creating inpainting masks
+  - Full-screen mask editor modal with brush, eraser, rectangle, and circle tools
+  - Adjustable brush size, Gaussian blur radius, and invert mask toggle
+  - Undo/redo support
+  - Conditional mask input handle on generator nodes when the selected model supports masking
+
+- **SPZ Viewer**
+  - SPZ Viewer node for viewing 3D Gaussian Splat files using Spark.js
+  - Standalone viewer pages (/viewer for SPZ/PLY files, /viewer/pano for panoramas)
+  - Cinema camera presets with sensor, lens, and aspect ratio choices
+  - Capture functionality for extracting images from 3D scenes
+
+- **Dynamic Model Input Handles** - Generator nodes automatically create additional input handles (mask, control image, depth map, etc.) based on the selected model's parameter schema
+
+- **UI Improvements**
+  - Reorganized floating action bar with Edit menu (Annotate, Pano Edit, Mask Paint) and Viewer menu (GLB Viewer, Pano Viewer, SPZ Viewer)
+  - Reactive edge subscription for Annotation and Mask Painter nodes (update when connected after creation)
+
 ### Fixed
 
 - Run button and global modal state issues

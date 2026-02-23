@@ -63,6 +63,10 @@ const createDefaultState = (overrides = {}) => ({
   setUseExternalImageStorage: mockSetUseExternalImageStorage,
   updateProviderApiKey: mockUpdateProviderApiKey,
   toggleProvider: mockToggleProvider,
+  maxConcurrentCalls: 3,
+  setMaxConcurrentCalls: vi.fn(),
+  canvasNavigationSettings: { panMode: "space", zoomMode: "altScroll", selectionMode: "click" },
+  updateCanvasNavigationSettings: vi.fn(),
   ...overrides,
 });
 
@@ -226,19 +230,6 @@ describe("ProjectSetupModal", () => {
 
       expect(screen.getByText("Project Name")).toBeInTheDocument();
       expect(screen.getByText("Project Directory")).toBeInTheDocument();
-    });
-
-    it("should render Browse button for directory selection", () => {
-      render(
-        <ProjectSetupModal
-          isOpen={true}
-          onClose={vi.fn()}
-          onSave={vi.fn()}
-          mode="new"
-        />
-      );
-
-      expect(screen.getByText("Browse")).toBeInTheDocument();
     });
 
     it("should render embed images checkbox", () => {

@@ -18,6 +18,11 @@ Built mainly with Opus 4.5.
 - **Workflow Chaining** - Connect multiple nodes to create complex pipelines
 - **Save/Load Workflows** - Export and import workflows as JSON files
 - **Group Locking** - Lock node groups to skip them during execution
+- **3D World Generation** - Generate panoramas and 3D Gaussian Splat worlds using WorldLabs Marble API
+- **Panorama Pipeline** - Interactive panorama viewer with perspective crop capture, downstream editing, and WebGL compositing back onto the original panorama
+- **Mask Painter** - Full-screen mask editor for inpainting with brush, eraser, rectangle, and circle tools
+- **SPZ Viewer** - 3D Gaussian Splatting viewer with cinema camera presets (sensor, lens, aspect) and capture functionality
+- **Dynamic Model Inputs** - Generator nodes automatically create input handles based on the selected model's schema
 
 ## Multi-Provider Support (Beta)
 
@@ -33,9 +38,10 @@ Configure API keys in Project Settings to enable these providers.
 - **Language**: TypeScript
 - **Node Editor**: @xyflow/react (React Flow)
 - **Canvas**: Konva.js / react-konva
+- **3D**: Three.js (panorama viewer), @sparkjsdev/spark (Gaussian Splatting)
 - **State Management**: Zustand
 - **Styling**: Tailwind CSS
-- **AI**: Google Gemini API, OpenAI API, Replicate (Beta), fal.ai (Beta)
+- **AI**: Google Gemini API, OpenAI API, WorldLabs Marble API, Replicate (Beta), fal.ai (Beta)
 
 ## Getting Started
 
@@ -50,9 +56,11 @@ Create a `.env.local` file in the root directory:
 
 ```env
 GEMINI_API_KEY=your_gemini_api_key
-OPENAI_API_KEY=your_openai_api_key      # Optional, for OpenAI LLM provider
-REPLICATE_API_KEY=your_replicate_api_key  # Optional, beta
-FAL_API_KEY=your_fal_api_key              # Optional, beta
+OPENAI_API_KEY=your_openai_api_key          # Optional, for OpenAI LLM provider
+KIE_API_KEY=your_kie_api_key                # Optional, for Kie.ai models (Sora, Veo, Kling, etc.)
+WORLDLABS_API_KEY=your_worldlabs_api_key    # Optional, for WorldLabs Marble 3D generation
+REPLICATE_API_KEY=your_replicate_api_key    # Optional, beta
+FAL_API_KEY=your_fal_api_key                # Optional, beta
 ```
 
 ### Installation

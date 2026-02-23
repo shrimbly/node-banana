@@ -1,4 +1,4 @@
-import { ModelType, Resolution, NanoBananaNodeData, GenerateVideoNodeData, Generate3DNodeData, SplitGridNodeData, WorkflowNode, ProviderType } from "@/types";
+import { ModelType, Resolution, NanoBananaNodeData, GenerateVideoNodeData, SplitGridNodeData, WorkflowNode, ProviderType } from "@/types";
 
 // Pricing in USD per image (Gemini API)
 export const PRICING = {
@@ -132,12 +132,12 @@ export function calculatePredictedCost(
 
   /**
    * Get pricing for a model.
-   * First checks modelPricing map, then falls back to hardcoded Gemini pricing.
+   * Priority: 1) external modelPricing map, 2) hardcoded Gemini pricing.
    */
   function getPricing(
     provider: ProviderType,
     modelId: string,
-    resolution?: Resolution
+    resolution?: Resolution,
   ): { unitCost: number; unit: string } | null {
     // Check external pricing map first
     if (modelPricing?.has(modelId)) {
@@ -238,31 +238,6 @@ export function calculatePredictedCost(
     nodeCount,
     unknownPricingCount,
   };
-}
-
-/**
- * Check whether any generation node in the workflow uses a non-Gemini provider.
- * Used to hide the CostIndicator when pricing data would be incomplete/misleading.
- */
-export function hasNonGeminiProviders(nodes: WorkflowNode[]): boolean {
-  return nodes.some((node) => {
-    if (node.type === "nanoBanana") {
-      const data = node.data as NanoBananaNodeData;
-      return data.selectedModel?.provider !== undefined && data.selectedModel.provider !== "gemini";
-    }
-    if (node.type === "generateVideo") {
-      const data = node.data as GenerateVideoNodeData;
-      return data.selectedModel?.provider !== undefined && data.selectedModel.provider !== "gemini";
-    }
-    if (node.type === "generate3d") {
-      const data = node.data as Generate3DNodeData;
-      return data.selectedModel?.provider !== undefined && data.selectedModel.provider !== "gemini";
-    }
-    if (node.type === "generateAudio") {
-      return true; // Audio nodes are always non-Gemini
-    }
-    return false;
-  });
 }
 
 export function formatCost(cost: number): string {

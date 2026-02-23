@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { calculatePredictedCost, formatCost, hasNonGeminiProviders } from "@/utils/costCalculator";
+import { calculatePredictedCost, formatCost } from "@/utils/costCalculator";
 import { CostDialog } from "./CostDialog";
 
 export function CostIndicator() {
@@ -14,24 +14,21 @@ export function CostIndicator() {
     return calculatePredictedCost(nodes);
   }, [nodes]);
 
-  const nonGemini = useMemo(() => hasNonGeminiProviders(nodes), [nodes]);
   const hasAnyNodes = predictedCost.nodeCount > 0;
 
-  if (nonGemini || (!hasAnyNodes && incurredCost === 0)) {
+  // Hide if there are no generation nodes and no costs incurred
+  if (!hasAnyNodes && incurredCost === 0) {
     return null;
   }
-
-  // Always show dollar format (external provider costs not included in total)
-  const displayCost = formatCost(predictedCost.totalCost);
 
   return (
     <>
       <button
         onClick={() => setShowDialog(true)}
         className="px-2 py-0.5 rounded text-xs text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 transition-colors"
-        title="View cost details"
+        title="Estimated workflow cost (click for details)"
       >
-        {displayCost}
+        {formatCost(predictedCost.totalCost)}
       </button>
 
       {showDialog && (

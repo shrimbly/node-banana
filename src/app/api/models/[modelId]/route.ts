@@ -51,6 +51,8 @@ const IMAGE_INPUT_PATTERNS = [
   "reference_image",
   "init_image",
   "mask_image",
+  "mask_url",
+  "mask",
   "control_image",
 ];
 
@@ -187,6 +189,7 @@ function isImageInput(name: string, prop: Record<string, unknown>): boolean {
 
   // Finally, check name patterns for remaining string types
   return name.endsWith("_image") ||
+         name.endsWith("_image_url") ||
          name.startsWith("image_") ||
          name.includes("_image_");
 }
@@ -196,6 +199,19 @@ function isImageInput(name: string, prop: Record<string, unknown>): boolean {
  */
 function isTextInput(name: string): boolean {
   return TEXT_INPUT_NAMES.includes(name);
+}
+
+/**
+ * Check if a resolved schema is an "image URL wrapper" object.
+ * fal.ai defines image inputs as objects like ImageUrl: { type: "object", properties: { url: { type: "string" } } }
+ * These should be treated as string type for input detection purposes.
+ */
+function isImageUrlWrapperObject(schema: Record<string, unknown>): boolean {
+  if (schema.type !== "object") return false;
+  const props = schema.properties as Record<string, Record<string, unknown>> | undefined;
+  if (!props) return false;
+  // Has a "url" property that is a string — this is an image/file URL wrapper
+  return props.url !== undefined && props.url.type === "string";
 }
 
 /**
@@ -436,16 +452,44 @@ function extractParametersFromSchema(
   const parameters: ModelParameter[] = [];
   const inputs: ModelInput[] = [];
 
-  for (const [name, prop] of Object.entries(properties)) {
+  for (const [name, rawProp] of Object.entries(properties)) {
+    // Resolve $ref if present (property-level references like { "$ref": "#/components/schemas/ImageUrl" })
+    let prop = rawProp;
+    if (rawProp.$ref && typeof rawProp.$ref === "string" && schemaComponents) {
+      const resolved = resolveRef(rawProp.$ref as string, schemaComponents);
+      if (resolved) {
+        // Image URL wrapper objects (e.g. ImageUrl: {type: "object", properties: {url: ...}})
+        // should be treated as string type for input detection
+        const resolvedType = isImageUrlWrapperObject(resolved) ? "string" : resolved.type;
+        prop = { ...resolved, ...rawProp, type: resolvedType || rawProp.type };
+      }
+    }
+    // Handle anyOf/oneOf (common in OpenAPI 3.1 for nullable types, e.g. anyOf: [{$ref: "..."}, {type: "null"}])
+    if (!prop.type && (prop.anyOf || prop.oneOf) && Array.isArray(prop.anyOf || prop.oneOf)) {
+      const variants = (prop.anyOf || prop.oneOf) as Record<string, unknown>[];
+      const nonNull = variants.find((s) => s.type !== "null");
+      if (nonNull) {
+        if (nonNull.$ref && typeof nonNull.$ref === "string" && schemaComponents) {
+          const resolved = resolveRef(nonNull.$ref as string, schemaComponents);
+          if (resolved) {
+            const resolvedType = isImageUrlWrapperObject(resolved) ? "string" : resolved.type;
+            prop = { ...prop, ...resolved, type: resolvedType };
+          }
+        } else if (nonNull.type) {
+          prop = { ...prop, type: nonNull.type };
+        }
+      }
+    }
+
     // Check if this is a connectable input (image or text)
-    // Pass both name AND prop to check schema type, not just name
+    // Pass both name AND resolved prop to check schema type, not just name
     if (isImageInput(name, prop)) {
       inputs.push({
         name,
         type: "image",
         required: required.includes(name),
         label: toLabel(name),
-        description: prop.description as string | undefined,
+        description: (prop.description || rawProp.description) as string | undefined,
         isArray: prop.type === "array",
       });
       continue;
@@ -457,13 +501,13 @@ function extractParametersFromSchema(
         type: "text",
         required: required.includes(name),
         label: toLabel(name),
-        description: prop.description as string | undefined,
+        description: (prop.description || rawProp.description) as string | undefined,
         isArray: prop.type === "array",
       });
       continue;
     }
 
-    // Otherwise it's a parameter
+    // Otherwise it's a parameter (pass resolved prop for better type detection)
     const param = convertSchemaProperty(name, prop, required, schemaComponents);
     if (param) {
       parameters.push(param);

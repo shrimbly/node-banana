@@ -148,6 +148,30 @@ function GenerateComboButton() {
             3D
           </button>
           <button
+            onClick={() => handleAddNode("worldLabsPano")}
+            draggable
+            onDragStart={(e) => handleDragStart(e, "worldLabsPano")}
+            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <circle cx="12" cy="12" r="10" />
+              <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+            Panorama
+          </button>
+          <button
+            onClick={() => handleAddNode("worldLabsWorld")}
+            draggable
+            onDragStart={(e) => handleDragStart(e, "worldLabsWorld")}
+            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <circle cx="12" cy="12" r="10" />
+              <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+            World
+          </button>
+          <button
             onClick={() => handleAddNode("llmGenerate")}
             draggable
             onDragStart={(e) => handleDragStart(e, "llmGenerate")}
@@ -164,6 +188,206 @@ function GenerateComboButton() {
   );
 }
 
+
+function ViewerComboButton() {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const addNode = useWorkflowStore((state) => state.addNode);
+  const { screenToFlowPosition } = useReactFlow();
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const handleAddNode = (type: NodeType) => {
+    const center = getPaneCenter();
+    const position = screenToFlowPosition({
+      x: center.x + Math.random() * 100 - 50,
+      y: center.y + Math.random() * 100 - 50,
+    });
+
+    addNode(type, position);
+    setIsOpen(false);
+  };
+
+  const handleDragStart = (event: React.DragEvent, type: NodeType) => {
+    event.dataTransfer.setData("application/node-type", type);
+    event.dataTransfer.effectAllowed = "copy";
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors flex items-center gap-1"
+      >
+        Viewer
+        <svg
+          className={`w-3 h-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute bottom-full left-0 mb-2 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-[140px]">
+          <button
+            onClick={() => handleAddNode("glbViewer")}
+            draggable
+            onDragStart={(e) => handleDragStart(e, "glbViewer")}
+            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+            </svg>
+            GLB Viewer
+          </button>
+          <button
+            onClick={() => handleAddNode("panoViewer")}
+            draggable
+            onDragStart={(e) => handleDragStart(e, "panoViewer")}
+            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5}>
+              <circle cx="12" cy="12" r="10" />
+              <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+            </svg>
+            Pano Viewer
+          </button>
+          <button
+            onClick={() => handleAddNode("spzViewer")}
+            draggable
+            onDragStart={(e) => handleDragStart(e, "spzViewer")}
+            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c-4.97 0-9 3.134-9 7s4.03 7 9 7c.703 0 1.387-.07 2.043-.2L19 19v-3.458C20.832 14.098 21 12.578 21 10c0-3.866-4.03-7-9-7z" />
+              <circle cx="12" cy="10" r="2" />
+            </svg>
+            SPZ Viewer
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MiscComboButton() {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const addNode = useWorkflowStore((state) => state.addNode);
+  const { screenToFlowPosition } = useReactFlow();
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const handleAddNode = (type: NodeType) => {
+    const center = getPaneCenter();
+    const position = screenToFlowPosition({
+      x: center.x + Math.random() * 100 - 50,
+      y: center.y + Math.random() * 100 - 50,
+    });
+
+    addNode(type, position);
+    setIsOpen(false);
+  };
+
+  const handleDragStart = (event: React.DragEvent, type: NodeType) => {
+    event.dataTransfer.setData("application/node-type", type);
+    event.dataTransfer.effectAllowed = "copy";
+    setIsOpen(false);
+  };
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors flex items-center gap-1"
+      >
+        Edit
+        <svg
+          className={`w-3 h-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute bottom-full left-0 mb-2 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-[140px]">
+          <button
+            onClick={() => handleAddNode("annotation")}
+            draggable
+            onDragStart={(e) => handleDragStart(e, "annotation")}
+            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+            </svg>
+            Annotate
+          </button>
+          <button
+            onClick={() => handleAddNode("panoEditor")}
+            draggable
+            onDragStart={(e) => handleDragStart(e, "panoEditor")}
+            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <circle cx="12" cy="12" r="3" />
+              <path d="M3 12h6M15 12h6M12 3v6M12 15v6" />
+            </svg>
+            Pano Edit
+          </button>
+          <button
+            onClick={() => handleAddNode("maskPainter")}
+            draggable
+            onDragStart={(e) => handleDragStart(e, "maskPainter")}
+            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42" />
+            </svg>
+            Mask Paint
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function FloatingActionBar() {
   const {
@@ -232,6 +456,7 @@ export function FloatingActionBar() {
     if (isRunning) {
       stopWorkflow();
     } else {
+      if (!window.confirm("Are you sure you want to run the entire workflow?")) return;
       executeWorkflow();
     }
   };
@@ -261,9 +486,10 @@ export function FloatingActionBar() {
     <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50">
       <div className="flex items-center gap-0.5 bg-neutral-800/95 backdrop-blur-sm rounded-lg shadow-lg border border-neutral-700/80 px-1.5 py-1">
         <NodeButton type="imageInput" label="Image" />
-        <NodeButton type="annotation" label="Annotate" />
         <NodeButton type="prompt" label="Prompt" />
         <GenerateComboButton />
+        <ViewerComboButton />
+        <MiscComboButton />
         <NodeButton type="output" label="Output" />
 
         {/* Browse models button */}
@@ -301,14 +527,14 @@ export function FloatingActionBar() {
         <div className="relative flex items-center" ref={runMenuRef}>
           <button
             onClick={handleRunClick}
-            disabled={!valid && !isRunning}
+            disabled={!isRunning && !valid}
             title={!valid ? errors.join("\n") : isRunning ? "Stop" : "Run"}
             className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium transition-colors ${
               isRunning
                 ? "bg-white text-neutral-900 hover:bg-neutral-200 rounded"
-                : valid
-                ? "bg-white text-neutral-900 hover:bg-neutral-200 rounded-l"
-                : "bg-neutral-700 text-neutral-500 cursor-not-allowed rounded"
+                : !valid
+                  ? "bg-neutral-600 text-neutral-400 cursor-not-allowed rounded"
+                  : "bg-white text-neutral-900 hover:bg-neutral-200 rounded-l"
             }`}
           >
             {isRunning ? (
@@ -346,6 +572,9 @@ export function FloatingActionBar() {
                   <path d="M8 5v14l11-7z" />
                 </svg>
                 <span>Run</span>
+                {!valid && (
+                  <span className="text-amber-500 text-[9px]" title={errors.join("\n")}>&#9888;</span>
+                )}
               </>
             )}
           </button>

@@ -177,6 +177,9 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
           modelId: model.id,
           displayName: model.name,
           capabilities: model.capabilities,
+          ...(model.pricing && {
+            pricing: { type: model.pricing.type, amount: model.pricing.amount },
+          }),
         };
         // Clear parameters when changing models (different models have different schemas)
         updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
@@ -351,12 +354,31 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
       modelId: model.id,
       displayName: model.name,
       capabilities: model.capabilities,
+      ...(model.pricing && {
+        pricing: {
+          type: model.pricing.type,
+          amount: model.pricing.amount,
+        },
+      }),
     };
     updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
     setIsBrowseDialogOpen(false);
   }, [id, updateNodeData]);
 
   const isGeminiProvider = currentProvider === "gemini";
+
+  // Dynamic image inputs from schema (mask, control images, depth maps, etc.)
+  // Exclude the first/primary image input which maps to the dedicated "Image" handle.
+  // connectedInputs.ts maps handleToSchemaName["image"] = imageInputs[0].name,
+  // so whatever the first image input is called, it's the primary handle.
+  const dynamicImageInputs = useMemo(() => {
+    if (!nodeData.inputSchema) return [];
+    const imageInputs = nodeData.inputSchema.filter((i) => i.type === "image");
+    if (imageInputs.length === 0) return [];
+    const primaryImageName = imageInputs[0].name;
+    return imageInputs.filter((i) => i.name !== primaryImageName);
+  }, [nodeData.inputSchema]);
+  const hasDynamicImageInputs = dynamicImageInputs.length > 0;
 
   // Dynamic title based on selected model - just the model name
   const displayTitle = useMemo(() => {
@@ -457,47 +479,105 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
       headerAction={headerAction}
       titlePrefix={titlePrefix}
       commentNavigation={commentNavigation ?? undefined}
+      lastCost={nodeData.lastGenerationCost}
     >
-      {/* Input handles - ALWAYS use same IDs and positions for connection stability */}
-      {/* Image input at 35%, Text input at 65% - never changes regardless of model */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="image"
-        style={{ top: "35%" }}
-        data-handletype="image"
-        isConnectable={true}
-      />
-      {/* Image label */}
-      <div
-        className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right"
-        style={{
-          right: `calc(100% + 8px)`,
-          top: "calc(35% - 18px)",
-          color: "var(--handle-color-image)",
-        }}
-      >
-        Image
-      </div>
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="text"
-        style={{ top: "65%" }}
-        data-handletype="text"
-        isConnectable={true}
-      />
-      {/* Prompt label */}
-      <div
-        className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right"
-        style={{
-          right: `calc(100% + 8px)`,
-          top: "calc(65% - 18px)",
-          color: "var(--handle-color-text)",
-        }}
-      >
-        Prompt
-      </div>
+      {/* Input handles - dynamically positioned based on number of image inputs */}
+      {(() => {
+        // Calculate handle positions: Image (primary), dynamic image inputs, Text/Prompt
+        // Total inputs: 1 (image) + dynamicImageInputs.length + 1 (text) = N
+        const totalInputs = 1 + dynamicImageInputs.length + 1;
+        const step = 100 / (totalInputs + 1); // evenly space handles
+
+        const handles: React.ReactNode[] = [];
+        let idx = 0;
+
+        // Primary image handle
+        const imageTop = step * (idx + 1);
+        handles.push(
+          <Handle
+            key="image"
+            type="target"
+            position={Position.Left}
+            id="image"
+            style={{ top: `${imageTop}%` }}
+            data-handletype="image"
+            isConnectable={true}
+          />,
+          <div
+            key="image-label"
+            className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right"
+            style={{
+              right: `calc(100% + 8px)`,
+              top: `calc(${imageTop}% - 18px)`,
+              color: "var(--handle-color-image)",
+            }}
+          >
+            Image
+          </div>
+        );
+        idx++;
+
+        // Dynamic image input handles (mask, control images, depth maps, etc.)
+        dynamicImageInputs.forEach((input) => {
+          const top = step * (idx + 1);
+          const handleId = `image-${input.name}`;
+          // Human-readable label: remove _url suffix, replace _ with space, capitalize
+          const label = input.label || input.name
+            .replace(/_url$/, "")
+            .replace(/_/g, " ")
+            .replace(/\b\w/g, (c: string) => c.toUpperCase());
+          handles.push(
+            <Handle
+              key={handleId}
+              type="target"
+              position={Position.Left}
+              id={handleId}
+              style={{ top: `${top}%` }}
+              data-handletype="image"
+              isConnectable={true}
+            />,
+            <div
+              key={`${handleId}-label`}
+              className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right"
+              style={{
+                right: `calc(100% + 8px)`,
+                top: `calc(${top}% - 18px)`,
+                color: "var(--handle-color-image)",
+              }}
+            >
+              {label}
+            </div>
+          );
+          idx++;
+        });
+
+        // Text/Prompt handle
+        const textTop = step * (idx + 1);
+        handles.push(
+          <Handle
+            key="text"
+            type="target"
+            position={Position.Left}
+            id="text"
+            style={{ top: `${textTop}%` }}
+            data-handletype="text"
+            isConnectable={true}
+          />,
+          <div
+            key="text-label"
+            className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right"
+            style={{
+              right: `calc(100% + 8px)`,
+              top: `calc(${textTop}% - 18px)`,
+              color: "var(--handle-color-text)",
+            }}
+          >
+            Prompt
+          </div>
+        );
+
+        return handles;
+      })()}
       {/* Output handle */}
       <Handle
         type="source"
@@ -677,6 +757,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
             onParametersChange={handleParametersChange}
             onExpandChange={handleParametersExpandChange}
             onInputsLoaded={handleInputsLoaded}
+            inputNames={nodeData.inputSchema?.map(i => i.name)}
           />
         )}
 

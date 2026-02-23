@@ -50,7 +50,7 @@ describe("CostIndicator", () => {
     it("should not render when there are no nodes and incurredCost is 0", () => {
       render(<CostIndicator />);
 
-      expect(screen.queryByTitle("View cost details")).not.toBeInTheDocument();
+      expect(screen.queryByTitle("Estimated workflow cost (click for details)")).not.toBeInTheDocument();
     });
 
     it("should render when there are generation nodes", () => {
@@ -72,7 +72,7 @@ describe("CostIndicator", () => {
 
       render(<CostIndicator />);
 
-      expect(screen.getByTitle("View cost details")).toBeInTheDocument();
+      expect(screen.getByTitle("Estimated workflow cost (click for details)")).toBeInTheDocument();
     });
 
     it("should render when incurredCost is greater than 0", () => {
@@ -82,7 +82,7 @@ describe("CostIndicator", () => {
 
       render(<CostIndicator />);
 
-      expect(screen.getByTitle("View cost details")).toBeInTheDocument();
+      expect(screen.getByTitle("Estimated workflow cost (click for details)")).toBeInTheDocument();
     });
   });
 
@@ -233,7 +233,7 @@ describe("CostIndicator", () => {
 
       render(<CostIndicator />);
 
-      const button = screen.getByTitle("View cost details");
+      const button = screen.getByTitle("Estimated workflow cost (click for details)");
       fireEvent.click(button);
 
       expect(screen.getByTestId("cost-dialog")).toBeInTheDocument();
@@ -259,7 +259,7 @@ describe("CostIndicator", () => {
       render(<CostIndicator />);
 
       // Open dialog
-      fireEvent.click(screen.getByTitle("View cost details"));
+      fireEvent.click(screen.getByTitle("Estimated workflow cost (click for details)"));
       expect(screen.getByTestId("cost-dialog")).toBeInTheDocument();
 
       // Close dialog
@@ -286,7 +286,7 @@ describe("CostIndicator", () => {
 
       render(<CostIndicator />);
 
-      fireEvent.click(screen.getByTitle("View cost details"));
+      fireEvent.click(screen.getByTitle("Estimated workflow cost (click for details)"));
 
       // nano-banana costs $0.039
       expect(screen.getByTestId("dialog-predicted-cost")).toHaveTextContent("$0.04");
@@ -311,7 +311,7 @@ describe("CostIndicator", () => {
 
       render(<CostIndicator />);
 
-      fireEvent.click(screen.getByTitle("View cost details"));
+      fireEvent.click(screen.getByTitle("Estimated workflow cost (click for details)"));
 
       expect(screen.getByTestId("dialog-incurred-cost")).toHaveTextContent("$1.25");
     });
@@ -438,12 +438,12 @@ describe("CostIndicator", () => {
       render(<CostIndicator />);
 
       // Should not render when no configured nodes
-      expect(screen.queryByTitle("View cost details")).not.toBeInTheDocument();
+      expect(screen.queryByTitle("Estimated workflow cost (click for details)")).not.toBeInTheDocument();
     });
   });
 
-  describe("Non-Gemini Provider Hiding", () => {
-    it("should not render when a nanoBanana node has a non-Gemini selectedModel", () => {
+  describe("Non-Gemini Provider Display", () => {
+    it("should render $0.00 when a nanoBanana node has a non-Gemini selectedModel", () => {
       const nodes: WorkflowNode[] = [
         {
           id: "node-1",
@@ -467,59 +467,9 @@ describe("CostIndicator", () => {
 
       render(<CostIndicator />);
 
-      expect(screen.queryByTitle("View cost details")).not.toBeInTheDocument();
-    });
-
-    it("should not render when a generateVideo node has a non-Gemini selectedModel", () => {
-      const nodes: WorkflowNode[] = [
-        {
-          id: "node-1",
-          type: "generateVideo",
-          position: { x: 0, y: 0 },
-          data: {
-            selectedModel: {
-              provider: "kie",
-              modelId: "kling-video",
-              displayName: "Kling Video",
-            },
-            status: "idle",
-          },
-        },
-      ];
-
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({ nodes }));
-      });
-
-      render(<CostIndicator />);
-
-      expect(screen.queryByTitle("View cost details")).not.toBeInTheDocument();
-    });
-
-    it("should not render when a generate3d node has a non-Gemini selectedModel", () => {
-      const nodes: WorkflowNode[] = [
-        {
-          id: "node-1",
-          type: "generate3d",
-          position: { x: 0, y: 0 },
-          data: {
-            selectedModel: {
-              provider: "fal",
-              modelId: "fal-3d",
-              displayName: "Fal 3D",
-            },
-            status: "idle",
-          },
-        },
-      ];
-
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({ nodes }));
-      });
-
-      render(<CostIndicator />);
-
-      expect(screen.queryByTitle("View cost details")).not.toBeInTheDocument();
+      // Non-Gemini nodes show $0.00 (no pricing data available)
+      expect(screen.getByTitle("Estimated workflow cost (click for details)")).toBeInTheDocument();
+      expect(screen.getByText("$0.00")).toBeInTheDocument();
     });
 
     it("should render when a nanoBanana node has selectedModel with provider gemini", () => {
@@ -546,7 +496,7 @@ describe("CostIndicator", () => {
 
       render(<CostIndicator />);
 
-      expect(screen.getByTitle("View cost details")).toBeInTheDocument();
+      expect(screen.getByTitle("Estimated workflow cost (click for details)")).toBeInTheDocument();
     });
 
     it("should render when a nanoBanana node has no selectedModel (legacy Gemini)", () => {
@@ -568,43 +518,7 @@ describe("CostIndicator", () => {
 
       render(<CostIndicator />);
 
-      expect(screen.getByTitle("View cost details")).toBeInTheDocument();
-    });
-
-    it("should not render when mix of Gemini and non-Gemini nodes exist", () => {
-      const nodes: WorkflowNode[] = [
-        {
-          id: "node-1",
-          type: "nanoBanana",
-          position: { x: 0, y: 0 },
-          data: {
-            model: "nano-banana",
-            resolution: "1K",
-          },
-        },
-        {
-          id: "node-2",
-          type: "nanoBanana",
-          position: { x: 100, y: 0 },
-          data: {
-            model: "nano-banana",
-            resolution: "1K",
-            selectedModel: {
-              provider: "replicate",
-              modelId: "some-model",
-              displayName: "Some Model",
-            },
-          },
-        },
-      ];
-
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({ nodes }));
-      });
-
-      render(<CostIndicator />);
-
-      expect(screen.queryByTitle("View cost details")).not.toBeInTheDocument();
+      expect(screen.getByTitle("Estimated workflow cost (click for details)")).toBeInTheDocument();
     });
   });
 });

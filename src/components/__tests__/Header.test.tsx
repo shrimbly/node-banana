@@ -378,12 +378,12 @@ describe("Header", () => {
       expect(screen.getByTitle("Open Project Folder")).toBeInTheDocument();
     });
 
-    it("should call fetch to open-directory API when clicked", async () => {
+    it("should call open-directory API when clicked", async () => {
       mockUseWorkflowStore.mockImplementation((selector) => {
         return selector(createDefaultState({
           workflowName: "My Project",
           workflowId: "project-123",
-          saveDirectoryPath: "/path/to/project",
+          saveDirectoryPath: "//OTOSERVE10/share/project",
         }));
       });
 
@@ -391,16 +391,18 @@ describe("Header", () => {
         ok: true,
         json: () => Promise.resolve({ success: true }),
       });
-      global.fetch = mockFetch;
+      globalThis.fetch = mockFetch;
 
       render(<Header />);
       const folderButton = screen.getByTitle("Open Project Folder");
       fireEvent.click(folderButton);
 
-      expect(mockFetch).toHaveBeenCalledWith("/api/open-directory", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: "/path/to/project" }),
+      await vi.waitFor(() => {
+        expect(mockFetch).toHaveBeenCalledWith("/api/open-directory", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: "//OTOSERVE10/share/project" }),
+        });
       });
     });
   });

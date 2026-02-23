@@ -12,6 +12,21 @@ import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { useToast } from "@/components/Toast";
 import { ProviderBadge } from "./ProviderBadge";
 
+function copyToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text);
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  document.body.removeChild(textarea);
+  return Promise.resolve();
+}
+
 // 3D generation capabilities
 const THREE_D_CAPABILITIES: ModelCapability[] = ["text-to-3d", "image-to-3d"];
 
@@ -74,6 +89,12 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
       provider: model.provider,
       modelId: model.id,
       displayName: model.name,
+      ...(model.pricing && {
+        pricing: {
+          type: model.pricing.type,
+          amount: model.pricing.amount,
+        },
+      }),
     };
     updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
     setIsBrowseDialogOpen(false);
@@ -133,6 +154,7 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
       headerAction={headerAction}
       titlePrefix={titlePrefix}
       commentNavigation={commentNavigation ?? undefined}
+      lastCost={nodeData.lastGenerationCost}
     >
       {/* Dynamic input handles based on model schema */}
       {nodeData.inputSchema && nodeData.inputSchema.length > 0 ? (
@@ -153,9 +175,10 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
           }> = [];
 
           if (hasImageInput) {
-            imageInputs.forEach((input, index) => {
+            imageInputs.forEach((input) => {
               handles.push({
-                id: `image-${index}`,
+                // Use schema name in handle ID for direct mapping in connectedInputs
+                id: `image-${input.name}`,
                 type: "image",
                 label: input.label,
                 schemaName: input.name,
@@ -175,9 +198,10 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
           }
 
           if (hasTextInput) {
-            textInputs.forEach((input, index) => {
+            textInputs.forEach((input) => {
               handles.push({
-                id: `text-${index}`,
+                // Use schema name in handle ID for direct mapping in connectedInputs
+                id: `text-${input.name}`,
                 type: "text",
                 label: input.label,
                 schemaName: input.name,
@@ -354,7 +378,7 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
                   }
                 }}
                 className="nodrag nopan text-[10px] text-neutral-400 hover:text-orange-300 truncate max-w-full cursor-pointer transition-colors flex items-center gap-1"
-                title={`Open in explorer: ${nodeData.savedFilePath}`}
+                title={`Copy path: ${nodeData.savedFilePath}`}
               >
                 <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
@@ -431,6 +455,7 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
             onParametersChange={handleParametersChange}
             onExpandChange={handleParametersExpandChange}
             onInputsLoaded={handleInputsLoaded}
+            inputNames={nodeData.inputSchema?.map(i => i.name)}
           />
         )}
       </div>

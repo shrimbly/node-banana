@@ -57,6 +57,8 @@ describe("ConnectionDropMenu", () => {
       expect(screen.getByText("Split Grid Node")).toBeInTheDocument();
       expect(screen.getByText("Split Grid Now")).toBeInTheDocument();
       expect(screen.getByText("Output")).toBeInTheDocument();
+      expect(screen.getByText("Generate Panorama")).toBeInTheDocument();
+      expect(screen.getByText("Generate World")).toBeInTheDocument();
     });
 
     it("should show text-accepting nodes when dragging from text output", () => {
@@ -65,6 +67,7 @@ describe("ConnectionDropMenu", () => {
       expect(screen.getByText("Generate Image")).toBeInTheDocument();
       expect(screen.getByText("Generate Video")).toBeInTheDocument();
       expect(screen.getByText("LLM Generate")).toBeInTheDocument();
+      expect(screen.getByText("Generate Panorama")).toBeInTheDocument();
       // Should NOT show image-only nodes
       expect(screen.queryByText("Annotate")).not.toBeInTheDocument();
       expect(screen.queryByText("Output")).not.toBeInTheDocument();
@@ -83,7 +86,8 @@ describe("ConnectionDropMenu", () => {
     it("should show 3D-accepting nodes when dragging from 3D output", () => {
       render(<ConnectionDropMenu {...defaultProps} handleType="3d" connectionType="source" />);
 
-      expect(screen.getByText("3D Viewer")).toBeInTheDocument();
+      expect(screen.getByText("GLB Viewer")).toBeInTheDocument();
+      expect(screen.getByText("SPZ Viewer")).toBeInTheDocument();
       // Should NOT show image/text/video nodes
       expect(screen.queryByText("Annotate")).not.toBeInTheDocument();
       expect(screen.queryByText("Generate Image")).not.toBeInTheDocument();
@@ -98,6 +102,8 @@ describe("ConnectionDropMenu", () => {
       expect(screen.getByText("Image Input")).toBeInTheDocument();
       expect(screen.getByText("Annotate")).toBeInTheDocument();
       expect(screen.getByText("Generate Image")).toBeInTheDocument();
+      expect(screen.getByText("Panorama")).toBeInTheDocument();
+      expect(screen.getByText("WorldLabs World")).toBeInTheDocument();
       // Should NOT show text nodes
       expect(screen.queryByText("Prompt")).not.toBeInTheDocument();
     });
@@ -125,6 +131,7 @@ describe("ConnectionDropMenu", () => {
       render(<ConnectionDropMenu {...defaultProps} handleType="3d" connectionType="target" />);
 
       expect(screen.getByText("Generate 3D")).toBeInTheDocument();
+      expect(screen.getByText("WorldLabs World")).toBeInTheDocument();
       // Should NOT show other nodes
       expect(screen.queryByText("Image Input")).not.toBeInTheDocument();
       expect(screen.queryByText("Generate Image")).not.toBeInTheDocument();
@@ -217,8 +224,8 @@ describe("ConnectionDropMenu", () => {
       // Press ArrowUp to go to last item (wrapping)
       fireEvent.keyDown(document, { key: "ArrowUp" });
 
-      // Last item should now be highlighted
-      const lastButton = screen.getByText("Image Compare").closest("button");
+      // Last item should now be highlighted (Mask Painter is the last IMAGE_TARGET_OPTIONS item)
+      const lastButton = screen.getByText("Mask Painter").closest("button");
       expect(lastButton).toHaveClass("bg-neutral-700");
     });
 
@@ -245,8 +252,9 @@ describe("ConnectionDropMenu", () => {
     it("should wrap around when navigating past last item", () => {
       render(<ConnectionDropMenu {...defaultProps} handleType="text" connectionType="source" />);
 
-      // Text target labels: Prompt, Prompt Constructor, Array, Generate Image, Generate Video, Generate Audio, LLM Generate (7 items)
-      // Navigate down 7 times to wrap to first
+      // Text target options: Prompt, Prompt Constructor, Array, Generate Image, Generate Video, Generate Audio, LLM Generate, Generate Panorama, Pano Editor (9 items)
+      // Navigate down 9 times to wrap to first
+      fireEvent.keyDown(document, { key: "ArrowDown" });
       fireEvent.keyDown(document, { key: "ArrowDown" });
       fireEvent.keyDown(document, { key: "ArrowDown" });
       fireEvent.keyDown(document, { key: "ArrowDown" });

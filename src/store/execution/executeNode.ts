@@ -10,12 +10,14 @@ import type { NodeExecutionContext } from "./types";
 import {
   executeAnnotation,
   executeArray,
+  executeMaskPainter,
   executePrompt,
   executePromptConstructor,
   executeOutput,
   executeOutputGallery,
   executeImageCompare,
   executeGlbViewer,
+  executeSpzViewer,
 } from "./simpleNodeExecutors";
 import { executeNanoBanana } from "./nanoBananaExecutor";
 import { executeGenerateVideo } from "./generateVideoExecutor";
@@ -23,6 +25,8 @@ import { executeGenerate3D } from "./generate3dExecutor";
 import { executeLlmGenerate } from "./llmGenerateExecutor";
 import { executeSplitGrid } from "./splitGridExecutor";
 import { executeVideoStitch, executeEaseCurve, executeVideoTrim, executeVideoFrameGrab } from "./videoProcessingExecutors";
+import { executeWorldLabsPano } from "./worldLabsPanoExecutor";
+import { executeWorldLabsWorld } from "./worldLabsWorldExecutor";
 import { executeGenerateAudio } from "./generateAudioExecutor";
 
 export interface ExecuteNodeOptions {
@@ -100,6 +104,18 @@ export async function executeNode(
       break;
     case "glbViewer":
       await executeGlbViewer(ctx);
+      break;
+    case "spzViewer":
+      await executeSpzViewer(ctx);
+      break;
+    case "worldLabsPano":
+      await executeWorldLabsPano(ctx);
+      break;
+    case "worldLabsWorld":
+      await executeWorldLabsWorld(ctx);
+      break;
+    case "maskPainter":
+      await executeMaskPainter(ctx);
       break;
     case "generateAudio":
       await executeGenerateAudio(ctx, regenOpts);

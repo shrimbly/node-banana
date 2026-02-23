@@ -10,6 +10,7 @@
 import type {
   AnnotationNodeData,
   ArrayNodeData,
+  MaskPainterNodeData,
   PromptConstructorNodeData,
   PromptNodeData,
   LLMGenerateNodeData,
@@ -181,8 +182,23 @@ export async function executePromptConstructor(ctx: NodeExecutionContext): Promi
  * Output node: displays final image/video result.
  */
 export async function executeOutput(ctx: NodeExecutionContext): Promise<void> {
-  const { node, getConnectedInputs, updateNodeData, saveDirectoryPath } = ctx;
+  const { node, getConnectedInputs, updateNodeData, saveDirectoryPath, getEdges, getNodes } = ctx;
   const { images, videos, audio } = getConnectedInputs(node.id);
+
+  // Diagnostic logging to help debug cases where Output node stays empty
+  if (images.length === 0 && videos.length === 0 && audio.length === 0) {
+    const edges = getEdges();
+    const nodes = getNodes();
+    const incomingEdges = edges.filter((e) => e.target === node.id);
+    const sourceInfo = incomingEdges.map((e) => {
+      const src = nodes.find((n) => n.id === e.source);
+      return `${src?.type || "unknown"}(${e.source}) via ${e.sourceHandle}->${e.targetHandle}`;
+    });
+    console.warn(
+      `[Workflow] Output node ${node.id}: No images, videos, or audio received.`,
+      `Connected sources: [${sourceInfo.join(", ")}]`
+    );
+  }
 
   // Check audio array first
   if (audio.length > 0) {
@@ -316,23 +332,81 @@ export async function executeImageCompare(ctx: NodeExecutionContext): Promise<vo
 }
 
 /**
- * GLB Viewer node: receives 3D model URL from upstream, fetches and loads it.
+ * Extract a filename from a URL path, falling back to a default.
+ */
+function extractFilenameFromUrl(url: string, fallback = "generated.glb"): string {
+  try {
+    const urlObj = new URL(url);
+    const pathname = urlObj.pathname;
+    const lastSegment = pathname.split("/").filter(Boolean).pop();
+    if (lastSegment && lastSegment.includes(".")) {
+      return lastSegment;
+    }
+  } catch {
+    // ignore parse errors
+  }
+  return fallback;
+}
+
+/**
+ * SPZ Viewer node: receives SPZ/PLY URL from upstream and stores it for the external viewer.
+ */
+export async function executeSpzViewer(ctx: NodeExecutionContext): Promise<void> {
+  const { node, getConnectedInputs, updateNodeData } = ctx;
+  const { model3d } = getConnectedInputs(node.id);
+  if (model3d) {
+    updateNodeData(node.id, {
+      spzUrl: model3d,
+      filename: extractFilenameFromUrl(model3d, "world.spz"),
+    });
+  }
+}
+
+/**
+ * Panorama Viewer node: receives equirectangular panorama URL from upstream
+ * and stores it for the external panorama viewer.
+ */
+export async function executePanoViewer(ctx: NodeExecutionContext): Promise<void> {
+  const { node, getConnectedInputs, updateNodeData } = ctx;
+  const { images } = getConnectedInputs(node.id);
+  if (images.length > 0) {
+    updateNodeData(node.id, {
+      panoUrl: images[0],
+    });
+  }
+}
+
+/**
+ * GLB Viewer node: receives 3D model URL from upstream, fetches via server proxy and loads it.
  */
 export async function executeGlbViewer(ctx: NodeExecutionContext): Promise<void> {
   const { node, getConnectedInputs, updateNodeData, signal } = ctx;
   const { model3d } = getConnectedInputs(node.id);
   if (model3d) {
-    // Fetch the GLB URL and create a blob URL for the viewer
+    // Use server-side proxy to avoid CORS issues with remote CDN URLs
     try {
-      const response = await fetch(model3d, signal ? { signal } : {});
+      const response = await fetch("/api/proxy-fetch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: model3d }),
+        ...(signal ? { signal } : {}),
+      });
       if (!response.ok) {
-        throw new Error(`Failed to fetch 3D model: ${response.status}`);
+        let errorDetail = `${response.status}`;
+        try {
+          const errJson = await response.json();
+          if (errJson.error) errorDetail = errJson.error;
+        } catch {
+          // ignore json parse failure
+        }
+        throw new Error(`Failed to fetch 3D model: ${errorDetail}`);
       }
       const blob = await response.blob();
       const blobUrl = URL.createObjectURL(blob);
+      const filename = extractFilenameFromUrl(model3d);
       updateNodeData(node.id, {
         glbUrl: blobUrl,
-        filename: "generated.glb",
+        filename,
         capturedImage: null,
       });
     } catch (error) {
@@ -341,8 +415,33 @@ export async function executeGlbViewer(ctx: NodeExecutionContext): Promise<void>
         return;
       }
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`[Workflow] GLB Viewer node ${node.id} failed:`, message);
+      console.error(`[Workflow] GLB Viewer node ${node.id} failed to load 3D model:`, message);
       updateNodeData(node.id, { error: message });
     }
+  }
+}
+
+/**
+ * Mask Painter node: receives upstream image, sets as sourceImage.
+ * Preserves outputMask if strokes exist (user has painted a mask).
+ */
+export async function executeMaskPainter(ctx: NodeExecutionContext): Promise<void> {
+  const { node, getConnectedInputs, updateNodeData } = ctx;
+  try {
+    const { images } = getConnectedInputs(node.id);
+    const image = images[0] || null;
+    if (image) {
+      const nodeData = node.data as MaskPainterNodeData;
+      updateNodeData(node.id, { sourceImage: image });
+      // If no strokes yet, no mask to output
+      if (nodeData.strokes.length === 0) {
+        updateNodeData(node.id, { outputMask: null });
+      }
+      // If strokes exist, keep the existing outputMask (user must re-open modal to regenerate)
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[Workflow] Mask Painter node ${node.id} failed:`, message);
+    updateNodeData(node.id, { error: message });
   }
 }

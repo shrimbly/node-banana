@@ -22,6 +22,7 @@ function ProviderIcon({ provider }: { provider: ProviderType }) {
     openai: { bg: "bg-teal-500/20", text: "text-teal-300" },
     kie: { bg: "bg-orange-500/20", text: "text-orange-300" },
     wavespeed: { bg: "bg-purple-500/20", text: "text-purple-300" },
+    worldlabs: { bg: "bg-cyan-500/20", text: "text-cyan-300" },
   };
 
   const labels: Record<ProviderType, string> = {
@@ -31,6 +32,7 @@ function ProviderIcon({ provider }: { provider: ProviderType }) {
     openai: "O",
     kie: "K",
     wavespeed: "W",
+    worldlabs: "WL",
   };
 
   const color = colors[provider] || colors.gemini;
@@ -53,6 +55,7 @@ function getProviderDisplayName(provider: ProviderType): string {
     openai: "OpenAI",
     kie: "Kie.ai",
     wavespeed: "WaveSpeed",
+    worldlabs: "World Labs",
   };
   return names[provider] || provider;
 }
@@ -73,6 +76,9 @@ function getModelUrl(provider: ProviderType, modelId: string): string | null {
   if (provider === "wavespeed") {
     // modelId format: "wavespeed-ai/model-name"
     return `https://wavespeed.ai`;
+  }
+  if (provider === "worldlabs") {
+    return `https://platform.worldlabs.ai`;
   }
   return null;
 }
@@ -242,7 +248,7 @@ export function CostDialog({ predictedCost, incurredCost, onClose }: CostDialogP
               </span>
             </div>
             <p className="text-xs text-neutral-500">
-              Actual API spend from Gemini generations
+              Actual API spend across all providers
             </p>
 
             {incurredCost > 0 && (

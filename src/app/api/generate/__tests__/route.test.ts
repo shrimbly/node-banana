@@ -830,7 +830,7 @@ describe("/api/generate route", () => {
       const data = await response.json();
 
       expect(response.status).toBe(200);
-      expect(data).toEqual({
+      expect(data).toMatchObject({
         success: true,
         image: "data:image/jpeg;base64,jpegOutputData",
       });

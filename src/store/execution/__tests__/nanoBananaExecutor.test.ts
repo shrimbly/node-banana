@@ -186,7 +186,7 @@ describe("executeNanoBanana", () => {
     const node = makeNode();
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ success: true, image: "data:image/png;base64,result" }),
+      json: () => Promise.resolve({ success: true, image: "data:image/png;base64,result", cost: 0.05 }),
     });
 
     const ctx = makeCtx(node);
@@ -197,11 +197,11 @@ describe("executeNanoBanana", () => {
 
   it("should track cost for fal provider", async () => {
     const node = makeNode({
-      selectedModel: { provider: "fal", modelId: "fal-model", displayName: "Fal", pricing: { amount: 0.10 } },
+      selectedModel: { provider: "fal", modelId: "fal-model", displayName: "Fal" },
     });
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ success: true, image: "data:image/png;base64,result" }),
+      json: () => Promise.resolve({ success: true, image: "data:image/png;base64,result", cost: 0.10 }),
     });
 
     const ctx = makeCtx(node, {

@@ -37,7 +37,6 @@ import {
   setCachedWaveSpeedSchemas,
   WaveSpeedApiSchema,
 } from "@/lib/providers/cache";
-
 // API base URLs
 const REPLICATE_API_BASE = "https://api.replicate.com/v1";
 const FAL_API_BASE = "https://api.fal.ai/v1";
@@ -874,9 +873,6 @@ async function fetchFalModels(
     hasMore = data.has_more;
     pageCount++;
   }
-
-  // Note: Pricing not fetched - external provider pricing is unreliable
-  // CostDialog shows model links instead of prices for fal.ai/Replicate
 
   return allModels;
 }

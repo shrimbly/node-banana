@@ -11,9 +11,11 @@ import type {
   AnnotationShape,
   BaseNodeData,
 } from "./annotation";
+import type { MaskPainterNodeData } from "./maskPainter";
 
-// Re-export types from annotation for convenience
+// Re-export types from annotation and mask painter for convenience
 export type { AnnotationNodeData, BaseNodeData };
+export type { MaskPainterNodeData };
 
 // Import from domain files to avoid circular dependencies
 import type { AspectRatio, Resolution, ModelType } from "./models";
@@ -42,7 +44,14 @@ export type NodeType =
   | "videoTrim"
   | "videoFrameGrab"
   | "generate3d"
-  | "glbViewer";
+  | "glbViewer"
+  | "spzViewer"
+  | "worldLabsPano"
+  | "worldLabsWorld"
+  | "panoCrop"
+  | "panoViewer"
+  | "panoEditor"
+  | "maskPainter";
 
 /**
  * Node execution status
@@ -177,6 +186,7 @@ export interface NanoBananaNodeData extends BaseNodeData {
   error: string | null;
   imageHistory: CarouselImageItem[]; // Carousel history (IDs only)
   selectedHistoryIndex: number; // Currently selected image in carousel
+  lastGenerationCost?: number | null; // Cost of the last generation run
 }
 
 /**
@@ -195,6 +205,7 @@ export interface GenerateVideoNodeData extends BaseNodeData {
   error: string | null;
   videoHistory: CarouselVideoItem[]; // Carousel history (IDs only)
   selectedVideoHistoryIndex: number; // Currently selected video in carousel
+  lastGenerationCost?: number | null; // Cost of the last generation run
 }
 
 /**
@@ -212,6 +223,54 @@ export interface Generate3DNodeData extends BaseNodeData {
   inputSchema?: ModelInputDef[];
   status: NodeStatus;
   error: string | null;
+  lastGenerationCost?: number | null; // Cost of the last generation run
+}
+
+/**
+ * WorldLabs Panorama node - generates equirectangular panoramas via Marble API.
+ * Quick preview step (defaults to Marble 0.1-mini for speed/cost).
+ * Supports text, single-image, and multi-image prompts with azimuth control.
+ */
+export interface WorldLabsPanoNodeData extends BaseNodeData {
+  worldName: string;
+  model: "Marble 0.1-plus" | "Marble 0.1-mini";
+  seed: number | null;
+  inputImages: string[];
+  inputPrompt: string | null;
+  operationId: string | null;
+  worldId: string | null;
+  status: NodeStatus;
+  error: string | null;
+  progress: string | null;
+  panoUrl: string | null;
+  thumbnailUrl: string | null;
+  caption: string | null;
+  /** Per-image azimuth angles for multi-image generation. Maps connection index → degrees. */
+  imageAzimuths: Record<number, number>;
+}
+
+/**
+ * WorldLabs World node - generates full 3D Gaussian Splat world from a 2:1 panorama.
+ * Production quality step (defaults to Marble 0.1-plus).
+ * Accepts a single panorama image input, outputs 3D SPZ data.
+ */
+export interface WorldLabsWorldNodeData extends BaseNodeData {
+  worldName: string;
+  model: "Marble 0.1-plus" | "Marble 0.1-mini";
+  seed: number | null;
+  inputImages: string[];
+  inputPrompt: string | null;
+  operationId: string | null;
+  worldId: string | null;
+  status: NodeStatus;
+  error: string | null;
+  progress: string | null;
+  spzUrls: { full_res: string | null; "500k": string | null; "100k": string | null } | null;
+  panoUrl: string | null;
+  thumbnailUrl: string | null;
+  marbleViewerUrl: string | null;
+  caption: string | null;
+  viewerWindowOpen: boolean;
 }
 
 /**
@@ -240,6 +299,7 @@ export interface GenerateAudioNodeData extends BaseNodeData {
   selectedAudioHistoryIndex: number; // Currently selected audio in carousel
   duration: number | null; // Duration in seconds
   format: string | null; // MIME type (audio/mp3, audio/wav, etc.)
+  lastGenerationCost?: number | null; // Cost of the last generation run
 }
 
 /**
@@ -256,6 +316,7 @@ export interface LLMGenerateNodeData extends BaseNodeData {
   maxTokens: number;
   status: NodeStatus;
   error: string | null;
+  lastGenerationCost?: number | null; // Cost of the last generation run
 }
 
 /**
@@ -385,6 +446,46 @@ export interface GLBViewerNodeData extends BaseNodeData {
 }
 
 /**
+ * SPZ/PLY Viewer node - opens external 3D Gaussian Splat viewer, captures screenshots
+ */
+export interface SpzViewerNodeData extends BaseNodeData {
+  spzUrl: string | null;         // SPZ/PLY file URL (HTTP or blob)
+  filename: string | null;       // Display name
+  capturedImage: string | null;  // Latest captured screenshot from viewer
+  viewerOpen: boolean;           // Whether the viewer window is currently open
+}
+
+/**
+ * Panorama Viewer node - views equirectangular panoramas with crop rectangle,
+ * captures perspective snapshots with camera metadata.
+ */
+export interface PanoViewerNodeData extends BaseNodeData {
+  panoUrl: string | null;          // Equirectangular image URL
+  viewerOpen: boolean;             // Whether the viewer window is currently open
+}
+
+/**
+ * Panorama Crop node - holds a perspective snapshot extracted from a panorama
+ * with its camera metadata. Created automatically by PanoViewer on capture.
+ */
+export interface PanoCropNodeData extends BaseNodeData {
+  image: string | null;            // Perspective snapshot (base64)
+  metadata: string | null;         // JSON-serialized PanoCropMetadata
+  filename: string | null;
+  dimensions: { width: number; height: number } | null;
+}
+
+/**
+ * Panorama Editor node - composites an edited perspective image back onto
+ * an equirectangular panorama using camera metadata for reprojection.
+ */
+export interface PanoEditorNodeData extends BaseNodeData {
+  outputImage: string | null;      // Composited equirectangular (base64)
+  status: NodeStatus;
+  error: string | null;
+}
+
+/**
  * Union of all node data types
  */
 export type WorkflowNodeData =
@@ -397,6 +498,8 @@ export type WorkflowNodeData =
   | NanoBananaNodeData
   | GenerateVideoNodeData
   | Generate3DNodeData
+  | WorldLabsPanoNodeData
+  | WorldLabsWorldNodeData
   | GenerateAudioNodeData
   | LLMGenerateNodeData
   | SplitGridNodeData
@@ -407,7 +510,12 @@ export type WorkflowNodeData =
   | EaseCurveNodeData
   | VideoTrimNodeData
   | VideoFrameGrabNodeData
-  | GLBViewerNodeData;
+  | GLBViewerNodeData
+  | SpzViewerNodeData
+  | PanoCropNodeData
+  | PanoViewerNodeData
+  | PanoEditorNodeData
+  | MaskPainterNodeData;
 
 /**
  * Workflow node with typed data (extended with optional groupId)

@@ -18,8 +18,9 @@ npm run test:run # Run all tests once (CI mode)
 Create `.env.local` in the root directory:
 ```
 GEMINI_API_KEY=your_gemini_api_key
-OPENAI_API_KEY=your_openai_api_key  # Optional, for OpenAI LLM provider
-KIE_API_KEY=your_kie_api_key        # Optional, for Kie.ai models (Sora, Veo, Kling, etc.)
+OPENAI_API_KEY=your_openai_api_key    # Optional, for OpenAI LLM provider
+KIE_API_KEY=your_kie_api_key          # Optional, for Kie.ai models (Sora, Veo, Kling, etc.)
+WORLDLABS_API_KEY=your_worldlabs_key  # Optional, for WorldLabs Marble 3D generation
 ```
 
 ## Architecture Overview
@@ -29,7 +30,9 @@ Node Banana is a node-based visual workflow editor for AI image generation. User
 ### Core Stack
 - **Next.js 16** (App Router) with TypeScript
 - **@xyflow/react** (React Flow) for the node editor canvas
-- **Konva.js / react-konva** for canvas annotation drawing
+- **Konva.js / react-konva** for canvas annotation & mask painting
+- **Three.js** for 3D panorama viewer & SPZ Gaussian Splat rendering
+- **@sparkjsdev/spark** for 3D Gaussian Splatting viewer
 - **Zustand** for state management (single store pattern)
 
 ### Key Files
@@ -44,6 +47,16 @@ Node Banana is a node-based visual workflow editor for AI image generation. User
 | LLM text generation API route | `src/app/api/llm/route.ts` |
 | Cost calculations | `src/utils/costCalculator.ts` |
 | Grid splitting utility | `src/utils/gridSplitter.ts` |
+| Equirectangular projection math | `src/utils/equirectProjection.ts` |
+| Cinema camera presets | `src/utils/cinemaCameraPresets.ts` |
+| Mask painter types | `src/types/maskPainter.ts` |
+| Mask painter state (Zustand) | `src/store/maskPainterStore.ts` |
+| Full-screen mask editor modal | `src/components/MaskPainterModal.tsx` |
+| WorldLabs API proxy | `src/app/api/worldlabs/route.ts` |
+| WorldLabs shared utilities | `src/store/execution/worldLabsUtils.ts` |
+| Panorama executor | `src/store/execution/worldLabsPanoExecutor.ts` |
+| World generation executor | `src/store/execution/worldLabsWorldExecutor.ts` |
+| Panorama compositing executor | `src/store/execution/panoEditorExecutor.ts` |
 
 ### State Management
 
@@ -62,7 +75,7 @@ All application state lives in `workflowStore.ts` using Zustand. Key patterns:
 4. `getConnectedInputs()` provides upstream images/text to each node
 5. Locked groups are skipped; pause edges halt execution
 
-## AI Models
+## AI Models & Providers
 
 Image generation models (these exist and are recently released):
 - `gemini-2.5-flash-image` → internal name: `nano-banana`
@@ -72,20 +85,57 @@ LLM models:
 - Google: `gemini-2.5-flash`, `gemini-3-flash-preview`, `gemini-3-pro-preview`
 - OpenAI: `gpt-4.1-mini`, `gpt-4.1-nano`
 
+3D world generation (WorldLabs Marble API):
+- `Marble 0.1-mini` — fast panorama generation (used by `worldLabsPano`)
+- `Marble 0.1-plus` — high-quality 3D world generation (used by `worldLabsWorld`)
+
 ## Node Types
+
+### Core Nodes
 
 | Type | Purpose | Inputs | Outputs |
 |------|---------|--------|---------|
 | `imageInput` | Load/upload images | reference | image |
 | `annotation` | Draw on images (Konva) | image | image |
 | `prompt` | Text prompt input | none | text |
-| `nanoBanana` | AI image generation | image, text | image |
+| `promptConstructor` | Template-based prompt builder | text (variables) | text |
+| `nanoBanana` | AI image generation | image, text, dynamic | image |
+| `generateVideo` | AI video generation | image, text | video |
+| `generate3d` | AI 3D model generation | image, text | 3d |
+| `generateAudio` | AI audio/TTS generation | text | audio |
 | `llmGenerate` | AI text generation | text, image | text |
 | `splitGrid` | Split image into grid cells | image | reference |
-| `generateAudio` | AI audio/TTS generation | text | audio |
 | `audioInput` | Load/upload audio files | audio | audio |
-| `glbViewer` | Load/display 3D GLB models | none | image |
 | `output` | Display final result | image | none |
+| `outputGallery` | Display multiple results | image (multiple) | none |
+| `imageCompare` | Side-by-side image comparison | image ×2 | none |
+
+### Video Processing Nodes
+
+| Type | Purpose | Inputs | Outputs |
+|------|---------|--------|---------|
+| `videoStitch` | Concatenate video clips | video (multiple) | video |
+| `easeCurve` | Apply easing curves to video | video, easeCurve | video |
+| `videoTrim` | Trim video start/end | video | video |
+| `videoFrameGrab` | Extract frame from video | video | image |
+
+### 3D & Panorama Nodes
+
+| Type | Purpose | Inputs | Outputs |
+|------|---------|--------|---------|
+| `worldLabsPano` | Generate panorama (Marble API) | image, text | image, text |
+| `worldLabsWorld` | Generate 3D world (Marble API) | image | 3d, image |
+| `glbViewer` | Load/display 3D GLB models | none | image |
+| `spzViewer` | View 3D Gaussian Splat files | 3d | image |
+| `panoViewer` | Interactive panorama viewer | image | creates PanoCrop nodes |
+| `panoCrop` | Perspective snapshot from pano | auto-created | image, text (metadata) |
+| `panoEditor` | Composite edit back onto pano | image ×2, text | image |
+
+### Mask & Utility Nodes
+
+| Type | Purpose | Inputs | Outputs |
+|------|---------|--------|---------|
+| `maskPainter` | Paint inpainting masks (Konva) | image | image (mask) |
 
 ## Node Connection System
 
@@ -96,29 +146,62 @@ LLM models:
 | `image` | Base64 data URL | Visual content |
 | `text` | String | Text content |
 | `audio` | Base64 data URL | Audio content |
+| `video` | Blob URL / data URL | Video content |
+| `3d` | URL | 3D model data (SPZ, PLY, GLB) |
+| `easeCurve` | Bezier handles | Easing function curve |
 
 ### Connection Rules
 
-1. **Type Matching**: Handles only connect to matching types (`image`→`image`, `text`→`text`)
+1. **Type Matching**: Handles only connect to matching types (`image`→`image`, `text`→`text`, `3d`→`3d`, etc.)
 2. **Direction**: Connections flow from source (output) to target (input)
 3. **Multiplicity**: Image inputs accept multiple connections; text inputs accept one
+4. **Dynamic Handles**: Generator nodes create additional input handles based on the selected model's schema (e.g., mask, control image, depth map)
+
+### Dynamic Model Input Handles
+
+Generator nodes (`nanoBanana`, `generateVideo`, `generate3d`) dynamically create input handles based on the selected model's `inputSchema`. When a model is selected:
+1. `ModelParameters` component fetches schema from `/api/models/{modelId}?provider={provider}`
+2. Schema is cached in localStorage (`node-banana-schema-cache-v3`, 48-hour TTL)
+3. Additional input handles appear on the node (e.g., `image-mask_url`, `image-control_image`)
+4. Handle IDs follow the pattern `image-{schemaName}` for image inputs, `text-{index}` for text inputs
+5. Connected inputs are routed to the correct API parameter via `dynamicInputs` in `getConnectedInputs()`
 
 ### Data Flow in `getConnectedInputs`
 
-Returns `{ images: string[], text: string | null }`.
+Returns `{ images, videos, audio, model3d, text, dynamicInputs, easeCurve }`.
 
 **Image data extracted from:**
 - `imageInput` → `data.image`
 - `annotation` → `data.outputImage`
 - `nanoBanana` → `data.outputImage`
+- `videoFrameGrab` → `data.outputImage`
+- `glbViewer` / `spzViewer` → `data.capturedImage`
+- `worldLabsPano` → `data.panoUrl` or `data.thumbnailUrl`
+- `worldLabsWorld` → `data.panoUrl` or `data.thumbnailUrl`
+- `panoCrop` → `data.image`
+- `panoEditor` → `data.outputImage`
+- `maskPainter` → `data.outputMask`
 
 **Text data extracted from:**
 - `prompt` → `data.prompt`
+- `promptConstructor` → `data.outputText`
 - `llmGenerate` → `data.outputText`
+- `worldLabsPano` → `data.caption` (via `text` handle)
+- `panoCrop` → `data.metadata` (via `text` handle)
+
+**Video data extracted from:**
+- `generateVideo` → `data.outputVideo`
+- `videoStitch` → `data.outputVideo`
+- `easeCurve` → `data.outputVideo`
+- `videoTrim` → `data.outputVideo`
 
 **Audio data extracted from:**
 - `audioInput` → `data.audioFile`
 - `generateAudio` → `data.outputAudio`
+
+**3D data extracted from:**
+- `generate3d` → `data.output3dUrl`
+- `worldLabsWorld` → `data.spzUrls` (via `3d` handle)
 
 ## Keyboard Shortcuts
 
@@ -131,6 +214,7 @@ Returns `{ images: string[], text: string | null }`.
 - `Shift + L` - Add LLM node
 - `Shift + A` - Add annotation node
 - `Shift + T` - Add audio (generateAudio) node
+- `Shift + W` - Add panorama (worldLabsPano) node
 - `H` - Stack selected nodes horizontally
 - `V` - Stack selected nodes vertically
 - `G` - Arrange selected nodes in grid
@@ -153,8 +237,13 @@ Returns `{ images: string[], text: string | null }`.
 ### Handle Naming Convention
 
 Use descriptive handle IDs matching the data type:
-- `id="image"` for image data
+- `id="image"` for primary image data
+- `id="image-{name}"` for dynamic/named image inputs (e.g., `image-mask_url`, `image-control_image`)
 - `id="text"` for text data
+- `id="3d"` for 3D model data
+- `id="video"` for video data
+- `id="audio"` for audio data
+- `id="easeCurve"` for easing curve data
 
 ### Validation
 
@@ -206,17 +295,84 @@ All routes in `src/app/api/`:
 
 | Route | Timeout | Purpose |
 |-------|---------|---------|
-| `/api/generate` | 5 min | Image generation via Gemini |
+| `/api/generate` | 5 min | Image/video/3D generation via Gemini or Kie.ai |
 | `/api/llm` | 1 min | Text generation (Google/OpenAI) |
+| `/api/worldlabs` | 5 min | WorldLabs Marble API: upload, generate, poll, getWorld |
+| `/api/models` | default | List available models and providers |
+| `/api/models/[modelId]` | default | Get model parameter schema |
 | `/api/workflow` | default | Save/load workflow files |
 | `/api/save-generation` | default | Auto-save generated images |
+| `/api/open-directory` | default | Open native OS file explorer at path |
+| `/api/browse-directory` | default | Open native OS folder picker dialog |
+| `/api/open-file` | default | Reveal file in OS explorer (localhost only) |
 | `/api/logs` | default | Session logging |
+
+### Standalone Pages
+
+| Route | Purpose |
+|-------|---------|
+| `/viewer` | SPZ/PLY 3D Gaussian Splatting viewer (URL param or file upload) |
+| `/viewer/[worldId]` | World-specific 3D viewer |
+| `/viewer/pano` | Equirectangular panorama viewer with perspective crop capture |
+
+## WorldLabs Integration
+
+The WorldLabs Marble API enables 3D world generation from images and text. The workflow is split into two node types:
+
+### Panorama Pipeline
+1. **WorldLabsPano** → generates an equirectangular panorama (fast, Marble 0.1-mini)
+2. **PanoViewer** → opens interactive panorama viewer, user captures perspective crops
+3. **PanoCrop** → holds captured perspective snapshots with camera metadata (auto-created by PanoViewer)
+4. Image edits on crops (via nanoBanana or annotation)
+5. **PanoEditor** → composites edited perspective back onto the equirectangular panorama (WebGL shader)
+6. **WorldLabsWorld** → generates full 3D Gaussian Splat world from final panorama (Marble 0.1-plus)
+7. **SpzViewer** → opens standalone Spark.js viewer for the 3D world
+
+### Key Architecture Details
+- **API proxy**: `src/app/api/worldlabs/route.ts` handles image upload (2-step signed URL), generation, polling, and world retrieval
+- **Executors**: `worldLabsPanoExecutor.ts` and `worldLabsWorldExecutor.ts` in `src/store/execution/`
+- **Panorama math**: `src/utils/equirectProjection.ts` provides `extractPerspectiveView()` and `compositeOntoEquirect()` for perspective↔equirectangular projection
+- **Viewer communication**: Standalone viewer pages use `postMessage` to send captures back to the main canvas, which creates ImageInput or PanoCrop nodes
+- **Large data transfer**: Pano data URLs are passed to viewer pages via `sessionStorage` to avoid URL length limits
+
+### WorldLabs API Authentication
+The API key is sent via `WLT-Api-Key` header. The route accepts either:
+- `X-WorldLabs-Key` request header (from client)
+- `WORLDLABS_API_KEY` environment variable
+
+## Mask Painter
+
+The mask painter provides inpainting mask creation with a full-screen Konva.js editor.
+
+### Architecture
+- **Node**: `MaskPainterNode.tsx` — displays source image and mask preview
+- **Modal**: `MaskPainterModal.tsx` — full-screen painting interface
+- **Store**: `maskPainterStore.ts` — Zustand store managing modal state, strokes, undo/redo history
+- **Types**: `src/types/maskPainter.ts` — `MaskStroke`, `MaskRect`, `MaskCircle`, `MaskElement`, `MaskTool`
+
+### Tools
+- **Brush** — freehand drawing (white on black mask)
+- **Eraser** — freehand erasing
+- **Rectangle** — filled rectangle shapes
+- **Circle** — filled circle/ellipse shapes
+
+### Features
+- Adjustable brush size
+- Gaussian blur radius (applied as post-processing)
+- Invert mask toggle (swap black/white)
+- Undo/redo (Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z)
+- Real-time CSS blur preview on overlay layer
+
+### Connection to Generator Nodes
+When a model schema includes a `mask` input (e.g., `mask_url`), generator nodes display a conditional mask input handle. The mask painter output connects to this handle, routing the mask image to the correct API parameter via `dynamicInputs`.
 
 ## localStorage Keys
 
 - `node-banana-workflow-configs` - Project metadata (paths)
 - `node-banana-workflow-costs` - Cost tracking per workflow
-- `node-banana-nanoBanana-defaults` - Sticky generation settings
+- `node-banana-nanoBanana-defaults` - Sticky generation settings (legacy)
+- `node-banana-node-defaults` - Sticky defaults per node type (new format)
+- `node-banana-schema-cache-v3` - Model parameter schema cache (48-hour TTL)
 
 ## Git Workflow
 

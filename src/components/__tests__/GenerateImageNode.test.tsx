@@ -651,8 +651,8 @@ describe("GenerateImageNode", () => {
       expect(textHandle).toBeInTheDocument();
     });
 
-    describe("Static Handles (inputSchema does not affect handle count)", () => {
-      it("should always render exactly one image and one text input handle regardless of schema", () => {
+    describe("Dynamic Image Handles from inputSchema", () => {
+      it("should render additional image input handles for dynamic image inputs in schema", () => {
         const { container } = render(
           <TestWrapper>
             <GenerateImageNode {...createNodeProps({
@@ -666,9 +666,10 @@ describe("GenerateImageNode", () => {
           </TestWrapper>
         );
 
-        // Component uses static handles - always 1 image input and 1 text input
+        // 1 primary image handle + 1 dynamic image handle (last_frame) = 2
+        // first_frame is the first image input, so it maps to the primary "Image" handle
         const imageInputHandles = container.querySelectorAll('[data-handletype="image"][class*="target"]');
-        expect(imageInputHandles.length).toBe(1);
+        expect(imageInputHandles.length).toBe(2);
 
         const textHandles = container.querySelectorAll('[data-handletype="text"]');
         expect(textHandles.length).toBe(1);

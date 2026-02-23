@@ -474,7 +474,7 @@ describe("executeImageCompare", () => {
 });
 
 describe("executeGlbViewer", () => {
-  it("should fetch 3D model and set blob URL", async () => {
+  it("should fetch 3D model via proxy and set blob URL", async () => {
     const node = makeNode("glb", "glbViewer", {});
     const mockBlob = new Blob(["fake-glb"], { type: "model/gltf-binary" });
     const mockBlobUrl = "blob:http://localhost/fake-blob-url";
@@ -497,10 +497,14 @@ describe("executeGlbViewer", () => {
 
     await executeGlbViewer(ctx);
 
-    expect(fetchSpy).toHaveBeenCalledWith("https://example.com/model.glb", {});
+    expect(fetchSpy).toHaveBeenCalledWith("/api/proxy-fetch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: "https://example.com/model.glb" }),
+    });
     expect(ctx.updateNodeData).toHaveBeenCalledWith("glb", {
       glbUrl: mockBlobUrl,
-      filename: "generated.glb",
+      filename: "model.glb",
       capturedImage: null,
     });
 

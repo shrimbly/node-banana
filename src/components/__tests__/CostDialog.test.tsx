@@ -492,7 +492,7 @@ describe("CostDialog", () => {
         />
       );
 
-      expect(screen.getByText("Actual API spend from Gemini generations")).toBeInTheDocument();
+      expect(screen.getByText("Actual API spend across all providers")).toBeInTheDocument();
     });
   });
 

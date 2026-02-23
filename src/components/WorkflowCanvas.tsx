@@ -38,6 +38,13 @@ import {
   ImageCompareNode,
   VideoStitchNode,
   EaseCurveNode,
+  WorldLabsPanoNode,
+  WorldLabsWorldNode,
+  SpzViewerNode,
+  PanoCropNode,
+  PanoViewerNode,
+  PanoEditorNode,
+  MaskPainterNode,
   VideoTrimNode,
   VideoFrameGrabNode,
 } from "./nodes";
@@ -81,6 +88,13 @@ const nodeTypes: NodeTypes = {
   videoTrim: VideoTrimNode,
   videoFrameGrab: VideoFrameGrabNode,
   glbViewer: GLBViewerNode,
+  spzViewer: SpzViewerNode,
+  worldLabsPano: WorldLabsPanoNode,
+  worldLabsWorld: WorldLabsWorldNode,
+  panoCrop: PanoCropNode,
+  panoViewer: PanoViewerNode,
+  panoEditor: PanoEditorNode,
+  maskPainter: MaskPainterNode,
 };
 
 const edgeTypes: EdgeTypes = {
@@ -154,6 +168,20 @@ const getNodeHandles = (nodeType: string): { inputs: string[]; outputs: string[]
       return { inputs: ["video"], outputs: ["image"] };
     case "glbViewer":
       return { inputs: ["3d"], outputs: ["image"] };
+    case "spzViewer":
+      return { inputs: ["3d"], outputs: ["image"] };
+    case "worldLabsPano":
+      return { inputs: ["image", "text"], outputs: ["image"] };
+    case "worldLabsWorld":
+      return { inputs: ["image"], outputs: ["image", "3d"] };
+    case "panoCrop":
+      return { inputs: [], outputs: ["image", "text"] };
+    case "panoViewer":
+      return { inputs: ["image"], outputs: [] };
+    case "panoEditor":
+      return { inputs: ["image-0", "image-1", "text"], outputs: ["image"] };
+    case "maskPainter":
+      return { inputs: ["image"], outputs: ["image"] };
     default:
       return { inputs: [], outputs: [] };
   }
@@ -496,11 +524,11 @@ export function WorkflowCanvas() {
           if (needInput) {
             // Find input handles matching the type
             const matchingInputs = nodeData.inputSchema.filter(i => i.type === handleType);
-            const numHandles = matchingInputs.length;
-            if (numHandles > 0) {
-              // Find the first unoccupied indexed handle by checking existing edges and batchUsed
-              for (let i = 0; i < numHandles; i++) {
-                const candidateHandle = `${handleType}-${i}`;
+            if (matchingInputs.length > 0) {
+              // Find the first unoccupied handle by checking existing edges and batchUsed
+              // Handle IDs use schema name format: "image-{schemaName}" or "text-{schemaName}"
+              for (const input of matchingInputs) {
+                const candidateHandle = `${handleType}-${input.name}`;
                 const isOccupied = edges.some(
                   (edge) => edge.target === node.id && edge.targetHandle === candidateHandle
                 ) || batchUsed?.has(candidateHandle);
@@ -806,11 +834,17 @@ export function WorkflowCanvas() {
       // Create the new node at the drop position
       const newNodeId = addNode(nodeType, flowPosition);
 
-      // If creating an annotation node from an image source, populate it with the source image
-      if (nodeType === "annotation" && connectionType === "source" && handleType === "image" && sourceNodeId) {
+      // If creating an annotation or mask painter node from an image source, populate it with the source image
+      if ((nodeType === "annotation" || nodeType === "maskPainter") && connectionType === "source" && handleType === "image" && sourceNodeId) {
         const sourceImage = getImageFromNode(sourceNodeId);
         if (sourceImage) {
-          updateNodeData(newNodeId, { sourceImage, outputImage: sourceImage });
+          if (nodeType === "maskPainter") {
+            // Mask painter: set sourceImage for the modal reference, but NOT outputMask — preview stays empty/black
+            updateNodeData(newNodeId, { sourceImage });
+          } else {
+            // Annotation: set both sourceImage and outputImage (annotation passes through the image)
+            updateNodeData(newNodeId, { sourceImage, outputImage: sourceImage });
+          }
         }
       }
 
@@ -821,10 +855,10 @@ export function WorkflowCanvas() {
       // Map handle type to the correct handle ID based on node type
       // Note: New nodes start with default handles (image, text) before a model is selected
       if (handleType === "image") {
-        if (nodeType === "annotation" || nodeType === "output" || nodeType === "splitGrid" || nodeType === "outputGallery" || nodeType === "imageCompare") {
+        if (nodeType === "annotation" || nodeType === "maskPainter" || nodeType === "output" || nodeType === "splitGrid" || nodeType === "outputGallery" || nodeType === "imageCompare") {
           targetHandleId = "image";
-          // annotation also has an image output
-          if (nodeType === "annotation") {
+          // annotation and maskPainter also have an image output
+          if (nodeType === "annotation" || nodeType === "maskPainter") {
             sourceHandleIdForNewNode = "image";
           }
         } else if (nodeType === "nanoBanana" || nodeType === "generateVideo") {
@@ -1123,6 +1157,9 @@ export function WorkflowCanvas() {
           case "a":
             nodeType = "annotation";
             break;
+          case "w":
+            nodeType = "worldLabsPano";
+            break;
           case "t":
             nodeType = "generateAudio";
             break;
@@ -1153,6 +1190,13 @@ export function WorkflowCanvas() {
             videoTrim: { width: 360, height: 360 },
             videoFrameGrab: { width: 320, height: 320 },
             glbViewer: { width: 360, height: 380 },
+            spzViewer: { width: 300, height: 280 },
+            worldLabsPano: { width: 320, height: 380 },
+            worldLabsWorld: { width: 320, height: 360 },
+            panoCrop: { width: 300, height: 280 },
+            panoViewer: { width: 300, height: 280 },
+            panoEditor: { width: 300, height: 300 },
+            maskPainter: { width: 260, height: 300 },
           };
           const dims = defaultDimensions[nodeType];
           addNode(nodeType, { x: centerX - dims.width / 2, y: centerY - dims.height / 2 });
@@ -1745,7 +1789,21 @@ export function WorkflowCanvas() {
               case "videoFrameGrab":
                 return "#38bdf8"; // sky-400 (image from video)
               case "glbViewer":
-                return "#0ea5e9"; // sky-500 (3D viewport)
+                return "#38bdf8"; // sky-400 (3D viewport)
+              case "spzViewer":
+                return "#34d399"; // emerald-400 (SPZ/PLY viewer)
+              case "worldLabsPano":
+                return "#818cf8"; // indigo-400 (panorama generation)
+              case "worldLabsWorld":
+                return "#6366f1"; // indigo-500 (3D world generation)
+              case "panoCrop":
+                return "#f9a8d4"; // pink-300 (panorama crop)
+              case "panoViewer":
+                return "#f472b6"; // pink-400 (panorama viewer)
+              case "panoEditor":
+                return "#fb923c"; // orange-400 (panorama editor)
+              case "maskPainter":
+                return "#a3a3a3"; // neutral-400 (mask painting)
               default:
                 return "#94a3b8";
             }

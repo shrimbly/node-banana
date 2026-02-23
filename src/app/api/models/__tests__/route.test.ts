@@ -98,7 +98,7 @@ describe("/api/models route", () => {
     delete process.env.REPLICATE_API_KEY;
     delete process.env.FAL_API_KEY;
     // Set up mock fetch
-    global.fetch = mockFetch;
+    global.fetch = mockFetch as typeof fetch;
     // Reset cache mock to default (miss)
     mockGetCachedModels.mockReturnValue(null);
   });

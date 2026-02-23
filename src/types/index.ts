@@ -7,6 +7,7 @@
 
 // Domain re-exports
 export * from "./annotation";
+export * from "./maskPainter";
 export * from "./nodes";
 export * from "./providers";
 export * from "./models";

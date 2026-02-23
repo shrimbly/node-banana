@@ -123,6 +123,9 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
           provider: currentProvider,
           modelId: model.id,
           displayName: model.name,
+          ...(model.pricing && {
+            pricing: { type: model.pricing.type, amount: model.pricing.amount },
+          }),
         };
         // Clear parameters when changing models (different models have different schemas)
         updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
@@ -254,6 +257,12 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
       provider: model.provider,
       modelId: model.id,
       displayName: model.name,
+      ...(model.pricing && {
+        pricing: {
+          type: model.pricing.type,
+          amount: model.pricing.amount,
+        },
+      }),
     };
     updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
     setIsBrowseDialogOpen(false);
@@ -346,6 +355,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
       headerAction={headerAction}
       titlePrefix={titlePrefix}
       commentNavigation={commentNavigation ?? undefined}
+      lastCost={nodeData.lastGenerationCost}
     >
       {/* Dynamic input handles based on model schema */}
       {nodeData.inputSchema && nodeData.inputSchema.length > 0 ? (
@@ -373,10 +383,10 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
 
           // Add image handles from schema, or a placeholder if none exist
           if (hasImageInput) {
-            imageInputs.forEach((input, index) => {
+            imageInputs.forEach((input) => {
               handles.push({
-                // Always use indexed IDs for schema inputs for consistency
-                id: `image-${index}`,
+                // Use schema name in handle ID for direct mapping in connectedInputs
+                id: `image-${input.name}`,
                 type: "image",
                 label: input.label,
                 schemaName: input.name,
@@ -398,10 +408,10 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
 
           // Add text handles from schema, or a placeholder if none exist
           if (hasTextInput) {
-            textInputs.forEach((input, index) => {
+            textInputs.forEach((input) => {
               handles.push({
-                // Always use indexed IDs for schema inputs for consistency
-                id: `text-${index}`,
+                // Use schema name in handle ID for direct mapping in connectedInputs
+                id: `text-${input.name}`,
                 type: "text",
                 label: input.label,
                 schemaName: input.name,
@@ -718,6 +728,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
             onParametersChange={handleParametersChange}
             onExpandChange={handleParametersExpandChange}
             onInputsLoaded={handleInputsLoaded}
+            inputNames={nodeData.inputSchema?.map(i => i.name)}
           />
         )}
       </div>

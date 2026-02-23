@@ -18,6 +18,7 @@ import { generateWithReplicate } from "./providers/replicate";
 import { clearFalInputMappingCache as _clearFalInputMappingCache, generateWithFalQueue } from "./providers/fal";
 import { generateWithKie } from "./providers/kie";
 import { generateWithWaveSpeed } from "./providers/wavespeed";
+import { calculateGenerationCost } from "@/utils/costCalculator";
 
 // Re-export for backward compatibility (test file imports from route)
 export const clearFalInputMappingCache = _clearFalInputMappingCache;

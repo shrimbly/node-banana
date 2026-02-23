@@ -14,6 +14,8 @@ import {
   WorkflowEdge,
   NodeType,
   NanoBananaNodeData,
+  Generate3DNodeData,
+  GLBViewerNodeData,
   OutputGalleryNodeData,
   WorkflowNodeData,
   ImageHistoryItem,
@@ -61,6 +63,7 @@ import { getConnectedInputsPure, validateWorkflowPure } from "./utils/connectedI
 import {
   executeAnnotation,
   executeArray,
+  executeMaskPainter,
   executePrompt,
   executePromptConstructor,
   executeOutput,
@@ -77,6 +80,11 @@ import {
   executeVideoTrim,
   executeVideoFrameGrab,
   executeGlbViewer,
+  executeSpzViewer,
+  executeWorldLabsPano,
+  executeWorldLabsWorld,
+  executePanoViewer,
+  executePanoEditor,
 } from "./execution";
 import type { NodeExecutionContext } from "./execution";
 export type { LevelGroup } from "./utils/executionUtils";
@@ -944,7 +952,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
       switch (node.type) {
           case "imageInput":
-            // Data source node - no execution needed
+          case "panoCrop":
+            // Data source nodes - no execution needed
             break;
           case "audioInput": {
             // If audio is connected from upstream, use it (connection wins over upload)
@@ -956,6 +965,15 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
           }
           case "glbViewer":
             await executeGlbViewer(executionCtx);
+            break;
+          case "spzViewer":
+            await executeSpzViewer(executionCtx);
+            break;
+          case "panoViewer":
+            await executePanoViewer(executionCtx);
+            break;
+          case "panoEditor":
+            await executePanoEditor(executionCtx);
             break;
           case "annotation":
             await executeAnnotation(executionCtx);
@@ -1007,6 +1025,9 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
             break;
           case "videoFrameGrab":
             await executeVideoFrameGrab(executionCtx);
+            break;
+          case "maskPainter":
+            await executeMaskPainter(executionCtx);
             break;
         }
     }; // End of executeSingleNode helper
@@ -1158,6 +1179,14 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         set({ isRunning: false, currentNodeIds: [] });
         await logger.endSession();
         return;
+      } else if (node.type === "worldLabsPano") {
+        await executeWorldLabsPano(executionCtx);
+      } else if (node.type === "worldLabsWorld") {
+        await executeWorldLabsWorld(executionCtx);
+      } else if (node.type === "panoViewer") {
+        await executePanoViewer(executionCtx);
+      } else if (node.type === "panoEditor") {
+        await executePanoEditor(executionCtx);
       } else if (node.type === "videoTrim") {
         await executeVideoTrim(executionCtx);
         set({ isRunning: false, currentNodeIds: [] });
@@ -1168,6 +1197,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         set({ isRunning: false, currentNodeIds: [] });
         await logger.endSession();
         return;
+      } else if (node.type === "maskPainter") {
+        await executeMaskPainter(executionCtx);
       }
 
       // After regeneration, execute directly connected downstream consumer nodes
@@ -1181,6 +1212,15 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         switch (targetNode.type) {
           case "glbViewer":
             await executeGlbViewer(targetCtx);
+            break;
+          case "spzViewer":
+            await executeSpzViewer(targetCtx);
+            break;
+          case "panoViewer":
+            await executePanoViewer(targetCtx);
+            break;
+          case "panoEditor":
+            await executePanoEditor(targetCtx);
             break;
           case "output":
             await executeOutput(targetCtx);
@@ -1265,10 +1305,20 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       switch (node.type) {
         case "imageInput":
         case "audioInput":
+        case "panoCrop":
           // Data source nodes - no execution needed
           break;
         case "glbViewer":
           await executeGlbViewer(executionCtx);
+          break;
+        case "spzViewer":
+          await executeSpzViewer(executionCtx);
+          break;
+        case "panoViewer":
+          await executePanoViewer(executionCtx);
+          break;
+        case "panoEditor":
+          await executePanoEditor(executionCtx);
           break;
         case "annotation":
           await executeAnnotation(executionCtx);
@@ -1393,6 +1443,18 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
             switch (targetNode.type) {
               case "glbViewer":
                 await executeGlbViewer(targetCtx);
+                propagated.add(edge.target);
+                break;
+              case "spzViewer":
+                await executeSpzViewer(targetCtx);
+                propagated.add(edge.target);
+                break;
+              case "panoViewer":
+                await executePanoViewer(targetCtx);
+                propagated.add(edge.target);
+                break;
+              case "panoEditor":
+                await executePanoEditor(targetCtx);
                 propagated.add(edge.target);
                 break;
               case "output":
@@ -1586,6 +1648,72 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       viewedCommentNodeIds: new Set<string>(),
     });
 
+    // Post-load: restore 3D models in GLB viewers with stale blob URLs
+    // Blob URLs (blob:http://...) are ephemeral and become invalid after page reload.
+    // Find glbViewer nodes with dead blob URLs and auto-restore from connected generate3d nodes.
+    const loadedNodes = get().nodes;
+    const loadedEdges = get().edges;
+
+    for (const node of loadedNodes) {
+      if (node.type !== "glbViewer") continue;
+      const viewerData = node.data as GLBViewerNodeData;
+
+      // Only act on stale blob URLs or null — skip valid remote URLs
+      const hasStaleUrl = viewerData.glbUrl?.startsWith("blob:") || false;
+      const hasNoUrl = !viewerData.glbUrl;
+
+      if (!hasStaleUrl && !hasNoUrl) continue;
+
+      // Clear dead blob URL immediately so the viewer shows placeholder (not broken state)
+      if (hasStaleUrl) {
+        get().updateNodeData(node.id, { glbUrl: null, capturedImage: null });
+      }
+
+      // Find connected generate3d node via edges (edge targeting this viewer's "3d" handle)
+      const incomingEdge = loadedEdges.find(
+        (e) => e.target === node.id && e.targetHandle === "3d"
+      );
+      if (!incomingEdge) continue;
+
+      const sourceNode = loadedNodes.find((n) => n.id === incomingEdge.source);
+      if (!sourceNode || sourceNode.type !== "generate3d") continue;
+
+      const gen3dData = sourceNode.data as Generate3DNodeData;
+      const remoteUrl = gen3dData.output3dUrl;
+
+      // Only restore from valid remote URLs (not blob URLs)
+      if (!remoteUrl || remoteUrl.startsWith("blob:")) continue;
+
+      // Fire-and-forget async restore — doesn't block workflow loading
+      (async () => {
+        try {
+          const response = await fetch("/api/proxy-fetch", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: remoteUrl }),
+          });
+
+          if (!response.ok) {
+            console.warn(`[3D restore] Failed to fetch ${remoteUrl}: HTTP ${response.status}`);
+            return;
+          }
+
+          const blob = await response.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const filename = gen3dData.savedFilename || "restored.glb";
+
+          get().updateNodeData(node.id, {
+            glbUrl: blobUrl,
+            filename,
+            capturedImage: null,
+          });
+          console.log(`[3D restore] Restored ${filename} in GLB viewer ${node.id}`);
+        } catch (err) {
+          console.warn(`[3D restore] Failed to restore 3D model for viewer ${node.id}:`, err);
+        }
+      })();
+    }
+
     // Clear snapshot unless explicitly preserving (e.g., AI workflow generation)
     if (!options?.preserveSnapshot) {
       get().clearSnapshot();
@@ -1635,7 +1763,9 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   setWorkflowMetadata: (id: string, name: string, path: string, generationsPath?: string | null) => {
     // Auto-derive generationsPath: use provided value, fall back to existing, then auto-derive
     const currentGenPath = get().generationsPath;
-    const derivedGenerationsPath = generationsPath ?? currentGenPath ?? `${path}/generations`;
+    // Normalize backslashes to forward slashes for consistency (UNC paths with / work on all platforms)
+    const normalizedPath = path.replace(/\\/g, "/");
+    const derivedGenerationsPath = generationsPath ?? currentGenPath ?? `${normalizedPath}/generations`;
 
     set({
       workflowId: id,

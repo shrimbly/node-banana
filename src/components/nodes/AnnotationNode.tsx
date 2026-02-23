@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { useCommentNavigation } from "@/hooks/useCommentNavigation";
@@ -15,7 +15,17 @@ export function AnnotationNode({ id, data, selected }: NodeProps<AnnotationNodeT
   const commentNavigation = useCommentNavigation(id);
   const openModal = useAnnotationStore((state) => state.openModal);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
+  const getConnectedInputs = useWorkflowStore((state) => state.getConnectedInputs);
+  const edges = useWorkflowStore((state) => state.edges);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Reactively update sourceImage when an edge is connected
+  useEffect(() => {
+    const inputs = getConnectedInputs(id);
+    if (inputs.images.length > 0 && inputs.images[0] !== nodeData.sourceImage) {
+      updateNodeData(id, { sourceImage: inputs.images[0], outputImage: inputs.images[0] });
+    }
+  }, [edges, id, getConnectedInputs, nodeData.sourceImage, updateNodeData]);
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {

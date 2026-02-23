@@ -92,6 +92,7 @@ const createDefaultState = (overrides = {}) => ({
 describe("FloatingActionBar", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    window.confirm = vi.fn(() => true);
     mockValidateWorkflow.mockReturnValue({ valid: true, errors: [] });
     mockFetch.mockResolvedValue({
       ok: true,

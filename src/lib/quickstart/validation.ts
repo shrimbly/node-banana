@@ -49,6 +49,13 @@ const DEFAULT_DIMENSIONS: Record<NodeType, { width: number; height: number }> = 
   videoTrim: { width: 360, height: 360 },
   videoFrameGrab: { width: 320, height: 320 },
   glbViewer: { width: 360, height: 380 },
+  spzViewer: { width: 300, height: 280 },
+  worldLabsPano: { width: 320, height: 380 },
+  worldLabsWorld: { width: 320, height: 360 },
+  panoCrop: { width: 300, height: 280 },
+  panoViewer: { width: 300, height: 280 },
+  panoEditor: { width: 300, height: 300 },
+  maskPainter: { width: 260, height: 300 },
 };
 
 /**
@@ -259,6 +266,7 @@ function createDefaultNodeData(type: NodeType): WorkflowNodeData {
         error: null,
         imageHistory: [],
         selectedHistoryIndex: 0,
+        lastGenerationCost: null,
       };
     case "generateVideo":
       return {
@@ -270,6 +278,7 @@ function createDefaultNodeData(type: NodeType): WorkflowNodeData {
         error: null,
         videoHistory: [],
         selectedVideoHistoryIndex: 0,
+        lastGenerationCost: null,
       };
     case "generate3d":
       return {
@@ -281,6 +290,7 @@ function createDefaultNodeData(type: NodeType): WorkflowNodeData {
         selectedModel: undefined,
         status: "idle",
         error: null,
+        lastGenerationCost: null,
       };
     case "generateAudio":
       return {
@@ -305,6 +315,7 @@ function createDefaultNodeData(type: NodeType): WorkflowNodeData {
         maxTokens: 8192,
         status: "idle",
         error: null,
+        lastGenerationCost: null,
       };
     case "splitGrid":
       return {
@@ -383,6 +394,76 @@ function createDefaultNodeData(type: NodeType): WorkflowNodeData {
         glbUrl: null,
         filename: null,
         capturedImage: null,
+      };
+    case "spzViewer":
+      return {
+        spzUrl: null,
+        filename: null,
+        capturedImage: null,
+        viewerOpen: false,
+      };
+    case "worldLabsPano":
+      return {
+        worldName: "Untitled World",
+        model: "Marble 0.1-mini",
+        seed: null,
+        inputImages: [],
+        inputPrompt: null,
+        operationId: null,
+        worldId: null,
+        status: "idle",
+        error: null,
+        progress: null,
+        panoUrl: null,
+        thumbnailUrl: null,
+        caption: null,
+        imageAzimuths: {},
+      };
+    case "worldLabsWorld":
+      return {
+        worldName: "Untitled World",
+        model: "Marble 0.1-plus",
+        seed: null,
+        inputImages: [],
+        inputPrompt: null,
+        operationId: null,
+        worldId: null,
+        status: "idle",
+        error: null,
+        progress: null,
+        spzUrls: null,
+        panoUrl: null,
+        thumbnailUrl: null,
+        marbleViewerUrl: null,
+        caption: null,
+        viewerWindowOpen: false,
+      };
+    case "panoCrop":
+      return {
+        image: null,
+        metadata: null,
+        filename: null,
+        dimensions: null,
+      };
+    case "panoViewer":
+      return {
+        panoUrl: null,
+        viewerOpen: false,
+      };
+    case "panoEditor":
+      return {
+        outputImage: null,
+        status: "idle",
+        error: null,
+      };
+    case "maskPainter":
+      return {
+        sourceImage: null,
+        strokes: [],
+        outputMask: null,
+        brushSize: 30,
+        blurRadius: 0,
+        invertMask: false,
       };
   }
 }
