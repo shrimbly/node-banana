@@ -24,6 +24,12 @@ export interface WorkflowSaveConfig {
   generationsPath: string | null;
   lastSavedAt: number | null;
   useExternalImageStorage?: boolean;  // Whether to store images as files vs embedded base64
+  createdAt?: number;       // Set on first save
+  updatedAt?: number;       // Set on every save
+  nodeCount?: number;       // Snapshot at save time
+  edgeCount?: number;       // Snapshot at save time
+  nodeTypeSummary?: Record<string, number>;  // e.g. { nanoBanana: 2, prompt: 3 }
+  primaryModel?: string;    // Display name of most-used generation model
 }
 
 // Cost tracking data stored per-workflow in localStorage

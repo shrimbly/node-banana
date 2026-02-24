@@ -72,6 +72,8 @@ export function Header() {
     revertToSnapshot,
     shortcutsDialogOpen,
     setShortcutsDialogOpen,
+    setShowDashboard,
+    autoSaveEnabled,
   } = useWorkflowStore();
 
   const [showProjectModal, setShowProjectModal] = useState(false);
@@ -222,6 +224,15 @@ export function Header() {
           <h1 className="text-2xl font-semibold text-neutral-100 tracking-tight">
             Node Banana
           </h1>
+          <button
+            onClick={() => setShowDashboard(true)}
+            className="p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded transition-colors"
+            title="Project dashboard"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+            </svg>
+          </button>
 
           <div className="flex items-center gap-2 ml-4 pl-4 border-l border-neutral-700">
             {isProjectConfigured ? (
@@ -363,12 +374,18 @@ export function Header() {
             </button>
           )}
           <CommentsNavigationIcon />
-          <span className="text-neutral-400">
+          <span className="text-neutral-400 flex items-center gap-1.5">
             {isProjectConfigured ? (
               isSaving ? (
-                "Saving..."
+                <>
+                  <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+                  Saving...
+                </>
               ) : lastSavedAt ? (
-                `Saved ${formatTime(lastSavedAt)}`
+                <>
+                  {autoSaveEnabled && <span className="w-1.5 h-1.5 rounded-full bg-green-500" title="Auto-save enabled" />}
+                  Saved {formatTime(lastSavedAt)}
+                </>
               ) : (
                 "Not saved"
               )

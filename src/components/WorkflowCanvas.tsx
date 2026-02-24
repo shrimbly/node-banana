@@ -56,6 +56,7 @@ import { detectAndSplitGrid } from "@/utils/gridSplitter";
 import { logger } from "@/utils/logger";
 import { WelcomeModal } from "./quickstart";
 import { ProjectSetupModal } from "./ProjectSetupModal";
+import { ProjectDashboard } from "./dashboard/ProjectDashboard";
 import { ChatPanel } from "./ChatPanel";
 import { EditOperation } from "@/lib/chat/editOperations";
 import { stripBinaryData } from "@/lib/chat/contextBuilder";
@@ -239,7 +240,7 @@ const findScrollableAncestor = (target: HTMLElement, deltaX: number, deltaY: num
 };
 
 export function WorkflowCanvas() {
-  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId, executeWorkflow, isModalOpen, showQuickstart, setShowQuickstart, navigationTarget, setNavigationTarget, captureSnapshot, applyEditOperations, setWorkflowMetadata, canvasNavigationSettings, setShortcutsDialogOpen } =
+  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId, executeWorkflow, isModalOpen, showQuickstart, setShowQuickstart, showDashboard, setShowDashboard, navigationTarget, setNavigationTarget, captureSnapshot, applyEditOperations, setWorkflowMetadata, canvasNavigationSettings, setShortcutsDialogOpen } =
     useWorkflowStore();
   const { screenToFlowPosition, getViewport, zoomIn, zoomOut, setViewport, setCenter } = useReactFlow();
   const { show: showToast } = useToast();
@@ -254,6 +255,13 @@ export function WorkflowCanvas() {
 
   // Detect if canvas is empty for showing quickstart
   const isCanvasEmpty = nodes.length === 0;
+
+  // Listen for dashboard:new-project event to open new project setup
+  useEffect(() => {
+    const handler = () => setShowNewProjectSetup(true);
+    window.addEventListener("dashboard:new-project", handler);
+    return () => window.removeEventListener("dashboard:new-project", handler);
+  }, []);
 
   // Handle comment navigation - center viewport on target node
   useEffect(() => {
@@ -1605,20 +1613,8 @@ export function WorkflowCanvas() {
         </div>
       )}
 
-      {/* Welcome Modal */}
-      {isCanvasEmpty && showQuickstart && (
-        <WelcomeModal
-          onWorkflowGenerated={async (workflow) => {
-            await loadWorkflow(workflow);
-            setShowQuickstart(false);
-          }}
-          onClose={() => setShowQuickstart(false)}
-          onNewProject={() => {
-            setShowQuickstart(false);
-            setShowNewProjectSetup(true);
-          }}
-        />
-      )}
+      {/* Project Dashboard */}
+      {showDashboard && <ProjectDashboard />}
 
       {/* New Project Setup Modal */}
       {showNewProjectSetup && (
@@ -1628,10 +1624,11 @@ export function WorkflowCanvas() {
           onSave={(id, name, directoryPath) => {
             setWorkflowMetadata(id, name, directoryPath);
             setShowNewProjectSetup(false);
+            setShowDashboard(false);
           }}
           onClose={() => {
             setShowNewProjectSetup(false);
-            setShowQuickstart(true);
+            setShowDashboard(true);
           }}
         />
       )}
@@ -1772,6 +1769,20 @@ export function WorkflowCanvas() {
 
       {/* Global image history */}
       <GlobalImageHistory />
+
+      {/* Floating projects button */}
+      {!showDashboard && (
+        <button
+          onClick={() => setShowDashboard(true)}
+          className="absolute bottom-4 left-14 z-20 flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-neutral-300 bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 rounded-lg shadow-lg transition-colors"
+          title="Open project dashboard"
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+          </svg>
+          Projects
+        </button>
+      )}
 
       {/* Chat toggle button - hidden for now */}
 
