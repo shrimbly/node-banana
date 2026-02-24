@@ -239,7 +239,7 @@ const findScrollableAncestor = (target: HTMLElement, deltaX: number, deltaY: num
 };
 
 export function WorkflowCanvas() {
-  const { nodes, edges, groups, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId, executeWorkflow, isModalOpen, showQuickstart, setShowQuickstart, navigationTarget, setNavigationTarget, captureSnapshot, applyEditOperations, setWorkflowMetadata, canvasNavigationSettings, setShortcutsDialogOpen } =
+  const { nodes, edges, groups, selectedGroupId, setSelectedGroupId, deleteSelection, onNodesChange, onEdgesChange, onConnect, addNode, updateNodeData, loadWorkflow, getNodeById, addToGlobalHistory, setNodeGroupId, executeWorkflow, isModalOpen, showQuickstart, setShowQuickstart, navigationTarget, setNavigationTarget, captureSnapshot, applyEditOperations, setWorkflowMetadata, canvasNavigationSettings, setShortcutsDialogOpen, undo, redo, canUndo, canRedo, _pushHistorySnapshot: pushHistorySnapshot } =
     useWorkflowStore();
   const { screenToFlowPosition, getViewport, zoomIn, zoomOut, setViewport, setCenter } = useReactFlow();
   const { show: showToast } = useToast();
@@ -251,6 +251,7 @@ export function WorkflowCanvas() {
   const [isBuildingWorkflow, setIsBuildingWorkflow] = useState(false);
   const [showNewProjectSetup, setShowNewProjectSetup] = useState(false);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const lastUndoRedoAtRef = useRef(0);
 
   // Detect if canvas is empty for showing quickstart
   const isCanvasEmpty = nodes.length === 0;
@@ -979,8 +980,15 @@ export function WorkflowCanvas() {
     setConnectionDrop(null);
   }, []);
 
+  const handleBeforeDelete = useCallback(() => {
+    if (!isModalOpen) {
+      pushHistorySnapshot();
+    }
+    return true;
+  }, [isModalOpen, pushHistorySnapshot]);
+
   // Get copy/paste functions and clipboard from store
-  const { copySelectedNodes, pasteNodes, clearClipboard, clipboard } = useWorkflowStore();
+  const { copySelectedNodes, pasteNodes, duplicateSelectedNodes, clearClipboard, clipboard } = useWorkflowStore();
 
   // Add non-passive wheel listener to handle zoom/pan and prevent browser navigation
   // This replaces the onWheel prop which is passive by default and can't preventDefault
@@ -1067,6 +1075,11 @@ export function WorkflowCanvas() {
       return;
     }
 
+    // Let modal-specific keyboard handlers (e.g. Annotation modal) own undo/redo.
+    if (isModalOpen) {
+      return;
+    }
+
     // Handle keyboard shortcuts dialog (? key)
     if (event.key === "?" && !event.ctrlKey && !event.metaKey) {
       event.preventDefault();
@@ -1081,11 +1094,74 @@ export function WorkflowCanvas() {
       return;
     }
 
+    // Undo / Redo
+    if ((event.ctrlKey || event.metaKey) && (event.key === "z" || event.key === "Z")) {
+      event.preventDefault();
+      if (event.repeat) return;
+      const now = Date.now();
+      if (now - lastUndoRedoAtRef.current < 120) return;
+      lastUndoRedoAtRef.current = now;
+      if (event.shiftKey) {
+        if (canRedo) redo();
+      } else {
+        if (canUndo) undo();
+      }
+      return;
+    }
+
+    if ((event.ctrlKey || event.metaKey) && (event.key === "y" || event.key === "Y")) {
+      event.preventDefault();
+      if (event.repeat) return;
+      const now = Date.now();
+      if (now - lastUndoRedoAtRef.current < 120) return;
+      lastUndoRedoAtRef.current = now;
+      if (canRedo) redo();
+      return;
+    }
+
     // Handle copy (Ctrl/Cmd + C)
     if ((event.ctrlKey || event.metaKey) && event.key === "c") {
       event.preventDefault();
       copySelectedNodes();
       return;
+    }
+
+    // Handle duplicate (Ctrl/Cmd + D)
+    if ((event.ctrlKey || event.metaKey) && (event.key === "d" || event.key === "D")) {
+      event.preventDefault();
+      duplicateSelectedNodes({ selectedGroupId });
+      return;
+    }
+
+    // Delete selected group (group + contained nodes + connected edges)
+    if (event.key === "Delete" || event.key === "Backspace") {
+      const selectedNodes = nodes.filter((node) => node.selected);
+      const selectedNodeIds = selectedNodes.map((node) => node.id);
+
+      const selectedGroupIds = new Set<string>();
+      if (selectedGroupId) selectedGroupIds.add(selectedGroupId);
+
+      if (selectedNodes.length > 0) {
+        const candidateGroupIds = Array.from(
+          new Set(selectedNodes.map((node) => node.groupId).filter((groupId): groupId is string => !!groupId))
+        );
+
+        for (const groupId of candidateGroupIds) {
+          const groupNodes = nodes.filter((node) => node.groupId === groupId);
+          const selectedSet = new Set(selectedNodeIds);
+          const isEntireGroupSelected =
+            groupNodes.length > 0 && groupNodes.every((node) => selectedSet.has(node.id));
+          if (isEntireGroupSelected) {
+            selectedGroupIds.add(groupId);
+          }
+        }
+      }
+
+      if (selectedGroupIds.size > 0 || selectedNodeIds.length > 0) {
+        event.preventDefault();
+        deleteSelection(selectedNodeIds, Array.from(selectedGroupIds));
+        return;
+      }
     }
 
       // Helper to get viewport center position in flow coordinates
@@ -1330,7 +1406,7 @@ export function WorkflowCanvas() {
           ]);
         });
       }
-  }, [nodes, onNodesChange, copySelectedNodes, pasteNodes, clearClipboard, clipboard, getViewport, addNode, updateNodeData, executeWorkflow, setShortcutsDialogOpen]);
+  }, [isModalOpen, selectedGroupId, deleteSelection, nodes, onNodesChange, copySelectedNodes, pasteNodes, duplicateSelectedNodes, clearClipboard, clipboard, getViewport, addNode, updateNodeData, executeWorkflow, setShortcutsDialogOpen, undo, redo, canUndo, canRedo]);
 
   useEffect(() => {
     window.addEventListener("keydown", handleKeyDown);
@@ -1644,12 +1720,15 @@ export function WorkflowCanvas() {
         onConnect={handleConnect}
         onConnectEnd={handleConnectEnd}
         onNodeDragStop={handleNodeDragStop}
+        onPaneClick={() => setSelectedGroupId(null)}
+        onNodeClick={() => setSelectedGroupId(null)}
         onSelectionChange={handleSelectionChange}
+        onBeforeDelete={handleBeforeDelete}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         isValidConnection={isValidConnection}
         fitView
-        deleteKeyCode={["Backspace", "Delete"]}
+        deleteKeyCode={null}
         multiSelectionKeyCode="Shift"
         selectionOnDrag={
           canvasNavigationSettings.selectionMode === "altDrag" || canvasNavigationSettings.selectionMode === "shiftDrag"

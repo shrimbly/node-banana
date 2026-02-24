@@ -20,7 +20,11 @@ const shortcutGroups: ShortcutGroup[] = [
     title: "General",
     shortcuts: [
       { keys: [`${modKey}`, "Enter"], description: "Run workflow" },
+      { keys: [`${modKey}`, "Z"], description: "Undo last canvas change" },
+      { keys: [`${modKey}`, "Shift", "Z"], description: "Redo canvas change" },
+      { keys: [`${modKey}`, "Y"], description: "Redo canvas change" },
       { keys: [`${modKey}`, "C"], description: "Copy selected nodes" },
+      { keys: [`${modKey}`, "D"], description: "Duplicate selected nodes/groups" },
       { keys: [`${modKey}`, "V"], description: "Paste nodes / image / text" },
       { keys: ["?"], description: "Show keyboard shortcuts" },
     ],
@@ -51,7 +55,7 @@ const shortcutGroups: ShortcutGroup[] = [
     shortcuts: [
       { keys: ["Scroll"], description: "Zoom in / out" },
       { keys: ["Trackpad"], description: "Pan (macOS)" },
-      { keys: ["Delete"], description: "Delete selected nodes" },
+      { keys: ["Delete"], description: "Delete selected nodes or selected group" },
     ],
   },
 ];
@@ -148,4 +152,3 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
     </div>
   );
 }
-

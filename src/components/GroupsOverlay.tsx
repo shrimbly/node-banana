@@ -62,7 +62,7 @@ interface GroupControlsProps {
 
 // Renders the group header and resize handles - displayed above nodes (z-index 5)
 function GroupControls({ groupId, zoom }: GroupControlsProps) {
-  const { groups, updateGroup, deleteGroup, moveGroupNodes, toggleGroupLock } = useWorkflowStore();
+  const { groups, selectedGroupId, setSelectedGroupId, updateGroup, deleteGroupWithNodes, moveGroupNodes, toggleGroupLock } = useWorkflowStore();
   const group = groups[groupId];
 
   const [isEditing, setIsEditing] = useState(false);
@@ -132,8 +132,8 @@ function GroupControls({ groupId, zoom }: GroupControlsProps) {
   );
 
   const handleDelete = useCallback(() => {
-    deleteGroup(groupId);
-  }, [groupId, deleteGroup]);
+    deleteGroupWithNodes(groupId);
+  }, [groupId, deleteGroupWithNodes]);
 
   const handleToggleLock = useCallback(() => {
     toggleGroupLock(groupId);
@@ -142,6 +142,7 @@ function GroupControls({ groupId, zoom }: GroupControlsProps) {
   // Header drag handlers
   const handleHeaderMouseDown = useCallback(
     (e: React.MouseEvent) => {
+      setSelectedGroupId(groupId);
       if (
         (e.target as HTMLElement).closest("button") ||
         (e.target as HTMLElement).closest("input")
@@ -153,7 +154,7 @@ function GroupControls({ groupId, zoom }: GroupControlsProps) {
       setIsDragging(true);
       dragStartRef.current = { x: e.clientX, y: e.clientY };
     },
-    []
+    [groupId, setSelectedGroupId]
   );
 
   // Resize handlers
@@ -282,7 +283,9 @@ function GroupControls({ groupId, zoom }: GroupControlsProps) {
     >
       {/* Header - interactive */}
       <div
-        className="absolute top-0 left-0 right-0 flex items-center gap-2 px-3 cursor-grab active:cursor-grabbing select-none rounded-t-xl pointer-events-auto"
+        className={`absolute top-0 left-0 right-0 flex items-center gap-2 px-3 cursor-grab active:cursor-grabbing select-none rounded-t-xl pointer-events-auto ${
+          selectedGroupId === groupId ? "ring-2 ring-white/60" : ""
+        }`}
         style={{ backgroundColor: bgColor, height: HEADER_HEIGHT }}
         onMouseDown={handleHeaderMouseDown}
       >

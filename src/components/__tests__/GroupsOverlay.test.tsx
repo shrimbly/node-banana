@@ -16,8 +16,10 @@ vi.mock("@xyflow/react", () => ({
 // Mock the workflow store
 const mockUpdateGroup = vi.fn();
 const mockDeleteGroup = vi.fn();
+const mockDeleteGroupWithNodes = vi.fn();
 const mockMoveGroupNodes = vi.fn();
 const mockToggleGroupLock = vi.fn();
+const mockSetSelectedGroupId = vi.fn();
 const mockUseWorkflowStore = vi.fn();
 
 vi.mock("@/store/workflowStore", () => ({
@@ -51,8 +53,11 @@ const createMockGroup = (overrides: Partial<Group> = {}): Group => ({
 // Default store state factory
 const createDefaultState = (overrides: { groups?: Record<string, Group> } = {}) => ({
   groups: {},
+  selectedGroupId: null,
+  setSelectedGroupId: mockSetSelectedGroupId,
   updateGroup: mockUpdateGroup,
   deleteGroup: mockDeleteGroup,
+  deleteGroupWithNodes: mockDeleteGroupWithNodes,
   moveGroupNodes: mockMoveGroupNodes,
   toggleGroupLock: mockToggleGroupLock,
   ...overrides,
@@ -386,7 +391,7 @@ describe("GroupControlsOverlay", () => {
   });
 
   describe("Delete Group", () => {
-    it("should call deleteGroup when delete button is clicked", () => {
+    it("should call deleteGroupWithNodes when delete button is clicked", () => {
       mockUseWorkflowStore.mockImplementation((selector) => {
         return selector(createDefaultState({
           groups: { "group-1": createMockGroup() },
@@ -396,7 +401,7 @@ describe("GroupControlsOverlay", () => {
       render(<GroupControlsOverlay />);
 
       fireEvent.click(screen.getByTitle("Delete group"));
-      expect(mockDeleteGroup).toHaveBeenCalledWith("group-1");
+      expect(mockDeleteGroupWithNodes).toHaveBeenCalledWith("group-1");
     });
   });
 
