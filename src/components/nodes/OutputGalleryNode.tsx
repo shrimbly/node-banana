@@ -4,7 +4,6 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useCommentNavigation } from "@/hooks/useCommentNavigation";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { OutputGalleryNodeData } from "@/types";
 
@@ -12,7 +11,6 @@ type OutputGalleryNodeType = Node<OutputGalleryNodeData, "outputGallery">;
 
 export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGalleryNodeType>) {
   const nodeData = data;
-  const commentNavigation = useCommentNavigation(id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const edges = useWorkflowStore((state) => state.edges);
   const nodes = useWorkflowStore((state) => state.nodes);
@@ -113,14 +111,8 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
     <>
       <BaseNode
         id={id}
-        title="Output Gallery"
-        customTitle={nodeData.customTitle}
-        comment={nodeData.comment}
-        onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-        onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
         selected={selected}
         className="min-w-[200px]"
-        commentNavigation={commentNavigation ?? undefined}
       >
         <Handle
           type="target"

@@ -4,7 +4,6 @@ import React, { useCallback, useState, useEffect, useMemo } from "react";
 import { Handle, Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { ProviderBadge } from "./ProviderBadge";
-import { useCommentNavigation } from "@/hooks/useCommentNavigation";
 import { ModelParameters } from "./ModelParameters";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { GenerateAudioNodeData, ProviderType, SelectedModel, ModelInputDef } from "@/types";
@@ -17,7 +16,6 @@ type GenerateAudioNodeType = Node<GenerateAudioNodeData, "generateAudio">;
 
 export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudioNodeType>) {
   const nodeData = data;
-  const commentNavigation = useCommentNavigation(id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const generationsPath = useWorkflowStore((state) => state.generationsPath);
   const [isBrowseDialogOpen, setIsBrowseDialogOpen] = useState(false);
@@ -191,21 +189,6 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
     return "Generate Audio";
   }, [nodeData.selectedModel?.displayName, nodeData.selectedModel?.modelId]);
 
-  // Provider badge as title prefix
-  const titlePrefix = useMemo(() => (
-    <ProviderBadge provider={currentProvider} />
-  ), [currentProvider]);
-
-  // Header action element - browse button
-  const headerAction = useMemo(() => (
-    <button
-      onClick={() => setIsBrowseDialogOpen(true)}
-      className="nodrag nopan text-[10px] py-0.5 px-1.5 bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 rounded text-neutral-300 transition-colors"
-    >
-      Browse
-    </button>
-  ), []);
-
   // Dynamic handles based on inputSchema
   const dynamicHandles = useMemo(() => {
     if (!nodeData.inputSchema || nodeData.inputSchema.length === 0) return null;
@@ -233,18 +216,9 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
     <>
       <BaseNode
         id={id}
-        title={displayTitle}
-        titlePrefix={titlePrefix}
-        headerAction={headerAction}
-        customTitle={nodeData.customTitle}
-        comment={nodeData.comment}
-        onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-        onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
-        onRun={handleRegenerate}
         selected={selected}
         isExecuting={isRunning}
         hasError={nodeData.status === "error"}
-        commentNavigation={commentNavigation ?? undefined}
         minWidth={300}
         minHeight={250}
       >

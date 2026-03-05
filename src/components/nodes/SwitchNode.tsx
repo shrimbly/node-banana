@@ -115,11 +115,6 @@ export const SwitchNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>)
   return (
     <BaseNode
       id={id}
-      title="Switch"
-      customTitle={nodeData.customTitle}
-      comment={nodeData.comment}
-      onCustomTitleChange={(customTitle) => updateNodeData(id, { customTitle })}
-      onCommentChange={(comment) => updateNodeData(id, { comment })}
       selected={selected}
       minWidth={220}
       minHeight={minHeight}

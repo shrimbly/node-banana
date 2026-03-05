@@ -110,35 +110,31 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
     <>
       <BaseNode
         id={id}
-        title="Output"
-        customTitle={nodeData.customTitle}
-        comment={nodeData.comment}
-        onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-        onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
-        onRun={handleRun}
-        isExecuting={isRunning}
         selected={selected}
+        isExecuting={isRunning}
+        contentClassName="flex-1 min-h-0 relative"
         className="min-w-[200px]"
-        commentNavigation={commentNavigation ?? undefined}
       >
         <Handle
           type="target"
           position={Position.Left}
           id="image"
           data-handletype="image"
+          style={{ zIndex: 10 }}
         />
         <Handle
           type="target"
           position={Position.Left}
           id="audio"
           data-handletype="audio"
-          style={{ top: "60%", background: "rgb(167, 139, 250)" }}
+          style={{ top: "60%", background: "rgb(167, 139, 250)", zIndex: 10 }}
         />
 
+        <div className="relative w-full h-full overflow-hidden rounded-lg">
         {contentSrc ? (
-          <div className="flex-1 flex flex-col min-h-0 gap-2">
+          <>
             {isAudio ? (
-              <div className="flex-1 flex items-center min-h-0 py-2">
+              <div className="w-full h-full flex items-center justify-center p-4">
                 <audio
                   src={contentSrc}
                   controls
@@ -147,7 +143,7 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
               </div>
             ) : (
               <div
-                className="relative cursor-pointer group flex-1 min-h-0"
+                className="relative cursor-pointer group w-full h-full"
                 onClick={() => setShowLightbox(true)}
               >
                 {isVideo ? (
@@ -158,17 +154,17 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
                     muted
                     autoPlay
                     playsInline
-                    className="w-full h-full object-contain rounded"
+                    className="w-full h-full object-cover"
                     onClick={(e) => e.stopPropagation()}
                   />
                 ) : (
                   <img
                     src={contentSrc}
                     alt="Output"
-                    className="w-full h-full object-contain rounded"
+                    className="w-full h-full object-cover"
                   />
                 )}
-                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center rounded pointer-events-none">
+                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center pointer-events-none">
                   <span className="text-[10px] font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity bg-black/50 px-2 py-1 rounded">
                     View full size
                   </span>
@@ -177,26 +173,22 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
             )}
             <button
               onClick={handleDownload}
-              className="w-full py-1.5 bg-white hover:bg-neutral-200 text-neutral-900 text-[10px] font-medium rounded transition-colors shrink-0"
+              className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white text-xs rounded transition-colors flex items-center gap-1"
+              title="Download"
             >
-              Download
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
             </button>
-          </div>
+          </>
         ) : (
-          <div className="w-full flex-1 min-h-[144px] border border-dashed border-neutral-600 rounded flex items-center justify-center">
-            <span className="text-neutral-500 text-[10px]">Waiting for image, video, or audio</span>
+          <div className="w-full h-full bg-neutral-900/40 flex flex-col items-center justify-center">
+            <svg className="w-8 h-8 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+            </svg>
+            <span className="text-xs text-neutral-500 mt-2">Connect input</span>
           </div>
         )}
-
-        {/* Filename input */}
-        <div className="mt-2 shrink-0">
-          <input
-            type="text"
-            value={nodeData.outputFilename || ""}
-            onChange={(e) => updateNodeData(id, { outputFilename: e.target.value })}
-            placeholder="Output filename (optional)"
-            className="nodrag nopan w-full px-2 py-1.5 text-[10px] bg-neutral-900/50 border border-neutral-700 rounded text-neutral-200 placeholder:text-neutral-500 focus:outline-none focus:ring-1 focus:ring-neutral-600"
-          />
         </div>
       </BaseNode>
 

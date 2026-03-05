@@ -3,7 +3,6 @@
 import React, { useMemo } from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useCommentNavigation } from "@/hooks/useCommentNavigation";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { VideoFrameGrabNodeData } from "@/types";
 
@@ -11,7 +10,6 @@ type VideoFrameGrabNodeType = Node<VideoFrameGrabNodeData, "videoFrameGrab">;
 
 export function VideoFrameGrabNode({ id, data, selected }: NodeProps<VideoFrameGrabNodeType>) {
   const nodeData = data;
-  const commentNavigation = useCommentNavigation(id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
@@ -40,16 +38,9 @@ export function VideoFrameGrabNode({ id, data, selected }: NodeProps<VideoFrameG
   return (
     <BaseNode
       id={id}
-      title="Frame Grab"
-      customTitle={nodeData.customTitle}
-      comment={nodeData.comment}
-      onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-      onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
-      onRun={canExtract ? handleExtract : undefined}
       selected={selected}
       isExecuting={isRunning}
       hasError={nodeData.status === "error"}
-      commentNavigation={commentNavigation ?? undefined}
       minWidth={320}
       minHeight={320}
     >

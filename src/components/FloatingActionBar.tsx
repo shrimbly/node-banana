@@ -1,10 +1,67 @@
 "use client";
 
-import { useRef, useState, useEffect, useMemo } from "react";
+import { useRef, useState, useEffect, useMemo, useCallback } from "react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { NodeType } from "@/types";
 import { useReactFlow } from "@xyflow/react";
 import { ModelSearchDialog } from "./modals/ModelSearchDialog";
+
+// All nodes menu categories
+const ALL_NODES_CATEGORIES: { label: string; nodes: { type: NodeType; label: string }[] }[] = [
+  {
+    label: "Input",
+    nodes: [
+      { type: "imageInput", label: "Image Input" },
+      { type: "audioInput", label: "Audio Input" },
+      { type: "glbViewer", label: "3D Viewer" },
+    ],
+  },
+  {
+    label: "Text",
+    nodes: [
+      { type: "prompt", label: "Prompt" },
+      { type: "promptConstructor", label: "Prompt Constructor" },
+      { type: "array", label: "Array" },
+    ],
+  },
+  {
+    label: "Generate",
+    nodes: [
+      { type: "nanoBanana", label: "Generate Image" },
+      { type: "generateVideo", label: "Generate Video" },
+      { type: "generate3d", label: "Generate 3D" },
+      { type: "generateAudio", label: "Generate Audio" },
+      { type: "llmGenerate", label: "LLM Generate" },
+    ],
+  },
+  {
+    label: "Process",
+    nodes: [
+      { type: "annotation", label: "Annotate" },
+      { type: "splitGrid", label: "Split Grid" },
+      { type: "videoStitch", label: "Video Stitch" },
+      { type: "videoTrim", label: "Video Trim" },
+      { type: "easeCurve", label: "Ease Curve" },
+      { type: "videoFrameGrab", label: "Frame Grab" },
+      { type: "imageCompare", label: "Image Compare" },
+    ],
+  },
+  {
+    label: "Route",
+    nodes: [
+      { type: "router", label: "Router" },
+      { type: "switch", label: "Switch" },
+      { type: "conditionalSwitch", label: "Conditional Switch" },
+    ],
+  },
+  {
+    label: "Output",
+    nodes: [
+      { type: "output", label: "Output" },
+      { type: "outputGallery", label: "Output Gallery" },
+    ],
+  },
+];
 
 // Get the center of the React Flow pane in screen coordinates
 function getPaneCenter() {
@@ -165,6 +222,89 @@ function GenerateComboButton() {
 }
 
 
+function AllNodesMenu() {
+  const [isOpen, setIsOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const addNode = useWorkflowStore((state) => state.addNode);
+  const { screenToFlowPosition } = useReactFlow();
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+
+    if (isOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isOpen]);
+
+  const handleAddNode = useCallback((type: NodeType) => {
+    const center = getPaneCenter();
+    const position = screenToFlowPosition({
+      x: center.x + Math.random() * 100 - 50,
+      y: center.y + Math.random() * 100 - 50,
+    });
+
+    addNode(type, position);
+    setIsOpen(false);
+  }, [addNode, screenToFlowPosition]);
+
+  const handleDragStart = useCallback((event: React.DragEvent, type: NodeType) => {
+    event.dataTransfer.setData("application/node-type", type);
+    event.dataTransfer.effectAllowed = "copy";
+    setIsOpen(false);
+  }, []);
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors flex items-center gap-1"
+      >
+        All nodes
+        <svg
+          className={`w-3 h-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="absolute bottom-full left-0 mb-2 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl overflow-hidden min-w-[180px] max-h-[400px] overflow-y-auto">
+          {ALL_NODES_CATEGORIES.map((category, catIndex) => (
+            <div key={category.label}>
+              <div className={`px-3 py-1 text-[10px] text-neutral-500 uppercase tracking-wide${catIndex > 0 ? " border-t border-neutral-700" : ""}`}>
+                {category.label}
+              </div>
+              {category.nodes.map((node) => (
+                <button
+                  key={node.type}
+                  onClick={() => handleAddNode(node.type)}
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, node.type)}
+                  className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
+                >
+                  {node.label}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function FloatingActionBar() {
   const {
     nodes,
@@ -261,21 +401,19 @@ export function FloatingActionBar() {
     <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50">
       <div className="flex items-center gap-0.5 bg-neutral-800/95 backdrop-blur-sm rounded-lg shadow-lg border border-neutral-700/80 px-1.5 py-1">
         <NodeButton type="imageInput" label="Image" />
-        <NodeButton type="annotation" label="Annotate" />
         <NodeButton type="prompt" label="Prompt" />
         <GenerateComboButton />
         <NodeButton type="output" label="Output" />
+        <AllNodesMenu />
 
-        {/* Browse models button */}
+        {/* All models button */}
         <div className="w-px h-5 bg-neutral-600 mx-1.5" />
         <button
           onClick={() => setModelSearchOpen(true)}
           title="Browse models"
-          className="p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors"
+          className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors"
         >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
+          All models
         </button>
 
         <div className="w-px h-5 bg-neutral-600 mx-1.5" />

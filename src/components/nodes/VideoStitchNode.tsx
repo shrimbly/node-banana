@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useCommentNavigation } from "@/hooks/useCommentNavigation";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { VideoStitchNodeData } from "@/types";
 import { checkEncoderSupport } from "@/hooks/useStitchVideos";
@@ -13,7 +12,6 @@ type VideoStitchNodeType = Node<VideoStitchNodeData, "videoStitch">;
 
 export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNodeType>) {
   const nodeData = data;
-  const commentNavigation = useCommentNavigation(id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const edges = useWorkflowStore((state) => state.edges);
   const nodes = useWorkflowStore((state) => state.nodes);
@@ -367,13 +365,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
     return (
       <BaseNode
         id={id}
-        title="Video Stitch"
-        customTitle={nodeData.customTitle}
-        comment={nodeData.comment}
-        onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-        onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
         selected={selected}
-        commentNavigation={commentNavigation ?? undefined}
         minWidth={500}
         minHeight={280}
       >
@@ -403,13 +395,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
     return (
       <BaseNode
         id={id}
-        title="Video Stitch"
-        customTitle={nodeData.customTitle}
-        comment={nodeData.comment}
-        onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-        onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
         selected={selected}
-        commentNavigation={commentNavigation ?? undefined}
         minWidth={500}
         minHeight={280}
       >
@@ -445,16 +431,9 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
   return (
     <BaseNode
       id={id}
-      title="Video Stitch"
-      customTitle={nodeData.customTitle}
-      comment={nodeData.comment}
-      onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-      onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
-      onRun={handleStitch}
       selected={selected}
       isExecuting={isRunning}
       hasError={nodeData.status === "error"}
-      commentNavigation={commentNavigation ?? undefined}
       minWidth={500}
       minHeight={280}
     >

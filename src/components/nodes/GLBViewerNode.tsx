@@ -5,7 +5,6 @@ import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { Canvas, useThree, useFrame } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { BaseNode } from "./BaseNode";
-import { useCommentNavigation } from "@/hooks/useCommentNavigation";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { useToast } from "@/components/Toast";
 import { GLBViewerNodeData } from "@/types";
@@ -202,7 +201,6 @@ function LoadingIndicator() {
 
 export function GLBViewerNode({ id, data, selected }: NodeProps<GLBViewerNodeType>) {
   const nodeData = data as GLBViewerNodeData;
-  const commentNavigation = useCommentNavigation(id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const captureRef = useRef<(() => string | null) | null>(null);
@@ -360,13 +358,7 @@ export function GLBViewerNode({ id, data, selected }: NodeProps<GLBViewerNodeTyp
   return (
     <BaseNode
       id={id}
-      title="3D"
-      customTitle={nodeData.customTitle}
-      comment={nodeData.comment}
-      onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-      onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
       selected={selected}
-      commentNavigation={commentNavigation ?? undefined}
       contentClassName={nodeData.glbUrl ? "flex-1 min-h-0 overflow-hidden flex flex-col" : undefined}
     >
       <input

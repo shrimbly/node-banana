@@ -3,7 +3,6 @@
 import { useCallback, useState, useEffect } from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useCommentNavigation } from "@/hooks/useCommentNavigation";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { SplitGridNodeData } from "@/types";
 import { SplitGridSettingsModal } from "../SplitGridSettingsModal";
@@ -12,7 +11,6 @@ type SplitGridNodeType = Node<SplitGridNodeData, "splitGrid">;
 
 export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeType>) {
   const nodeData = data;
-  const commentNavigation = useCommentNavigation(id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
@@ -40,14 +38,8 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
   return (
     <BaseNode
       id={id}
-      title="Split Grid"
-      customTitle={nodeData.customTitle}
-      comment={nodeData.comment}
-      onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-      onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
       selected={selected}
       hasError={nodeData.status === "error"}
-      commentNavigation={commentNavigation ?? undefined}
     >
       {/* Image input handle */}
       <Handle

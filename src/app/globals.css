@@ -61,8 +61,8 @@ body {
 
 /* Base handle styles */
 .react-flow__handle {
-  width: 10px;
-  height: 10px;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
   border: 2px solid white;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
@@ -81,11 +81,11 @@ body {
 }
 
 .react-flow__handle-left {
-  left: -5px;
+  left: -7px;
 }
 
 .react-flow__handle-right {
-  right: -5px;
+  right: -7px;
 }
 
 /* Image handles - soft green */

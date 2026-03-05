@@ -3,7 +3,6 @@
 import React, { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { Handle, Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useCommentNavigation } from "@/hooks/useCommentNavigation";
 import { ModelParameters } from "./ModelParameters";
 import { useWorkflowStore, useProviderApiKeys } from "@/store/workflowStore";
 import { Generate3DNodeData, ProviderType, SelectedModel, ModelInputDef } from "@/types";
@@ -11,6 +10,7 @@ import { ProviderModel, ModelCapability } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { useToast } from "@/components/Toast";
 import { ProviderBadge } from "./ProviderBadge";
+import { getModelPageUrl, getProviderDisplayName } from "@/utils/providerUrls";
 
 // 3D generation capabilities
 const THREE_D_CAPABILITIES: ModelCapability[] = ["text-to-3d", "image-to-3d"];
@@ -19,7 +19,6 @@ type Generate3DNodeType = Node<Generate3DNodeData, "generate3d">;
 
 export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeType>) {
   const nodeData = data;
-  const commentNavigation = useCommentNavigation(id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const { replicateApiKey, falApiKey, kieApiKey } = useProviderApiKeys();
   const [isBrowseDialogOpen, setIsBrowseDialogOpen] = useState(false);
@@ -87,21 +86,6 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
     return "Select 3D model...";
   }, [nodeData.selectedModel?.displayName, nodeData.selectedModel?.modelId]);
 
-  // Provider badge as title prefix
-  const titlePrefix = useMemo(() => (
-    <ProviderBadge provider={currentProvider} />
-  ), [currentProvider]);
-
-  // Header action element - browse button
-  const headerAction = useMemo(() => (
-    <button
-      onClick={() => setIsBrowseDialogOpen(true)}
-      className="nodrag nopan text-[10px] py-0.5 px-1.5 bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 rounded text-neutral-300 transition-colors"
-    >
-      Browse
-    </button>
-  ), []);
-
   // Track previous status to detect error transitions
   const prevStatusRef = useRef(nodeData.status);
 
@@ -121,18 +105,9 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
     <>
     <BaseNode
       id={id}
-      title={displayTitle}
-      customTitle={nodeData.customTitle}
-      comment={nodeData.comment}
-      onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-      onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
-      onRun={handleRegenerate}
       selected={selected}
       isExecuting={isRunning}
       hasError={nodeData.status === "error"}
-      headerAction={headerAction}
-      titlePrefix={titlePrefix}
-      commentNavigation={commentNavigation ?? undefined}
     >
       {/* Dynamic input handles based on model schema */}
       {nodeData.inputSchema && nodeData.inputSchema.length > 0 ? (

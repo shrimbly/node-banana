@@ -71,11 +71,6 @@ export const RouterNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>)
   return (
     <BaseNode
       id={id}
-      title="Router"
-      customTitle={nodeData.customTitle}
-      comment={nodeData.comment}
-      onCustomTitleChange={(customTitle) => updateNodeData(id, { customTitle })}
-      onCommentChange={(comment) => updateNodeData(id, { comment })}
       selected={selected}
       minWidth={200}
       minHeight={minHeight}

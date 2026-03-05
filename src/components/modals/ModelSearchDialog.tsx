@@ -14,6 +14,7 @@ const MODELS_CACHE_TTL = 48 * 60 * 60 * 1000; // 48 hours
 
 interface ModelsCacheEntry {
   models: ProviderModel[];
+  availableProviders?: string[];
   timestamp: number;
 }
 
@@ -30,10 +31,10 @@ function getCachedModels(cacheKey: string): ModelsCacheEntry | null {
   return null;
 }
 
-function setCachedModels(cacheKey: string, models: ProviderModel[]) {
+function setCachedModels(cacheKey: string, models: ProviderModel[], availableProviders?: string[]) {
   try {
     const cache = JSON.parse(localStorage.getItem(MODELS_CACHE_KEY) || "{}");
-    cache[cacheKey] = { models, timestamp: Date.now() };
+    cache[cacheKey] = { models, availableProviders, timestamp: Date.now() };
     localStorage.setItem(MODELS_CACHE_KEY, JSON.stringify(cache));
   } catch {
     // Ignore cache errors
@@ -95,6 +96,8 @@ type CapabilityFilter = "all" | "image" | "video" | "3d" | "audio";
 interface ModelsResponse {
   success: boolean;
   models?: ProviderModel[];
+  /** Providers with API keys configured (env or client header) */
+  availableProviders?: string[];
   error?: string;
 }
 
@@ -138,6 +141,7 @@ export function ModelSearchDialog({
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [serverAvailableProviders, setServerAvailableProviders] = useState<string[]>([]);
 
   // Refs
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -180,6 +184,9 @@ export function ModelSearchDialog({
       const cached = getCachedModels(cacheKey);
       if (cached) {
         setModels(cached.models);
+        if (cached.availableProviders) {
+          setServerAvailableProviders(cached.availableProviders);
+        }
         return;
       }
     }
@@ -239,8 +246,12 @@ export function ModelSearchDialog({
 
       if (data.success && data.models) {
         setModels(data.models);
-        // Cache the successful result
-        setCachedModels(cacheKey, data.models);
+        // Cache the successful result (including available providers)
+        setCachedModels(cacheKey, data.models, data.availableProviders);
+        // Update server-reported available providers
+        if (data.availableProviders) {
+          setServerAvailableProviders(data.availableProviders);
+        }
       } else {
         setError(data.error || "Failed to fetch models");
         setModels([]);
@@ -404,6 +415,27 @@ export function ModelSearchDialog({
         return provider;
     }
   };
+
+  // Compute which providers are available based on client API keys + server env vars
+  const availableProviders = useMemo(() => {
+    const providers = new Set<ProviderType>(["gemini", "fal"]); // Always available
+    // Client-side keys (from localStorage/provider settings)
+    if (replicateApiKey) providers.add("replicate");
+    if (kieApiKey) providers.add("kie");
+    if (wavespeedApiKey) providers.add("wavespeed");
+    // Server-side keys (from env vars, reported by /api/models)
+    for (const p of serverAvailableProviders) {
+      providers.add(p as ProviderType);
+    }
+    return providers;
+  }, [replicateApiKey, kieApiKey, wavespeedApiKey, serverAvailableProviders]);
+
+  // Reset provider filter if current selection becomes unavailable
+  useEffect(() => {
+    if (providerFilter !== "all" && !availableProviders.has(providerFilter as ProviderType)) {
+      setProviderFilter("all");
+    }
+  }, [providerFilter, availableProviders]);
 
   // Filter recent models by capability
   const filteredRecentModels = useMemo(() => {
@@ -585,7 +617,7 @@ export function ModelSearchDialog({
               />
             </div>
 
-            {/* Provider Filter - Icon Buttons */}
+            {/* Provider Filter - Icon Buttons (only show available providers) */}
             <div className="flex items-center gap-0.5 bg-neutral-700/50 rounded p-0.5">
               <button
                 onClick={() => setProviderFilter("all")}
@@ -598,61 +630,71 @@ export function ModelSearchDialog({
               >
                 All
               </button>
-              <button
-                onClick={() => setProviderFilter("gemini")}
-                title="Gemini"
-                className={`p-2 rounded transition-colors ${
-                  providerFilter === "gemini"
-                    ? "bg-green-500/20 text-green-300"
-                    : "text-neutral-400 hover:text-green-300 hover:bg-neutral-700"
-                }`}
-              >
-                <GeminiIcon />
-              </button>
-              <button
-                onClick={() => setProviderFilter("replicate")}
-                title="Replicate"
-                className={`p-2 rounded transition-colors ${
-                  providerFilter === "replicate"
-                    ? "bg-blue-500/20 text-blue-300"
-                    : "text-neutral-400 hover:text-blue-300 hover:bg-neutral-700"
-                }`}
-              >
-                <ReplicateIcon />
-              </button>
-              <button
-                onClick={() => setProviderFilter("fal")}
-                title="fal.ai"
-                className={`p-2 rounded transition-colors ${
-                  providerFilter === "fal"
-                    ? "bg-yellow-500/20 text-yellow-300"
-                    : "text-neutral-400 hover:text-yellow-300 hover:bg-neutral-700"
-                }`}
-              >
-                <FalIcon />
-              </button>
-              <button
-                onClick={() => setProviderFilter("kie")}
-                title="Kie.ai"
-                className={`p-2 rounded transition-colors ${
-                  providerFilter === "kie"
-                    ? "bg-orange-500/20 text-orange-300"
-                    : "text-neutral-400 hover:text-orange-300 hover:bg-neutral-700"
-                }`}
-              >
-                <KieIcon />
-              </button>
-              <button
-                onClick={() => setProviderFilter("wavespeed")}
-                title="WaveSpeed"
-                className={`p-2 rounded transition-colors ${
-                  providerFilter === "wavespeed"
-                    ? "bg-orange-500/20 text-orange-300"
-                    : "text-neutral-400 hover:text-orange-300 hover:bg-neutral-700"
-                }`}
-              >
-                <WaveSpeedIcon />
-              </button>
+              {availableProviders.has("gemini") && (
+                <button
+                  onClick={() => setProviderFilter("gemini")}
+                  title="Gemini"
+                  className={`p-2 rounded transition-colors ${
+                    providerFilter === "gemini"
+                      ? "bg-green-500/20 text-green-300"
+                      : "text-neutral-400 hover:text-green-300 hover:bg-neutral-700"
+                  }`}
+                >
+                  <GeminiIcon />
+                </button>
+              )}
+              {availableProviders.has("replicate") && (
+                <button
+                  onClick={() => setProviderFilter("replicate")}
+                  title="Replicate"
+                  className={`p-2 rounded transition-colors ${
+                    providerFilter === "replicate"
+                      ? "bg-blue-500/20 text-blue-300"
+                      : "text-neutral-400 hover:text-blue-300 hover:bg-neutral-700"
+                  }`}
+                >
+                  <ReplicateIcon />
+                </button>
+              )}
+              {availableProviders.has("fal") && (
+                <button
+                  onClick={() => setProviderFilter("fal")}
+                  title="fal.ai"
+                  className={`p-2 rounded transition-colors ${
+                    providerFilter === "fal"
+                      ? "bg-yellow-500/20 text-yellow-300"
+                      : "text-neutral-400 hover:text-yellow-300 hover:bg-neutral-700"
+                  }`}
+                >
+                  <FalIcon />
+                </button>
+              )}
+              {availableProviders.has("kie") && (
+                <button
+                  onClick={() => setProviderFilter("kie")}
+                  title="Kie.ai"
+                  className={`p-2 rounded transition-colors ${
+                    providerFilter === "kie"
+                      ? "bg-orange-500/20 text-orange-300"
+                      : "text-neutral-400 hover:text-orange-300 hover:bg-neutral-700"
+                  }`}
+                >
+                  <KieIcon />
+                </button>
+              )}
+              {availableProviders.has("wavespeed") && (
+                <button
+                  onClick={() => setProviderFilter("wavespeed")}
+                  title="WaveSpeed"
+                  className={`p-2 rounded transition-colors ${
+                    providerFilter === "wavespeed"
+                      ? "bg-purple-500/20 text-purple-300"
+                      : "text-neutral-400 hover:text-purple-300 hover:bg-neutral-700"
+                  }`}
+                >
+                  <WaveSpeedIcon />
+                </button>
+              )}
             </div>
 
             {/* Capability Filter */}

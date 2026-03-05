@@ -65,7 +65,6 @@ export function ModelParameters({
   const [schema, setSchema] = useState<ModelParameter[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isExpanded, setIsExpanded] = useState(true);
   // Use stable selector for API keys to prevent unnecessary re-fetches
   const { replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey } = useProviderApiKeys();
 
@@ -139,12 +138,12 @@ export function ModelParameters({
     fetchSchema();
   }, [modelId, provider, replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, onInputsLoaded]);
 
-  // Notify parent to resize node when schema loads and panel is expanded
+  // Notify parent to resize node when schema loads
   useEffect(() => {
-    if (isExpanded && schema.length > 0 && onExpandChange) {
+    if (schema.length > 0 && onExpandChange) {
       onExpandChange(true, schema.length);
     }
-  }, [schema, isExpanded, onExpandChange]);
+  }, [schema, onExpandChange]);
 
   const handleParameterChange = useCallback(
     (name: string, value: unknown) => {
@@ -174,70 +173,22 @@ export function ModelParameters({
   }
 
   return (
-    <div className="shrink-0">
-      {/* Collapsible header */}
-      <button
-        onClick={() => {
-          const newExpanded = !isExpanded;
-          setIsExpanded(newExpanded);
-          onExpandChange?.(newExpanded, schema.length);
-        }}
-        className="w-full flex items-center justify-between text-[10px] text-neutral-400 hover:text-neutral-300 transition-colors py-0.5"
-      >
-        <span className="flex items-center gap-1">
-          <svg
-            className={`w-2.5 h-2.5 transition-transform ${isExpanded ? "rotate-90" : ""}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-          Parameters
-          {Object.keys(parameters).length > 0 && (
-            <span className="text-neutral-500">({Object.keys(parameters).length})</span>
-          )}
-        </span>
-        {isLoading && (
-          <svg className="w-2.5 h-2.5 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="3"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-            />
-          </svg>
-        )}
-      </button>
-
-      {/* Parameter inputs (when expanded) */}
-      {isExpanded && (
-        <div className="mt-1 space-y-1.5">
-          {error ? (
-            <span className="text-[9px] text-red-400">{error}</span>
-          ) : isLoading ? (
-            <span className="text-[9px] text-neutral-500">Loading parameters...</span>
-          ) : schema.length === 0 ? (
-            <span className="text-[9px] text-neutral-500">No parameters available</span>
-          ) : (
-            schema.map((param) => (
-              <ParameterInput
-                key={param.name}
-                param={param}
-                value={parameters[param.name]}
-                onChange={(value) => handleParameterChange(param.name, value)}
-              />
-            ))
-          )}
-        </div>
+    <div className="shrink-0 space-y-1.5">
+      {error ? (
+        <span className="text-[9px] text-red-400">{error}</span>
+      ) : isLoading ? (
+        <span className="text-[9px] text-neutral-500">Loading parameters...</span>
+      ) : schema.length === 0 ? (
+        <span className="text-[9px] text-neutral-500">No parameters available</span>
+      ) : (
+        schema.map((param) => (
+          <ParameterInput
+            key={param.name}
+            param={param}
+            value={parameters[param.name]}
+            onChange={(value) => handleParameterChange(param.name, value)}
+          />
+        ))
       )}
     </div>
   );

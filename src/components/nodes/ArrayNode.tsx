@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Handle, Node, NodeProps, Position, useReactFlow } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useCommentNavigation } from "@/hooks/useCommentNavigation";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { ArrayNodeData } from "@/types";
 import { getConnectedInputsPure } from "@/store/utils/connectedInputs";
@@ -21,7 +20,6 @@ function arraysEqual(a: string[], b: string[]): boolean {
 
 export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
   const nodeData = data;
-  const commentNavigation = useCommentNavigation(id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const addNode = useWorkflowStore((state) => state.addNode);
   const onConnect = useWorkflowStore((state) => state.onConnect);
@@ -174,34 +172,28 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
   return (
     <BaseNode
       id={id}
-      title="Array"
-      customTitle={nodeData.customTitle}
-      comment={nodeData.comment}
-      onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-      onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
       selected={selected}
-      commentNavigation={commentNavigation ?? undefined}
       hasError={!!nodeData.error}
       minWidth={320}
       minHeight={300}
-      headerButtons={
-        <button
-          type="button"
-          onClick={handleAutoRouteToPrompts}
-          disabled={previewItems.length === 0}
-          className="nodrag nopan ml-2 shrink-0 p-1 rounded border border-neutral-600 text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed"
-          title="Auto-route to Prompts"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 3v6m0 0a2 2 0 104 0 2 2 0 00-4 0zm0 0v7a3 3 0 003 3h6m0 0a2 2 0 100 4 2 2 0 000-4zm0 0v-6a3 3 0 013-3h0" />
-          </svg>
-        </button>
-      }
     >
       <Handle type="target" position={Position.Left} id="text" data-handletype="text" />
 
       {/* Single text output point (each outgoing edge receives a separate item) */}
       <Handle type="source" position={Position.Right} id="text" data-handletype="text" style={{ top: 48 }} />
+
+      {/* Auto-route button - floating absolute positioned */}
+      <button
+        type="button"
+        onClick={handleAutoRouteToPrompts}
+        disabled={previewItems.length === 0}
+        className="nodrag nopan absolute top-2 right-2 z-10 shrink-0 p-1 rounded border border-neutral-600 bg-neutral-800/90 text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 disabled:opacity-50 disabled:cursor-not-allowed"
+        title="Auto-route to Prompts"
+      >
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 3v6m0 0a2 2 0 104 0 2 2 0 00-4 0zm0 0v7a3 3 0 003 3h6m0 0a2 2 0 100 4 2 2 0 000-4zm0 0v-6a3 3 0 013-3h0" />
+        </svg>
+      </button>
 
       <div className="flex flex-col gap-2 flex-1 min-h-0">
         <div className="grid grid-cols-[auto_1fr] gap-2 items-center">

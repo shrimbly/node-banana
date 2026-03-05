@@ -118,9 +118,9 @@ describe("FloatingActionBar", () => {
 
       await waitFor(() => {
         expect(screen.getByText("Image")).toBeInTheDocument();
-        expect(screen.getByText("Annotate")).toBeInTheDocument();
         expect(screen.getByText("Prompt")).toBeInTheDocument();
         expect(screen.getByText("Output")).toBeInTheDocument();
+        expect(screen.getByText("All nodes")).toBeInTheDocument();
       });
     });
 
@@ -177,23 +177,6 @@ describe("FloatingActionBar", () => {
       fireEvent.click(imageButton);
 
       expect(mockAddNode).toHaveBeenCalledWith("imageInput", expect.any(Object));
-    });
-
-    it("should call addNode when Annotate button is clicked", async () => {
-      render(
-        <TestWrapper>
-          <FloatingActionBar />
-        </TestWrapper>
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText("Annotate")).toBeInTheDocument();
-      });
-
-      const annotateButton = screen.getByText("Annotate");
-      fireEvent.click(annotateButton);
-
-      expect(mockAddNode).toHaveBeenCalledWith("annotation", expect.any(Object));
     });
 
     it("should call addNode when Prompt button is clicked", async () => {
@@ -385,7 +368,7 @@ describe("FloatingActionBar", () => {
   });
 
   describe("Browse Models Button", () => {
-    it("should render Browse models button", async () => {
+    it("should render All models button with Browse models title", async () => {
       render(
         <TestWrapper>
           <FloatingActionBar />
@@ -394,10 +377,11 @@ describe("FloatingActionBar", () => {
 
       await waitFor(() => {
         expect(screen.getByTitle("Browse models")).toBeInTheDocument();
+        expect(screen.getByText("All models")).toBeInTheDocument();
       });
     });
 
-    it("should open ModelSearchDialog when Browse models button is clicked", async () => {
+    it("should open ModelSearchDialog when All models button is clicked", async () => {
       render(
         <TestWrapper>
           <FloatingActionBar />
@@ -405,13 +389,88 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTitle("Browse models")).toBeInTheDocument();
+        expect(screen.getByText("All models")).toBeInTheDocument();
       });
 
-      const browseButton = screen.getByTitle("Browse models");
+      const browseButton = screen.getByText("All models");
       fireEvent.click(browseButton);
 
       expect(mockSetModelSearchOpen).toHaveBeenCalledWith(true);
+    });
+  });
+
+  describe("All Nodes Menu", () => {
+    it("should render All nodes button", async () => {
+      render(
+        <TestWrapper>
+          <FloatingActionBar />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("All nodes")).toBeInTheDocument();
+      });
+    });
+
+    it("should open All nodes dropdown when clicked", async () => {
+      render(
+        <TestWrapper>
+          <FloatingActionBar />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("All nodes")).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText("All nodes"));
+
+      // Check representative items from different categories
+      expect(screen.getByText("Image Input")).toBeInTheDocument();
+      expect(screen.getByText("Generate Image")).toBeInTheDocument();
+      expect(screen.getByText("Router")).toBeInTheDocument();
+      expect(screen.getByText("Output Gallery")).toBeInTheDocument();
+      expect(screen.getByText("Annotate")).toBeInTheDocument();
+    });
+
+    it("should call addNode when a node is selected from All nodes menu", async () => {
+      render(
+        <TestWrapper>
+          <FloatingActionBar />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("All nodes")).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText("All nodes"));
+      fireEvent.click(screen.getByText("Annotate"));
+
+      expect(mockAddNode).toHaveBeenCalledWith("annotation", expect.any(Object));
+    });
+
+    it("should close All nodes dropdown after selection", async () => {
+      render(
+        <TestWrapper>
+          <FloatingActionBar />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("All nodes")).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByText("All nodes"));
+
+      // Verify dropdown is open
+      expect(screen.getByText("Image Input")).toBeInTheDocument();
+
+      // Click an item
+      fireEvent.click(screen.getByText("Image Input"));
+
+      // Dropdown should close - "Image Input" should no longer be visible
+      expect(screen.queryByText("Image Input")).not.toBeInTheDocument();
     });
   });
 

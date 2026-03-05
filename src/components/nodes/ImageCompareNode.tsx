@@ -7,7 +7,6 @@ import {
   ReactCompareSliderImage,
 } from "react-compare-slider";
 import { BaseNode } from "./BaseNode";
-import { useCommentNavigation } from "@/hooks/useCommentNavigation";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { ImageCompareNodeData } from "@/types";
 
@@ -19,7 +18,6 @@ export function ImageCompareNode({
   selected,
 }: NodeProps<ImageCompareNodeType>) {
   const nodeData = data;
-  const commentNavigation = useCommentNavigation(id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const edges = useWorkflowStore((state) => state.edges);
   const nodes = useWorkflowStore((state) => state.nodes);
@@ -66,18 +64,8 @@ export function ImageCompareNode({
   return (
     <BaseNode
       id={id}
-      title="Image Compare"
-      customTitle={nodeData.customTitle}
-      comment={nodeData.comment}
-      onCustomTitleChange={(title) =>
-        updateNodeData(id, { customTitle: title || undefined })
-      }
-      onCommentChange={(comment) =>
-        updateNodeData(id, { comment: comment || undefined })
-      }
       selected={selected}
       className="min-w-[200px]"
-      commentNavigation={commentNavigation ?? undefined}
     >
       {/* Two labeled image input handles */}
       <Handle

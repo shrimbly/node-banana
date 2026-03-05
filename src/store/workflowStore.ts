@@ -243,9 +243,11 @@ interface WorkflowStore {
   openModalCount: number;
   isModalOpen: boolean;
   showQuickstart: boolean;
+  hoveredNodeId: string | null;
   incrementModalCount: () => void;
   decrementModalCount: () => void;
   setShowQuickstart: (show: boolean) => void;
+  setHoveredNodeId: (id: string | null) => void;
 
   // Execution
   isRunning: boolean;
@@ -450,6 +452,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   openModalCount: 0,
   isModalOpen: false,
   showQuickstart: true,
+  hoveredNodeId: null,
   isRunning: false,
   currentNodeIds: [],  // Changed from currentNodeId for parallel execution
   pausedAtNodeId: null,
@@ -520,6 +523,10 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
   setShowQuickstart: (show: boolean) => {
     set({ showQuickstart: show });
+  },
+
+  setHoveredNodeId: (id: string | null) => {
+    set({ hoveredNodeId: id });
   },
 
   addNode: (type: NodeType, position: XYPosition, initialData?: Partial<WorkflowNodeData>) => {

@@ -4,7 +4,6 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom";
 import { Handle, Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useCommentNavigation } from "@/hooks/useCommentNavigation";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { EaseCurveNodeData } from "@/types";
 import { checkEncoderSupport } from "@/hooks/useStitchVideos";
@@ -40,7 +39,6 @@ const PRESET_NAMES = new Set(EASING_PRESETS);
 
 export function EaseCurveNode({ id, data, selected }: NodeProps<EaseCurveNodeType>) {
   const nodeData = data;
-  const commentNavigation = useCommentNavigation(id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
@@ -300,13 +298,7 @@ export function EaseCurveNode({ id, data, selected }: NodeProps<EaseCurveNodeTyp
     return (
       <BaseNode
         id={id}
-        title="Ease Curve"
-        customTitle={nodeData.customTitle}
-        comment={nodeData.comment}
-        onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-        onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
         selected={selected}
-        commentNavigation={commentNavigation ?? undefined}
         minWidth={340}
         minHeight={480}
       >
@@ -336,13 +328,7 @@ export function EaseCurveNode({ id, data, selected }: NodeProps<EaseCurveNodeTyp
     return (
       <BaseNode
         id={id}
-        title="Ease Curve"
-        customTitle={nodeData.customTitle}
-        comment={nodeData.comment}
-        onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-        onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
         selected={selected}
-        commentNavigation={commentNavigation ?? undefined}
         minWidth={340}
         minHeight={480}
       >
@@ -363,16 +349,9 @@ export function EaseCurveNode({ id, data, selected }: NodeProps<EaseCurveNodeTyp
   return (
     <BaseNode
       id={id}
-      title="Ease Curve"
-      customTitle={nodeData.customTitle}
-      comment={nodeData.comment}
-      onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-      onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
-      onRun={handleRun}
       selected={selected}
       isExecuting={isRunning}
       hasError={nodeData.status === "error"}
-      commentNavigation={commentNavigation ?? undefined}
       minWidth={340}
       minHeight={VIDEO_HEIGHT}
     >

@@ -206,32 +206,29 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
   return (
     <BaseNode
       id={id}
-      title="Conditional Switch"
-      customTitle={nodeData.customTitle}
-      comment={nodeData.comment}
-      onCustomTitleChange={(customTitle) => updateNodeData(id, { customTitle })}
-      onCommentChange={(comment) => updateNodeData(id, { comment })}
       selected={selected}
       minWidth={260}
       minHeight={minHeight}
       className="bg-teal-950/80 border-teal-600"
-      headerButtons={showClearButton ? (
-        <div className="relative ml-2 shrink-0 group">
+    >
+      {/* Clear button - floating absolute positioned */}
+      {showClearButton && (
+        <div className="absolute top-2 right-2 z-10">
           <button
             onClick={handleClear}
-            className="nodrag nopan p-0.5 rounded transition-all duration-200 ease-in-out flex items-center overflow-hidden group-hover:pr-2 text-neutral-500 group-hover:text-neutral-200 border border-neutral-600"
+            className="nodrag nopan p-0.5 rounded transition-all duration-200 ease-in-out flex items-center overflow-hidden group pr-2 text-neutral-500 hover:text-neutral-200 border border-neutral-600 bg-neutral-800/90"
             title="Clear evaluation"
           >
             <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
-            <span className="text-[9px] whitespace-nowrap max-w-0 group-hover:max-w-[60px] transition-all duration-200 ease-in-out overflow-hidden opacity-0 group-hover:opacity-100">
+            <span className="text-[9px] whitespace-nowrap ml-1">
               Clear
             </span>
           </button>
         </div>
-      ) : undefined}
-    >
+      )}
+
       {/* Input handle (left) - text only, aligned with header */}
       <Handle
         type="target"

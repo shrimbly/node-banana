@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
-import { useCommentNavigation } from "@/hooks/useCommentNavigation";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { VideoTrimNodeData } from "@/types";
 import { checkEncoderSupport } from "@/hooks/useStitchVideos";
@@ -22,7 +21,6 @@ function formatTime(seconds: number): string {
 
 export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeType>) {
   const nodeData = data;
-  const commentNavigation = useCommentNavigation(id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
@@ -203,13 +201,8 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
     return (
       <BaseNode
         id={id}
-        title="Video Trim"
-        customTitle={nodeData.customTitle}
-        comment={nodeData.comment}
-        onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-        onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
         selected={selected}
-        commentNavigation={commentNavigation ?? undefined}
+        contentClassName="flex-1 min-h-0 overflow-clip"
         minWidth={360}
         minHeight={360}
       >
@@ -239,13 +232,7 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
     return (
       <BaseNode
         id={id}
-        title="Video Trim"
-        customTitle={nodeData.customTitle}
-        comment={nodeData.comment}
-        onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-        onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
         selected={selected}
-        commentNavigation={commentNavigation ?? undefined}
         minWidth={360}
         minHeight={360}
       >
@@ -266,16 +253,9 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
   return (
     <BaseNode
       id={id}
-      title="Video Trim"
-      customTitle={nodeData.customTitle}
-      comment={nodeData.comment}
-      onCustomTitleChange={(title) => updateNodeData(id, { customTitle: title || undefined })}
-      onCommentChange={(comment) => updateNodeData(id, { comment: comment || undefined })}
-      onRun={canTrim ? handleTrim : undefined}
       selected={selected}
       isExecuting={isRunning}
       hasError={nodeData.status === "error"}
-      commentNavigation={commentNavigation ?? undefined}
       minWidth={360}
       minHeight={360}
     >

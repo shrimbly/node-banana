@@ -166,11 +166,13 @@ export function calculateNodeSize(
  *
  * @param aspectRatio - Width divided by height of the content
  * @param currentHeight - The node's current height (if manually set)
+ * @param skipChromeOffset - If true, skip subtracting NODE_CHROME_HEIGHT (for full-bleed nodes with floating headers)
  * @returns {width, height} dimensions that preserve height when possible
  */
 export function calculateNodeSizePreservingHeight(
   aspectRatio: number,
-  currentHeight?: number
+  currentHeight?: number,
+  skipChromeOffset: boolean = false
 ): { width: number; height: number } {
   // Handle invalid aspect ratios
   if (!aspectRatio || aspectRatio <= 0 || !isFinite(aspectRatio)) {
@@ -179,11 +181,12 @@ export function calculateNodeSizePreservingHeight(
 
   // No current height or below minimum = use default behavior
   if (!currentHeight || currentHeight < MIN_HEIGHT) {
-    return calculateNodeSize(aspectRatio);
+    return skipChromeOffset ? calculateNodeSizeForFullBleed(aspectRatio) : calculateNodeSize(aspectRatio);
   }
 
   // Preserve height, calculate width to maintain aspect ratio
-  const contentHeight = currentHeight - NODE_CHROME_HEIGHT;
+  const chromeHeight = skipChromeOffset ? 0 : NODE_CHROME_HEIGHT;
+  const contentHeight = currentHeight - chromeHeight;
   let newWidth = contentHeight * aspectRatio;
 
   // Clamp width to constraints
@@ -192,5 +195,69 @@ export function calculateNodeSizePreservingHeight(
   return {
     width: Math.round(newWidth),
     height: Math.round(currentHeight),
+  };
+}
+
+/**
+ * Calculate node dimensions for full-bleed content (no header chrome).
+ * Used by nodes with floating headers where content fills the entire node area.
+ *
+ * @param aspectRatio - Width divided by height (e.g., 16/9 for landscape, 9/16 for portrait)
+ * @param currentHeight - Optional current height to preserve (if manually resized)
+ * @returns {width, height} dimensions that fit within constraints
+ */
+export function calculateNodeSizeForFullBleed(
+  aspectRatio: number,
+  currentHeight?: number
+): { width: number; height: number } {
+  // Handle invalid aspect ratios
+  if (!aspectRatio || aspectRatio <= 0 || !isFinite(aspectRatio)) {
+    return { width: 300, height: 300 }; // Return default square
+  }
+
+  // If preserving height, calculate width
+  if (currentHeight && currentHeight >= MIN_HEIGHT) {
+    let width = currentHeight * aspectRatio;
+    width = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, width));
+    return {
+      width: Math.round(width),
+      height: Math.round(currentHeight),
+    };
+  }
+
+  // Start with base width and calculate height
+  let width = 300; // Default starting width
+  let height = width / aspectRatio;
+
+  // Check if height exceeds max - if so, scale down width to fit
+  if (height > MAX_HEIGHT) {
+    height = MAX_HEIGHT;
+    width = height * aspectRatio;
+  }
+
+  // Check if height is below min - if so, scale up width to fit
+  if (height < MIN_HEIGHT) {
+    height = MIN_HEIGHT;
+    width = height * aspectRatio;
+  }
+
+  // Clamp width to constraints
+  if (width > MAX_WIDTH) {
+    width = MAX_WIDTH;
+    height = width / aspectRatio;
+    // Re-clamp height
+    height = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, height));
+  }
+
+  if (width < MIN_WIDTH) {
+    width = MIN_WIDTH;
+    height = width / aspectRatio;
+    // Re-clamp height
+    height = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, height));
+  }
+
+  return {
+    width: Math.round(width),
+    height: Math.round(height),
   };
 }

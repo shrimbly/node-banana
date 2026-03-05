@@ -237,15 +237,14 @@ describe("GenerateImageNode", () => {
       expect(screen.getByText("Run to generate")).toBeInTheDocument();
     });
 
-    it("should render a dashed border placeholder when no output image", () => {
-      const { container } = render(
+    it("should render empty state placeholder when no output image", () => {
+      render(
         <TestWrapper>
           <GenerateImageNode {...createNodeProps({ status: "idle", outputImage: null })} />
         </TestWrapper>
       );
 
-      const placeholder = container.querySelector(".border-dashed");
-      expect(placeholder).toBeInTheDocument();
+      expect(screen.getByText("Run to generate")).toBeInTheDocument();
     });
   });
 
