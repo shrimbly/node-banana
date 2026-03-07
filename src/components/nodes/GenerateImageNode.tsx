@@ -36,6 +36,12 @@ const IMAGE_CAPABILITIES: ModelCapability[] = ["text-to-image", "image-to-image"
 
 type NanoBananaNodeType = Node<NanoBananaNodeData, "nanoBanana">;
 
+/**
+ * GenerateImageNode component for AI image generation.
+ * Handles model selection, parameter configuration, and image preview/history.
+ * @param props - Node properties from React Flow.
+ * @returns React component for the image generation node.
+ */
 export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNodeType>) {
   const nodeData = data;
   const commentNavigation = useCommentNavigation(id);
@@ -94,6 +100,10 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   }, [id, nodeData.model, nodeData.selectedModel, updateNodeData]);
 
   // Fetch models from external providers when provider changes
+  /**
+   * Fetches available models from the currently selected provider.
+   * @returns A promise that resolves when models are loaded.
+   */
   const fetchModels = useCallback(async () => {
     if (currentProvider === "gemini") {
       setExternalModels([]);
@@ -144,6 +154,11 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   }, [fetchModels]);
 
   // Handle provider change
+  /**
+   * Handles changes to the model provider.
+   * Resets model selection and parameters when provider changes.
+   * @param e - the change event from the select element.
+   */
   const handleProviderChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const provider = e.target.value as ProviderType;
@@ -172,6 +187,10 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   );
 
   // Handle model change for external providers
+  /**
+   * Handles changes to external models (Replicate, Fal, etc.).
+   * @param e - the change event from the select element.
+   */
   const handleExternalModelChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const modelId = e.target.value;
@@ -208,6 +227,10 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
     [id, updateNodeData]
   );
 
+  /**
+   * Handles model selection for Gemini-native models.
+   * @param e - Change event from selection.
+   */
   const handleModelChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {
       const model = e.target.value as ModelType;
@@ -285,10 +308,18 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
 
+  /**
+   * Triggers the regeneration of the current node's image.
+   */
   const handleRegenerate = useCallback(() => {
     regenerateNode(id);
   }, [id, regenerateNode]);
 
+  /**
+   * Loads an image by its unique ID from the local generations path.
+   * @param imageId - The ID of the image to load.
+   * @returns A promise resolving to the base64 image data or null if not found.
+   */
   const loadImageById = useCallback(async (imageId: string) => {
     if (!generationsPath) {
       console.error("Generations path not configured");
@@ -359,6 +390,10 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   }, [id, nodeData.imageHistory, nodeData.selectedHistoryIndex, isLoadingCarouselImage, loadImageById, updateNodeData]);
 
   // Handle model selection from browse dialog
+  /**
+   * Handles model selection from the external browse dialog.
+   * @param model - The chosen provider model.
+   */
   const handleBrowseModelSelect = useCallback((model: ProviderModel) => {
     const newSelectedModel: SelectedModel = {
       provider: model.provider,
@@ -473,66 +508,17 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
       headerAction={headerAction}
       titlePrefix={titlePrefix}
       commentNavigation={commentNavigation ?? undefined}
+      handles={
+        <>
+          <Handle type="target" position={Position.Left} id="image" style={{ top: "35%", pointerEvents: "auto" }} data-handletype="image" isConnectable={true} />
+          <div className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right" style={{ right: `calc(100% + 8px)`, top: "calc(35% - 18px)", color: "var(--handle-color-image)" }}>Image</div>
+          <Handle type="target" position={Position.Left} id="text" style={{ top: "65%", pointerEvents: "auto" }} data-handletype="text" isConnectable={true} />
+          <div className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right" style={{ right: `calc(100% + 8px)`, top: "calc(65% - 18px)", color: "var(--handle-color-text)" }}>Prompt</div>
+          <Handle type="source" position={Position.Right} id="image" style={{ top: "50%", pointerEvents: "auto" }} data-handletype="image" />
+          <div className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none" style={{ left: `calc(100% + 8px)`, top: "calc(50% - 18px)", color: "var(--handle-color-image)" }}>Image</div>
+        </>
+      }
     >
-      {/* Input handles - ALWAYS use same IDs and positions for connection stability */}
-      {/* Image input at 35%, Text input at 65% - never changes regardless of model */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="image"
-        style={{ top: "35%" }}
-        data-handletype="image"
-        isConnectable={true}
-      />
-      {/* Image label */}
-      <div
-        className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right"
-        style={{
-          right: `calc(100% + 8px)`,
-          top: "calc(35% - 18px)",
-          color: "var(--handle-color-image)",
-        }}
-      >
-        Image
-      </div>
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="text"
-        style={{ top: "65%" }}
-        data-handletype="text"
-        isConnectable={true}
-      />
-      {/* Prompt label */}
-      <div
-        className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right"
-        style={{
-          right: `calc(100% + 8px)`,
-          top: "calc(65% - 18px)",
-          color: "var(--handle-color-text)",
-        }}
-      >
-        Prompt
-      </div>
-      {/* Output handle */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="image"
-        style={{ top: "50%" }}
-        data-handletype="image"
-      />
-      {/* Output label */}
-      <div
-        className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none"
-        style={{
-          left: `calc(100% + 8px)`,
-          top: "calc(50% - 18px)",
-          color: "var(--handle-color-image)",
-        }}
-      >
-        Image
-      </div>
 
       <div className="flex-1 flex flex-col min-h-0 gap-2">
         {/* Preview area */}

@@ -628,7 +628,7 @@ export function WorkflowCanvas() {
             if (numHandles > 0) {
               // Find the first unoccupied indexed handle by checking existing edges and batchUsed
               for (let i = 0; i < numHandles; i++) {
-                const candidateHandle = `${handleType}-${i}`;
+                const candidateHandle = i === 0 ? handleType : `${handleType}-${i}`;
                 const isOccupied = edges.some(
                   (edge) => edge.target === node.id && edge.targetHandle === candidateHandle
                 ) || batchUsed?.has(candidateHandle);

@@ -45,6 +45,7 @@
     "@types/three": "^0.182.0",
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^4.0.16",
+    "baseline-browser-mapping": "^2.10.0",
     "jsdom": "^27.4.0",
     "typescript": "^5.9.3",
     "vite-tsconfig-paths": "^6.0.4",

@@ -33,6 +33,7 @@ interface BaseNodeProps {
   headerButtons?: ReactNode;
   titlePrefix?: ReactNode;
   commentNavigation?: CommentNavigationProps;
+  handles?: ReactNode;
 }
 
 export function BaseNode({
@@ -56,6 +57,7 @@ export function BaseNode({
   headerButtons,
   titlePrefix,
   commentNavigation,
+  handles,
 }: BaseNodeProps) {
   const currentNodeIds = useWorkflowStore((state) => state.currentNodeIds);
   const groups = useWorkflowStore((state) => state.groups);
@@ -260,6 +262,14 @@ export function BaseNode({
           ${className}
         `}
       >
+        {/* Handles Overlay - Absolute sibling to everything else for perfect positioning */}
+        {handles && (
+          <div className="absolute inset-0 pointer-events-none z-10">
+            <div className="relative w-full h-full">
+              {handles}
+            </div>
+          </div>
+        )}
         <div className="px-3 pt-2 pb-1 flex items-center justify-between shrink-0">
           {/* Title Section */}
           <div className="flex-1 min-w-0 flex items-center gap-1.5">

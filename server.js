@@ -1,3 +1,4 @@
+// Modified with the help of Antigravity - Charlie
 // Custom Next.js server with extended timeout for video generation
 // Node.js default server.requestTimeout is 5 minutes (300,000ms)
 // We extend it to 10 minutes for long-running fal.ai video generation

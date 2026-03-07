@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useCallback, useState, useEffect, useMemo, useRef } from "react";
-import { Handle, Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
+import { Handle, Position, NodeProps, Node, useReactFlow, useUpdateNodeInternals } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { useCommentNavigation } from "@/hooks/useCommentNavigation";
 import { ModelParameters } from "./ModelParameters";
@@ -14,6 +14,7 @@ import { useToast } from "@/components/Toast";
 import { getVideoDimensions, calculateNodeSizePreservingHeight } from "@/utils/nodeDimensions";
 import { ProviderBadge } from "./ProviderBadge";
 import { useVideoBlobUrl } from "@/hooks/useVideoBlobUrl";
+import { isVeoModel, getVeoMetadata } from "@/utils/veoUtils";
 
 // Video generation capabilities
 const VIDEO_CAPABILITIES: ModelCapability[] = ["text-to-video", "image-to-video"];
@@ -23,32 +24,61 @@ const VEO_ASPECT_RATIOS = ["16:9", "9:16"] as const;
 const VEO_DURATIONS = ["4", "6", "8"] as const;
 const VEO_RESOLUTIONS = ["720p", "1080p", "4k"] as const;
 
-/** Returns true for Gemini-native Veo video models */
-function isVeoModel(modelId: string | undefined): boolean {
-  if (!modelId) return false;
-  return modelId.startsWith("veo-");
-}
-
-/** Build the hardcoded inputSchema for a Veo model, or undefined for non-Veo */
+/**
+ * Builds a hardcoded input schema for Veo models.
+ * @param modelId - The model ID to build the schema for.
+ * @returns Array of input definitions or undefined if not a Veo model.
+ */
 function buildVeoInputSchema(modelId: string): ModelInputDef[] | undefined {
-  if (!isVeoModel(modelId)) return undefined;
-  const isI2V = modelId.includes("image-to-video");
-  const inputs: ModelInputDef[] = [
-    { name: "prompt", type: "text", required: true, label: "Prompt" },
-    { name: "negative_prompt", type: "text", required: false, label: "Neg. Prompt" },
-  ];
-  if (isI2V) {
-    inputs.unshift({ name: "image", type: "image", required: true, label: "Image" });
+  const metadata = getVeoMetadata(modelId);
+  if (!metadata.isVeo) return undefined;
+  
+  const schema: ModelInputDef[] = [];
+  
+  // Only include image for Image-to-Video models
+  if (metadata.isI2V) {
+    schema.push({ 
+      name: metadata.imageParamName, 
+      type: "image", 
+      required: true, 
+      label: "Image",
+      description: "Starting image frame for video" 
+    });
   }
-  return inputs;
+  
+  // Prompt and Neg Prompt are always included for Veo
+  schema.push({ 
+    name: "prompt", 
+    type: "text", 
+    required: true, 
+    label: "Prompt",
+    description: "Text description of the video to generate"
+  });
+  
+  schema.push({ 
+    name: "negative_prompt", 
+    type: "text", 
+    required: false, 
+    label: "Neg. Prompt",
+    description: "Things to avoid in the generated video"
+  });
+  
+  return schema;
 }
 
 type GenerateVideoNodeType = Node<GenerateVideoNodeData, "generateVideo">;
 
+/**
+ * GenerateVideoNode component for AI video generation.
+ * Supports Google Veo and other external video models.
+ * @param props - Node properties from React Flow.
+ * @returns React component for the video generation node.
+ */
 export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVideoNodeType>) {
   const nodeData = data;
   const commentNavigation = useCommentNavigation(id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
+  const updateNodeInternals = useUpdateNodeInternals();
   // Use stable selector for API keys to prevent unnecessary re-fetches
   const { geminiApiKey, replicateApiKey, falApiKey, kieApiKey, replicateEnabled, kieEnabled } = useProviderApiKeys();
   const generationsPath = useWorkflowStore((state) => state.generationsPath);
@@ -82,6 +112,10 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
   }, [geminiApiKey, replicateEnabled, replicateApiKey, kieEnabled, kieApiKey]);
 
   // Fetch models from external providers when provider changes
+  /**
+   * Fetches available video models from the selected provider.
+   * @returns A promise resolving when models are loaded.
+   */
   const fetchModels = useCallback(async () => {
     setIsLoadingModels(true);
     setModelsFetchError(null);
@@ -179,6 +213,11 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
   );
 
   // Update a single key in the parameters bag (used by hardcoded Veo controls)
+  /**
+   * Updates a specific parameter for Veo models.
+   * @param key - The parameter key to update.
+   * @param value - The new value for the parameter.
+   */
   const updateVeoParam = useCallback(
     (key: string, value: unknown) => {
       const current = nodeData.parameters || {};
@@ -218,18 +257,49 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
             : node
         )
       );
+
+      // Recompute React Flow hitboxes immediately after height change
+      requestAnimationFrame(() => updateNodeInternals(id));
     },
-    [id, setNodes]
+    [id, setNodes, updateNodeInternals]
   );
+  
+  // Migrate existing/legacy Veo nodes to use the new stable schema automatically
+  useEffect(() => {
+    const modelId = nodeData.selectedModel?.modelId;
+    if (isVeoModel(modelId)) {
+      const stableSchema = buildVeoInputSchema(modelId!);
+      // Use JSON comparison to avoid infinite update loops
+      const currentSchemaJson = JSON.stringify(nodeData.inputSchema);
+      const stableSchemaJson = JSON.stringify(stableSchema);
+      
+      if (currentSchemaJson !== stableSchemaJson) {
+        updateNodeData(id, { inputSchema: stableSchema });
+      }
+    }
+  }, [id, nodeData.selectedModel?.modelId, nodeData.inputSchema, updateNodeData]);
+
+  // Update React Flow internals when schema changes so handles are correctly positioned
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, nodeData.inputSchema, updateNodeInternals]);
 
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
 
+  /**
+   * Triggers the regeneration of the current node's video.
+   */
   const handleRegenerate = useCallback(() => {
     regenerateNode(id);
   }, [id, regenerateNode]);
 
   // Load video by ID from generations folder
+  /**
+   * Loads a video by its unique ID from the local generations path.
+   * @param videoId - The ID of the video/generation to load.
+   * @returns A promise resolving to the video data or null if not found.
+   */
   const loadVideoById = useCallback(async (videoId: string) => {
     if (!generationsPath) {
       console.error("Generations path not configured");
@@ -301,6 +371,10 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
   }, [id, nodeData.videoHistory, nodeData.selectedVideoHistoryIndex, isLoadingCarouselVideo, loadVideoById, updateNodeData]);
 
   // Handle model selection from browse dialog
+  /**
+   * Handles model selection from the external browse dialog.
+   * @param model - The chosen provider model.
+   */
   const handleBrowseModelSelect = useCallback((model: ProviderModel) => {
     const newSelectedModel: SelectedModel = {
       provider: model.provider,
@@ -383,9 +457,12 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
             return { ...node, style: { ...node.style, width: newSize.width, height: newSize.height } };
           })
         );
+
+        // Recompute React Flow hitboxes immediately after auto-resize
+        requestAnimationFrame(() => updateNodeInternals(id));
       });
     });
-  }, [id, nodeData.outputVideo, setNodes]);
+  }, [id, nodeData.outputVideo, setNodes, updateNodeInternals]);
 
   return (
     <>
@@ -403,213 +480,113 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
       headerAction={headerAction}
       titlePrefix={titlePrefix}
       commentNavigation={commentNavigation ?? undefined}
-    >
-      {/* Dynamic input handles based on model schema */}
-      {nodeData.inputSchema && nodeData.inputSchema.length > 0 ? (
-        // Render handles from schema, sorted by type (images first, text second)
-        // IMPORTANT: Always render "image" and "text" handles to maintain connection
-        // compatibility. Schema may only have text inputs (text-to-video models) but
-        // we still need the image handle to preserve connections made before model selection.
-        (() => {
-          const imageInputs = nodeData.inputSchema!.filter(i => i.type === "image");
-          const textInputs = nodeData.inputSchema!.filter(i => i.type === "text");
-
-          // Always include at least one image and one text handle for connection stability
-          const hasImageInput = imageInputs.length > 0;
-          const hasTextInput = textInputs.length > 0;
-
-          // Build the handles array: schema inputs + fallback defaults if missing
-          const handles: Array<{
-            id: string;
-            type: "image" | "text";
-            label: string;
-            schemaName: string | null;
-            description: string | null;
-            isPlaceholder: boolean;
-          }> = [];
-
-          // Add image handles from schema, or a placeholder if none exist
-          if (hasImageInput) {
-            imageInputs.forEach((input, index) => {
-              handles.push({
-                // Always use indexed IDs for schema inputs for consistency
-                id: `image-${index}`,
-                type: "image",
-                label: input.label,
-                schemaName: input.name,
-                description: input.description || null,
-                isPlaceholder: false,
-              });
-            });
-          } else {
-            // No image inputs in schema - add placeholder to preserve connections
-            handles.push({
-              id: "image",
-              type: "image",
-              label: "Image",
-              schemaName: null,
-              description: "Not used by this model",
-              isPlaceholder: true,
-            });
-          }
-
-          // Add text handles from schema, or a placeholder if none exist
-          if (hasTextInput) {
-            textInputs.forEach((input, index) => {
-              handles.push({
-                // Always use indexed IDs for schema inputs for consistency
-                id: `text-${index}`,
-                type: "text",
-                label: input.label,
-                schemaName: input.name,
-                description: input.description || null,
-                isPlaceholder: false,
-              });
-            });
-          } else {
-            // No text inputs in schema - add placeholder to preserve connections
-            handles.push({
-              id: "text",
-              type: "text",
-              label: "Prompt",
-              schemaName: null,
-              description: "Not used by this model",
-              isPlaceholder: true,
-            });
-          }
-
-          // Calculate positions
-          const imageHandles = handles.filter(h => h.type === "image");
-          const textHandles = handles.filter(h => h.type === "text");
-          const totalSlots = imageHandles.length + textHandles.length + 1; // +1 for gap
-
-          const renderedHandles = handles.map((handle, index) => {
-            // Position: images first, then gap, then text
-            const isImage = handle.type === "image";
-            const typeIndex = isImage
-              ? imageHandles.findIndex(h => h.id === handle.id)
-              : textHandles.findIndex(h => h.id === handle.id);
-            const adjustedIndex = isImage ? typeIndex : imageHandles.length + 1 + typeIndex;
-            const topPercent = ((adjustedIndex + 1) / (totalSlots + 1)) * 100;
-
-            return (
-              <React.Fragment key={handle.id}>
-                <Handle
-                  type="target"
-                  position={Position.Left}
-                  id={handle.id}
-                  style={{
-                    top: `${topPercent}%`,
-                    opacity: handle.isPlaceholder ? 0.3 : 1,
-                  }}
-                  data-handletype={handle.type}
-                  data-schema-name={handle.schemaName || undefined}
-                  isConnectable={true}
-                  title={handle.description || handle.label}
-                />
-                {/* Handle label - positioned outside node, above the connector */}
-                <div
-                  className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right"
-                  style={{
-                    right: `calc(100% + 8px)`,
-                    top: `calc(${topPercent}% - 18px)`,
-                    color: isImage ? "var(--handle-color-image)" : "var(--handle-color-text)",
-                    opacity: handle.isPlaceholder ? 0.3 : 1,
-                  }}
-                >
-                  {handle.label}
-                </div>
-              </React.Fragment>
-            );
-          });
-
-          // Add hidden backward-compatibility handles for edges using non-indexed IDs
-          // This ensures edges created with "image"/"text" still work when schema uses "image-0"/"text-0"
-          // Note: No data-handletype to avoid being counted in tests - these are purely for edge routing
-          return (
-            <>
-              {renderedHandles}
-              {hasImageInput && (
-                <Handle
-                  type="target"
-                  position={Position.Left}
-                  id="image"
-                  style={{ top: "35%", opacity: 0, pointerEvents: "none" }}
-                  isConnectable={false}
-                />
-              )}
-              {hasTextInput && (
-                <Handle
-                  type="target"
-                  position={Position.Left}
-                  id="text"
-                  style={{ top: "65%", opacity: 0, pointerEvents: "none" }}
-                  isConnectable={false}
-                />
-              )}
-            </>
-          );
-        })()
-      ) : (
-        // Default handles when no schema
+      handles={
         <>
-          <Handle
-            type="target"
-            position={Position.Left}
-            id="image"
-            style={{ top: "35%" }}
-            data-handletype="image"
-            isConnectable={true}
-          />
-          {/* Default image label */}
-          <div
-            className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right"
-            style={{
-              right: `calc(100% + 8px)`,
-              top: "calc(35% - 18px)",
-              color: "var(--handle-color-image)",
-            }}
-          >
-            Image
-          </div>
-          <Handle
-            type="target"
-            position={Position.Left}
-            id="text"
-            style={{ top: "65%" }}
-            data-handletype="text"
-          />
-          {/* Default text label */}
-          <div
-            className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right"
-            style={{
-              right: `calc(100% + 8px)`,
-              top: "calc(65% - 18px)",
-              color: "var(--handle-color-text)",
-            }}
-          >
-            Prompt
-          </div>
+          {/* Dynamic input handles based on model schema */}
+          {nodeData.inputSchema && nodeData.inputSchema.length > 0 ? (
+            (() => {
+              const imageInputs = nodeData.inputSchema!.filter(i => i.type === "image");
+              const textInputs = nodeData.inputSchema!.filter(i => i.type === "text");
+              const hasImageInput = imageInputs.length > 0;
+              const hasTextInput = textInputs.length > 0;
+
+              const handles: Array<{
+                id: string;
+                type: "image" | "text";
+                label: string;
+                schemaName: string | null;
+                description: string | null;
+                isPlaceholder: boolean;
+              }> = [];
+
+              if (hasImageInput) {
+                imageInputs.forEach((input, index) => {
+                  handles.push({
+                    id: index === 0 ? "image" : `image-${index}`,
+                    type: "image",
+                    label: input.label,
+                    schemaName: input.name,
+                    description: input.description || null,
+                    isPlaceholder: false,
+                  });
+                });
+              }
+
+              if (hasTextInput) {
+                textInputs.forEach((input, index) => {
+                  handles.push({
+                    id: index === 0 ? "text" : `text-${index}`,
+                    type: "text",
+                    label: input.label,
+                    schemaName: input.name,
+                    description: input.description || null,
+                    isPlaceholder: false,
+                  });
+                });
+              }
+
+              const imageHandles = handles.filter(h => h.type === "image");
+              const textHandles = handles.filter(h => h.type === "text");
+              const totalSlots = imageHandles.length + textHandles.length + 1;
+
+              return handles.map((handle) => {
+                const isImage = handle.type === "image";
+                const typeIndex = isImage
+                  ? imageHandles.findIndex(h => h.id === handle.id)
+                  : textHandles.findIndex(h => h.id === handle.id);
+                const adjustedIndex = isImage ? typeIndex : imageHandles.length + 1 + typeIndex;
+                const topPercent = ((adjustedIndex + 1) / (totalSlots + 1)) * 100;
+
+                // Hide handles that are placeholders (not supported by current model)
+                const isHidden = handle.isPlaceholder;
+
+                return (
+                  <React.Fragment key={handle.id}>
+                    <Handle
+                      type="target"
+                      position={Position.Left}
+                      id={handle.id}
+                      style={{
+                        top: `${topPercent}%`,
+                        opacity: isHidden ? 0 : 1,
+                        pointerEvents: isHidden ? "none" : "auto",
+                      }}
+                      data-handletype={handle.type}
+                      data-schema-name={handle.schemaName || undefined}
+                      isConnectable={!isHidden}
+                      title={handle.description || handle.label}
+                    />
+                    {!isHidden && (
+                      <div
+                        className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right"
+                        style={{
+                          right: `calc(100% + 8px)`,
+                          top: `calc(${topPercent}% - 18px)`,
+                          color: isImage ? "var(--handle-color-image)" : "var(--handle-color-text)",
+                        }}
+                      >
+                        {handle.label}
+                      </div>
+                    )}
+                  </React.Fragment>
+                );
+              });
+            })()
+          ) : (
+            <>
+              <Handle type="target" position={Position.Left} id="image" style={{ top: "35%", pointerEvents: "auto" }} data-handletype="image" isConnectable={true} />
+              <div className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right" style={{ right: `calc(100% + 8px)`, top: "calc(35% - 18px)", color: "var(--handle-color-image)" }}>Image</div>
+              <Handle type="target" position={Position.Left} id="text" style={{ top: "65%", pointerEvents: "auto" }} data-handletype="text" isConnectable={true} />
+              <div className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none text-right" style={{ right: `calc(100% + 8px)`, top: "calc(65% - 18px)", color: "var(--handle-color-text)" }}>Prompt</div>
+            </>
+          )}
+
+          {/* Video output handle */}
+          <Handle type="source" position={Position.Right} id="video" style={{ top: "50%", pointerEvents: "auto" }} data-handletype="video" />
+          <div className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none" style={{ left: `calc(100% + 8px)`, top: "calc(50% - 18px)", color: "var(--handle-color-video, var(--handle-color-image))" }}>Video</div>
         </>
-      )}
-      {/* Video output */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="video"
-        data-handletype="video"
-      />
-      {/* Output label */}
-      <div
-        className="absolute text-[10px] font-medium whitespace-nowrap pointer-events-none"
-        style={{
-          left: `calc(100% + 8px)`,
-          top: "calc(50% - 18px)",
-          color: "var(--handle-color-image)",
-        }}
-      >
-        Video
-      </div>
+      }
+    >
 
       <div className="flex-1 flex flex-col min-h-0 gap-2">
         {/* Preview area */}

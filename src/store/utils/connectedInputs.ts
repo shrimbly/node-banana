@@ -45,6 +45,11 @@ export interface ConnectedInputs {
 /**
  * Helper to determine if a handle ID is an image type
  */
+/**
+ * Checks if a handle ID corresponds to an image input/output.
+ * @param handleId - The ID of the handle to check.
+ * @returns True if the handle is related to image data.
+ */
 function isImageHandle(handleId: string | null | undefined): boolean {
   if (!handleId) return false;
   return handleId === "image" || handleId.startsWith("image-") || handleId.includes("frame");
@@ -53,6 +58,11 @@ function isImageHandle(handleId: string | null | undefined): boolean {
 /**
  * Helper to determine if a handle ID is a text type
  */
+/**
+ * Checks if a handle ID corresponds to a text input/output.
+ * @param handleId - The ID of the handle to check.
+ * @returns True if the handle is related to text data.
+ */
 function isTextHandle(handleId: string | null | undefined): boolean {
   if (!handleId) return false;
   return handleId === "text" || handleId.startsWith("text-") || handleId.includes("prompt");
@@ -60,6 +70,13 @@ function isTextHandle(handleId: string | null | undefined): boolean {
 
 /**
  * Extract output data and type from a source node
+ */
+/**
+ * Extracts the output data and its type from a source node based on the handle.
+ * @param sourceNode - The node from which data originates.
+ * @param sourceHandle - The specific handle ID on the source node.
+ * @param edgeData - Optional metadata associated with the workflow edge.
+ * @returns An object containing the data type and the actual value.
  */
 function getSourceOutput(
   sourceNode: WorkflowNode,
@@ -123,6 +140,16 @@ function getSourceOutput(
  * Get all connected inputs for a node.
  * Pure function version of workflowStore.getConnectedInputs.
  */
+/**
+ * Recursively retrieves all connected input data for a specific node.
+ * This is a pure function used for dependency tracking and data flow.
+ * @param nodeId - The ID of the target node.
+ * @param nodes - The complete list of nodes in the workflow.
+ * @param edges - The complete list of edges in the workflow.
+ * @param visited - A set of already visited node IDs to prevent infinite loops.
+ * @param dimmedNodeIds - Optional set of node IDs that are considered inactive.
+ * @returns A structured object containing all connected inputs (images, text, etc.).
+ */
 export function getConnectedInputsPure(
   nodeId: string,
   nodes: WorkflowNode[],
@@ -150,6 +177,7 @@ export function getConnectedInputsPure(
   if (inputSchema && inputSchema.length > 0) {
     const imageInputs = inputSchema.filter(i => i.type === "image");
     const textInputs = inputSchema.filter(i => i.type === "text");
+    const audioInputs = inputSchema.filter(i => i.type === "audio");
 
     imageInputs.forEach((input, index) => {
       handleToSchemaName[`image-${index}`] = input.name;
@@ -162,6 +190,13 @@ export function getConnectedInputsPure(
       handleToSchemaName[`text-${index}`] = input.name;
       if (index === 0) {
         handleToSchemaName["text"] = input.name;
+      }
+    });
+
+    audioInputs.forEach((input, index) => {
+      handleToSchemaName[`audio-${index}`] = input.name;
+      if (index === 0) {
+        handleToSchemaName["audio"] = input.name;
       }
     });
   }
@@ -285,12 +320,27 @@ export function getConnectedInputsPure(
         model3d = value;
       } else if (type === "video") {
         videos.push(value);
-      } else if (type === "audio") {
+      } else if (type === "audio" || handleId === "audio" || handleId?.startsWith("audio-")) {
         audio.push(value);
       } else if (type === "text" || isTextHandle(handleId)) {
-        // Defensive: ensure text values are always strings
-        // (Guards against corrupted node data during parallel execution)
-        text = typeof value === 'string' ? value : String(value);
+        // Multi-handle text input handling:
+        // By default, the first text input (prompt) should populate the main 'text' variable.
+        // Secondary inputs (e.g. text-1/negative_prompt) are handled via dynamicInputs.
+        const stringValue = typeof value === "string" ? value : String(value);
+
+        // Normalize handleId: if it's the primary handle for prompt, set the root 'text'
+        let isPrimaryText = !handleId || handleId === "text" || handleId === "text-0" || handleId === "prompt";
+        if (inputSchema && inputSchema.length > 0) {
+          const textInputs = inputSchema.filter((i) => i.type === "text");
+          if (textInputs.length > 0 && handleId) {
+            const schemaName = handleToSchemaName[handleId];
+            isPrimaryText = schemaName === textInputs[0].name;
+          }
+        }
+
+        if (isPrimaryText) {
+          text = stringValue;
+        }
       } else if (isImageHandle(handleId) || !handleId) {
         images.push(value);
       }
@@ -319,6 +369,12 @@ export function getConnectedInputsPure(
 /**
  * Validate workflow structure.
  * Pure function version of workflowStore.validateWorkflow.
+ */
+/**
+ * Validates the integrity and requirements of the workflow structure.
+ * @param nodes - The list of nodes to validate.
+ * @param edges - The list of edges to validate.
+ * @returns An object indicating if the workflow is valid and a list of error messages.
  */
 export function validateWorkflowPure(
   nodes: WorkflowNode[],
