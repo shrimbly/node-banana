@@ -24,6 +24,7 @@ describe("getConnectedInputsPure", () => {
     expect(result.videos).toEqual([]);
     expect(result.audio).toEqual([]);
     expect(result.text).toBeNull();
+    expect(result.namedImages).toEqual({});
     expect(result.dynamicInputs).toEqual({});
     expect(result.easeCurve).toBeNull();
   });

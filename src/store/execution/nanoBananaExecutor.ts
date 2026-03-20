@@ -7,9 +7,12 @@
 
 import type {
   NanoBananaNodeData,
+  PromptPart,
+  PromptConstructorNodeData,
 } from "@/types";
 import { calculateGenerationCost } from "@/utils/costCalculator";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
+import { resolveImageVars, hasImageVarReferences } from "@/utils/resolveImageVars";
 import type { NodeExecutionContext } from "./types";
 
 export interface NanoBananaOptions {
@@ -40,7 +43,7 @@ export async function executeNanoBanana(
 
   const { useStoredFallback = false } = options;
 
-  const { images: connectedImages, text: connectedText, dynamicInputs } = getConnectedInputs(node.id);
+  const { images: connectedImages, text: connectedText, namedImages, dynamicInputs } = getConnectedInputs(node.id);
 
   // Get fresh node data from store
   const freshNode = getFreshNode(node.id);
@@ -51,8 +54,11 @@ export async function executeNanoBanana(
   let promptText: string | null;
 
   if (useStoredFallback) {
-    images = connectedImages.length > 0 ? connectedImages : nodeData.inputImages;
-    promptText = connectedText ?? nodeData.inputPrompt;
+    // Only fall back to stored values if the node still has incoming edges.
+    // If all edges are disconnected, stored data is stale and should not be used.
+    const hasIncomingEdges = getEdges().some((e) => e.target === node.id);
+    images = connectedImages.length > 0 ? connectedImages : (hasIncomingEdges ? nodeData.inputImages : []);
+    promptText = connectedText ?? (hasIncomingEdges ? nodeData.inputPrompt : null);
   } else {
     images = connectedImages;
     // For dynamic inputs, check if we have at least a prompt
@@ -94,7 +100,32 @@ export async function executeNanoBanana(
   const sanitizedDynamicInputs = { ...dynamicInputs };
   delete sanitizedDynamicInputs.prompt;
 
-  const requestPayload = {
+  // Check for multimodal parts from image variable references.
+  let parts: PromptPart[] | undefined;
+
+  // 1. Try direct namedImages (imageInput connected directly to this node)
+  if (Object.keys(namedImages).length > 0 && promptText && hasImageVarReferences(promptText, namedImages)) {
+    parts = resolveImageVars(promptText, namedImages);
+  }
+
+  // 2. Check upstream PromptConstructor for multimodal parts.
+  //    outputParts are always fresh here: during full workflow execution the PC
+  //    executes first (topological order), and during regenerateNode the PC is
+  //    re-executed before this node.
+  if (!parts) {
+    const upstreamPcNode = getEdges()
+      .filter((e) => e.target === node.id && (e.targetHandle === "text" || e.targetHandle?.startsWith("text")))
+      .map((e) => getNodes().find((n) => n.id === e.source))
+      .find((n) => n?.type === "promptConstructor");
+    if (upstreamPcNode) {
+      const pcData = upstreamPcNode.data as PromptConstructorNodeData;
+      if (pcData.outputParts && pcData.outputParts.length > 0) {
+        parts = pcData.outputParts;
+      }
+    }
+  }
+
+  const requestPayload: Record<string, unknown> = {
     images,
     prompt: promptText,
     aspectRatio: nodeData.aspectRatio,
@@ -105,6 +136,7 @@ export async function executeNanoBanana(
     selectedModel: nodeData.selectedModel,
     parameters: nodeData.parameters,
     dynamicInputs: sanitizedDynamicInputs,
+    ...(parts && { parts }),
   };
 
   // Final guard: assert that prompt is a string before sending to API

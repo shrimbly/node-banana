@@ -5,6 +5,15 @@ import { logger } from "@/utils/logger";
 
 export const maxDuration = 60; // 1 minute timeout
 
+// Convert a base64 data URL image to Gemini inlineData format
+function imageDataToInlinePart(img: string): { inlineData: { mimeType: string; data: string } } {
+  const matches = img.match(/^data:(.+?);base64,(.+)$/);
+  if (matches) {
+    return { inlineData: { mimeType: matches[1], data: matches[2] } };
+  }
+  return { inlineData: { mimeType: "image/png", data: img } };
+}
+
 // Generate a unique request ID for tracking
 function generateRequestId(): string {
   return `llm-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
@@ -36,7 +45,8 @@ async function generateWithGoogle(
   maxTokens: number,
   images?: string[],
   requestId?: string,
-  userApiKey?: string | null
+  userApiKey?: string | null,
+  parts?: Array<{ type: string; value: string; name?: string }>
 ): Promise<string> {
   // User-provided key takes precedence over env variable
   const apiKey = userApiKey || process.env.GEMINI_API_KEY;
@@ -55,31 +65,24 @@ async function generateWithGoogle(
     maxTokens,
     imageCount: images?.length || 0,
     promptLength: prompt.length,
+    partsCount: parts?.length || 0,
   });
 
-  // Build multimodal content if images are provided
-  let contents: string | Array<{ inlineData: { mimeType: string; data: string } } | { text: string }>;
-  if (images && images.length > 0) {
+  // Build multimodal content
+  type GeminiPart = { inlineData: { mimeType: string; data: string } } | { text: string };
+  let contents: string | GeminiPart[];
+
+  if (parts && parts.length > 0) {
+    // Interleaved multimodal parts from image variable resolution
+    contents = parts.map((part): GeminiPart => {
+      if (part.type === "image" && part.value) {
+        return imageDataToInlinePart(part.value);
+      }
+      return { text: part.value };
+    });
+  } else if (images && images.length > 0) {
     contents = [
-      ...images.map((img) => {
-        // Extract base64 data and mime type from data URL
-        const matches = img.match(/^data:(.+?);base64,(.+)$/);
-        if (matches) {
-          return {
-            inlineData: {
-              mimeType: matches[1],
-              data: matches[2],
-            },
-          };
-        }
-        // Fallback: assume PNG if no data URL prefix
-        return {
-          inlineData: {
-            mimeType: "image/png",
-            data: img,
-          },
-        };
-      }),
+      ...images.map((img) => imageDataToInlinePart(img)),
       { text: prompt },
     ];
   } else {
@@ -298,14 +301,15 @@ export async function POST(request: NextRequest) {
     const openaiApiKey = request.headers.get("X-OpenAI-API-Key");
     const anthropicApiKey = request.headers.get("X-Anthropic-API-Key");
 
-    const body: LLMGenerateRequest = await request.json();
+    const body = await request.json() as LLMGenerateRequest & { parts?: Array<{ type: string; value: string; name?: string }> };
     const {
       prompt,
       images,
       provider,
       model,
       temperature = 0.7,
-      maxTokens = 1024
+      maxTokens = 1024,
+      parts,
     } = body;
 
     logger.info('api.llm', 'LLM generation request received', {
@@ -330,7 +334,7 @@ export async function POST(request: NextRequest) {
     let text: string;
 
     if (provider === "google") {
-      text = await generateWithGoogle(prompt, model, temperature, maxTokens, images, requestId, geminiApiKey);
+      text = await generateWithGoogle(prompt, model, temperature, maxTokens, images, requestId, geminiApiKey, parts);
     } else if (provider === "openai") {
       text = await generateWithOpenAI(prompt, model, temperature, maxTokens, images, requestId, openaiApiKey);
     } else if (provider === "anthropic") {

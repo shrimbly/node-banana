@@ -68,6 +68,7 @@ export function Header() {
     isSaving,
     setWorkflowMetadata,
     saveToFile,
+    saveWorkflow,
     loadWorkflow,
     previousWorkflowSnapshot,
     revertToSnapshot,
@@ -83,6 +84,7 @@ export function Header() {
     isSaving: state.isSaving,
     setWorkflowMetadata: state.setWorkflowMetadata,
     saveToFile: state.saveToFile,
+    saveWorkflow: state.saveWorkflow,
     loadWorkflow: state.loadWorkflow,
     previousWorkflowSnapshot: state.previousWorkflowSnapshot,
     revertToSnapshot: state.revertToSnapshot,
@@ -94,6 +96,7 @@ export function Header() {
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [projectModalMode, setProjectModalMode] = useState<"new" | "settings">("new");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
 
   const isProjectConfigured = !!workflowName;
   const canSave = !!(workflowId && workflowName && saveDirectoryPath);
@@ -117,6 +120,35 @@ export function Header() {
 
   const handleOpenFile = () => {
     fileInputRef.current?.click();
+  };
+
+  const handleDownloadWorkflow = () => {
+    saveWorkflow(workflowName || undefined);
+  };
+
+  const handleUploadWorkflow = () => {
+    uploadInputRef.current?.click();
+  };
+
+  const handleUploadFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const workflow = JSON.parse(event.target?.result as string) as WorkflowFile;
+        if (workflow.version && workflow.nodes && workflow.edges) {
+          await loadWorkflow(workflow);
+        } else {
+          alert("Invalid workflow file format");
+        }
+      } catch {
+        alert("Failed to parse workflow file");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -189,6 +221,49 @@ export function Header() {
     }
   }, [revertToSnapshot]);
 
+  const clientWorkflowButtons = (
+    <div className="flex items-center gap-0.5 ml-1 pl-1 border-l border-neutral-700/50">
+      <button
+        onClick={handleDownloadWorkflow}
+        className="p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded transition-colors"
+        title="Download workflow"
+      >
+        <svg
+          className="w-4 h-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={1.5}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"
+          />
+        </svg>
+      </button>
+      <button
+        onClick={handleUploadWorkflow}
+        className="p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded transition-colors"
+        title="Upload workflow"
+      >
+        <svg
+          className="w-4 h-4"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={1.5}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
+          />
+        </svg>
+      </button>
+    </div>
+  );
+
   const settingsButtons = (
     <div className="flex items-center gap-0.5 ml-1 pl-1 border-l border-neutral-700/50">
       <button
@@ -231,6 +306,13 @@ export function Header() {
         type="file"
         accept=".json"
         onChange={handleFileChange}
+        className="hidden"
+      />
+      <input
+        ref={uploadInputRef}
+        type="file"
+        accept=".json"
+        onChange={handleUploadFileChange}
         className="hidden"
       />
       <header className="h-11 bg-neutral-900 border-b border-neutral-800 flex items-center justify-between px-4 shrink-0">
@@ -321,6 +403,7 @@ export function Header() {
                 </div>
 
                 {settingsButtons}
+                {clientWorkflowButtons}
               </>
             ) : (
               <>
@@ -370,6 +453,7 @@ export function Header() {
                 </div>
 
                 {settingsButtons}
+                {clientWorkflowButtons}
               </>
             )}
           </div>

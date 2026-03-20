@@ -13,13 +13,16 @@ import type {
   PromptConstructorNodeData,
   PromptNodeData,
   LLMGenerateNodeData,
+  ImageInputNodeData,
   OutputNodeData,
   OutputGalleryNodeData,
+  PromptPart,
   WorkflowNode,
 } from "@/types";
 import type { NodeExecutionContext } from "./types";
 import { parseTextToArray } from "@/utils/arrayParser";
 import { parseVarTags } from "@/utils/parseVarTags";
+import { resolveImageVars } from "@/utils/resolveImageVars";
 
 /**
  * Annotation node: receives upstream image as source, passes through if no annotations.
@@ -115,6 +118,12 @@ export async function executePromptConstructor(ctx: NodeExecutionContext): Promi
       .map((e) => nodes.find((n) => n.id === e.source))
       .filter((n): n is WorkflowNode => n !== undefined);
 
+    // Find all connected image nodes
+    const connectedImageNodes = edges
+      .filter((e) => e.target === node.id && e.targetHandle === "image")
+      .map((e) => nodes.find((n) => n.id === e.source))
+      .filter((n): n is WorkflowNode => n !== undefined);
+
     // Build variable map: named variables from Prompt nodes take precedence
     const variableMap: Record<string, string> = {};
     connectedTextNodes.forEach((srcNode) => {
@@ -122,6 +131,17 @@ export async function executePromptConstructor(ctx: NodeExecutionContext): Promi
         const promptData = srcNode.data as PromptNodeData;
         if (promptData.variableName) {
           variableMap[promptData.variableName] = promptData.prompt;
+        }
+      }
+    });
+
+    // Build named images map from connected ImageInput nodes with variableName
+    const namedImages: Record<string, string> = {};
+    connectedImageNodes.forEach((srcNode) => {
+      if (srcNode.type === "imageInput") {
+        const imgData = srcNode.data as ImageInputNodeData;
+        if (imgData.variableName && imgData.image) {
+          namedImages[imgData.variableName] = imgData.image;
         }
       }
     });
@@ -153,21 +173,30 @@ export async function executePromptConstructor(ctx: NodeExecutionContext): Promi
     const unresolvedVars: string[] = [];
     let resolvedText = template;
 
-    // Replace @variables with values or track unresolved
+    // Replace text @variables with values or track unresolved
+    // (image @variables are left as-is in outputText — they're resolved in outputParts)
     const matches = template.matchAll(varPattern);
     for (const match of matches) {
       const varName = match[1];
       if (variableMap[varName] !== undefined) {
         resolvedText = resolvedText.replaceAll(`@${varName}`, variableMap[varName]);
-      } else {
+      } else if (!namedImages[varName]) {
+        // Only unresolved if not an image variable either
         if (!unresolvedVars.includes(varName)) {
           unresolvedVars.push(varName);
         }
       }
     }
 
+    // Build multimodal outputParts if there are image variables referenced in the template
+    let outputParts: PromptPart[] | null = null;
+    if (Object.keys(namedImages).length > 0) {
+      outputParts = resolveImageVars(resolvedText, namedImages);
+    }
+
     updateNodeData(node.id, {
       outputText: resolvedText,
+      outputParts,
       unresolvedVars,
     });
   } catch (err) {

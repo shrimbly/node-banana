@@ -45,6 +45,7 @@ import {
   RouterNode,
   SwitchNode,
   ConditionalSwitchNode,
+  InpaintNode,
 } from "./nodes";
 
 // Lazy-load GLBViewerNode to avoid bundling three.js for users who don't use 3D nodes
@@ -98,6 +99,7 @@ const nodeTypes: NodeTypes = {
   switch: SwitchNode,
   conditionalSwitch: ConditionalSwitchNode,
   glbViewer: GLBViewerNode,
+  inpaint: InpaintNode,
 };
 
 const edgeTypes: EdgeTypes = {
@@ -144,7 +146,7 @@ const getNodeHandles = (nodeType: string): { inputs: string[]; outputs: string[]
     case "array":
       return { inputs: ["text"], outputs: ["text"] };
     case "promptConstructor":
-      return { inputs: ["text"], outputs: ["text"] };
+      return { inputs: ["text", "image"], outputs: ["text"] };
     case "nanoBanana":
       return { inputs: ["image", "text"], outputs: ["image"] };
     case "generateVideo":
@@ -1473,6 +1475,7 @@ export function WorkflowCanvas() {
             switch: { width: 220, height: 120 },
             conditionalSwitch: { width: 260, height: 180 },
             glbViewer: { width: 360, height: 380 },
+            inpaint: { width: 320, height: 340 },
           };
           const dims = defaultDimensions[nodeType];
           addNode(nodeType, { x: centerX - dims.width / 2, y: centerY - dims.height / 2 });
@@ -1980,7 +1983,7 @@ export function WorkflowCanvas() {
             ? false
             : canvasNavigationSettings.panMode === "always"
             ? false
-            : isMacOS && !isModalOpen
+            : !isModalOpen
         }
         selectionKeyCode={
           isModalOpen ? null
@@ -1995,7 +1998,7 @@ export function WorkflowCanvas() {
             ? true
             : canvasNavigationSettings.panMode === "middleMouse"
             ? [2]
-            : !isMacOS
+            : [1, 2]
         }
         selectNodesOnDrag={false}
         nodeDragThreshold={5}
@@ -2080,6 +2083,8 @@ export function WorkflowCanvas() {
                 return "#06b6d4"; // cyan-500 (distinct from Router gray and Switch violet)
               case "glbViewer":
                 return "#0ea5e9"; // sky-500 (3D viewport)
+              case "inpaint":
+                return "#f472b6"; // pink-400 (mask/edit)
               default:
                 return "#94a3b8";
             }

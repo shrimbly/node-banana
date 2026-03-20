@@ -23,6 +23,7 @@ import {
   SwitchNodeData,
   ConditionalSwitchNodeData,
   GLBViewerNodeData,
+  InpaintNodeData,
   WorkflowNodeData,
   GroupColor,
   SelectedModel,
@@ -58,6 +59,7 @@ export const defaultNodeDimensions: Record<NodeType, { width: number; height: nu
   switch: { width: 220, height: 120 },
   conditionalSwitch: { width: 260, height: 180 },
   glbViewer: { width: 360, height: 380 },
+  inpaint: { width: 320, height: 340 },
 };
 
 /**
@@ -124,6 +126,7 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
       return {
         template: "",
         outputText: null,
+        outputParts: null,
         unresolvedVars: [],
       } as PromptConstructorNodeData;
     case "nanoBanana": {
@@ -322,5 +325,18 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         filename: null,
         capturedImage: null,
       } as GLBViewerNodeData;
+    case "inpaint":
+      return {
+        inputImage: null,
+        maskImage: null,
+        inputPrompt: null,
+        outputImage: null,
+        inpaintProvider: "gemini",
+        maskBrushSize: 40,
+        status: "idle",
+        error: null,
+        imageHistory: [],
+        selectedHistoryIndex: 0,
+      } as InpaintNodeData;
   }
 };

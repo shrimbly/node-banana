@@ -8,15 +8,17 @@ const subscribers = new Set<() => void>();
 // Get current value from localStorage
 function getSnapshot(): boolean {
   try {
-    return localStorage.getItem(INLINE_PARAMS_KEY) === "true";
+    const value = localStorage.getItem(INLINE_PARAMS_KEY);
+    // Default to true (inline) when not explicitly set
+    return value === null ? true : value === "true";
   } catch {
-    return false;
+    return true;
   }
 }
 
-// Server-side snapshot (always false)
+// Server-side snapshot (default to true to match client)
 function getServerSnapshot(): boolean {
-  return false;
+  return true;
 }
 
 // Subscribe to changes

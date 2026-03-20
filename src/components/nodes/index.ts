@@ -21,3 +21,4 @@ export { RouterNode } from "./RouterNode";
 export { SwitchNode } from "./SwitchNode";
 export { ConditionalSwitchNode } from "./ConditionalSwitchNode";
 export { GroupNode } from "./GroupNode";
+export { InpaintNode } from "./InpaintNode";

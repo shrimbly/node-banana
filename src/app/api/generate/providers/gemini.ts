@@ -19,6 +19,25 @@ export const MODEL_MAP: Record<ModelType, string> = {
 };
 
 /**
+ * Convert a base64 data URL image to Gemini inlineData format
+ */
+function imageToInlineData(
+  requestId: string,
+  image: string,
+  label: string
+): { inlineData: { mimeType: string; data: string } } {
+  if (image.includes("base64,")) {
+    const [header, data] = image.split("base64,");
+    const mimeMatch = header.match(/data:([^;]+)/);
+    const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
+    console.log(`[API:${requestId}]   Image ${label}: ${mimeType}, ${(data.length / 1024).toFixed(1)}KB`);
+    return { inlineData: { mimeType, data } };
+  }
+  console.log(`[API:${requestId}]   Image ${label}: raw, ${(image.length / 1024).toFixed(1)}KB`);
+  return { inlineData: { mimeType: "image/png", data: image } };
+}
+
+/**
  * Generate image using Gemini API (legacy/default path)
  */
 export async function generateWithGemini(
@@ -30,37 +49,34 @@ export async function generateWithGemini(
   aspectRatio?: string,
   resolution?: string,
   useGoogleSearch?: boolean,
-  useImageSearch?: boolean
+  useImageSearch?: boolean,
+  multimodalParts?: Array<{ type: string; value: string; name?: string }>
 ): Promise<NextResponse<GenerateResponse>> {
-  console.log(`[API:${requestId}] Gemini generation - Model: ${model}, Images: ${images?.length || 0}, Prompt: ${prompt?.length || 0} chars`);
-
-  // Extract base64 data and MIME types from data URLs
-  const imageData = (images || []).map((image, idx) => {
-    if (image.includes("base64,")) {
-      const [header, data] = image.split("base64,");
-      // Extract MIME type from header (e.g., "data:image/png;" -> "image/png")
-      const mimeMatch = header.match(/data:([^;]+)/);
-      const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
-      console.log(`[API:${requestId}]   Image ${idx + 1}: ${mimeType}, ${(data.length / 1024).toFixed(1)}KB`);
-      return { data, mimeType };
-    }
-    console.log(`[API:${requestId}]   Image ${idx + 1}: raw, ${(image.length / 1024).toFixed(1)}KB`);
-    return { data: image, mimeType: "image/png" };
-  });
+  console.log(`[API:${requestId}] Gemini generation - Model: ${model}, Images: ${images?.length || 0}, Prompt: ${prompt?.length || 0} chars, Parts: ${multimodalParts?.length || 0}`);
 
   // Initialize Gemini client
   const ai = new GoogleGenAI({ apiKey });
 
-  // Build request parts array with prompt and all images
-  const requestParts: Array<{ text: string } | { inlineData: { mimeType: string; data: string } }> = [
-    { text: prompt },
-    ...imageData.map(({ data, mimeType }) => ({
-      inlineData: {
-        mimeType,
-        data,
-      },
-    })),
-  ];
+  // Build request parts array — use multimodal parts if provided, otherwise legacy prompt+images
+  type GeminiPart = { text: string } | { inlineData: { mimeType: string; data: string } };
+  let requestParts: GeminiPart[];
+
+  if (multimodalParts && multimodalParts.length > 0) {
+    // Build interleaved multimodal request from image variable parts
+    requestParts = multimodalParts.map((part) => {
+      if (part.type === "image" && part.value) {
+        return imageToInlineData(requestId, part.value, part.name || "var");
+      }
+      return { text: part.value };
+    });
+  } else {
+    // Legacy: prompt text + all images appended
+    const imageData = (images || []).map((image, idx) => imageToInlineData(requestId, image, `${idx + 1}`));
+    requestParts = [
+      { text: prompt },
+      ...imageData,
+    ];
+  }
 
   // Build config object based on model capabilities
   const config: Record<string, unknown> = {

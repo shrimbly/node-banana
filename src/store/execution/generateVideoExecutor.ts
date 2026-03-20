@@ -23,6 +23,7 @@ export async function executeGenerateVideo(
     getConnectedInputs,
     updateNodeData,
     getFreshNode,
+    getEdges,
     signal,
     providerSettings,
     addIncurredCost,
@@ -44,8 +45,9 @@ export async function executeGenerateVideo(
   let text: string | null;
 
   if (useStoredFallback) {
-    images = connectedImages.length > 0 ? connectedImages : nodeData.inputImages;
-    text = connectedText ?? nodeData.inputPrompt;
+    const hasIncomingEdges = getEdges().some((e) => e.target === node.id);
+    images = connectedImages.length > 0 ? connectedImages : (hasIncomingEdges ? nodeData.inputImages : []);
+    text = connectedText ?? (hasIncomingEdges ? nodeData.inputPrompt : null);
     // Validate fallback inputs the same way as the regular path
     const hasPrompt = text || dynamicInputs.prompt || dynamicInputs.negative_prompt;
     if (!hasPrompt && images.length === 0) {

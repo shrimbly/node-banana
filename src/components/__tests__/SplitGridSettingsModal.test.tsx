@@ -78,13 +78,18 @@ describe("SplitGridSettingsModal", () => {
         />
       );
 
+      expect(screen.getByText("1x2")).toBeInTheDocument();
+      expect(screen.getByText("1x3")).toBeInTheDocument();
+      expect(screen.getByText("1x4")).toBeInTheDocument();
+      expect(screen.getByText("2x1")).toBeInTheDocument();
       expect(screen.getByText("2x2")).toBeInTheDocument();
-      expect(screen.getByText("1x5")).toBeInTheDocument();
       expect(screen.getByText("2x3")).toBeInTheDocument();
       expect(screen.getByText("3x2")).toBeInTheDocument();
       expect(screen.getByText("2x4")).toBeInTheDocument();
       expect(screen.getByText("3x3")).toBeInTheDocument();
-      expect(screen.getByText("2x5")).toBeInTheDocument();
+      expect(screen.getByText("3x4")).toBeInTheDocument();
+      expect(screen.getByText("4x3")).toBeInTheDocument();
+      expect(screen.getByText("4x4")).toBeInTheDocument();
     });
 
     it("should highlight selected layout", () => {
@@ -116,8 +121,8 @@ describe("SplitGridSettingsModal", () => {
       const threeByThreeButton = buttons.find(btn => btn.textContent?.includes("3x3"));
       fireEvent.click(threeByThreeButton!);
 
-      // The grid description should update
-      expect(screen.getByText(/3x3 = 9 images/)).toBeInTheDocument();
+      // The custom input area should show target count
+      expect(screen.getByText(/= 9 images/)).toBeInTheDocument();
     });
 
     it("should display grid dimensions description", () => {
@@ -130,7 +135,7 @@ describe("SplitGridSettingsModal", () => {
       );
 
       // Default is 2x3
-      expect(screen.getByText(/2x3 = 6 images/)).toBeInTheDocument();
+      expect(screen.getByText(/= 6 images/)).toBeInTheDocument();
     });
 
     it("should allow selecting 3x2 layout (6 images, portrait orientation)", () => {
@@ -148,7 +153,7 @@ describe("SplitGridSettingsModal", () => {
       fireEvent.click(threeByTwoButton!);
 
       // Should show 3x2 = 6 images
-      expect(screen.getByText(/3x2 = 6 images/)).toBeInTheDocument();
+      expect(screen.getByText(/= 6 images/)).toBeInTheDocument();
     });
   });
 
@@ -453,7 +458,7 @@ describe("SplitGridSettingsModal", () => {
 
       // The modal renders via createPortal to document.body, so use document.querySelectorAll
       const gridPreviews = document.querySelectorAll(".aspect-video");
-      expect(gridPreviews.length).toBe(7); // 7 layout options
+      expect(gridPreviews.length).toBe(12); // 12 layout options
     });
   });
 
@@ -480,7 +485,7 @@ describe("SplitGridSettingsModal", () => {
       );
 
       // Check target count
-      expect(screen.getByText(/3x3 = 9 images/)).toBeInTheDocument();
+      expect(screen.getByText(/= 9 images/)).toBeInTheDocument();
 
       // Check prompt
       const textarea = screen.getByPlaceholderText(/Enter prompt that will be applied/);

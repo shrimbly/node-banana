@@ -5,8 +5,9 @@
  * Used by both executeWorkflow and regenerateNode.
  */
 
-import type { LLMGenerateNodeData } from "@/types";
+import type { LLMGenerateNodeData, PromptPart, PromptConstructorNodeData } from "@/types";
 import { buildLlmHeaders } from "@/store/utils/buildApiHeaders";
+import { resolveImageVars, hasImageVarReferences } from "@/utils/resolveImageVars";
 import type { NodeExecutionContext } from "./types";
 
 export interface LlmGenerateOptions {
@@ -22,6 +23,8 @@ export async function executeLlmGenerate(
     node,
     getConnectedInputs,
     updateNodeData,
+    getEdges,
+    getNodes,
     signal,
     providerSettings,
   } = ctx;
@@ -36,8 +39,9 @@ export async function executeLlmGenerate(
   let text: string | null;
 
   if (useStoredFallback) {
-    images = inputs.images.length > 0 ? inputs.images : nodeData.inputImages;
-    text = inputs.text ?? nodeData.inputPrompt;
+    const hasIncomingEdges = getEdges().some((e) => e.target === node.id);
+    images = inputs.images.length > 0 ? inputs.images : (hasIncomingEdges ? nodeData.inputImages : []);
+    text = inputs.text ?? (hasIncomingEdges ? nodeData.inputPrompt : null);
   } else {
     images = inputs.images;
     text = inputs.text ?? nodeData.inputPrompt;
@@ -58,6 +62,30 @@ export async function executeLlmGenerate(
     error: null,
   });
 
+  // Check for multimodal parts from image variable references.
+  let parts: PromptPart[] | undefined;
+
+  // 1. Try direct namedImages (imageInput connected directly to this node)
+  if (Object.keys(inputs.namedImages).length > 0 && hasImageVarReferences(text, inputs.namedImages)) {
+    parts = resolveImageVars(text, inputs.namedImages);
+  }
+
+  // 2. Check upstream PromptConstructor for multimodal parts.
+  //    outputParts are always fresh: during full workflow the PC executes first,
+  //    and during regenerateNode the PC is re-executed before this node.
+  if (!parts) {
+    const upstreamPcNode = getEdges()
+      .filter((e) => e.target === node.id && (e.targetHandle === "text" || e.targetHandle?.startsWith("text")))
+      .map((e) => getNodes().find((n) => n.id === e.source))
+      .find((n) => n?.type === "promptConstructor");
+    if (upstreamPcNode) {
+      const pcData = upstreamPcNode.data as PromptConstructorNodeData;
+      if (pcData.outputParts && pcData.outputParts.length > 0) {
+        parts = pcData.outputParts;
+      }
+    }
+  }
+
   const headers = buildLlmHeaders(nodeData.provider, providerSettings);
 
   try {
@@ -67,6 +95,7 @@ export async function executeLlmGenerate(
       body: JSON.stringify({
         prompt: text,
         ...(images.length > 0 && { images }),
+        ...(parts && { parts }),
         provider: nodeData.provider,
         model: nodeData.model,
         temperature: nodeData.temperature,

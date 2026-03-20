@@ -59,6 +59,7 @@ function makeCtx(
       videos: [],
       audio: [],
       text: "test prompt",
+      namedImages: {},
       dynamicInputs: {},
       easeCurve: null,
     }),
@@ -97,6 +98,7 @@ describe("executeNanoBanana", () => {
         videos: [],
         audio: [],
         text: null,
+        namedImages: {},
         dynamicInputs: {},
         easeCurve: null,
       }),
@@ -251,6 +253,7 @@ describe("executeNanoBanana", () => {
         videos: [],
         audio: [],
         text: null,
+        namedImages: {},
         dynamicInputs: { prompt: "dynamic prompt" },
         easeCurve: null,
       }),
@@ -278,6 +281,7 @@ describe("executeNanoBanana", () => {
         videos: [],
         audio: [],
         text: "with image",
+        namedImages: {},
         dynamicInputs: {},
         easeCurve: null,
       }),
@@ -304,9 +308,14 @@ describe("executeNanoBanana", () => {
         videos: [],
         audio: [],
         text: null,
+        namedImages: {},
         dynamicInputs: {},
         easeCurve: null,
       }),
+      // Edges exist (upstream just not re-run) — fallback should be used
+      getEdges: vi.fn().mockReturnValue([
+        { id: "e1", source: "prompt-1", target: "gen-1", targetHandle: "text" },
+      ]),
     });
     // Enable regenerate mode: fallback to stored inputs
     mockFetch.mockResolvedValueOnce({

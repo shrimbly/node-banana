@@ -23,6 +23,7 @@ export async function executeGenerateAudio(
     getConnectedInputs,
     updateNodeData,
     getFreshNode,
+    getEdges,
     signal,
     providerSettings,
     addIncurredCost,
@@ -43,7 +44,8 @@ export async function executeGenerateAudio(
   let text: string | null;
 
   if (useStoredFallback) {
-    text = connectedText ?? nodeData.inputPrompt;
+    const hasIncomingEdges = getEdges().some((e) => e.target === node.id);
+    text = connectedText ?? (hasIncomingEdges ? nodeData.inputPrompt : null);
     const hasPrompt = text || dynamicInputs.prompt;
     if (!hasPrompt) {
       updateNodeData(node.id, {

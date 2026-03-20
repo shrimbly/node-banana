@@ -45,7 +45,8 @@ export type NodeType =
   | "switch"
   | "conditionalSwitch"
   | "generate3d"
-  | "glbViewer";
+  | "glbViewer"
+  | "inpaint";
 
 /**
  * Node execution status
@@ -60,6 +61,7 @@ export interface ImageInputNodeData extends BaseNodeData {
   imageRef?: string; // External image reference for storage optimization
   filename: string | null;
   dimensions: { width: number; height: number } | null;
+  variableName?: string; // Optional variable name for use in PromptConstructor templates (image variable)
 }
 
 /**
@@ -104,6 +106,7 @@ export interface ArrayNodeData extends BaseNodeData {
 export interface PromptConstructorNodeData extends BaseNodeData {
   template: string;
   outputText: string | null;
+  outputParts: PromptPart[] | null; // Multimodal parts with interleaved text and image references
   unresolvedVars: string[];
 }
 
@@ -114,7 +117,15 @@ export interface AvailableVariable {
   name: string;
   value: string;
   nodeId: string;
+  variableType: "text" | "image"; // Whether this variable holds text or image data
 }
+
+/**
+ * A single part of a multimodal prompt (text or image reference)
+ */
+export type PromptPart =
+  | { type: "text"; value: string }
+  | { type: "image"; name: string; value: string }; // value is base64 data URL
 
 /**
  * Image history item for tracking generated images
@@ -439,6 +450,27 @@ export interface GLBViewerNodeData extends BaseNodeData {
 }
 
 /**
+ * Inpaint node - masked image regeneration
+ */
+export type InpaintProvider = "gemini" | "wavespeed";
+
+export interface InpaintNodeData extends BaseNodeData {
+  inputImage: string | null;        // Source image (from connection or stored)
+  inputImageRef?: string;
+  maskImage: string | null;         // Black/white mask (white = area to regenerate)
+  inputPrompt: string | null;       // What to generate in the masked area
+  outputImage: string | null;       // Result image
+  outputImageRef?: string;
+  inpaintProvider: InpaintProvider;  // Which provider to use
+  selectedModel?: SelectedModel;    // WaveSpeed model selection
+  maskBrushSize: number;            // Last used brush size
+  status: NodeStatus;
+  error: string | null;
+  imageHistory: CarouselImageItem[];
+  selectedHistoryIndex: number;
+}
+
+/**
  * Union of all node data types
  */
 export type WorkflowNodeData =
@@ -464,7 +496,8 @@ export type WorkflowNodeData =
   | RouterNodeData
   | SwitchNodeData
   | ConditionalSwitchNodeData
-  | GLBViewerNodeData;
+  | GLBViewerNodeData
+  | InpaintNodeData;
 
 /**
  * Workflow node with typed data (extended with optional groupId)

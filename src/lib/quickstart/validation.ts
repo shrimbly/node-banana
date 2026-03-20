@@ -64,6 +64,7 @@ const DEFAULT_DIMENSIONS: Record<NodeType, { width: number; height: number }> = 
   switch: { width: 220, height: 120 },
   conditionalSwitch: { width: 260, height: 180 },
   glbViewer: { width: 360, height: 380 },
+  inpaint: { width: 320, height: 340 },
 };
 
 /**
@@ -417,6 +418,19 @@ function createDefaultNodeData(type: NodeType): WorkflowNodeData {
         glbUrl: null,
         filename: null,
         capturedImage: null,
+      };
+    case "inpaint":
+      return {
+        inputImage: null,
+        maskImage: null,
+        inputPrompt: null,
+        outputImage: null,
+        inpaintProvider: "gemini",
+        maskBrushSize: 40,
+        status: "idle",
+        error: null,
+        imageHistory: [],
+        selectedHistoryIndex: 0,
       };
   }
 }

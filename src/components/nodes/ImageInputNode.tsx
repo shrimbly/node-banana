@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { useCommentNavigation } from "@/hooks/useCommentNavigation";
@@ -16,6 +17,26 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
   const commentNavigation = useCommentNavigation(id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Variable naming state
+  const [showVarDialog, setShowVarDialog] = useState(false);
+  const [varNameInput, setVarNameInput] = useState(nodeData.variableName || "");
+
+  const handleSaveVariableName = useCallback(() => {
+    updateNodeData(id, { variableName: varNameInput || undefined });
+    setShowVarDialog(false);
+  }, [id, varNameInput, updateNodeData]);
+
+  const handleClearVariableName = useCallback(() => {
+    setVarNameInput("");
+    updateNodeData(id, { variableName: undefined });
+    setShowVarDialog(false);
+  }, [id, updateNodeData]);
+
+  const handleVariableNameChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const sanitized = e.target.value.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 30);
+    setVarNameInput(sanitized);
+  }, []);
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -84,6 +105,7 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
   }, [id, updateNodeData]);
 
   return (
+    <>
     <BaseNode
       id={id}
       selected={selected}
@@ -148,6 +170,17 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
         </div>
       )}
 
+      {/* Variable name badge */}
+      <div className="absolute bottom-0 left-0 right-0 z-10 px-3 py-1.5 bg-neutral-900/90 rounded-b-lg">
+        <button
+          onClick={() => setShowVarDialog(true)}
+          className="nodrag nopan text-[10px] text-emerald-400 hover:text-emerald-300 transition-colors"
+          title="Set image variable name"
+        >
+          {nodeData.variableName ? `@${nodeData.variableName}` : "Add variable"}
+        </button>
+      </div>
+
       <Handle
         type="source"
         position={Position.Right}
@@ -155,5 +188,63 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
         data-handletype="image"
       />
     </BaseNode>
+
+    {/* Variable Naming Dialog */}
+    {showVarDialog && createPortal(
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
+        <div className="bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl p-4 w-96">
+          <h3 className="text-sm font-semibold text-neutral-100 mb-3">Set Image Variable Name</h3>
+          <p className="text-xs text-neutral-400 mb-3">
+            Reference this image as <span className="text-emerald-400">@name</span> in prompts and PromptConstructor templates
+          </p>
+          <div className="mb-4">
+            <label className="block text-xs text-neutral-300 mb-1">Variable name</label>
+            <input
+              type="text"
+              value={varNameInput}
+              onChange={handleVariableNameChange}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && varNameInput) {
+                  handleSaveVariableName();
+                }
+              }}
+              placeholder="e.g. photo, reference, style"
+              className="w-full px-3 py-2 text-sm text-neutral-100 bg-neutral-900 border border-neutral-700 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              autoFocus
+            />
+            {varNameInput && (
+              <div className="mt-2 text-xs text-emerald-400">
+                Preview: <span className="font-mono">@{varNameInput}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex gap-2 justify-end">
+            {nodeData.variableName && (
+              <button
+                onClick={handleClearVariableName}
+                className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded transition-colors"
+              >
+                Clear
+              </button>
+            )}
+            <button
+              onClick={() => setShowVarDialog(false)}
+              className="px-3 py-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-300 hover:bg-neutral-700 rounded transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSaveVariableName}
+              disabled={!varNameInput}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+    </>
   );
 }

@@ -49,6 +49,7 @@ function makeCtx(
       videos: [],
       audio: [],
       text: "test llm prompt",
+      namedImages: {},
       dynamicInputs: {},
       easeCurve: null,
     }),
@@ -81,6 +82,7 @@ describe("executeLlmGenerate", () => {
         videos: [],
         audio: [],
         text: null,
+        namedImages: {},
         dynamicInputs: {},
         easeCurve: null,
       }),
@@ -144,6 +146,7 @@ describe("executeLlmGenerate", () => {
         videos: [],
         audio: [],
         text: "describe this",
+        namedImages: {},
         dynamicInputs: {},
         easeCurve: null,
       }),
@@ -224,9 +227,13 @@ describe("executeLlmGenerate", () => {
         videos: [],
         audio: [],
         text: null,
+        namedImages: {},
         dynamicInputs: {},
         easeCurve: null,
       }),
+      getEdges: vi.fn().mockReturnValue([
+        { id: "e1", source: "prompt-1", target: "llm-1", targetHandle: "text" },
+      ]),
     });
     mockFetch.mockResolvedValueOnce({
       ok: true,

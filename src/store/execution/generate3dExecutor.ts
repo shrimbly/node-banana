@@ -23,6 +23,7 @@ export async function executeGenerate3D(
     getConnectedInputs,
     updateNodeData,
     getFreshNode,
+    getEdges,
     signal,
     providerSettings,
     addIncurredCost,
@@ -43,8 +44,9 @@ export async function executeGenerate3D(
   let promptText: string | null;
 
   if (useStoredFallback) {
-    images = connectedImages.length > 0 ? connectedImages : nodeData.inputImages;
-    promptText = connectedText ?? nodeData.inputPrompt;
+    const hasIncomingEdges = getEdges().some((e) => e.target === node.id);
+    images = connectedImages.length > 0 ? connectedImages : (hasIncomingEdges ? nodeData.inputImages : []);
+    promptText = connectedText ?? (hasIncomingEdges ? nodeData.inputPrompt : null);
   } else {
     images = connectedImages;
     const promptFromDynamic = Array.isArray(dynamicInputs.prompt)

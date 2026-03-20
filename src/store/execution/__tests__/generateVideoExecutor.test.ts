@@ -234,6 +234,9 @@ describe("executeGenerateVideo", () => {
         dynamicInputs: {},
         easeCurve: null,
       }),
+      getEdges: vi.fn().mockReturnValue([
+        { id: "e1", source: "prompt-1", target: "vid-1", targetHandle: "text" },
+      ]),
       getFreshNode: vi.fn().mockReturnValue(node),
     });
     mockFetch.mockResolvedValueOnce({

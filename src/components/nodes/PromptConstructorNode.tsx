@@ -5,7 +5,7 @@ import { Handle, Position, NodeProps, Node } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { usePromptAutocomplete } from "@/hooks/usePromptAutocomplete";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { PromptConstructorNodeData, PromptNodeData, LLMGenerateNodeData, AvailableVariable } from "@/types";
+import { PromptConstructorNodeData, PromptNodeData, LLMGenerateNodeData, ImageInputNodeData, AvailableVariable } from "@/types";
 import { parseVarTags } from "@/utils/parseVarTags";
 
 type PromptConstructorNodeType = Node<PromptConstructorNodeData, "promptConstructor">;
@@ -30,9 +30,15 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
   }, [nodeData.template, isEditing]);
 
   // Get available variables from connected prompt nodes (named variables + inline <var> tags)
+  // and image variables from connected image nodes
   const availableVariables = useMemo((): AvailableVariable[] => {
     const connectedTextNodes = edges
       .filter((e) => e.target === id && e.targetHandle === "text")
+      .map((e) => nodes.find((n) => n.id === e.source))
+      .filter((n): n is typeof nodes[0] => n !== undefined);
+
+    const connectedImageNodes = edges
+      .filter((e) => e.target === id && e.targetHandle === "image")
       .map((e) => nodes.find((n) => n.id === e.source))
       .filter((n): n is typeof nodes[0] => n !== undefined);
 
@@ -48,13 +54,30 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
             name: promptData.variableName,
             value: promptData.prompt || "",
             nodeId: node.id,
+            variableType: "text",
           });
           usedNames.add(promptData.variableName);
         }
       }
     });
 
-    // Second pass: parse inline <var> tags from all connected text nodes
+    // Image variables from connected ImageInput nodes with variableName
+    connectedImageNodes.forEach((node) => {
+      if (node.type === "imageInput") {
+        const imgData = node.data as ImageInputNodeData;
+        if (imgData.variableName && !usedNames.has(imgData.variableName)) {
+          vars.push({
+            name: imgData.variableName,
+            value: imgData.image ? "(image)" : "(no image)",
+            nodeId: node.id,
+            variableType: "image",
+          });
+          usedNames.add(imgData.variableName);
+        }
+      }
+    });
+
+    // Parse inline <var> tags from all connected text nodes
     connectedTextNodes.forEach((node) => {
       let text: string | null = null;
       if (node.type === "prompt") {
@@ -74,6 +97,7 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
               name,
               value,
               nodeId: `${node.id}-var-${name}`,
+              variableType: "text",
             });
             usedNames.add(name);
           }
@@ -145,9 +169,9 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
     }
   }, []);
 
-  // Build highlighted text with blue for resolved, red for unresolved variables
+  // Build highlighted text with blue for text vars, green for image vars, red for unresolved
   const highlightedContent = useMemo((): ReactNode[] => {
-    const availableNames = new Set(availableVariables.map(v => v.name));
+    const varMap = new Map(availableVariables.map(v => [v.name, v]));
     const pattern = /@(\w+)/g;
     const parts: ReactNode[] = [];
     let lastIndex = 0;
@@ -157,9 +181,13 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
       if (idx > lastIndex) {
         parts.push(localTemplate.slice(lastIndex, idx));
       }
-      const isResolved = availableNames.has(match[1]);
+      const variable = varMap.get(match[1]);
+      let bgClass = "bg-red-400/50"; // unresolved
+      if (variable) {
+        bgClass = variable.variableType === "image" ? "bg-emerald-400/30" : "bg-blue-400/30";
+      }
       parts.push(
-        <mark key={idx} className={`${isResolved ? "bg-blue-400/30" : "bg-red-400/50"} text-transparent rounded-sm px-0.5 -mx-0.5 py-0.5`}>{match[0]}</mark>
+        <mark key={idx} className={`${bgClass} text-transparent rounded-sm px-0.5 -mx-0.5 py-0.5`}>{match[0]}</mark>
       );
       lastIndex = idx + match[0].length;
     }
@@ -195,7 +223,16 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
           position={Position.Left}
           id="text"
           data-handletype="text"
-          style={{ zIndex: 10 }}
+          style={{ top: "40%", zIndex: 10 }}
+        />
+
+        {/* Image input handle - for image variables */}
+        <Handle
+          type="target"
+          position={Position.Left}
+          id="image"
+          data-handletype="image"
+          style={{ top: "60%", zIndex: 10 }}
         />
 
         {/* Template textarea with highlight overlay for @variables */}
@@ -226,7 +263,7 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
           {/* Autocomplete dropdown */}
           {showAutocomplete && filteredAutocompleteVars.length > 0 && (
             <div
-              className="absolute z-20 bg-neutral-800 border border-neutral-600 rounded shadow-xl max-h-40 overflow-y-auto"
+              className="nodrag nopan nowheel absolute z-20 bg-neutral-800 border border-neutral-600 rounded shadow-xl max-h-40 overflow-y-auto"
               style={{
                 top: autocompletePosition.top,
                 left: autocompletePosition.left,
@@ -237,6 +274,7 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
                   key={variable.nodeId}
                   onMouseDown={(e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     handleAutocompleteSelect(variable.name);
                   }}
                   className={`w-full px-3 py-2 text-left text-[11px] flex flex-col gap-0.5 transition-colors ${
@@ -245,9 +283,9 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
                       : "text-neutral-300 hover:bg-neutral-700"
                   }`}
                 >
-                  <div className="font-medium text-blue-400">@{variable.name}</div>
+                  <div className={`font-medium ${variable.variableType === "image" ? "text-emerald-400" : "text-blue-400"}`}>@{variable.name}</div>
                   <div className="text-neutral-500 truncate max-w-[200px]">
-                    {variable.value || "(empty)"}
+                    {variable.variableType === "image" ? "(image)" : variable.value || "(empty)"}
                   </div>
                 </button>
               ))}

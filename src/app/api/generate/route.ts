@@ -100,7 +100,8 @@ export async function POST(request: NextRequest) {
       parameters,
       dynamicInputs,
       mediaType,
-    } = body;
+      parts,
+    } = body as MultiProviderGenerateRequest & { parts?: Array<{ type: string; value: string; name?: string }> };
 
     // Prompt is required unless:
     // - Provided via dynamicInputs
@@ -524,7 +525,8 @@ export async function POST(request: NextRequest) {
       aspectRatio,
       resolution,
       useGoogleSearch,
-      useImageSearch
+      useImageSearch,
+      parts as Array<{ type: string; value: string; name?: string }> | undefined
     );
   } catch (error) {
     // Extract error information

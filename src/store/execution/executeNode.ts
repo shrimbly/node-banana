@@ -24,6 +24,7 @@ import { executeLlmGenerate } from "./llmGenerateExecutor";
 import { executeSplitGrid } from "./splitGridExecutor";
 import { executeVideoStitch, executeEaseCurve, executeVideoTrim, executeVideoFrameGrab } from "./videoProcessingExecutors";
 import { executeGenerateAudio } from "./generateAudioExecutor";
+import { executeInpaint } from "./inpaintExecutor";
 
 export interface ExecuteNodeOptions {
   /** When true, executors that support it will fall back to stored inputs. */
@@ -106,6 +107,9 @@ export async function executeNode(
       break;
     case "videoFrameGrab":
       await executeVideoFrameGrab(ctx);
+      break;
+    case "inpaint":
+      await executeInpaint(ctx);
       break;
   }
 }

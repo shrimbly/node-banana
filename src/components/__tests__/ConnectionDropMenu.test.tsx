@@ -218,7 +218,7 @@ describe("ConnectionDropMenu", () => {
       fireEvent.keyDown(document, { key: "ArrowUp" });
 
       // Last item should now be highlighted
-      const lastButton = screen.getByText("Switch").closest("button");
+      const lastButton = screen.getByText("Prompt Constructor").closest("button");
       expect(lastButton).toHaveClass("bg-neutral-700");
     });
 
