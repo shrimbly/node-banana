@@ -63,7 +63,7 @@ export function FTUXModal({ onComplete, onStartTutorial }: FTUXModalProps) {
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60"
       onWheelCapture={(e) => e.stopPropagation()}
     >
-      <div className="relative bg-neutral-800 rounded-xl w-full max-w-[520px] mx-4 border border-neutral-700 shadow-2xl overflow-clip flex flex-col max-h-[80vh]">
+      <div className="relative bg-neutral-800 rounded-xl w-full max-w-[640px] mx-4 border border-neutral-700 shadow-2xl overflow-clip flex flex-col max-h-[80vh]">
         {/* Header */}
         <div className="px-8 pt-8 pb-4 border-b border-neutral-700/50 shrink-0">
           <div className="flex items-center justify-between">

@@ -61,7 +61,7 @@ export function FTUXModelDefaultsStep({}: FTUXStepProps) {
         Default Models (Optional)
       </h3>
       <p className="text-sm text-neutral-400 mb-4">
-        Choose which AI models to use by default when creating new nodes. You can always change these later.
+        Choose which AI models to use by default when creating new nodes.
       </p>
 
       <div className="space-y-3">
@@ -161,7 +161,7 @@ export function FTUXModelDefaultsStep({}: FTUXStepProps) {
       </div>
 
       <p className="text-xs text-neutral-400 mt-4">
-        These defaults are applied when creating nodes. You can skip this step and configure them later in settings.
+        You can skip this step and configure them later in settings.
       </p>
 
       {/* Model Selection Dialogs */}

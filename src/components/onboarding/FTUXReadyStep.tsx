@@ -5,21 +5,6 @@ import { FTUXStepProps } from "@/types/ftux";
 export function FTUXReadyStep({ onStartTutorial, onComplete }: FTUXStepProps) {
   return (
     <div className="flex flex-col items-center justify-center py-8 px-6">
-      <div className="mb-6 w-16 h-16 rounded-full bg-green-500/20 border-2 border-green-500 flex items-center justify-center">
-        <svg
-          className="w-8 h-8 text-green-400"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth={2}
-            d="M5 13l4 4L19 7"
-          />
-        </svg>
-      </div>
       <h2 className="text-2xl font-semibold text-neutral-100 mb-3">
         All Set Up!
       </h2>

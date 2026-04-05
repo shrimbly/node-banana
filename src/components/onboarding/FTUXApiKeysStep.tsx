@@ -110,7 +110,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
         API Keys (Optional)
       </h3>
       <p className="text-sm text-neutral-400 mb-4">
-        Configure your API keys to access different AI providers. You can skip this step and add them later in settings.
+        Add your API keys here, or save them to .env.local to keep them secure across sessions.
       </p>
 
       <div className="space-y-2 max-h-[380px] overflow-y-auto pr-2">
