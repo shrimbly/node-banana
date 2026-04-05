@@ -77,6 +77,8 @@ import { useInlineParameters } from "@/hooks/useInlineParameters";
 import { SplitGridSettingsModal } from "./SplitGridSettingsModal";
 import { createPortal } from "react-dom";
 import { useAnnotationStore } from "@/store/annotationStore";
+import { TutorialOverlay } from "./onboarding/TutorialOverlay";
+import { useFTUXStore } from "@/store/ftuxStore";
 
 const nodeTypes: NodeTypes = {
   imageInput: ImageInputNode,
@@ -322,6 +324,12 @@ export function WorkflowCanvas() {
   const [showNewProjectSetup, setShowNewProjectSetup] = useState(false);
   const [expandingNode, setExpandingNode] = useState<{ id: string; type: string } | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+
+  // FTUX tutorial state
+  const { tutorialActive, lockedFeatures } = useFTUXStore((state) => ({
+    tutorialActive: state.tutorialActive,
+    lockedFeatures: state.lockedFeatures,
+  }));
 
   // Detect if canvas is empty for showing quickstart
   const isCanvasEmpty = nodes.length === 0;
@@ -2064,10 +2072,15 @@ export function WorkflowCanvas() {
         <SharedEdgeGradients />
         <GroupBackgroundsPortal />
         <GroupControlsOverlay />
-        <Background color="#404040" gap={20} size={1} />
-        <Controls className="bg-neutral-800 border border-neutral-700 rounded-lg shadow-lg [&>button]:bg-neutral-800 [&>button]:border-neutral-700 [&>button]:fill-neutral-300 [&>button:hover]:bg-neutral-700 [&>button:hover]:fill-neutral-100" />
+        <Background
+          color="#404040"
+          gap={20}
+          size={1}
+          className={tutorialActive && lockedFeatures ? "opacity-30 pointer-events-none" : ""}
+        />
+        <Controls className={`bg-neutral-800 border border-neutral-700 rounded-lg shadow-lg [&>button]:bg-neutral-800 [&>button]:border-neutral-700 [&>button]:fill-neutral-300 [&>button:hover]:bg-neutral-700 [&>button:hover]:fill-neutral-100 ${tutorialActive && lockedFeatures ? "opacity-30 pointer-events-none" : ""}`} />
         <MiniMap
-          className="bg-neutral-800 border border-neutral-700 rounded-lg shadow-lg"
+          className={`bg-neutral-800 border border-neutral-700 rounded-lg shadow-lg ${tutorialActive && lockedFeatures ? "opacity-30 pointer-events-none" : ""}`}
           maskColor="rgba(0, 0, 0, 0.6)"
           pannable
           zoomable
@@ -2317,6 +2330,9 @@ export function WorkflowCanvas() {
 
       {/* AnnotationModal is globally managed by annotationStore */}
       <AnnotationModal />
+
+      {/* Tutorial overlay */}
+      <TutorialOverlay />
     </div>
   );
 }

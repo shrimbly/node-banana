@@ -81,9 +81,10 @@ function getPaneCenter() {
 interface NodeButtonProps {
   type: NodeType;
   label: string;
+  dataTutorial?: string;
 }
 
-function NodeButton({ type, label }: NodeButtonProps) {
+function NodeButton({ type, label, dataTutorial }: NodeButtonProps) {
   const addNode = useWorkflowStore((state) => state.addNode);
   const { screenToFlowPosition } = useReactFlow();
 
@@ -107,6 +108,7 @@ function NodeButton({ type, label }: NodeButtonProps) {
       onClick={handleClick}
       draggable
       onDragStart={handleDragStart}
+      data-tutorial={dataTutorial}
       className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors cursor-grab active:cursor-grabbing"
     >
       {label}
@@ -416,11 +418,11 @@ export function FloatingActionBar() {
   return (
     <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50">
       <div className="flex items-center gap-0.5 bg-neutral-800/95 rounded-lg shadow-lg border border-neutral-700/80 px-1.5 py-1">
-        <NodeButton type="imageInput" label="Image" />
+        <NodeButton type="imageInput" label="Image" dataTutorial="image-button" />
         <NodeButton type="videoInput" label="Video" />
         <NodeButton type="prompt" label="Prompt" />
         <GenerateComboButton />
-        <NodeButton type="output" label="Output" />
+        <NodeButton type="output" label="Output" dataTutorial="output-button" />
         <AllNodesMenu />
 
         {/* All models button */}
