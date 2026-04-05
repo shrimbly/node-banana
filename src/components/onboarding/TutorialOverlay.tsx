@@ -1,0 +1,111 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
+import { useFTUXStore } from "@/store/ftuxStore";
+import { useWorkflowStore } from "@/store/workflowStore";
+import { ElementHighlight } from "./ElementHighlight";
+import { TutorialMessage } from "./TutorialMessage";
+
+/**
+ * Main tutorial coordination component.
+ * Manages tutorial progression, action detection, and UI rendering.
+ */
+export function TutorialOverlay() {
+  const [mounted, setMounted] = useState(false);
+
+  const tutorialActive = useFTUXStore((state) => state.tutorialActive);
+  const currentTutorialStep = useFTUXStore((state) => state.currentTutorialStep);
+  const tutorialSteps = useFTUXStore((state) => state.tutorialSteps);
+  const completeCurrentStep = useFTUXStore((state) => state.completeCurrentStep);
+  const nextTutorialStep = useFTUXStore((state) => state.nextTutorialStep);
+  const skipTutorial = useFTUXStore((state) => state.skipTutorial);
+
+  const nodes = useWorkflowStore((state) => state.nodes);
+
+  // Ensure portal rendering only happens client-side
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // Action detection: monitor workflow state for required actions
+  useEffect(() => {
+    if (!tutorialActive || currentTutorialStep >= tutorialSteps.length) {
+      return;
+    }
+
+    const currentStep = tutorialSteps[currentTutorialStep];
+    if (!currentStep.requiredAction || currentStep.completed) {
+      return;
+    }
+
+    let actionCompleted = false;
+
+    // Detect specific actions based on requiredAction type
+    switch (currentStep.requiredAction) {
+      case "add-image-node":
+        actionCompleted = nodes.some((node) => node.type === "imageInput");
+        break;
+
+      case "connect-nodes":
+        // Check if any edges exist in workflow store
+        const edges = useWorkflowStore.getState().edges;
+        actionCompleted = edges.length > 0;
+        break;
+
+      case "run-workflow":
+        // Check if any node has been executed (has output)
+        actionCompleted = nodes.some((node) => {
+          const data = node.data as Record<string, unknown>;
+          return data.outputImage || data.outputText || data.outputAudio;
+        });
+        break;
+    }
+
+    if (actionCompleted) {
+      completeCurrentStep();
+      // Advance to next step after short delay
+      setTimeout(() => {
+        nextTutorialStep();
+      }, 1000);
+    }
+  }, [
+    tutorialActive,
+    currentTutorialStep,
+    tutorialSteps,
+    nodes,
+    completeCurrentStep,
+    nextTutorialStep,
+  ]);
+
+  // Don't render during SSR or when tutorial is inactive
+  if (!mounted || !tutorialActive || currentTutorialStep >= tutorialSteps.length) {
+    return null;
+  }
+
+  const currentStep = tutorialSteps[currentTutorialStep];
+
+  return createPortal(
+    <>
+      {/* Element highlight (if specified) */}
+      {currentStep.highlightSelector && (
+        <ElementHighlight selector={currentStep.highlightSelector} />
+      )}
+
+      {/* Tutorial message */}
+      <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 93 }}>
+        <TutorialMessage message={currentStep.message} />
+      </div>
+
+      {/* Skip tutorial button */}
+      <button
+        onClick={skipTutorial}
+        className="fixed top-4 right-4 px-3 py-2 text-sm text-neutral-400 hover:text-neutral-200 transition-colors pointer-events-auto"
+        style={{ zIndex: 94 }}
+      >
+        Skip tutorial
+      </button>
+    </>,
+    document.body
+  );
+}
