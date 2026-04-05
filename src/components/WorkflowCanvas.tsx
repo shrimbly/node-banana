@@ -325,11 +325,24 @@ export function WorkflowCanvas() {
   const [expandingNode, setExpandingNode] = useState<{ id: string; type: string } | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
-  // FTUX tutorial state
-  const { tutorialActive, lockedFeatures } = useFTUXStore((state) => ({
-    tutorialActive: state.tutorialActive,
-    lockedFeatures: state.lockedFeatures,
-  }));
+  // FTUX tutorial state (client-side only to avoid SSR hydration issues)
+  const [tutorialActive, setTutorialActive] = useState(false);
+  const [lockedFeatures, setLockedFeatures] = useState(false);
+
+  useEffect(() => {
+    // Subscribe to FTUX store on client-side only
+    const unsubscribe = useFTUXStore.subscribe((state) => {
+      setTutorialActive(state.tutorialActive);
+      setLockedFeatures(state.lockedFeatures);
+    });
+
+    // Initialize with current state
+    const currentState = useFTUXStore.getState();
+    setTutorialActive(currentState.tutorialActive);
+    setLockedFeatures(currentState.lockedFeatures);
+
+    return unsubscribe;
+  }, []);
 
   // Detect if canvas is empty for showing quickstart
   const isCanvasEmpty = nodes.length === 0;
