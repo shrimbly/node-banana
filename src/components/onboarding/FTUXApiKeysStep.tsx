@@ -193,11 +193,6 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
           );
         })}
       </div>
-
-      <p className="text-xs text-neutral-400 mt-4">
-        Keys added here will be stored in your browser. For better security, add them to{" "}
-        <code className="px-1 py-0.5 bg-neutral-800 rounded">.env.local</code> instead.
-      </p>
     </div>
   );
 }
