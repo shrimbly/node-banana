@@ -110,7 +110,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
         API Keys (Optional)
       </h3>
       <p className="text-sm text-neutral-400 mb-4">
-        Add your API keys here, or save them to .env.local to keep them secure across sessions.
+        Add keys to use AI providers. For security, save them to your .env.local file instead of the browser.
       </p>
 
       <div className="space-y-2 max-h-[380px] overflow-y-auto pr-2">

@@ -58,10 +58,10 @@ export function FTUXModelDefaultsStep({}: FTUXStepProps) {
   return (
     <div className="py-6 px-6">
       <h3 className="text-lg font-semibold text-neutral-100 mb-2">
-        Default Models (Optional)
+        Choose Your Models (Optional)
       </h3>
       <p className="text-sm text-neutral-400 mb-4">
-        Choose which AI models to use by default when creating new nodes.
+        Pick which AI models to use for images and videos.
       </p>
 
       <div className="space-y-3">
@@ -159,10 +159,6 @@ export function FTUXModelDefaultsStep({}: FTUXStepProps) {
           </div>
         </div>
       </div>
-
-      <p className="text-xs text-neutral-400 mt-4">
-        You can skip this step and configure them later in settings.
-      </p>
 
       {/* Model Selection Dialogs */}
       {showImageDialog && (
