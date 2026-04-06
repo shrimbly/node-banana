@@ -80,6 +80,10 @@ export function TutorialOverlay() {
         });
         break;
 
+      case "show-connection-menu":
+        actionCompleted = useFTUXStore.getState().connectionMenuShown;
+        break;
+
       case "add-nanoBanana-from-menu":
         actionCompleted = useFTUXStore.getState().nanoBananaAddedFromMenu;
         break;
@@ -87,10 +91,11 @@ export function TutorialOverlay() {
 
     if (actionCompleted) {
       completeCurrentStep();
-      // Advance to next step after short delay
+      // Advance to next step after configurable delay (default 1000ms)
+      const delay = currentStep.advanceDelay !== undefined ? currentStep.advanceDelay : 1000;
       setTimeout(() => {
         nextTutorialStep();
-      }, 1000);
+      }, delay);
     }
   }, [
     tutorialActive,
