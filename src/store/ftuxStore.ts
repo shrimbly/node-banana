@@ -10,7 +10,6 @@ export interface TutorialStep {
     | "add-output-node"
     | "connect-nodes"
     | "run-workflow"
-    | "start-connection-drag"
     | "show-connection-menu"
     | "add-nanoBanana-from-menu";
   position?: "left" | "right" | "center" | "top-center";
@@ -25,7 +24,6 @@ export interface FTUXState {
   lockedFeatures: boolean;
 
   // Tutorial progress flags
-  connectionDragStarted: boolean;
   connectionMenuShown: boolean;
   nanoBananaAddedFromMenu: boolean;
 
@@ -35,7 +33,6 @@ export interface FTUXState {
   completeCurrentStep: () => void;
   nextTutorialStep: () => void;
   resetTutorial: () => void;
-  setConnectionDragStarted: (started: boolean) => void;
   setConnectionMenuShown: (shown: boolean) => void;
   setNanoBananaAddedFromMenu: (added: boolean) => void;
 }
@@ -106,26 +103,11 @@ const initialTutorialSteps: TutorialStep[] = [
     completed: false,
   },
   {
-    id: "drag-from-output",
-    message: "Try it! Click and drag from the output handle on the right.",
+    id: "drag-and-drop",
+    message: "Drag from the output handle and drop into empty space.",
     highlightSelector: '[data-tutorial="node-output-handle"]',
     position: "right",
-    requiredAction: "start-connection-drag",
-    completed: false,
-  },
-  {
-    id: "drop-in-space",
-    message: "Now release anywhere on the canvas to see available nodes.",
-    position: "top-center",
     requiredAction: "show-connection-menu",
-    completed: false,
-  },
-  {
-    id: "explain-connection-menu",
-    message: "This menu shows nodes that can connect to your output.\n\nIt's the fastest way to build workflows.",
-    highlightSelector: '[data-tutorial="connection-drop-menu"]',
-    position: "top-center",
-    waitForClick: true,
     completed: false,
   },
   {
@@ -153,7 +135,6 @@ export const useFTUXStore = create<FTUXState>((set, get) => ({
   currentTutorialStep: 0,
   tutorialSteps: [],
   lockedFeatures: false,
-  connectionDragStarted: false,
   connectionMenuShown: false,
   nanoBananaAddedFromMenu: false,
 
@@ -163,7 +144,6 @@ export const useFTUXStore = create<FTUXState>((set, get) => ({
       currentTutorialStep: 0,
       tutorialSteps: initialTutorialSteps.map((step) => ({ ...step, completed: false })),
       lockedFeatures: true,
-      connectionDragStarted: false,
       connectionMenuShown: false,
       nanoBananaAddedFromMenu: false,
     });
@@ -214,7 +194,6 @@ export const useFTUXStore = create<FTUXState>((set, get) => ({
     });
   },
 
-  setConnectionDragStarted: (started: boolean) => set({ connectionDragStarted: started }),
   setConnectionMenuShown: (shown: boolean) => set({ connectionMenuShown: shown }),
   setNanoBananaAddedFromMenu: (added: boolean) => set({ nanoBananaAddedFromMenu: added }),
 }));

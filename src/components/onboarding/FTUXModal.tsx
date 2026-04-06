@@ -63,50 +63,52 @@ export function FTUXModal({ onComplete, onStartTutorial }: FTUXModalProps) {
       className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60"
       onWheelCapture={(e) => e.stopPropagation()}
     >
-      <div className="relative bg-neutral-800 rounded-xl w-full max-w-[640px] mx-4 border border-neutral-700 shadow-2xl overflow-clip flex flex-col max-h-[80vh]">
+      <div className={`relative bg-neutral-800 rounded-xl w-full ${currentStep === 4 ? 'max-w-[420px]' : 'max-w-[640px]'} mx-4 border border-neutral-700 shadow-2xl overflow-clip flex flex-col ${currentStep === 4 ? '' : 'max-h-[80vh]'}`}>
         {/* Header */}
-        <div className="px-8 pt-8 pb-4 border-b border-neutral-700/50 shrink-0">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <img src="/banana_icon.png" alt="" className="w-6 h-6" />
-              <h2 className="text-xl font-medium text-neutral-100">
-                Welcome to Node Banana
-              </h2>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowSkipConfirm(true)}
-              className="text-neutral-400 hover:text-neutral-100 transition-colors"
-              aria-label="Close"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
+        {currentStep !== 4 && (
+          <div className="px-8 pt-8 pb-4 border-b border-neutral-700/50 shrink-0">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <img src="/banana_icon.png" alt="" className="w-6 h-6" />
+                <h2 className="text-xl font-medium text-neutral-100">
+                  Welcome to Node Banana
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowSkipConfirm(true)}
+                className="text-neutral-400 hover:text-neutral-100 transition-colors"
+                aria-label="Close"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            </div>
 
-          {/* Step indicators */}
-          <div className="flex gap-2 mt-4">
-            {([1, 2, 3, 4] as const).map((step) => (
-              <div
-                key={step}
-                className={`h-1 flex-1 rounded-full transition-colors ${
-                  step <= currentStep ? "bg-white" : "bg-neutral-700"
-                }`}
-              />
-            ))}
+            {/* Step indicators */}
+            <div className="flex gap-2 mt-4">
+              {([1, 2, 3, 4] as const).map((step) => (
+                <div
+                  key={step}
+                  className={`h-1 flex-1 rounded-full transition-colors ${
+                    step <= currentStep ? "bg-white" : "bg-neutral-700"
+                  }`}
+                />
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Content area */}
         <div className="flex-1 min-h-0 overflow-y-auto">

@@ -80,26 +80,7 @@ export function ElementHighlight({ selector, onComplete }: ElementHighlightProps
 
   return (
     <>
-      {/* Layer 1: Dimmed overlay with cutout for highlighted element */}
-      <div
-        className="fixed inset-0 pointer-events-none"
-        style={{ zIndex: 90 }}
-      >
-        {/* Use box-shadow technique to create overlay with hole */}
-        <div
-          className="fixed"
-          style={{
-            top: rect.top,
-            left: rect.left,
-            width: rect.width,
-            height: rect.height,
-            boxShadow: "0 0 0 9999px rgba(0, 0, 0, 0.6)",
-            zIndex: 90,
-          }}
-        />
-      </div>
-
-      {/* Layer 2: Pulsing blue ring highlight */}
+      {/* Pulsing blue ring highlight (no darkening overlay) */}
       <div
         className="fixed pointer-events-none"
         style={{

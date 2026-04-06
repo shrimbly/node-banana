@@ -150,6 +150,7 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
         position={Position.Left}
         id="reference"
         data-handletype="reference"
+        data-tutorial="node-input-handle"
         className="!bg-gray-500"
       />
       <Handle
@@ -157,6 +158,7 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
         position={Position.Right}
         id="image"
         data-handletype="image"
+        data-tutorial="node-output-handle"
       />
     </BaseNode>
   );

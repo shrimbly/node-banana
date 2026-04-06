@@ -4,15 +4,15 @@ import { FTUXStepProps } from "@/types/ftux";
 
 export function FTUXReadyStep({ onStartTutorial, onComplete }: FTUXStepProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-8 px-6">
-      <h2 className="text-2xl font-semibold text-neutral-100 mb-3">
+    <div className="flex flex-col items-center justify-center py-12 px-8">
+      <h2 className="text-2xl font-semibold text-neutral-100 mb-4">
         You're ready!
       </h2>
-      <p className="text-neutral-300 text-center max-w-md leading-relaxed mb-6">
+      <p className="text-neutral-300 text-center leading-relaxed mb-8">
         Want a quick tutorial?
       </p>
 
-      <div className="flex gap-3 mt-2">
+      <div className="flex gap-3">
         <button
           type="button"
           onClick={onComplete}
@@ -25,7 +25,7 @@ export function FTUXReadyStep({ onStartTutorial, onComplete }: FTUXStepProps) {
           onClick={onStartTutorial}
           className="px-5 py-2.5 text-sm bg-white text-neutral-900 rounded-lg hover:bg-neutral-200 transition-colors font-medium"
         >
-          Show me how
+          Start tutorial
         </button>
       </div>
     </div>

@@ -59,17 +59,18 @@ interface ProviderInfo {
   id: ProviderType;
   name: string;
   icon: () => ReactElement;
+  apiKeyUrl: string;
   isRecommended?: boolean;
 }
 
 const providers: ProviderInfo[] = [
-  { id: "gemini", name: "Google Gemini", icon: GeminiIcon, isRecommended: true },
-  { id: "openai", name: "OpenAI", icon: OpenAIIcon },
-  { id: "anthropic", name: "Anthropic", icon: AnthropicIcon },
-  { id: "replicate", name: "Replicate", icon: ReplicateIcon },
-  { id: "fal", name: "fal.ai", icon: FalIcon },
-  { id: "kie", name: "Kie.ai", icon: KieIcon },
-  { id: "wavespeed", name: "WaveSpeed", icon: WaveSpeedIcon },
+  { id: "gemini", name: "Google Gemini", icon: GeminiIcon, apiKeyUrl: "https://aistudio.google.com/apikey", isRecommended: true },
+  { id: "openai", name: "OpenAI", icon: OpenAIIcon, apiKeyUrl: "https://platform.openai.com/api-keys" },
+  { id: "anthropic", name: "Anthropic", icon: AnthropicIcon, apiKeyUrl: "https://console.anthropic.com/settings/keys" },
+  { id: "replicate", name: "Replicate", icon: ReplicateIcon, apiKeyUrl: "https://replicate.com/account/api-tokens" },
+  { id: "fal", name: "fal.ai", icon: FalIcon, apiKeyUrl: "https://fal.ai/dashboard/keys" },
+  { id: "kie", name: "Kie.ai", icon: KieIcon, apiKeyUrl: "https://kie.ai/api-key" },
+  { id: "wavespeed", name: "WaveSpeed", icon: WaveSpeedIcon, apiKeyUrl: "https://wavespeed.ai/accesskey" },
 ];
 
 export function FTUXApiKeysStep({}: FTUXStepProps) {
@@ -147,6 +148,22 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
                   <span className="text-sm font-medium text-neutral-100 truncate">
                     {provider.name}
                   </span>
+                  <div className="relative group shrink-0">
+                    <a
+                      href={provider.apiKeyUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-neutral-400 hover:text-neutral-200 transition-colors"
+                      aria-label={`Get ${provider.name} API key`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                    </a>
+                    <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 bg-neutral-900 text-neutral-200 text-xs rounded border border-neutral-700 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
+                      Get API key
+                    </div>
+                  </div>
                   {provider.isRecommended && (
                     <span className="text-xs text-green-400 shrink-0">Recommended</span>
                   )}

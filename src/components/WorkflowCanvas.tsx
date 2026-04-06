@@ -12,7 +12,6 @@ import {
   Edge,
   useReactFlow,
   OnConnectEnd,
-  OnConnectStart,
   Node,
   OnSelectionChangeParams,
   ViewportPortal,
@@ -764,17 +763,6 @@ export function WorkflowCanvas() {
       }
     },
     [onConnect, nodes, edges]
-  );
-
-  // Handle connection drag start
-  const handleConnectStart: OnConnectStart = useCallback(
-    (event, params) => {
-      // Tutorial tracking
-      if (tutorialActive) {
-        useFTUXStore.getState().setConnectionDragStarted(true);
-      }
-    },
-    [tutorialActive]
   );
 
   // Handle connection dropped on empty space or on a node
@@ -2069,7 +2057,6 @@ export function WorkflowCanvas() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={handleConnect}
-        onConnectStart={handleConnectStart}
         onConnectEnd={handleConnectEnd}
         onMoveStart={() => { isPanningRef.current = true; setHoveredNodeId(null); document.documentElement.classList.add("canvas-interacting"); }}
         onMoveEnd={() => { isPanningRef.current = false; document.documentElement.classList.remove("canvas-interacting"); }}

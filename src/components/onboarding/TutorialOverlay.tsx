@@ -80,10 +80,6 @@ export function TutorialOverlay() {
         });
         break;
 
-      case "start-connection-drag":
-        actionCompleted = useFTUXStore.getState().connectionDragStarted;
-        break;
-
       case "show-connection-menu":
         actionCompleted = useFTUXStore.getState().connectionMenuShown;
         break;
