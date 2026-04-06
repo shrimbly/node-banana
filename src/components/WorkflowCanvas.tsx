@@ -958,13 +958,8 @@ export function WorkflowCanvas() {
         sourceNodeId: connectionState.fromNode.id,
         sourceHandleId: fromHandleId,
       });
-
-      // Tutorial tracking
-      if (tutorialActive) {
-        useFTUXStore.getState().setConnectionMenuShown(true);
-      }
     },
-    [screenToFlowPosition, nodes, edges, handleConnect, tutorialActive]
+    [screenToFlowPosition, nodes, edges, handleConnect]
   );
 
   // Handle the splitGrid action - uses automated grid detection

@@ -10,7 +10,6 @@ export interface TutorialStep {
     | "add-output-node"
     | "connect-nodes"
     | "run-workflow"
-    | "show-connection-menu"
     | "add-nanoBanana-from-menu";
   position?: "left" | "right" | "center" | "top-center";
   waitForClick?: boolean;
@@ -24,7 +23,6 @@ export interface FTUXState {
   lockedFeatures: boolean;
 
   // Tutorial progress flags
-  connectionMenuShown: boolean;
   nanoBananaAddedFromMenu: boolean;
 
   // Actions
@@ -33,7 +31,6 @@ export interface FTUXState {
   completeCurrentStep: () => void;
   nextTutorialStep: () => void;
   resetTutorial: () => void;
-  setConnectionMenuShown: (shown: boolean) => void;
   setNanoBananaAddedFromMenu: (added: boolean) => void;
 }
 
@@ -103,16 +100,8 @@ const initialTutorialSteps: TutorialStep[] = [
     completed: false,
   },
   {
-    id: "drag-and-drop",
-    message: "Drag from the output handle and drop into empty space.",
-    highlightSelector: '[data-tutorial="node-output-handle"]',
-    position: "right",
-    requiredAction: "show-connection-menu",
-    completed: false,
-  },
-  {
     id: "select-generate-image",
-    message: "Select 'Generate Image' to add an AI image generation node.",
+    message: "Drag from the output handle and drop into empty space.\n\nThen select 'Generate Image'.",
     highlightSelector: '[data-tutorial="generate-image-option"]',
     position: "top-center",
     requiredAction: "add-nanoBanana-from-menu",
@@ -135,7 +124,6 @@ export const useFTUXStore = create<FTUXState>((set, get) => ({
   currentTutorialStep: 0,
   tutorialSteps: [],
   lockedFeatures: false,
-  connectionMenuShown: false,
   nanoBananaAddedFromMenu: false,
 
   startTutorial: () => {
@@ -144,7 +132,6 @@ export const useFTUXStore = create<FTUXState>((set, get) => ({
       currentTutorialStep: 0,
       tutorialSteps: initialTutorialSteps.map((step) => ({ ...step, completed: false })),
       lockedFeatures: true,
-      connectionMenuShown: false,
       nanoBananaAddedFromMenu: false,
     });
   },
@@ -194,6 +181,5 @@ export const useFTUXStore = create<FTUXState>((set, get) => ({
     });
   },
 
-  setConnectionMenuShown: (shown: boolean) => set({ connectionMenuShown: shown }),
   setNanoBananaAddedFromMenu: (added: boolean) => set({ nanoBananaAddedFromMenu: added }),
 }));

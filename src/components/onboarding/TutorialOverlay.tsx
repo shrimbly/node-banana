@@ -80,10 +80,6 @@ export function TutorialOverlay() {
         });
         break;
 
-      case "show-connection-menu":
-        actionCompleted = useFTUXStore.getState().connectionMenuShown;
-        break;
-
       case "add-nanoBanana-from-menu":
         actionCompleted = useFTUXStore.getState().nanoBananaAddedFromMenu;
         break;
