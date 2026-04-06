@@ -52,6 +52,7 @@ export default function Home() {
 
   const handleStartTutorial = () => {
     setShowFTUX(false);
+    setFTUXCompleted(true);
     useFTUXStore.getState().startTutorial();
   };
 
