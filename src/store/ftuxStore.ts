@@ -12,7 +12,8 @@ export interface TutorialStep {
     | "connect-nodes"
     | "run-workflow"
     | "show-connection-menu"
-    | "add-nanoBanana-from-menu";
+    | "add-nanoBanana-from-menu"
+    | "add-prompt-node";
   position?: "left" | "right" | "center" | "top-center";
   waitForClick?: boolean;
   completed: boolean;
@@ -121,8 +122,24 @@ const initialTutorialSteps: TutorialStep[] = [
     completed: false,
   },
   {
+    id: "add-prompt-node",
+    message: "Click the Prompt button to add a prompt node.",
+    highlightSelector: '[data-tutorial="prompt-button"]',
+    position: "top-center",
+    requiredAction: "add-prompt-node",
+    completed: false,
+  },
+  {
+    id: "connect-prompt-to-generate",
+    message: "Drag from the Prompt's output handle to the Generate Image's input handle.",
+    highlightSelector: '[data-tutorial="prompt-output-handle"]',
+    position: "right",
+    requiredAction: "connect-nodes",
+    completed: false,
+  },
+  {
     id: "complete",
-    message: "You're all set! Connect nodes to build workflows, or press Cmd+Enter to run.",
+    message: "You're all set! Press Cmd+Enter to generate an image.",
     position: "top-center",
     completed: false,
   },

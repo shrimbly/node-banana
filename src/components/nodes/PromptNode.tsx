@@ -128,6 +128,7 @@ export function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
           position={Position.Right}
           id="text"
           data-handletype="text"
+          data-tutorial="prompt-output-handle"
           style={{ zIndex: 10 }}
         />
       </BaseNode>

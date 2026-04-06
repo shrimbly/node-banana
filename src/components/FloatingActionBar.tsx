@@ -440,7 +440,7 @@ export function FloatingActionBar() {
       <div className="flex items-center gap-0.5 bg-neutral-800/95 rounded-lg shadow-lg border border-neutral-700/80 px-1.5 py-1">
         <NodeButton type="imageInput" label="Image" dataTutorial="image-button" />
         <NodeButton type="videoInput" label="Video" />
-        <NodeButton type="prompt" label="Prompt" />
+        <NodeButton type="prompt" label="Prompt" dataTutorial="prompt-button" />
         <GenerateComboButton />
         <NodeButton type="output" label="Output" dataTutorial="output-button" />
         <AllNodesMenu />

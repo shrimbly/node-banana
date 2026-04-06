@@ -89,6 +89,10 @@ export function TutorialOverlay() {
       case "add-nanoBanana-from-menu":
         actionCompleted = nanoBananaAddedFromMenu;
         break;
+
+      case "add-prompt-node":
+        actionCompleted = nodes.some((node) => node.type === "prompt");
+        break;
     }
 
     if (actionCompleted) {
