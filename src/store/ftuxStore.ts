@@ -4,7 +4,7 @@ export interface TutorialStep {
   id: string;
   message: string;
   highlightSelector?: string;
-  requiredAction?: "add-image-node" | "connect-nodes" | "run-workflow";
+  requiredAction?: "add-image-node" | "add-output-node" | "connect-nodes" | "run-workflow";
   completed: boolean;
 }
 
@@ -47,7 +47,7 @@ export function getFTUXCompleted(): boolean {
 }
 
 /**
- * Initial tutorial steps (will be expanded in Plan 03).
+ * Tutorial steps for FTUX onboarding.
  */
 const initialTutorialSteps: TutorialStep[] = [
   {
@@ -57,24 +57,21 @@ const initialTutorialSteps: TutorialStep[] = [
   },
   {
     id: "add-image",
-    message: "Start by adding an image node",
+    message: "Click the Image button to add an image node.",
     highlightSelector: '[data-tutorial="image-button"]',
     requiredAction: "add-image-node",
     completed: false,
   },
   {
-    id: "placeholder-1",
-    message: "Placeholder for node explanation step 1",
+    id: "add-output",
+    message: "Now add an Output node to see your results.",
+    highlightSelector: '[data-tutorial="output-button"]',
+    requiredAction: "add-output-node",
     completed: false,
   },
   {
-    id: "placeholder-2",
-    message: "Placeholder for node explanation step 2",
-    completed: false,
-  },
-  {
-    id: "placeholder-3",
-    message: "Placeholder for node explanation step 3",
+    id: "complete",
+    message: "You're all set! Connect nodes to build workflows, or press Cmd+Enter to run.",
     completed: false,
   },
 ];

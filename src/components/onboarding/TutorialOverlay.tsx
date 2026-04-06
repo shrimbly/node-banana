@@ -35,8 +35,17 @@ export function TutorialOverlay() {
     }
 
     const currentStep = tutorialSteps[currentTutorialStep];
-    if (!currentStep.requiredAction || currentStep.completed) {
+    if (currentStep.completed) {
       return;
+    }
+
+    // Steps without requiredAction auto-advance after 3 seconds
+    if (!currentStep.requiredAction) {
+      const timer = setTimeout(() => {
+        completeCurrentStep();
+        nextTutorialStep();
+      }, 3000);
+      return () => clearTimeout(timer);
     }
 
     let actionCompleted = false;
@@ -45,6 +54,10 @@ export function TutorialOverlay() {
     switch (currentStep.requiredAction) {
       case "add-image-node":
         actionCompleted = nodes.some((node) => node.type === "imageInput");
+        break;
+
+      case "add-output-node":
+        actionCompleted = nodes.some((node) => node.type === "output");
         break;
 
       case "connect-nodes":
