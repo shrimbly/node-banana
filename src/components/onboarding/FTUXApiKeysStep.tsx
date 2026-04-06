@@ -5,6 +5,7 @@ import type { ReactElement } from "react";
 import { FTUXStepProps } from "@/types/ftux";
 import { ProviderType } from "@/types";
 import { EnvStatusResponse } from "@/app/api/env-status/route";
+import { useWorkflowStore } from "@/store/workflowStore";
 
 // Provider icons
 const GeminiIcon = () => (
@@ -72,6 +73,7 @@ const providers: ProviderInfo[] = [
 ];
 
 export function FTUXApiKeysStep({}: FTUXStepProps) {
+  const updateProviderApiKey = useWorkflowStore((state) => state.updateProviderApiKey);
   const [envStatus, setEnvStatus] = useState<EnvStatusResponse | null>(null);
   const [showKey, setShowKey] = useState<Record<ProviderType, boolean>>({
     gemini: false,
@@ -104,13 +106,23 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
     return envStatus[providerId] === true;
   };
 
+  const handleKeyChange = (providerId: ProviderType, value: string) => {
+    const newValue = value || "";
+    setLocalKeys((prev) => ({
+      ...prev,
+      [providerId]: newValue,
+    }));
+    // Save to localStorage immediately (null if empty string)
+    updateProviderApiKey(providerId, newValue || null);
+  };
+
   return (
     <div className="py-6 px-6">
       <h3 className="text-lg font-semibold text-neutral-100 mb-2">
         API Keys (Optional)
       </h3>
       <p className="text-sm text-neutral-400 mb-4">
-        Add keys here to use AI providers (stored in browser), or save them to your .env.local file for better security across sessions.
+        Add keys here to use AI providers (stored in browser), or save them to your .env file for better security and persistence.
       </p>
 
       <div className="space-y-2">
@@ -163,12 +175,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
                     <input
                       type={showKey[provider.id] ? "text" : "password"}
                       value={localKeys[provider.id]}
-                      onChange={(e) =>
-                        setLocalKeys((prev) => ({
-                          ...prev,
-                          [provider.id]: e.target.value,
-                        }))
-                      }
+                      onChange={(e) => handleKeyChange(provider.id, e.target.value)}
                       placeholder="Enter key..."
                       className="w-32 px-2 py-1 bg-neutral-800 border border-neutral-600 rounded text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
                     />
