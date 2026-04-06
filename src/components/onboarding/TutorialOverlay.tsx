@@ -21,6 +21,8 @@ export function TutorialOverlay() {
   const completeCurrentStep = useFTUXStore((state) => state.completeCurrentStep);
   const nextTutorialStep = useFTUXStore((state) => state.nextTutorialStep);
   const skipTutorial = useFTUXStore((state) => state.skipTutorial);
+  const connectionMenuShown = useFTUXStore((state) => state.connectionMenuShown);
+  const nanoBananaAddedFromMenu = useFTUXStore((state) => state.nanoBananaAddedFromMenu);
 
   const nodes = useWorkflowStore((state) => state.nodes);
 
@@ -81,11 +83,11 @@ export function TutorialOverlay() {
         break;
 
       case "show-connection-menu":
-        actionCompleted = useFTUXStore.getState().connectionMenuShown;
+        actionCompleted = connectionMenuShown;
         break;
 
       case "add-nanoBanana-from-menu":
-        actionCompleted = useFTUXStore.getState().nanoBananaAddedFromMenu;
+        actionCompleted = nanoBananaAddedFromMenu;
         break;
     }
 
@@ -102,6 +104,8 @@ export function TutorialOverlay() {
     currentTutorialStep,
     tutorialSteps,
     nodes,
+    connectionMenuShown,
+    nanoBananaAddedFromMenu,
     completeCurrentStep,
     nextTutorialStep,
   ]);
