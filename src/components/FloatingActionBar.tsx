@@ -92,8 +92,8 @@ function NodeButton({ type, label, dataTutorial }: NodeButtonProps) {
   const handleClick = () => {
     const center = getPaneCenter();
     const position = screenToFlowPosition({
-      x: center.x + Math.random() * 100 - 50,
-      y: center.y + Math.random() * 100 - 50,
+      x: center.x,
+      y: center.y,
     });
 
     addNode(type, position);

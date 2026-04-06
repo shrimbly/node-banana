@@ -31,6 +31,7 @@ import { useToast } from "@/components/Toast";
 import { logger } from "@/utils/logger";
 import { externalizeWorkflowMedia, hydrateWorkflowMedia } from "@/utils/mediaStorage";
 import { EditOperation, applyEditOperations as executeEditOps } from "@/lib/chat/editOperations";
+import { findNearestFreePosition } from "@/utils/spatialLayout";
 import {
   loadSaveConfigs,
   saveSaveConfig,
@@ -669,6 +670,10 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     const { width, height } = defaultNodeDimensions[type];
 
+    // Find collision-free position
+    const state = get();
+    const finalPosition = findNearestFreePosition(position, type, state.nodes);
+
     // Merge default data with initialData if provided
     const defaultData = createDefaultNodeData(type);
     const nodeData = initialData
@@ -678,7 +683,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     const newNode: WorkflowNode = {
       id,
       type,
-      position,
+      position: finalPosition,
       data: nodeData,
       style: { width, height },
     };
