@@ -13,7 +13,8 @@ export interface TutorialStep {
     | "run-workflow"
     | "show-connection-menu"
     | "add-nanoBanana-from-menu"
-    | "add-prompt-node";
+    | "add-prompt-node"
+    | "connect-prompt-node";
   position?: "left" | "right" | "center" | "top-center";
   waitForClick?: boolean;
   completed: boolean;
@@ -134,7 +135,7 @@ const initialTutorialSteps: TutorialStep[] = [
     message: "Drag from the Prompt's output handle to the Generate Image's input handle.",
     highlightSelector: '[data-tutorial="prompt-output-handle"]',
     position: "right",
-    requiredAction: "connect-nodes",
+    requiredAction: "connect-prompt-node",
     completed: false,
   },
   {

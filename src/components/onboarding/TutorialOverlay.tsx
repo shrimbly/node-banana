@@ -25,6 +25,7 @@ export function TutorialOverlay() {
   const nanoBananaAddedFromMenu = useFTUXStore((state) => state.nanoBananaAddedFromMenu);
 
   const nodes = useWorkflowStore((state) => state.nodes);
+  const edges = useWorkflowStore((state) => state.edges);
 
   // Ensure portal rendering only happens client-side
   useEffect(() => {
@@ -69,8 +70,7 @@ export function TutorialOverlay() {
         break;
 
       case "connect-nodes":
-        // Check if any edges exist in workflow store
-        const edges = useWorkflowStore.getState().edges;
+        // Check if any edges exist
         actionCompleted = edges.length > 0;
         break;
 
@@ -93,6 +93,14 @@ export function TutorialOverlay() {
       case "add-prompt-node":
         actionCompleted = nodes.some((node) => node.type === "prompt");
         break;
+
+      case "connect-prompt-node":
+        // Check if any edge has a prompt node as source
+        actionCompleted = edges.some((edge) => {
+          const sourceNode = nodes.find((n) => n.id === edge.source);
+          return sourceNode?.type === "prompt";
+        });
+        break;
     }
 
     if (actionCompleted) {
@@ -108,6 +116,7 @@ export function TutorialOverlay() {
     currentTutorialStep,
     tutorialSteps,
     nodes,
+    edges,
     connectionMenuShown,
     nanoBananaAddedFromMenu,
     completeCurrentStep,
