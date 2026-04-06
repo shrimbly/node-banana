@@ -6,6 +6,7 @@ import { useShallow } from "zustand/shallow";
 import { NodeType } from "@/types";
 import { useReactFlow } from "@xyflow/react";
 import { ModelSearchDialog } from "./modals/ModelSearchDialog";
+import { useFTUXStore } from "@/store/ftuxStore";
 
 // All nodes menu categories
 const ALL_NODES_CATEGORIES: { label: string; nodes: { type: NodeType; label: string }[] }[] = [
@@ -339,6 +340,12 @@ export function FloatingActionBar() {
     modelSearchOpen: state.modelSearchOpen,
     modelSearchProvider: state.modelSearchProvider,
   })));
+
+  // FTUX tutorial state - bar should NOT be dimmed during tutorial
+  const { tutorialActive, lockedFeatures } = useFTUXStore((state) => ({
+    tutorialActive: state.tutorialActive,
+    lockedFeatures: state.lockedFeatures,
+  }));
 
   // Get display text for running nodes
   const runningNodeCount = currentNodeIds.length;
