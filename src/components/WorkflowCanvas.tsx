@@ -12,6 +12,7 @@ import {
   Edge,
   useReactFlow,
   OnConnectEnd,
+  OnConnectStart,
   Node,
   OnSelectionChangeParams,
   ViewportPortal,
@@ -313,7 +314,7 @@ export function WorkflowCanvas() {
   const clearWorkflow = useWorkflowStore((state) => state.clearWorkflow);
   const setHoveredNodeId = useWorkflowStore((state) => state.setHoveredNodeId);
   const openAnnotationModal = useAnnotationStore((state) => state.openModal);
-  const { screenToFlowPosition, getViewport, zoomIn, zoomOut, setViewport, setCenter } = useReactFlow();
+  const { screenToFlowPosition, getViewport, zoomIn, zoomOut, setViewport, setCenter, fitView } = useReactFlow();
   const { show: showToast } = useToast();
   const [isDragOver, setIsDragOver] = useState(false);
   const [dropType, setDropType] = useState<"image" | "audio" | "workflow" | "node" | null>(null);
@@ -324,6 +325,7 @@ export function WorkflowCanvas() {
   const [showNewProjectSetup, setShowNewProjectSetup] = useState(false);
   const [expandingNode, setExpandingNode] = useState<{ id: string; type: string } | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const tutorialViewportSet = useRef(false);
 
   // FTUX tutorial state (client-side only to avoid SSR hydration issues)
   const [tutorialActive, setTutorialActive] = useState(false);
@@ -365,6 +367,29 @@ export function WorkflowCanvas() {
       setNavigationTarget(null);
     }
   }, [navigationTarget, nodes, setCenter, setNavigationTarget]);
+
+  // Set default viewport when tutorial starts and first node is added
+  useEffect(() => {
+    if (tutorialActive && nodes.length > 0 && !tutorialViewportSet.current) {
+      tutorialViewportSet.current = true;
+      // Use setTimeout to ensure React Flow is fully initialized
+      setTimeout(() => {
+        // Center on the first node at zoom 0.7
+        const firstNode = nodes[0];
+        if (firstNode) {
+          const nodeWidth = (firstNode.style?.width as number) || 300;
+          const nodeHeight = (firstNode.style?.height as number) || 280;
+          const centerX = firstNode.position.x + nodeWidth / 2;
+          const centerY = firstNode.position.y + nodeHeight / 2;
+          setCenter(centerX, centerY, { duration: 300, zoom: 0.7 });
+        }
+      }, 100);
+    }
+    // Reset the ref when tutorial ends
+    if (!tutorialActive) {
+      tutorialViewportSet.current = false;
+    }
+  }, [tutorialActive, nodes.length, setCenter]);
 
   // Apply dimming className to nodes downstream of disabled Switch outputs or skipped by optional inputs
   const allNodes = useMemo(() => {
@@ -741,6 +766,17 @@ export function WorkflowCanvas() {
     [onConnect, nodes, edges]
   );
 
+  // Handle connection drag start
+  const handleConnectStart: OnConnectStart = useCallback(
+    (event, params) => {
+      // Tutorial tracking
+      if (tutorialActive) {
+        useFTUXStore.getState().setConnectionDragStarted(true);
+      }
+    },
+    [tutorialActive]
+  );
+
   // Handle connection dropped on empty space or on a node
   const handleConnectEnd: OnConnectEnd = useCallback(
     (event, connectionState) => {
@@ -934,8 +970,13 @@ export function WorkflowCanvas() {
         sourceNodeId: connectionState.fromNode.id,
         sourceHandleId: fromHandleId,
       });
+
+      // Tutorial tracking
+      if (tutorialActive) {
+        useFTUXStore.getState().setConnectionMenuShown(true);
+      }
     },
-    [screenToFlowPosition, nodes, edges, handleConnect]
+    [screenToFlowPosition, nodes, edges, handleConnect, tutorialActive]
   );
 
   // Handle the splitGrid action - uses automated grid detection
@@ -1126,6 +1167,11 @@ export function WorkflowCanvas() {
 
       // Create the new node at the drop position
       const newNodeId = addNode(nodeType, flowPosition);
+
+      // Tutorial tracking
+      if (tutorialActive && nodeType === "nanoBanana") {
+        useFTUXStore.getState().setNanoBananaAddedFromMenu(true);
+      }
 
       // If creating an annotation node from an image source, populate it with the source image
       if (nodeType === "annotation" && connectionType === "source" && handleType === "image" && sourceNodeId) {
@@ -1328,7 +1374,7 @@ export function WorkflowCanvas() {
 
       setConnectionDrop(null);
     },
-    [connectionDrop, addNode, onConnect, nodes, handleSplitGridAction, getImageFromNode, updateNodeData]
+    [connectionDrop, addNode, onConnect, nodes, handleSplitGridAction, getImageFromNode, updateNodeData, tutorialActive]
   );
 
   const handleCloseDropMenu = useCallback(() => {
@@ -2023,6 +2069,7 @@ export function WorkflowCanvas() {
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onConnect={handleConnect}
+        onConnectStart={handleConnectStart}
         onConnectEnd={handleConnectEnd}
         onMoveStart={() => { isPanningRef.current = true; setHoveredNodeId(null); document.documentElement.classList.add("canvas-interacting"); }}
         onMoveEnd={() => { isPanningRef.current = false; document.documentElement.classList.remove("canvas-interacting"); }}
@@ -2049,7 +2096,9 @@ export function WorkflowCanvas() {
             : "Shift"
         }
         panOnDrag={
-          isModalOpen
+          tutorialActive
+            ? false
+            : isModalOpen
             ? false
             : canvasNavigationSettings.panMode === "always"
             ? true
@@ -2060,13 +2109,15 @@ export function WorkflowCanvas() {
         selectNodesOnDrag={false}
         nodeDragThreshold={5}
         nodeClickDistance={5}
-        zoomOnScroll={false}
-        zoomOnPinch={!isModalOpen}
+        zoomOnScroll={tutorialActive ? false : false}
+        zoomOnPinch={tutorialActive ? false : !isModalOpen}
         minZoom={0.1}
         maxZoom={4}
         defaultViewport={{ x: 0, y: 0, zoom: 1 }}
         panActivationKeyCode={
-          isModalOpen
+          tutorialActive
+            ? null
+            : isModalOpen
             ? null
             : canvasNavigationSettings.panMode === "space"
             ? "Space"

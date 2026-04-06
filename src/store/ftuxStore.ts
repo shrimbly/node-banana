@@ -4,7 +4,17 @@ export interface TutorialStep {
   id: string;
   message: string;
   highlightSelector?: string;
-  requiredAction?: "add-image-node" | "add-output-node" | "connect-nodes" | "run-workflow";
+  highlightDelay?: number; // Delay in ms before showing highlight
+  requiredAction?:
+    | "add-image-node"
+    | "add-output-node"
+    | "connect-nodes"
+    | "run-workflow"
+    | "start-connection-drag"
+    | "show-connection-menu"
+    | "add-nanoBanana-from-menu";
+  position?: "left" | "right" | "center" | "top-center";
+  waitForClick?: boolean;
   completed: boolean;
 }
 
@@ -14,12 +24,20 @@ export interface FTUXState {
   tutorialSteps: TutorialStep[];
   lockedFeatures: boolean;
 
+  // Tutorial progress flags
+  connectionDragStarted: boolean;
+  connectionMenuShown: boolean;
+  nanoBananaAddedFromMenu: boolean;
+
   // Actions
   startTutorial: () => void;
   skipTutorial: () => void;
   completeCurrentStep: () => void;
   nextTutorialStep: () => void;
   resetTutorial: () => void;
+  setConnectionDragStarted: (started: boolean) => void;
+  setConnectionMenuShown: (shown: boolean) => void;
+  setNanoBananaAddedFromMenu: (added: boolean) => void;
 }
 
 const FTUX_COMPLETED_KEY = "node-banana-ftux-completed";
@@ -63,15 +81,65 @@ const initialTutorialSteps: TutorialStep[] = [
     completed: false,
   },
   {
-    id: "add-output",
-    message: "Now add an Output node to see your results.",
-    highlightSelector: '[data-tutorial="output-button"]',
-    requiredAction: "add-output-node",
+    id: "explain-node",
+    message: "This is a node. Each node has a specific function.\n\nThis node adds images.",
+    position: "top-center",
+    waitForClick: true,
+    completed: false,
+  },
+  {
+    id: "explain-node-inputs",
+    message: "Inputs always go in on the left side of the node.",
+    highlightSelector: '[data-tutorial="node-input-handle"]',
+    highlightDelay: 1000,
+    position: "left",
+    waitForClick: true,
+    completed: false,
+  },
+  {
+    id: "explain-node-outputs",
+    message: "Outputs always come from the right side of the node.",
+    highlightSelector: '[data-tutorial="node-output-handle"]',
+    highlightDelay: 1000,
+    position: "right",
+    waitForClick: true,
+    completed: false,
+  },
+  {
+    id: "drag-from-output",
+    message: "Try it! Click and drag from the output handle on the right.",
+    highlightSelector: '[data-tutorial="node-output-handle"]',
+    position: "right",
+    requiredAction: "start-connection-drag",
+    completed: false,
+  },
+  {
+    id: "drop-in-space",
+    message: "Now release anywhere on the canvas to see available nodes.",
+    position: "top-center",
+    requiredAction: "show-connection-menu",
+    completed: false,
+  },
+  {
+    id: "explain-connection-menu",
+    message: "This menu shows nodes that can connect to your output.\n\nIt's the fastest way to build workflows.",
+    highlightSelector: '[data-tutorial="connection-drop-menu"]',
+    position: "top-center",
+    waitForClick: true,
+    completed: false,
+  },
+  {
+    id: "select-generate-image",
+    message: "Select 'Generate Image' to add an AI image generation node.",
+    highlightSelector: '[data-tutorial="generate-image-option"]',
+    position: "top-center",
+    requiredAction: "add-nanoBanana-from-menu",
     completed: false,
   },
   {
     id: "complete",
     message: "You're all set! Connect nodes to build workflows, or press Cmd+Enter to run.",
+    position: "top-center",
     completed: false,
   },
 ];
@@ -85,6 +153,9 @@ export const useFTUXStore = create<FTUXState>((set, get) => ({
   currentTutorialStep: 0,
   tutorialSteps: [],
   lockedFeatures: false,
+  connectionDragStarted: false,
+  connectionMenuShown: false,
+  nanoBananaAddedFromMenu: false,
 
   startTutorial: () => {
     set({
@@ -92,6 +163,9 @@ export const useFTUXStore = create<FTUXState>((set, get) => ({
       currentTutorialStep: 0,
       tutorialSteps: initialTutorialSteps.map((step) => ({ ...step, completed: false })),
       lockedFeatures: true,
+      connectionDragStarted: false,
+      connectionMenuShown: false,
+      nanoBananaAddedFromMenu: false,
     });
   },
 
@@ -139,4 +213,8 @@ export const useFTUXStore = create<FTUXState>((set, get) => ({
       lockedFeatures: false,
     });
   },
+
+  setConnectionDragStarted: (started: boolean) => set({ connectionDragStarted: started }),
+  setConnectionMenuShown: (shown: boolean) => set({ connectionMenuShown: shown }),
+  setNanoBananaAddedFromMenu: (added: boolean) => set({ nanoBananaAddedFromMenu: added }),
 }));

@@ -728,6 +728,7 @@ export function ConnectionDropMenu({
     <div
       ref={menuRef}
       tabIndex={-1}
+      data-tutorial="connection-drop-menu"
       className="fixed z-100 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl overflow-hidden min-w-[160px] outline-none"
       style={{
         left: position.x,
@@ -746,6 +747,7 @@ export function ConnectionDropMenu({
             key={option.type}
             onClick={() => onSelect({ type: option.type, isAction: option.isAction || false })}
             onMouseEnter={() => setSelectedIndex(index)}
+            data-tutorial={option.type === "nanoBanana" ? "generate-image-option" : undefined}
             className={`w-full px-3 py-2 text-left text-[11px] font-medium flex items-center gap-2 transition-colors ${
               index === selectedIndex
                 ? "bg-neutral-700 text-neutral-100"

@@ -13,6 +13,7 @@ import { TutorialMessage } from "./TutorialMessage";
  */
 export function TutorialOverlay() {
   const [mounted, setMounted] = useState(false);
+  const [showHighlight, setShowHighlight] = useState(false);
 
   const tutorialActive = useFTUXStore((state) => state.tutorialActive);
   const currentTutorialStep = useFTUXStore((state) => state.currentTutorialStep);
@@ -36,6 +37,11 @@ export function TutorialOverlay() {
 
     const currentStep = tutorialSteps[currentTutorialStep];
     if (currentStep.completed) {
+      return;
+    }
+
+    // Steps with waitForClick require manual progression
+    if (currentStep.waitForClick) {
       return;
     }
 
@@ -73,6 +79,18 @@ export function TutorialOverlay() {
           return data.outputImage || data.outputText || data.outputAudio;
         });
         break;
+
+      case "start-connection-drag":
+        actionCompleted = useFTUXStore.getState().connectionDragStarted;
+        break;
+
+      case "show-connection-menu":
+        actionCompleted = useFTUXStore.getState().connectionMenuShown;
+        break;
+
+      case "add-nanoBanana-from-menu":
+        actionCompleted = useFTUXStore.getState().nanoBananaAddedFromMenu;
+        break;
     }
 
     if (actionCompleted) {
@@ -91,6 +109,28 @@ export function TutorialOverlay() {
     nextTutorialStep,
   ]);
 
+  // Handle highlight delay
+  useEffect(() => {
+    if (!tutorialActive || currentTutorialStep >= tutorialSteps.length) {
+      return;
+    }
+
+    const currentStep = tutorialSteps[currentTutorialStep];
+
+    if (currentStep.highlightSelector && currentStep.highlightDelay) {
+      // Start with highlight hidden
+      setShowHighlight(false);
+      // Show highlight after delay
+      const timer = setTimeout(() => {
+        setShowHighlight(true);
+      }, currentStep.highlightDelay);
+      return () => clearTimeout(timer);
+    } else {
+      // No delay, show highlight immediately
+      setShowHighlight(true);
+    }
+  }, [tutorialActive, currentTutorialStep, tutorialSteps]);
+
   // Don't render during SSR or when tutorial is inactive
   if (!mounted || !tutorialActive || currentTutorialStep >= tutorialSteps.length) {
     return null;
@@ -98,16 +138,34 @@ export function TutorialOverlay() {
 
   const currentStep = tutorialSteps[currentTutorialStep];
 
+  const handleContinue = () => {
+    completeCurrentStep();
+    nextTutorialStep();
+  };
+
   return createPortal(
     <>
-      {/* Element highlight (if specified) */}
-      {currentStep.highlightSelector && (
+      {/* Click-to-continue overlay (when waitForClick is true) */}
+      {currentStep.waitForClick && (
+        <div
+          onClick={handleContinue}
+          className="fixed inset-0 cursor-pointer"
+          style={{ zIndex: 92 }}
+        />
+      )}
+
+      {/* Element highlight (if specified and delay has passed) */}
+      {currentStep.highlightSelector && showHighlight && (
         <ElementHighlight selector={currentStep.highlightSelector} />
       )}
 
       {/* Tutorial message */}
       <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 93 }}>
-        <TutorialMessage message={currentStep.message} />
+        <TutorialMessage
+          message={currentStep.message}
+          position={currentStep.position}
+          waitForClick={currentStep.waitForClick}
+        />
       </div>
 
       {/* Skip tutorial button */}
