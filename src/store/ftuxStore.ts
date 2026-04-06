@@ -161,14 +161,14 @@ const initialTutorialSteps: TutorialStep[] = [
   },
   {
     id: "save-and-resources",
-    message: "💾 Save your project (Cmd+S) to keep all generations locally.\n\n📚 Check out Templates for ready-made workflows.\n\n💬 Join our Discord for help and inspiration!",
+    message: "Save your project (Cmd+S) to keep all generations locally.\n\nCheck out Templates for ready-made workflows.\n\nJoin our Discord for help and inspiration.",
     position: "top-center",
     waitForClick: true,
     completed: false,
   },
   {
     id: "complete",
-    message: "You're all set! Happy creating! 🎨",
+    message: "You're all set! Happy creating.",
     position: "top-center",
     completed: false,
   },
