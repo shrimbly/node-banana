@@ -16,6 +16,7 @@ export default function Home() {
     (state) => state.initializeAutoSave
   );
   const cleanupAutoSave = useWorkflowStore((state) => state.cleanupAutoSave);
+  const setShowQuickstart = useWorkflowStore((state) => state.setShowQuickstart);
   const [showFTUX, setShowFTUX] = useState(false);
 
   useEffect(() => {
@@ -53,6 +54,7 @@ export default function Home() {
   const handleStartTutorial = () => {
     setShowFTUX(false);
     setFTUXCompleted(true);
+    setShowQuickstart(false); // Close WelcomeModal if open
     useFTUXStore.getState().startTutorial();
   };
 
