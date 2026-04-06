@@ -113,7 +113,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
         Add keys to use AI providers. For security, save them to your .env.local file instead of the browser.
       </p>
 
-      <div className="space-y-2 max-h-[380px] overflow-y-auto pr-2">
+      <div className="space-y-2">
         {providers.map((provider) => {
           const Icon = provider.icon;
           const hasKey = hasEnvKey(provider.id);
