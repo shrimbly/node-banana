@@ -79,6 +79,7 @@ import { createPortal } from "react-dom";
 import { useAnnotationStore } from "@/store/annotationStore";
 import { TutorialOverlay } from "./onboarding/TutorialOverlay";
 import { useFTUXStore } from "@/store/ftuxStore";
+import { getTutorialNodeData } from "@/utils/tutorialDefaults";
 
 const nodeTypes: NodeTypes = {
   imageInput: ImageInputNode,
@@ -371,18 +372,23 @@ export function WorkflowCanvas() {
   useEffect(() => {
     if (tutorialActive && nodes.length > 0 && !tutorialViewportSet.current) {
       tutorialViewportSet.current = true;
-      // Use setTimeout to ensure React Flow is fully initialized
-      setTimeout(() => {
+      // Use setTimeout to ensure React Flow and node content are fully initialized
+      // Longer delay needed when nodes have pre-loaded image data
+      const timeoutId = setTimeout(() => {
         // Center on the first node at zoom 0.7
-        const firstNode = nodes[0];
+        const currentNodes = useWorkflowStore.getState().nodes;
+        const firstNode = currentNodes[0];
         if (firstNode) {
           const nodeWidth = (firstNode.style?.width as number) || 300;
           const nodeHeight = (firstNode.style?.height as number) || 280;
           const centerX = firstNode.position.x + nodeWidth / 2;
           const centerY = firstNode.position.y + nodeHeight / 2;
-          setCenter(centerX, centerY, { duration: 300, zoom: 0.7 });
+          // Use setCenter with explicit zoom to ensure 0.7 zoom level
+          setCenter(centerX, centerY, { duration: 500, zoom: 0.7 });
         }
-      }, 100);
+      }, 600);
+
+      return () => clearTimeout(timeoutId);
     }
     // Reset the ref when tutorial ends
     if (!tutorialActive) {
@@ -1153,8 +1159,12 @@ export function WorkflowCanvas() {
       // Regular node creation
       const nodeType = selection.type as NodeType;
 
+      // Get tutorial defaults if active
+      const tutorialSampleImage = useFTUXStore.getState().tutorialSampleImage;
+      const initialData = getTutorialNodeData(nodeType, tutorialActive, tutorialSampleImage);
+
       // Create the new node at the drop position
-      const newNodeId = addNode(nodeType, flowPosition);
+      const newNodeId = addNode(nodeType, flowPosition, initialData);
 
       // Tutorial tracking
       if (tutorialActive && nodeType === "nanoBanana") {

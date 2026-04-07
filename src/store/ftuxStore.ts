@@ -25,6 +25,7 @@ export interface FTUXState {
   currentTutorialStep: number;
   tutorialSteps: TutorialStep[];
   lockedFeatures: boolean;
+  tutorialSampleImage: string | null; // Base64 data URL for tutorial sample image
 
   // Tutorial progress flags
   connectionMenuShown: boolean;
@@ -38,6 +39,7 @@ export interface FTUXState {
   resetTutorial: () => void;
   setConnectionMenuShown: (shown: boolean) => void;
   setNanoBananaAddedFromMenu: (added: boolean) => void;
+  loadTutorialSampleImage: () => Promise<void>;
 }
 
 const FTUX_COMPLETED_KEY = "node-banana-ftux-completed";
@@ -139,22 +141,8 @@ const initialTutorialSteps: TutorialStep[] = [
     completed: false,
   },
   {
-    id: "add-prompt-text",
-    message: "Click on the Prompt node and enter a description of what you want to generate (e.g., 'a cat wearing sunglasses').",
-    position: "top-center",
-    waitForClick: true,
-    completed: false,
-  },
-  {
-    id: "add-image-content",
-    message: "Click on the Image node and upload a reference image, or use one of the sample images.",
-    position: "top-center",
-    waitForClick: true,
-    completed: false,
-  },
-  {
     id: "run-workflow",
-    message: "Now press Cmd+Enter (or Ctrl+Enter on Windows) to run your workflow and generate an image!",
+    message: "Perfect! Now press Cmd+Enter (or Ctrl+Enter on Windows) to run your workflow and generate an image.",
     position: "top-center",
     waitForClick: true,
     completed: false,
@@ -183,8 +171,24 @@ export const useFTUXStore = create<FTUXState>((set, get) => ({
   currentTutorialStep: 0,
   tutorialSteps: [],
   lockedFeatures: false,
+  tutorialSampleImage: null,
   connectionMenuShown: false,
   nanoBananaAddedFromMenu: false,
+
+  loadTutorialSampleImage: async () => {
+    try {
+      const response = await fetch("/sample-images/model.png");
+      const blob = await response.blob();
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        set({ tutorialSampleImage: base64 });
+      };
+      reader.readAsDataURL(blob);
+    } catch (error) {
+      console.error("Failed to load tutorial sample image:", error);
+    }
+  },
 
   startTutorial: () => {
     set({
@@ -195,6 +199,9 @@ export const useFTUXStore = create<FTUXState>((set, get) => ({
       connectionMenuShown: false,
       nanoBananaAddedFromMenu: false,
     });
+
+    // Pre-load sample image for tutorial
+    get().loadTutorialSampleImage();
   },
 
   skipTutorial: () => {
