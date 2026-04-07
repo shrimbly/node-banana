@@ -650,6 +650,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
         id="text"
         style={{ top: "65%", zIndex: 10 }}
         data-handletype="text"
+        data-tutorial="generate-text-input-handle"
         isConnectable={true}
       />
       {/* Prompt label */}

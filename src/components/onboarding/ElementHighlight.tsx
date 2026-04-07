@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 
 interface ElementHighlightProps {
-  selector: string;
+  selector: string | string[]; // Support single or multiple selectors
   onComplete?: () => void;
 }
 
@@ -15,86 +15,98 @@ interface ElementRect {
 }
 
 /**
- * Highlights a UI element with a pulsing blue ring and dims everything else.
- * Creates three layers: dimmed overlay, pulsing blue ring, and clickable window.
+ * Highlights one or more UI elements with pulsing blue rings.
+ * Supports single selector string or array of selectors.
  */
 export function ElementHighlight({ selector, onComplete }: ElementHighlightProps) {
-  const [rect, setRect] = useState<ElementRect | null>(null);
-  const observerRef = useRef<ResizeObserver | null>(null);
-  const elementRef = useRef<Element | null>(null);
+  const [rects, setRects] = useState<ElementRect[]>([]);
+  const observersRef = useRef<ResizeObserver[]>([]);
 
-  const updateRect = () => {
-    const element = document.querySelector(selector);
-    if (element) {
-      const bounds = element.getBoundingClientRect();
-      setRect({
-        top: bounds.top,
-        left: bounds.left,
-        width: bounds.width,
-        height: bounds.height,
-      });
-      elementRef.current = element;
-    } else {
-      setRect(null);
-      elementRef.current = null;
-    }
+  const updateRects = () => {
+    const selectors = Array.isArray(selector) ? selector : [selector];
+    const newRects: ElementRect[] = [];
+
+    selectors.forEach((sel) => {
+      const element = document.querySelector(sel);
+      if (element) {
+        const bounds = element.getBoundingClientRect();
+        newRects.push({
+          top: bounds.top,
+          left: bounds.left,
+          width: bounds.width,
+          height: bounds.height,
+        });
+      }
+    });
+
+    setRects(newRects);
   };
 
   useEffect(() => {
     // Initial measurement
-    updateRect();
+    updateRects();
 
     // Update on resize
-    const handleResize = () => updateRect();
+    const handleResize = () => updateRects();
     window.addEventListener("resize", handleResize);
 
     // Update on scroll
-    const handleScroll = () => updateRect();
+    const handleScroll = () => updateRects();
     window.addEventListener("scroll", handleScroll, true);
 
     // ResizeObserver for element size changes
     if (typeof ResizeObserver !== "undefined") {
-      observerRef.current = new ResizeObserver(() => updateRect());
-      const element = document.querySelector(selector);
-      if (element) {
-        observerRef.current.observe(element);
-      }
+      const selectors = Array.isArray(selector) ? selector : [selector];
+
+      // Clean up previous observers
+      observersRef.current.forEach(observer => observer.disconnect());
+      observersRef.current = [];
+
+      selectors.forEach((sel) => {
+        const element = document.querySelector(sel);
+        if (element) {
+          const observer = new ResizeObserver(() => updateRects());
+          observer.observe(element);
+          observersRef.current.push(observer);
+        }
+      });
     }
 
     // Periodic check for element appearing/disappearing
-    const intervalId = setInterval(updateRect, 500);
+    const intervalId = setInterval(updateRects, 500);
 
     return () => {
       window.removeEventListener("resize", handleResize);
       window.removeEventListener("scroll", handleScroll, true);
-      if (observerRef.current) {
-        observerRef.current.disconnect();
-      }
+      observersRef.current.forEach(observer => observer.disconnect());
+      observersRef.current = [];
       clearInterval(intervalId);
     };
   }, [selector]);
 
-  if (!rect) {
+  if (rects.length === 0) {
     return null;
   }
 
   return (
     <>
-      {/* Pulsing blue ring highlight (no darkening overlay) */}
-      <div
-        className="fixed pointer-events-none"
-        style={{
-          top: rect.top - 4,
-          left: rect.left - 4,
-          width: rect.width + 8,
-          height: rect.height + 8,
-          zIndex: 101,
-          border: "2px solid rgb(59, 130, 246)",
-          borderRadius: "8px",
-          boxShadow: "0 0 8px rgba(59, 130, 246, 0.3)",
-          animation: "pulse-ring 2s infinite",
-        }}
-      />
+      {rects.map((rect, index) => (
+        <div
+          key={index}
+          className="fixed pointer-events-none"
+          style={{
+            top: rect.top - 4,
+            left: rect.left - 4,
+            width: rect.width + 8,
+            height: rect.height + 8,
+            zIndex: 101,
+            border: "2px solid rgb(59, 130, 246)",
+            borderRadius: "8px",
+            boxShadow: "0 0 8px rgba(59, 130, 246, 0.3)",
+            animation: "pulse-ring 2s infinite",
+          }}
+        />
+      ))}
     </>
   );
 }

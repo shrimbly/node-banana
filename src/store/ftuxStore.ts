@@ -3,7 +3,7 @@ import { create } from "zustand";
 export interface TutorialStep {
   id: string;
   message: string;
-  highlightSelector?: string;
+  highlightSelector?: string | string[]; // Single selector or array of selectors
   highlightDelay?: number; // Delay in ms before showing highlight
   advanceDelay?: number; // Delay in ms before advancing to next step after action completes (default: 1000)
   requiredAction?:
@@ -72,7 +72,7 @@ export function getFTUXCompleted(): boolean {
 const initialTutorialSteps: TutorialStep[] = [
   {
     id: "welcome",
-    message: "Let's cook.",
+    message: "Let's go over the basics.",
     completed: false,
   },
   {
@@ -135,8 +135,8 @@ const initialTutorialSteps: TutorialStep[] = [
   {
     id: "connect-prompt-to-generate",
     message: "Drag from the Prompt's output handle to the Generate Image's input handle.",
-    highlightSelector: '[data-tutorial="prompt-output-handle"]',
-    position: "right",
+    highlightSelector: ['[data-tutorial="prompt-output-handle"]', '[data-tutorial="generate-text-input-handle"]'],
+    position: "left",
     requiredAction: "connect-prompt-node",
     completed: false,
   },
