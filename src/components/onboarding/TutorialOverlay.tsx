@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useFTUXStore } from "@/store/ftuxStore";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { ElementHighlight } from "./ElementHighlight";
 import { TutorialMessage } from "./TutorialMessage";
+import { getTutorialSampleContent } from "@/utils/tutorialDefaults";
 
 /**
  * Main tutorial coordination component.
@@ -14,6 +15,7 @@ import { TutorialMessage } from "./TutorialMessage";
 export function TutorialOverlay() {
   const [mounted, setMounted] = useState(false);
   const [showHighlight, setShowHighlight] = useState(false);
+  const nodesPopulated = useRef(false);
 
   const tutorialActive = useFTUXStore((state) => state.tutorialActive);
   const currentTutorialStep = useFTUXStore((state) => state.currentTutorialStep);
@@ -23,9 +25,11 @@ export function TutorialOverlay() {
   const skipTutorial = useFTUXStore((state) => state.skipTutorial);
   const connectionMenuShown = useFTUXStore((state) => state.connectionMenuShown);
   const nanoBananaAddedFromMenu = useFTUXStore((state) => state.nanoBananaAddedFromMenu);
+  const tutorialSampleImage = useFTUXStore((state) => state.tutorialSampleImage);
 
   const nodes = useWorkflowStore((state) => state.nodes);
   const edges = useWorkflowStore((state) => state.edges);
+  const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
 
   // Ensure portal rendering only happens client-side
   useEffect(() => {
@@ -144,6 +148,44 @@ export function TutorialOverlay() {
       setShowHighlight(true);
     }
   }, [tutorialActive, currentTutorialStep, tutorialSteps]);
+
+  // Auto-populate nodes after prompt is connected
+  useEffect(() => {
+    if (!tutorialActive || nodesPopulated.current) {
+      return;
+    }
+
+    const currentStep = tutorialSteps[currentTutorialStep];
+
+    // Check if we just completed the "connect-prompt-node" step
+    if (currentStep?.id === "connect-prompt-to-generate" && currentStep.completed) {
+      nodesPopulated.current = true;
+
+      // Find the image input and prompt nodes
+      const imageInputNode = nodes.find((node) => node.type === "imageInput");
+      const promptNode = nodes.find((node) => node.type === "prompt");
+
+      // Populate with sample content
+      if (imageInputNode) {
+        const imageContent = getTutorialSampleContent("imageInput", tutorialSampleImage);
+        if (imageContent) {
+          updateNodeData(imageInputNode.id, imageContent);
+        }
+      }
+
+      if (promptNode) {
+        const promptContent = getTutorialSampleContent("prompt", tutorialSampleImage);
+        if (promptContent) {
+          updateNodeData(promptNode.id, promptContent);
+        }
+      }
+    }
+
+    // Reset ref when tutorial ends
+    if (!tutorialActive) {
+      nodesPopulated.current = false;
+    }
+  }, [tutorialActive, currentTutorialStep, tutorialSteps, nodes, tutorialSampleImage, updateNodeData]);
 
   // Don't render during SSR or when tutorial is inactive
   if (!mounted || !tutorialActive || currentTutorialStep >= tutorialSteps.length) {

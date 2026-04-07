@@ -177,7 +177,7 @@ export const useFTUXStore = create<FTUXState>((set, get) => ({
 
   loadTutorialSampleImage: async () => {
     try {
-      const response = await fetch("/sample-images/model.png");
+      const response = await fetch("/sample-images/owl.jpg");
       const blob = await response.blob();
       const reader = new FileReader();
       reader.onloadend = () => {

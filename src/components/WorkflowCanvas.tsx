@@ -79,7 +79,6 @@ import { createPortal } from "react-dom";
 import { useAnnotationStore } from "@/store/annotationStore";
 import { TutorialOverlay } from "./onboarding/TutorialOverlay";
 import { useFTUXStore } from "@/store/ftuxStore";
-import { getTutorialNodeData } from "@/utils/tutorialDefaults";
 
 const nodeTypes: NodeTypes = {
   imageInput: ImageInputNode,
@@ -1159,12 +1158,8 @@ export function WorkflowCanvas() {
       // Regular node creation
       const nodeType = selection.type as NodeType;
 
-      // Get tutorial defaults if active
-      const tutorialSampleImage = useFTUXStore.getState().tutorialSampleImage;
-      const initialData = getTutorialNodeData(nodeType, tutorialActive, tutorialSampleImage);
-
-      // Create the new node at the drop position
-      const newNodeId = addNode(nodeType, flowPosition, initialData);
+      // Create the new node at the drop position (empty - tutorial will populate after connection)
+      const newNodeId = addNode(nodeType, flowPosition);
 
       // Tutorial tracking
       if (tutorialActive && nodeType === "nanoBanana") {

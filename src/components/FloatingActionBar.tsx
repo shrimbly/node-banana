@@ -7,7 +7,6 @@ import { NodeType } from "@/types";
 import { useReactFlow } from "@xyflow/react";
 import { ModelSearchDialog } from "./modals/ModelSearchDialog";
 import { useFTUXStore } from "@/store/ftuxStore";
-import { getTutorialNodeData } from "@/utils/tutorialDefaults";
 
 // All nodes menu categories
 const ALL_NODES_CATEGORIES: { label: string; nodes: { type: NodeType; label: string }[] }[] = [
@@ -88,8 +87,6 @@ interface NodeButtonProps {
 
 function NodeButton({ type, label, dataTutorial }: NodeButtonProps) {
   const addNode = useWorkflowStore((state) => state.addNode);
-  const tutorialActive = useFTUXStore((state) => state.tutorialActive);
-  const tutorialSampleImage = useFTUXStore((state) => state.tutorialSampleImage);
   const { screenToFlowPosition } = useReactFlow();
 
   const handleClick = () => {
@@ -99,10 +96,8 @@ function NodeButton({ type, label, dataTutorial }: NodeButtonProps) {
       y: center.y,
     });
 
-    // Get tutorial defaults if active
-    const initialData = getTutorialNodeData(type, tutorialActive, tutorialSampleImage);
-
-    addNode(type, position, initialData);
+    // Nodes are created empty - tutorial will populate after connection
+    addNode(type, position);
   };
 
   const handleDragStart = (event: React.DragEvent) => {
