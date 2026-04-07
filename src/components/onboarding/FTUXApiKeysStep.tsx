@@ -65,10 +65,10 @@ interface ProviderInfo {
 
 const providers: ProviderInfo[] = [
   { id: "gemini", name: "Google Gemini", icon: GeminiIcon, apiKeyUrl: "https://aistudio.google.com/apikey", isRecommended: true },
+  { id: "fal", name: "fal.ai", icon: FalIcon, apiKeyUrl: "https://fal.ai/dashboard/keys", isRecommended: true },
   { id: "openai", name: "OpenAI", icon: OpenAIIcon, apiKeyUrl: "https://platform.openai.com/api-keys" },
   { id: "anthropic", name: "Anthropic", icon: AnthropicIcon, apiKeyUrl: "https://console.anthropic.com/settings/keys" },
   { id: "replicate", name: "Replicate", icon: ReplicateIcon, apiKeyUrl: "https://replicate.com/account/api-tokens" },
-  { id: "fal", name: "fal.ai", icon: FalIcon, apiKeyUrl: "https://fal.ai/dashboard/keys" },
   { id: "kie", name: "Kie.ai", icon: KieIcon, apiKeyUrl: "https://kie.ai/api-key" },
   { id: "wavespeed", name: "WaveSpeed", icon: WaveSpeedIcon, apiKeyUrl: "https://wavespeed.ai/accesskey" },
 ];
@@ -120,7 +120,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
   return (
     <div className="py-6 px-6">
       <h3 className="text-lg font-semibold text-neutral-100 mb-2">
-        API Keys (Optional)
+        API Keys
       </h3>
       <p className="text-sm text-neutral-400 mb-4">
         Add keys here to use AI providers (stored in browser), or save them to your .env file for better security and persistence.
@@ -161,7 +161,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
                       </svg>
                     </a>
                     <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 px-2 py-1 bg-neutral-900 text-neutral-200 text-xs rounded border border-neutral-700 whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-10">
-                      Get API key
+                      Get API key{(provider.id === "openai" || provider.id === "anthropic") && " • Used for LLM nodes only"}
                     </div>
                   </div>
                   {provider.isRecommended && (

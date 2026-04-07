@@ -239,6 +239,7 @@ export function Header() {
                     disabled={isSaving}
                     className="relative p-1.5 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800 rounded transition-colors disabled:opacity-50"
                     title={isSaving ? "Saving..." : canSave ? "Save project" : "Configure save location"}
+                    data-tutorial="save-button"
                   >
                     <svg
                       className="w-4 h-4"

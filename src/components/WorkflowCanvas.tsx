@@ -395,6 +395,25 @@ export function WorkflowCanvas() {
     }
   }, [tutorialActive, nodes.length, setCenter]);
 
+  // Zoom out when demonstration step starts to show full workflow tree
+  useEffect(() => {
+    if (!tutorialActive) return;
+
+    const ftuxState = useFTUXStore.getState();
+    const currentStep = ftuxState.tutorialSteps[ftuxState.currentTutorialStep];
+
+    if (currentStep?.id === "demonstrate-downstream" && nodes.length > 0) {
+      // Zoom out immediately (not after delay) so users can see nodes being added
+      const generateNode = nodes.find((n) => n.type === "nanoBanana");
+      if (generateNode) {
+        // Center on the middle of the workflow tree with generous zoom
+        const centerX = generateNode.position.x + 700; // Center of the new wider layout
+        const centerY = generateNode.position.y;
+        setCenter(centerX, centerY, { duration: 800, zoom: 0.35 }); // Zoom to 0.35 for better overview
+      }
+    }
+  }, [tutorialActive, nodes, setCenter]);
+
   // Apply dimming className to nodes downstream of disabled Switch outputs or skipped by optional inputs
   const allNodes = useMemo(() => {
     return nodes.map((node) => {

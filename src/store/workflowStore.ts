@@ -273,6 +273,7 @@ interface WorkflowStore {
   regenerateNode: (nodeId: string) => Promise<void>;
   executeSelectedNodes: (nodeIds: string[]) => Promise<void>;
   stopWorkflow: () => void;
+  mockTutorialExecution: () => Promise<void>;
   setMaxConcurrentCalls: (value: number) => void;
 
   // Save/Load
@@ -1508,6 +1509,64 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       controller.abort("user-cancelled");
     }
     set({ isRunning: false, currentNodeIds: [], skippedNodeIds: new Set(), _abortController: null });
+  },
+
+  mockTutorialExecution: async () => {
+    const { nodes, updateNodeData } = get();
+
+    // Find the Generate Image node
+    const nanoBananaNode = nodes.find((n) => n.type === "nanoBanana");
+    if (!nanoBananaNode) return;
+
+    // Set execution state
+    set({
+      isRunning: true,
+      currentNodeIds: [nanoBananaNode.id],
+      _abortController: new AbortController(),
+    });
+
+    // Set loading state (triggers edge animations)
+    updateNodeData(nanoBananaNode.id, {
+      status: "loading",
+      error: null,
+    });
+
+    // Wait 5 seconds (realistic generation time)
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
+    // Load the mock output image
+    const mockImageUrl = "/tutorial/owl-aviator.png";
+    try {
+      const response = await fetch(mockImageUrl);
+      const blob = await response.blob();
+      const reader = new FileReader();
+
+      const base64Image = await new Promise<string>((resolve) => {
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.readAsDataURL(blob);
+      });
+
+      // Set output (completes the tutorial step)
+      updateNodeData(nanoBananaNode.id, {
+        status: "complete",
+        outputImage: base64Image,
+        imageHistory: [{ image: base64Image, timestamp: Date.now() }],
+        selectedHistoryIndex: 0,
+      });
+    } catch (error) {
+      // Fallback to error state if image not found
+      updateNodeData(nanoBananaNode.id, {
+        status: "error",
+        error: "Failed to load tutorial image",
+      });
+    }
+
+    // Clear execution state
+    set({
+      isRunning: false,
+      currentNodeIds: [],
+      _abortController: null,
+    });
   },
 
   setMaxConcurrentCalls: (value: number) => {

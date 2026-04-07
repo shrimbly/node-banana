@@ -16,6 +16,7 @@ export function TutorialOverlay() {
   const [mounted, setMounted] = useState(false);
   const [showHighlight, setShowHighlight] = useState(false);
   const nodesPopulated = useRef(false);
+  const demonstrateNodesAdded = useRef(false);
 
   const tutorialActive = useFTUXStore((state) => state.tutorialActive);
   const currentTutorialStep = useFTUXStore((state) => state.currentTutorialStep);
@@ -149,7 +150,7 @@ export function TutorialOverlay() {
     }
   }, [tutorialActive, currentTutorialStep, tutorialSteps]);
 
-  // Auto-populate nodes after prompt is connected
+  // Auto-populate nodes during the populate-content step
   useEffect(() => {
     if (!tutorialActive || nodesPopulated.current) {
       return;
@@ -157,35 +158,232 @@ export function TutorialOverlay() {
 
     const currentStep = tutorialSteps[currentTutorialStep];
 
-    // Check if we just completed the "connect-prompt-node" step
-    if (currentStep?.id === "connect-prompt-to-generate" && currentStep.completed) {
+    // Check if we're on the "populate-content" step
+    if (currentStep?.id === "populate-content" && !currentStep.completed) {
       nodesPopulated.current = true;
 
-      // Find the image input and prompt nodes
-      const imageInputNode = nodes.find((node) => node.type === "imageInput");
-      const promptNode = nodes.find((node) => node.type === "prompt");
+      // Wait a bit before populating to show the message first
+      setTimeout(() => {
+        // Find the image input and prompt nodes
+        const imageInputNode = nodes.find((node) => node.type === "imageInput");
+        const promptNode = nodes.find((node) => node.type === "prompt");
 
-      // Populate with sample content
-      if (imageInputNode) {
-        const imageContent = getTutorialSampleContent("imageInput", tutorialSampleImage);
-        if (imageContent) {
-          updateNodeData(imageInputNode.id, imageContent);
+        // Populate with sample content
+        if (imageInputNode) {
+          const imageContent = getTutorialSampleContent("imageInput", tutorialSampleImage);
+          if (imageContent) {
+            updateNodeData(imageInputNode.id, imageContent);
+          }
         }
-      }
 
-      if (promptNode) {
-        const promptContent = getTutorialSampleContent("prompt", tutorialSampleImage);
-        if (promptContent) {
-          updateNodeData(promptNode.id, promptContent);
+        if (promptNode) {
+          const promptContent = getTutorialSampleContent("prompt", tutorialSampleImage);
+          if (promptContent) {
+            updateNodeData(promptNode.id, promptContent);
+          }
         }
-      }
+
+        // Auto-advance after populating
+        setTimeout(() => {
+          completeCurrentStep();
+          nextTutorialStep();
+        }, 1500);
+      }, 1000);
     }
 
     // Reset ref when tutorial ends
     if (!tutorialActive) {
       nodesPopulated.current = false;
     }
-  }, [tutorialActive, currentTutorialStep, tutorialSteps, nodes, tutorialSampleImage, updateNodeData]);
+  }, [tutorialActive, currentTutorialStep, tutorialSteps, nodes, tutorialSampleImage, updateNodeData, completeCurrentStep, nextTutorialStep]);
+
+  // Auto-add downstream demonstration nodes
+  useEffect(() => {
+    if (!tutorialActive || demonstrateNodesAdded.current) {
+      return;
+    }
+
+    const currentStep = tutorialSteps[currentTutorialStep];
+
+    if (currentStep?.id === "demonstrate-downstream" && !currentStep.completed) {
+      demonstrateNodesAdded.current = true;
+      const addNode = useWorkflowStore.getState().addNode;
+      const onConnect = useWorkflowStore.getState().onConnect;
+      const updateNodeData = useWorkflowStore.getState().updateNodeData;
+
+      // Initial delay to show message
+      setTimeout(() => {
+        // Find the Generate Image node
+        const generateNode = nodes.find((n) => n.type === "nanoBanana");
+        if (!generateNode) return;
+
+        const baseX = generateNode.position.x;
+        const baseY = generateNode.position.y;
+
+        // VIDEO BRANCH (top) - Clean horizontal layout with generous spacing
+        // Add Prompt node for video
+        const videoPromptId = addNode("prompt", {
+          x: baseX + 400,
+          y: baseY - 350,
+        });
+
+        setTimeout(() => {
+          // Add Generate Video node
+          const videoNodeId = addNode("generateVideo", {
+            x: baseX + 750,
+            y: baseY - 350,
+          });
+
+          setTimeout(() => {
+            // Connect Prompt → Video (text)
+            onConnect({
+              source: videoPromptId,
+              target: videoNodeId,
+              sourceHandle: "text",
+              targetHandle: "text",
+            });
+
+            setTimeout(() => {
+              // Connect Image → Video (image)
+              onConnect({
+                source: generateNode.id,
+                target: videoNodeId,
+                sourceHandle: "image",
+                targetHandle: "image",
+              });
+
+              setTimeout(() => {
+                // Populate video prompt
+                updateNodeData(videoPromptId, {
+                  prompt: "A bird soaring through clouds at sunset",
+                });
+
+                setTimeout(() => {
+                  // Add Output for video
+                  const videoOutputId = addNode("output", {
+                    x: baseX + 1100,
+                    y: baseY - 350,
+                  });
+
+                  setTimeout(() => {
+                    // Connect Video → Output
+                    onConnect({
+                      source: videoNodeId,
+                      target: videoOutputId,
+                      sourceHandle: "video",
+                      targetHandle: "video",
+                    });
+
+                    // LLM ANALYSIS BRANCH (bottom) - Clean horizontal layout with generous spacing
+                    setTimeout(() => {
+                      // Add Prompt node for LLM
+                      const llmPromptId = addNode("prompt", {
+                        x: baseX + 400,
+                        y: baseY + 350,
+                      });
+
+                      setTimeout(() => {
+                        // Add LLM Generate node
+                        const llmNodeId = addNode("llmGenerate", {
+                          x: baseX + 750,
+                          y: baseY + 350,
+                        });
+
+                        setTimeout(() => {
+                          // Connect Prompt → LLM (text)
+                          onConnect({
+                            source: llmPromptId,
+                            target: llmNodeId,
+                            sourceHandle: "text",
+                            targetHandle: "text",
+                          });
+
+                          setTimeout(() => {
+                            // Connect Image → LLM (image for analysis)
+                            onConnect({
+                              source: generateNode.id,
+                              target: llmNodeId,
+                              sourceHandle: "image",
+                              targetHandle: "image",
+                            });
+
+                            setTimeout(() => {
+                              // Populate LLM prompt
+                              updateNodeData(llmPromptId, {
+                                prompt:
+                                  "Give me an image generation prompt that shows this bird in a nightclub filled with other birds, also in costume. Only output the prompt and nothing else.",
+                              });
+
+                              setTimeout(() => {
+                                // Add second Generate Image node
+                                const generateNode2Id = addNode("nanoBanana", {
+                                  x: baseX + 1100,
+                                  y: baseY + 350,
+                                });
+
+                                setTimeout(() => {
+                                  // Connect LLM → Generate Image #2 (text prompt)
+                                  onConnect({
+                                    source: llmNodeId,
+                                    target: generateNode2Id,
+                                    sourceHandle: "text",
+                                    targetHandle: "text",
+                                  });
+
+                                  setTimeout(() => {
+                                    // Also connect original bird image as reference
+                                    onConnect({
+                                      source: generateNode.id,
+                                      target: generateNode2Id,
+                                      sourceHandle: "image",
+                                      targetHandle: "image",
+                                    });
+
+                                    setTimeout(() => {
+                                      // Add final Output
+                                      const finalOutputId = addNode("output", {
+                                        x: baseX + 1450,
+                                        y: baseY + 350,
+                                      });
+
+                                      setTimeout(() => {
+                                        // Connect Generate Image #2 → Output
+                                        onConnect({
+                                          source: generateNode2Id,
+                                          target: finalOutputId,
+                                          sourceHandle: "image",
+                                          targetHandle: "image",
+                                        });
+
+                                        // Final delay before advancing
+                                        setTimeout(() => {
+                                          completeCurrentStep();
+                                          nextTutorialStep();
+                                        }, 1000);
+                                      }, 400);
+                                    }, 600);
+                                  }, 500);
+                                }, 400);
+                              }, 600);
+                            }, 500);
+                          }, 400);
+                        }, 400);
+                      }, 400);
+                    }, 600);
+                  }, 400);
+                }, 600);
+              }, 500);
+            }, 400);
+          }, 400);
+        }, 400);
+      }, 1000);
+    }
+
+    // Reset ref when tutorial ends
+    if (!tutorialActive) {
+      demonstrateNodesAdded.current = false;
+    }
+  }, [tutorialActive, currentTutorialStep, tutorialSteps, nodes, completeCurrentStep, nextTutorialStep]);
 
   // Don't render during SSR or when tutorial is inactive
   if (!mounted || !tutorialActive || currentTutorialStep >= tutorialSteps.length) {
@@ -215,19 +413,22 @@ export function TutorialOverlay() {
         <ElementHighlight selector={currentStep.highlightSelector} />
       )}
 
-      {/* Tutorial message */}
-      <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 93 }}>
-        <TutorialMessage
-          message={currentStep.message}
-          position={currentStep.position}
-          waitForClick={currentStep.waitForClick}
-        />
-      </div>
+      {/* Tutorial message - hide if current step is completed */}
+      {!currentStep.completed && (
+        <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 93 }}>
+          <TutorialMessage
+            message={currentStep.message}
+            position={currentStep.position}
+            waitForClick={currentStep.waitForClick}
+            links={currentStep.links}
+          />
+        </div>
+      )}
 
       {/* Skip tutorial button */}
       <button
         onClick={skipTutorial}
-        className="fixed top-4 right-4 px-3 py-2 text-sm text-neutral-400 hover:text-neutral-200 transition-colors pointer-events-auto"
+        className="fixed top-20 right-4 px-3 py-2 text-sm text-neutral-400 hover:text-neutral-200 transition-colors pointer-events-auto"
         style={{ zIndex: 94 }}
       >
         Skip tutorial

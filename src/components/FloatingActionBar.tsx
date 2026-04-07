@@ -6,7 +6,7 @@ import { useShallow } from "zustand/shallow";
 import { NodeType } from "@/types";
 import { useReactFlow } from "@xyflow/react";
 import { ModelSearchDialog } from "./modals/ModelSearchDialog";
-import { useFTUXStore } from "@/store/ftuxStore";
+import { useFTUXStore, TutorialStep } from "@/store/ftuxStore";
 
 // All nodes menu categories
 const ALL_NODES_CATEGORIES: { label: string; nodes: { type: NodeType; label: string }[] }[] = [
@@ -320,6 +320,7 @@ export function FloatingActionBar() {
     regenerateNode,
     executeSelectedNodes,
     stopWorkflow,
+    mockTutorialExecution,
     validateWorkflow,
     edgeStyle,
     setEdgeStyle,
@@ -334,6 +335,7 @@ export function FloatingActionBar() {
     regenerateNode: state.regenerateNode,
     executeSelectedNodes: state.executeSelectedNodes,
     stopWorkflow: state.stopWorkflow,
+    mockTutorialExecution: state.mockTutorialExecution,
     validateWorkflow: state.validateWorkflow,
     edgeStyle: state.edgeStyle,
     setEdgeStyle: state.setEdgeStyle,
@@ -345,18 +347,24 @@ export function FloatingActionBar() {
   // FTUX tutorial state (client-side only to avoid SSR hydration issues)
   const [tutorialActive, setTutorialActive] = useState(false);
   const [lockedFeatures, setLockedFeatures] = useState(false);
+  const [currentTutorialStep, setCurrentTutorialStep] = useState(0);
+  const [tutorialSteps, setTutorialSteps] = useState<TutorialStep[]>([]);
 
   useEffect(() => {
     // Subscribe to FTUX store on client-side only
     const unsubscribe = useFTUXStore.subscribe((state) => {
       setTutorialActive(state.tutorialActive);
       setLockedFeatures(state.lockedFeatures);
+      setCurrentTutorialStep(state.currentTutorialStep);
+      setTutorialSteps(state.tutorialSteps);
     });
 
     // Initialize with current state
     const currentState = useFTUXStore.getState();
     setTutorialActive(currentState.tutorialActive);
     setLockedFeatures(currentState.lockedFeatures);
+    setCurrentTutorialStep(currentState.currentTutorialStep);
+    setTutorialSteps(currentState.tutorialSteps);
 
     return unsubscribe;
   }, []);
@@ -386,11 +394,21 @@ export function FloatingActionBar() {
     return selectedNodes.length === 1 ? selectedNodes[0] : null;
   }, [selectedNodes]);
 
-  // Close run menu when clicking outside
+  // Check if we're on the run options tutorial step
+  const isRunOptionsTutorialStep = useMemo(() => {
+    if (!tutorialActive || tutorialSteps.length === 0) return false;
+    const currentStep = tutorialSteps[currentTutorialStep];
+    return currentStep?.id === "explain-run-options";
+  }, [tutorialActive, currentTutorialStep, tutorialSteps]);
+
+  // Close run menu when clicking outside (but not during tutorial step)
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (runMenuRef.current && !runMenuRef.current.contains(event.target as Node)) {
-        setRunMenuOpen(false);
+        // Don't close menu during the run options tutorial step
+        if (!isRunOptionsTutorialStep) {
+          setRunMenuOpen(false);
+        }
       }
     };
 
@@ -401,19 +419,45 @@ export function FloatingActionBar() {
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [runMenuOpen]);
+  }, [runMenuOpen, isRunOptionsTutorialStep]);
+
+  // Open run menu when tutorial step is "explain-run-options"
+  useEffect(() => {
+    if (isRunOptionsTutorialStep) {
+      setRunMenuOpen(true);
+    }
+  }, [isRunOptionsTutorialStep]);
+
+  // Close run menu when tutorial advances past run options
+  useEffect(() => {
+    if (tutorialActive && tutorialSteps.length > 0) {
+      const currentStep = tutorialSteps[currentTutorialStep];
+      // Close menu when we're on run-workflow or later steps
+      if (currentStep?.id === "run-workflow" || currentStep?.id === "demonstrate-downstream" || currentStep?.id === "demonstrate-complete") {
+        setRunMenuOpen(false);
+      }
+    }
+  }, [tutorialActive, currentTutorialStep, tutorialSteps]);
 
   const toggleEdgeStyle = () => {
     setEdgeStyle(edgeStyle === "angular" ? "curved" : "angular");
   };
 
-  const handleRunClick = () => {
+  const handleRunClick = useCallback(() => {
+    // Check if we're in tutorial mode
+    const ftuxState = useFTUXStore.getState();
+    const currentStep = ftuxState.tutorialSteps[ftuxState.currentTutorialStep];
+
     if (isRunning) {
       stopWorkflow();
+    } else if (ftuxState.tutorialActive && currentStep?.id === "run-workflow") {
+      // Use mock execution for tutorial
+      mockTutorialExecution();
     } else {
+      // Normal execution
       executeWorkflow();
     }
-  };
+  }, [isRunning, stopWorkflow, executeWorkflow]);
 
   const handleRunFromSelected = () => {
     if (selectedNode) {
@@ -481,6 +525,7 @@ export function FloatingActionBar() {
             onClick={handleRunClick}
             disabled={!valid && !isRunning}
             title={!valid ? errors.join("\n") : isRunning ? "Stop" : "Run"}
+            data-tutorial="floating-run-button"
             className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium transition-colors ${
               isRunning
                 ? "bg-white text-neutral-900 hover:bg-neutral-200 rounded"
@@ -532,6 +577,7 @@ export function FloatingActionBar() {
           {!isRunning && valid && (
             <button
               onClick={() => setRunMenuOpen(!runMenuOpen)}
+              data-tutorial="floating-run-dropdown"
               className="flex items-center self-stretch px-1.5 rounded-r bg-white text-neutral-900 hover:bg-neutral-200 border-l border-neutral-200 transition-colors"
               title="Run options"
             >
@@ -549,7 +595,10 @@ export function FloatingActionBar() {
 
           {/* Dropdown menu */}
           {runMenuOpen && !isRunning && (
-            <div className="absolute bottom-full right-0 mb-2 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-[180px]">
+            <div
+              data-tutorial="floating-run-menu"
+              className="absolute bottom-full right-0 mb-2 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-[180px]"
+            >
               <button
                 onClick={() => {
                   executeWorkflow();

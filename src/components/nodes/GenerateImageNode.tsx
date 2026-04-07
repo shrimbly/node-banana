@@ -506,6 +506,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
       fullBleed
       settingsExpanded={inlineParametersEnabled && isParamsExpanded}
       aspectFitMedia={nodeData.outputImage}
+      dataTutorial="generate-image-node"
       settingsPanel={inlineParametersEnabled ? (
         <InlineParameterPanel
           expanded={isParamsExpanded}
@@ -520,6 +521,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                 <select
                   value={currentModelId}
                   onChange={handleModelChange}
+                  data-tutorial="generate-model-selector"
                   className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 bg-[#1a1a1a] rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
                 >
                   {GEMINI_IMAGE_MODELS.map((m) => (
@@ -686,7 +688,10 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
         Image
       </div>
 
-      <div className="relative w-full h-full min-h-0 overflow-hidden rounded-lg">
+      <div
+        className="relative w-full h-full min-h-0 overflow-hidden rounded-lg"
+        data-tutorial="generate-output-area"
+      >
         {/* Preview area */}
         {nodeData.outputImage ? (
           <>

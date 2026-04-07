@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FTUXStepProps } from "@/types/ftux";
 import { NodeDefaultsConfig } from "@/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { ProviderModel } from "@/lib/providers/types";
+import { loadNodeDefaults, saveNodeDefaults } from "@/store/utils/localStorage";
 
 // Provider icons
 const GeminiIcon = () => (
@@ -55,6 +56,12 @@ export function FTUXModelDefaultsStep({}: FTUXStepProps) {
   const [showImageDialog, setShowImageDialog] = useState(false);
   const [showVideoDialog, setShowVideoDialog] = useState(false);
 
+  // Load current defaults on mount
+  useEffect(() => {
+    const currentDefaults = loadNodeDefaults();
+    setLocalDefaults(currentDefaults);
+  }, []);
+
   return (
     <div className="py-6 px-6">
       <h3 className="text-lg font-semibold text-neutral-100 mb-2">
@@ -90,6 +97,7 @@ export function FTUXModelDefaultsStep({}: FTUXStepProps) {
                     onClick={() => {
                       const { generateImage, ...rest } = localDefaults;
                       setLocalDefaults(rest);
+                      saveNodeDefaults(rest);
                     }}
                     className="text-xs text-neutral-400 hover:text-neutral-200"
                   >
@@ -137,6 +145,7 @@ export function FTUXModelDefaultsStep({}: FTUXStepProps) {
                     onClick={() => {
                       const { generateVideo, ...rest } = localDefaults;
                       setLocalDefaults(rest);
+                      saveNodeDefaults(rest);
                     }}
                     className="text-xs text-neutral-400 hover:text-neutral-200"
                   >
@@ -166,17 +175,19 @@ export function FTUXModelDefaultsStep({}: FTUXStepProps) {
           isOpen={showImageDialog}
           onClose={() => setShowImageDialog(false)}
           onModelSelected={(model: ProviderModel) => {
-            setLocalDefaults((prev) => ({
-              ...prev,
+            const updatedDefaults = {
+              ...localDefaults,
               generateImage: {
-                ...prev.generateImage,
+                ...localDefaults.generateImage,
                 selectedModel: {
                   provider: model.provider,
                   modelId: model.id,
                   displayName: model.name,
                 },
               },
-            }));
+            };
+            setLocalDefaults(updatedDefaults);
+            saveNodeDefaults(updatedDefaults);
             setShowImageDialog(false);
           }}
           initialCapabilityFilter="image"
@@ -187,17 +198,19 @@ export function FTUXModelDefaultsStep({}: FTUXStepProps) {
           isOpen={showVideoDialog}
           onClose={() => setShowVideoDialog(false)}
           onModelSelected={(model: ProviderModel) => {
-            setLocalDefaults((prev) => ({
-              ...prev,
+            const updatedDefaults = {
+              ...localDefaults,
               generateVideo: {
-                ...prev.generateVideo,
+                ...localDefaults.generateVideo,
                 selectedModel: {
                   provider: model.provider,
                   modelId: model.id,
                   displayName: model.name,
                 },
               },
-            }));
+            };
+            setLocalDefaults(updatedDefaults);
+            saveNodeDefaults(updatedDefaults);
             setShowVideoDialog(false);
           }}
           initialCapabilityFilter="video"

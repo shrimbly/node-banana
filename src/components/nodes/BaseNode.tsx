@@ -26,6 +26,8 @@ interface BaseNodeProps {
   settingsExpanded?: boolean;
   /** Settings panel rendered outside the bordered area so it shares the node's full width */
   settingsPanel?: ReactNode;
+  /** Tutorial identifier for highlighting */
+  dataTutorial?: string;
 }
 
 /**
@@ -69,6 +71,7 @@ export function BaseNode({
   aspectFitMedia,
   settingsExpanded = false,
   settingsPanel,
+  dataTutorial,
 }: BaseNodeProps) {
   const currentNodeIds = useWorkflowStore((state) => state.currentNodeIds);
   const setHoveredNodeId = useWorkflowStore((state) => state.setHoveredNodeId);
@@ -290,6 +293,7 @@ export function BaseNode({
         ? `relative flex flex-col w-full h-full overflow-visible bg-neutral-800 rounded-lg ${selected ? "ring-2 ring-blue-500/40 shadow-lg shadow-blue-500/25" : ""}`
         : "contents"}
       onDoubleClick={handleResizeHandleDblClick}
+      data-tutorial={dataTutorial}
     >
       <NodeResizer
         isVisible={selected}
