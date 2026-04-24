@@ -2,6 +2,7 @@ import {
   WorkflowSaveConfig,
   WorkflowCostData,
   ProviderSettings,
+  ProviderConfig,
   RecentModel,
   NodeDefaultsConfig,
   GenerateImageNodeDefaults,
@@ -128,13 +129,17 @@ export const getProviderSettings = (): ProviderSettings => {
   if (stored) {
     try {
       const parsed = JSON.parse(stored) as ProviderSettings;
-      // Merge with defaults to handle new providers added after user saved settings
-      return {
-        providers: {
-          ...defaultProviderSettings.providers,
-          ...parsed.providers,
+      // Deep-merge each provider with defaults to handle new fields/providers
+      const mergedProviders = { ...defaultProviderSettings.providers } as Record<string, ProviderConfig>;
+      for (const [key, value] of Object.entries(parsed.providers)) {
+        if (value && typeof value === "object") {
+          mergedProviders[key] = {
+            ...(defaultProviderSettings.providers as Record<string, ProviderConfig>)[key],
+            ...value,
+          };
         }
-      };
+      }
+      return { providers: mergedProviders };
     } catch {
       return defaultProviderSettings;
     }

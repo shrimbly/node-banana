@@ -571,6 +571,30 @@ const GEMINI_VIDEO_MODELS: ProviderModel[] = [
   },
 ];
 
+// OpenAI image models (hardcoded - no public image model discovery API)
+const OPENAI_IMAGE_MODELS: ProviderModel[] = [
+  {
+    id: "gpt-image-2",
+    name: "GPT Image 2",
+    description: "OpenAI's state-of-the-art image generation model (gpt-image-2). Best-in-class text rendering, photorealism, and precise editing. Supports text-to-image and image-to-image.",
+    provider: "openai",
+    capabilities: ["text-to-image", "image-to-image"],
+    coverImage: undefined,
+    pricing: { type: "per-run", amount: 0.05, currency: "USD" },
+    pageUrl: "https://platform.openai.com/docs/guides/images",
+  },
+  {
+    id: "gpt-image-1",
+    name: "GPT Image 1",
+    description: "OpenAI's gpt-image-1 model for high-quality image generation. Supports text-to-image and image-to-image with size, quality, and background controls.",
+    provider: "openai",
+    capabilities: ["text-to-image", "image-to-image"],
+    coverImage: undefined,
+    pricing: { type: "per-run", amount: 0.05, currency: "USD" },
+    pageUrl: "https://platform.openai.com/docs/guides/images",
+  },
+];
+
 // WaveSpeed models are now fetched dynamically from https://api.wavespeed.ai/api/v3/models
 
 // ============ Replicate Types ============
@@ -1098,6 +1122,8 @@ export async function GET(
   const falKey = request.headers.get("X-Fal-Key") || process.env.FAL_API_KEY || null;
   const kieKey = request.headers.get("X-Kie-Key") || process.env.KIE_API_KEY || null;
   const wavespeedKey = request.headers.get("X-WaveSpeed-Key") || process.env.WAVESPEED_API_KEY || null;
+  const openaiKey = request.headers.get("X-OpenAI-API-Key") || process.env.OPENAI_API_KEY || null;
+  console.log("[models/route] openaiKey present:", !!openaiKey, "from header:", !!request.headers.get("X-OpenAI-API-Key"), "from env:", !!process.env.OPENAI_API_KEY);
 
   // Build list of all available providers (have keys from env or client headers)
   const availableProviders: string[] = ["gemini"]; // Gemini always available
@@ -1105,11 +1131,13 @@ export async function GET(
   if (replicateKey) availableProviders.push("replicate");
   if (kieKey) availableProviders.push("kie");
   if (wavespeedKey) availableProviders.push("wavespeed");
+  if (openaiKey) availableProviders.push("openai");
 
-  // Determine which providers to fetch from (excluding gemini/kie - handled separately as hardcoded)
+  // Determine which providers to fetch from (excluding gemini/kie/openai - handled separately as hardcoded)
   const providersToFetch: ProviderType[] = [];
   let includeGemini = false;
   let includeKie = false;
+  let includeOpenai = false;
 
   if (providerFilter) {
     if (providerFilter === "gemini") {
@@ -1124,6 +1152,19 @@ export async function GET(
           {
             success: false,
             error: "Kie API key required. Add KIE_API_KEY to .env.local or configure in Settings.",
+          },
+          { status: 400 }
+        );
+      }
+    } else if (providerFilter === "openai") {
+      // Only OpenAI requested - no external API calls needed (hardcoded models)
+      if (openaiKey) {
+        includeOpenai = true;
+      } else {
+        return NextResponse.json<ModelsErrorResponse>(
+          {
+            success: false,
+            error: "OpenAI API key required. Add OPENAI_API_KEY to .env.local or configure in Settings.",
           },
           { status: 400 }
         );
@@ -1152,6 +1193,7 @@ export async function GET(
     // Include all providers that have keys configured
     includeGemini = true; // Gemini always available
     includeKie = kieKey ? true : false; // Kie only if API key is configured
+    includeOpenai = openaiKey ? true : false; // OpenAI only if API key is configured
     if (wavespeedKey) {
       providersToFetch.push("wavespeed"); // WaveSpeed if key is configured
     }
@@ -1163,13 +1205,13 @@ export async function GET(
     }
   }
 
-  // Gemini and Kie are always available (with key for Kie), so we don't fail if no external providers
-  if (providersToFetch.length === 0 && !includeGemini && !includeKie) {
+  // Gemini and Kie are always available (with key for Kie/OpenAI), so we don't fail if no external providers
+  if (providersToFetch.length === 0 && !includeGemini && !includeKie && !includeOpenai) {
     return NextResponse.json<ModelsErrorResponse>(
       {
         success: false,
         error:
-          "No providers available. Add REPLICATE_API_KEY, FAL_API_KEY, KIE_API_KEY, or WAVESPEED_API_KEY to .env.local or configure in Settings.",
+          "No providers available. Add REPLICATE_API_KEY, FAL_API_KEY, KIE_API_KEY, WAVESPEED_API_KEY, or OPENAI_API_KEY to .env.local or configure in Settings.",
       },
       { status: 400 }
     );
@@ -1208,6 +1250,22 @@ export async function GET(
     providerResults["kie"] = {
       success: true,
       count: kieModels.length,
+      cached: true, // Hardcoded models are effectively "cached"
+    };
+    anyFromCache = true;
+  }
+
+  // Add OpenAI models if included (hardcoded, no API call needed)
+  if (includeOpenai) {
+    // Filter by search query if provided
+    let openaiModels = OPENAI_IMAGE_MODELS;
+    if (searchQuery) {
+      openaiModels = filterModelsBySearch(openaiModels, searchQuery);
+    }
+    allModels.push(...openaiModels);
+    providerResults["openai"] = {
+      success: true,
+      count: openaiModels.length,
       cached: true, // Hardcoded models are effectively "cached"
     };
     anyFromCache = true;

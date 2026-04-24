@@ -215,7 +215,7 @@ export async function executeNanoBanana(
           });
 
         // Track cost
-        if (modelToUse.provider === "fal" && modelToUse.pricing) {
+        if ((modelToUse.provider === "fal" || modelToUse.provider === "openai") && modelToUse.pricing) {
           addIncurredCost(modelToUse.pricing.amount);
         } else if (modelToUse.provider === "gemini") {
           const generationCost = calculateGenerationCost(nodeData.model, nodeData.resolution);
