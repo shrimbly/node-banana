@@ -699,6 +699,23 @@ function getKieSchema(modelId: string): ExtractedSchema {
         { name: "input_urls", type: "image", required: true, label: "Image", isArray: true },
       ],
     },
+    "gpt-image-2/text-to-image": {
+      parameters: [
+        { name: "aspect_ratio", type: "string", description: "Output aspect ratio", enum: ["1:1", "2:3", "3:2", "4:3", "3:4", "16:9", "9:16"], default: "1:1" },
+        { name: "quality", type: "string", description: "Output quality tier", enum: ["low", "medium", "high"], default: "medium" },
+      ],
+      inputs: [{ name: "prompt", type: "text", required: true, label: "Prompt" }],
+    },
+    "gpt-image-2/image-to-image": {
+      parameters: [
+        { name: "aspect_ratio", type: "string", description: "Output aspect ratio", enum: ["1:1", "2:3", "3:2", "4:3", "3:4", "16:9", "9:16"], default: "1:1" },
+        { name: "quality", type: "string", description: "Output quality tier", enum: ["low", "medium", "high"], default: "medium" },
+      ],
+      inputs: [
+        { name: "prompt", type: "text", required: true, label: "Prompt" },
+        { name: "input_urls", type: "image", required: true, label: "Source Images", isArray: true },
+      ],
+    },
     "flux-2/pro-text-to-image": {
       parameters: [
         { name: "aspect_ratio", type: "string", description: "Output aspect ratio", enum: flux2AspectRatios, default: "1:1" },
@@ -1140,6 +1157,109 @@ function getKieSchema(modelId: string): ExtractedSchema {
 }
 
 /**
+ * Get hardcoded schema for OpenAI image models.
+ *
+ * OpenAI doesn't expose an OpenAPI discovery endpoint for image models, so we
+ * pin the parameter set explicitly. Source:
+ * https://developers.openai.com/api/docs/models/gpt-image-2
+ *
+ * Notes:
+ * - `size` accepts "auto" plus a fixed set of square/portrait/landscape sizes.
+ *   gpt-image-2 advertises support for additional resolutions up to ~2000px;
+ *   we expose a curated enum so the UI stays usable.
+ * - `quality` ranges low → high. "auto" lets the model pick.
+ * - `n` is 1-10 (multiple images, shared style).
+ * - `output_format` controls the file type; `output_compression` (0-100) only
+ *   applies to webp/jpeg.
+ * - `background` may be "auto" or "opaque". Transparent backgrounds are NOT
+ *   supported on gpt-image-2.
+ * - `moderation` is "auto" (default) or "low".
+ * - `thinking` is the new reasoning-effort knob: off / low / medium / high.
+ */
+function getOpenAISchema(modelId: string): ExtractedSchema | null {
+  if (modelId !== "gpt-image-2") return null;
+
+  const parameters: ModelParameter[] = [
+    {
+      name: "size",
+      type: "string",
+      description: "Output image dimensions. `auto` lets the model decide based on the prompt.",
+      enum: ["auto", "1024x1024", "1536x1024", "1024x1536", "2048x2048"],
+      default: "auto",
+    },
+    {
+      name: "quality",
+      type: "string",
+      description: "Quality tier. Higher quality is slower and more expensive.",
+      enum: ["auto", "low", "medium", "high"],
+      default: "auto",
+    },
+    {
+      name: "thinking",
+      type: "string",
+      description: "Reasoning effort. Higher = better composition but slower / more expensive.",
+      enum: ["off", "low", "medium", "high"],
+      default: "low",
+    },
+    {
+      name: "n",
+      type: "integer",
+      description: "Number of images to generate (1-10). Multiple images share style.",
+      default: 1,
+      minimum: 1,
+      maximum: 10,
+    },
+    {
+      name: "output_format",
+      type: "string",
+      description: "File format of the returned image.",
+      enum: ["png", "webp", "jpeg"],
+      default: "png",
+    },
+    {
+      name: "output_compression",
+      type: "integer",
+      description: "Compression level 0-100 (webp/jpeg only).",
+      default: 100,
+      minimum: 0,
+      maximum: 100,
+    },
+    {
+      name: "background",
+      type: "string",
+      description: "Background handling. Transparent is NOT supported on gpt-image-2.",
+      enum: ["auto", "opaque"],
+      default: "auto",
+    },
+    {
+      name: "moderation",
+      type: "string",
+      description: "Moderation strictness for the generated image.",
+      enum: ["auto", "low"],
+      default: "auto",
+    },
+  ];
+
+  // Single connectable handle: prompt + (optional) image input. The image
+  // handle being `isArray: true` lets the GenerateImageNode collect multiple
+  // upstream images for composition, which routes to /v1/images/edits at
+  // generation time.
+  const inputs: ModelInput[] = [
+    { name: "prompt", type: "text", required: true, label: "Prompt" },
+    {
+      name: "image",
+      type: "image",
+      required: false,
+      label: "Source Images",
+      description: "Optional. Up to 16 source images for editing or composition.",
+      isArray: true,
+    },
+  ];
+
+  return { parameters, inputs };
+}
+
+/**
  * Get schema for Gemini video models (native Veo via Gemini API)
  * Returns null if the model is not a Gemini video model.
  */
@@ -1460,11 +1580,11 @@ export async function GET(
   const decodedModelId = decodeURIComponent(modelId);
   const provider = request.nextUrl.searchParams.get("provider") as ProviderType | null;
 
-  if (!provider || (provider !== "replicate" && provider !== "fal" && provider !== "kie" && provider !== "wavespeed" && provider !== "gemini")) {
+  if (!provider || (provider !== "replicate" && provider !== "fal" && provider !== "kie" && provider !== "wavespeed" && provider !== "gemini" && provider !== "openai")) {
     return NextResponse.json<SchemaErrorResponse>(
       {
         success: false,
-        error: "Invalid or missing provider. Use ?provider=replicate, ?provider=fal, ?provider=kie, ?provider=wavespeed, or ?provider=gemini",
+        error: "Invalid or missing provider. Use ?provider=replicate, ?provider=fal, ?provider=kie, ?provider=wavespeed, ?provider=gemini, or ?provider=openai",
       },
       { status: 400 }
     );
@@ -1512,6 +1632,16 @@ export async function GET(
     } else if (provider === "kie") {
       // Kie.ai uses hardcoded schemas (no schema discovery API)
       result = getKieSchema(decodedModelId);
+    } else if (provider === "openai") {
+      // OpenAI image models use hardcoded schemas (no schema discovery API)
+      const openaiSchema = getOpenAISchema(decodedModelId);
+      if (!openaiSchema) {
+        return NextResponse.json<SchemaErrorResponse>(
+          { success: false, error: `Unknown OpenAI image model: ${decodedModelId}` },
+          { status: 400 }
+        );
+      }
+      result = openaiSchema;
     } else if (provider === "wavespeed") {
       // WaveSpeed uses dynamic schemas from API, with static fallback
       const apiKey = request.headers.get("X-WaveSpeed-Key") || process.env.WAVESPEED_API_KEY || null;

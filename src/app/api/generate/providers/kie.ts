@@ -25,6 +25,13 @@ export function getKieModelDefaults(modelId: string): Record<string, unknown> {
         quality: "medium",
       };
 
+    case "gpt-image-2/text-to-image":
+    case "gpt-image-2/image-to-image":
+      return {
+        aspect_ratio: "1:1",
+        quality: "medium",
+      };
+
     // Z-Image model
     case "z-image":
       return {
@@ -239,6 +246,7 @@ export function getKieImageInputKey(modelId: string): string {
   if (modelId === "nano-banana-pro") return "image_input";
   if (modelId === "seedream/4.5-edit") return "image_urls";
   if (modelId === "gpt-image/1.5-image-to-image") return "input_urls";
+  if (modelId === "gpt-image-2/image-to-image") return "input_urls";
   // Flux-2 I2I models use input_urls
   if (modelId === "flux-2/pro-image-to-image" || modelId === "flux-2/flex-image-to-image") return "input_urls";
   // Wan 2.7 Image uses input_urls
