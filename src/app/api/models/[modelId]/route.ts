@@ -1297,6 +1297,41 @@ function getGeminiImageSchema(modelId: string): ExtractedSchema | null {
 }
 
 /**
+ * Get hardcoded schema for OpenAI image models
+ * OpenAI doesn't have a schema discovery API for image generation models
+ */
+function getOpenAiSchema(modelId: string): ExtractedSchema {
+  const schemas: Record<string, ExtractedSchema> = {
+    "gpt-image-2": {
+      parameters: [
+        { name: "size", type: "string", description: "Output image size", enum: ["1024x1024", "1024x1536", "1536x1024", "auto"], default: "auto" },
+        { name: "quality", type: "string", description: "Output quality level", enum: ["low", "medium", "high", "auto"], default: "auto" },
+        { name: "n", type: "integer", description: "Number of images to generate (1-10)", default: 1, minimum: 1, maximum: 10 },
+        { name: "background", type: "string", description: "Background type for generated image", enum: ["transparent", "opaque"], default: "opaque" },
+      ],
+      inputs: [
+        { name: "prompt", type: "text", required: true, label: "Prompt" },
+        { name: "image", type: "image", required: false, label: "Image", isArray: true },
+      ],
+    },
+    "gpt-image-1": {
+      parameters: [
+        { name: "size", type: "string", description: "Output image size", enum: ["1024x1024", "1024x1536", "1536x1024", "auto"], default: "auto" },
+        { name: "quality", type: "string", description: "Output quality level", enum: ["low", "medium", "high", "auto"], default: "auto" },
+        { name: "n", type: "integer", description: "Number of images to generate (1-10)", default: 1, minimum: 1, maximum: 10 },
+        { name: "background", type: "string", description: "Background type for generated image", enum: ["transparent", "opaque"], default: "opaque" },
+      ],
+      inputs: [
+        { name: "prompt", type: "text", required: true, label: "Prompt" },
+        { name: "image", type: "image", required: false, label: "Image", isArray: true },
+      ],
+    },
+  };
+
+  return schemas[modelId] || { parameters: [], inputs: [] };
+}
+
+/**
  * Get static schema for WaveSpeed models (fallback when dynamic schema not available)
  */
 function getStaticWaveSpeedSchema(modelId: string): ExtractedSchema {
@@ -1530,11 +1565,11 @@ export async function GET(
   const decodedModelId = decodeURIComponent(modelId);
   const provider = request.nextUrl.searchParams.get("provider") as ProviderType | null;
 
-  if (!provider || (provider !== "replicate" && provider !== "fal" && provider !== "kie" && provider !== "wavespeed" && provider !== "gemini")) {
+  if (!provider || (provider !== "replicate" && provider !== "fal" && provider !== "kie" && provider !== "wavespeed" && provider !== "gemini" && provider !== "openai")) {
     return NextResponse.json<SchemaErrorResponse>(
       {
         success: false,
-        error: "Invalid or missing provider. Use ?provider=replicate, ?provider=fal, ?provider=kie, ?provider=wavespeed, or ?provider=gemini",
+        error: "Invalid or missing provider. Use ?provider=replicate, ?provider=fal, ?provider=kie, ?provider=wavespeed, ?provider=openai, or ?provider=gemini",
       },
       { status: 400 }
     );
@@ -1586,6 +1621,9 @@ export async function GET(
       // WaveSpeed uses dynamic schemas from API, with static fallback
       const apiKey = request.headers.get("X-WaveSpeed-Key") || process.env.WAVESPEED_API_KEY || null;
       result = await fetchWaveSpeedSchema(decodedModelId, apiKey);
+    } else if (provider === "openai") {
+      // OpenAI uses hardcoded schemas (no schema discovery API for image models)
+      result = getOpenAiSchema(decodedModelId);
     } else {
       // User-provided key takes precedence over env variable
       const apiKey = request.headers.get("X-Fal-Key") || process.env.FAL_API_KEY || null;

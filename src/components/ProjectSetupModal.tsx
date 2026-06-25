@@ -9,6 +9,7 @@ import { loadNodeDefaults, saveNodeDefaults, getLastProjectBaseDir, setLastProje
 import { ProviderModel } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { useInlineParameters } from "@/hooks/useInlineParameters";
+import { clearFetchCache } from "@/utils/deduplicatedFetch";
 
 // LLM provider and model options (mirrored from LLMGenerateNode)
 const LLM_PROVIDERS: { value: LLMProvider; label: string }[] = [
@@ -331,6 +332,10 @@ export function ProjectSetupModal({
         updateProviderApiKey(providerId, local.apiKey);
       }
     }
+    // Clear model caches so the next model list fetch is fresh
+    clearFetchCache();
+    localStorage.removeItem("node-banana-models-cache");
+    localStorage.removeItem("node-banana-schema-cache");
     onClose();
   };
 

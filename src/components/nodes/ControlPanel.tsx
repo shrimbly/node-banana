@@ -201,7 +201,7 @@ function GenerateImageControls({ node }: { node: Node }) {
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
-  const { replicateApiKey, falApiKey, kieApiKey, replicateEnabled, kieEnabled } = useProviderApiKeys();
+  const { replicateApiKey, falApiKey, kieApiKey, openaiApiKey, replicateEnabled, kieEnabled, openaiEnabled } = useProviderApiKeys();
   const [externalModels, setExternalModels] = useState<ProviderModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelsFetchError, setModelsFetchError] = useState<string | null>(null);
@@ -220,8 +220,11 @@ function GenerateImageControls({ node }: { node: Node }) {
     if (kieEnabled && kieApiKey) {
       providers.push({ id: "kie", name: "Kie.ai" });
     }
+    if (openaiEnabled && openaiApiKey) {
+      providers.push({ id: "openai", name: "OpenAI" });
+    }
     return providers;
-  }, [replicateEnabled, replicateApiKey, kieEnabled, kieApiKey]);
+  }, [replicateEnabled, replicateApiKey, kieEnabled, kieApiKey, openaiEnabled, openaiApiKey]);
 
   // Fetch models from external providers
   const fetchModels = useCallback(async () => {
@@ -246,6 +249,9 @@ function GenerateImageControls({ node }: { node: Node }) {
         case "kie":
           if (kieApiKey) headers["X-Kie-Key"] = kieApiKey;
           break;
+        case "openai":
+          if (openaiApiKey) headers["X-OpenAI-API-Key"] = openaiApiKey;
+          break;
       }
 
       const response = await deduplicatedFetch(`/api/models?provider=${currentProvider}&capabilities=${capabilities}`, { headers });
@@ -266,7 +272,7 @@ function GenerateImageControls({ node }: { node: Node }) {
     } finally {
       setIsLoadingModels(false);
     }
-  }, [currentProvider, replicateApiKey, falApiKey, kieApiKey]);
+  }, [currentProvider, replicateApiKey, falApiKey, kieApiKey, openaiApiKey]);
 
   useEffect(() => {
     fetchModels();

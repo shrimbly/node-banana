@@ -21,6 +21,8 @@ export function getModelPageUrl(
       return `https://docs.kie.ai/`;
     case "wavespeed":
       return `https://wavespeed.ai`;
+    case "openai":
+      return `https://platform.openai.com/docs/guides/images`;
     default:
       return null;
   }
@@ -41,6 +43,8 @@ export function getProviderDisplayName(provider: ProviderType): string {
       return "Kie.ai";
     case "wavespeed":
       return "WaveSpeed";
+    case "openai":
+      return "OpenAI";
     default:
       return provider;
   }

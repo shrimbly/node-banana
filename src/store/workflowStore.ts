@@ -2870,9 +2870,11 @@ export function useProviderApiKeys() {
       falApiKey: state.providerSettings.providers.fal?.apiKey ?? null,
       kieApiKey: state.providerSettings.providers.kie?.apiKey ?? null,
       wavespeedApiKey: state.providerSettings.providers.wavespeed?.apiKey ?? null,
+      openaiApiKey: state.providerSettings.providers.openai?.apiKey ?? null,
       // Provider enabled states (for conditional UI)
       replicateEnabled: state.providerSettings.providers.replicate?.enabled ?? false,
       kieEnabled: state.providerSettings.providers.kie?.enabled ?? false,
+      openaiEnabled: state.providerSettings.providers.openai?.enabled ?? false,
     }))
   );
 }
