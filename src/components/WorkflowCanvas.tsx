@@ -1482,23 +1482,28 @@ export function WorkflowCanvas() {
             else zoomOut();
           } else {
             // Pan (also prevent horizontal swipe navigation)
+            // Shift+scroll: horizontal pan (Figma-style). Normal scroll: vertical pan
             event.preventDefault();
             const viewport = getViewport();
-            setViewport({
-              x: viewport.x - event.deltaX,
-              y: viewport.y - event.deltaY,
-              zoom: viewport.zoom,
-            });
+            const dx = event.shiftKey ? event.deltaY : event.deltaX;
+            const dy = event.shiftKey ? 0 : event.deltaY;
+            setViewport({ x: viewport.x - dx, y: viewport.y - dy, zoom: viewport.zoom });
           }
         }
         return;
       }
 
-      // Non-macOS
+      // Non-macOS (Windows, Linux): scroll pans; shift+scroll pans horizontal
       if (shouldZoom) {
         event.preventDefault();
         if (event.deltaY < 0) zoomIn();
         else zoomOut();
+      } else {
+        event.preventDefault();
+        const viewport = getViewport();
+        const dx = event.shiftKey ? event.deltaY : event.deltaX;
+        const dy = event.shiftKey ? 0 : event.deltaY;
+        setViewport({ x: viewport.x - dx, y: viewport.y - dy, zoom: viewport.zoom });
       }
     };
 
