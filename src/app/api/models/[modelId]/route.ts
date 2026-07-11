@@ -70,6 +70,7 @@ const VIDEO_INPUT_PATTERNS = [
   "video_urls",
   "video",
   "videos",
+  "video_input",
   "input_video",
   "source_video",
   "init_video",
@@ -275,6 +276,15 @@ function isVideoInput(name: string, prop: Record<string, unknown>, schemaCompone
     }
   }
 
+  // Exclude counts/sizes/scales/guidance — these are settings, not video inputs.
+  // Providers commonly expose string enums like video_size ("720p"), which would
+  // otherwise match the name patterns below and surface as a bogus video input
+  // handle instead of a settings parameter.
+  if (name.includes("_count") || name.includes("_size") || name.includes("_scale") ||
+      name.includes("guidance") || name.startsWith("num_")) {
+    return false;
+  }
+
   // Check explicit patterns
   if (VIDEO_INPUT_PATTERNS.includes(name)) {
     return true;
@@ -285,12 +295,13 @@ function isVideoInput(name: string, prop: Record<string, unknown>, schemaCompone
   if (description.includes("video url") ||
       description.includes("video file") ||
       description.includes("url of the video") ||
+      description.includes("source video") ||
       description.includes("input video")) {
     return true;
   }
 
-  // Check name patterns
-  return name.endsWith("_video") || name.startsWith("video_");
+  // Check name patterns (mid-name _video_ catches e.g. ref_video_url)
+  return name.endsWith("_video") || name.startsWith("video_") || name.includes("_video_");
 }
 
 /**
