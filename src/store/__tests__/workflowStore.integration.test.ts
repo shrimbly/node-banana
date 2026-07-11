@@ -2733,4 +2733,85 @@ describe("workflowStore integration tests", () => {
       });
     });
   });
+
+  describe("executeWorkflow — Run unprocessed only (skipCompleted)", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    function setupPromptToGenerate(generateData: Record<string, unknown>) {
+      useWorkflowStore.setState({
+        nodes: [
+          createTestNode("prompt-1", "prompt", { prompt: "a banana" }),
+          createTestNode("nanoBanana-1", "nanoBanana", {
+            aspectRatio: "1:1",
+            resolution: "1K",
+            model: "nano-banana",
+            ...generateData,
+          }),
+        ],
+        edges: [createTestEdge("prompt-1", "nanoBanana-1", "text", "text")],
+      });
+    }
+
+    function calledGenerateApi(mockFetch: ReturnType<typeof vi.fn>): boolean {
+      return mockFetch.mock.calls.some((call) => String(call[0]).includes("/api/generate"));
+    }
+
+    it("should skip an already-completed generative node and preserve its output", async () => {
+      const mockFetch = vi.fn();
+      vi.stubGlobal("fetch", mockFetch);
+
+      setupPromptToGenerate({
+        status: "complete",
+        outputImage: "data:image/png;base64,existingOutput",
+      });
+
+      const store = useWorkflowStore.getState();
+      await store.executeWorkflow(undefined, { skipCompleted: true });
+
+      // No generation request was made, and the existing output survived untouched
+      expect(calledGenerateApi(mockFetch)).toBe(false);
+      const genNode = useWorkflowStore.getState().nodes.find(n => n.id === "nanoBanana-1");
+      expect(genNode?.data).toHaveProperty("status", "complete");
+      expect(genNode?.data).toHaveProperty("outputImage", "data:image/png;base64,existingOutput");
+    });
+
+    it("should still re-run completed nodes on a normal run (flag off)", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ success: false, error: "mock" }),
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      setupPromptToGenerate({
+        status: "complete",
+        outputImage: "data:image/png;base64,existingOutput",
+      });
+
+      const store = useWorkflowStore.getState();
+      await store.executeWorkflow();
+
+      // Default behavior unchanged: the completed node is re-generated
+      expect(calledGenerateApi(mockFetch)).toBe(true);
+    });
+
+    it("should still run errored generative nodes in skipCompleted mode", async () => {
+      const mockFetch = vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ success: false, error: "mock" }),
+      });
+      vi.stubGlobal("fetch", mockFetch);
+
+      setupPromptToGenerate({ status: "error", error: "previous failure" });
+
+      const store = useWorkflowStore.getState();
+      await store.executeWorkflow(undefined, { skipCompleted: true });
+
+      // Only "complete" nodes are skipped — errored/idle nodes fire as usual
+      expect(calledGenerateApi(mockFetch)).toBe(true);
+    });
+  });
 });
