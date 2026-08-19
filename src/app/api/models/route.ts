@@ -1,13 +1,13 @@
 /**
  * Unified Models API Endpoint
  *
- * Aggregates models from all configured providers (Replicate, fal.ai, Gemini, WaveSpeed).
+ * Aggregates models from all configured providers (Replicate, fal.ai, Gemini, Kie.ai, WaveSpeed, metaso).
  * Uses in-memory caching to reduce external API calls.
  *
  * GET /api/models
  *
  * Query params:
- *   - provider: Optional, filter to specific provider ("replicate" | "fal" | "gemini" | "wavespeed")
+ *   - provider: Optional, filter to a specific provider
  *   - search: Optional, search query
  *   - refresh: Optional, bypass cache if "true"
  *   - capabilities: Optional, filter by capabilities (comma-separated)
@@ -16,6 +16,7 @@
  *   - X-Replicate-Key: Replicate API key
  *   - X-Fal-Key: fal.ai API key (optional, works without but rate limited)
  *   - X-WaveSpeed-Key: WaveSpeed API key
+ *   - X-Metaso-API-Key: metaso API key
  *
  * Response:
  *   {
@@ -498,6 +499,20 @@ const KIE_MODELS: ProviderModel[] = [
     coverImage: undefined,
     pricing: { type: "per-run", amount: 0.02, currency: "USD" },
     pageUrl: "https://kie.ai/elevenlabs-sound-effect",
+  },
+];
+
+// metaso models (hardcoded - the H3 V2 endpoint has no model discovery route)
+const METASO_MODELS: ProviderModel[] = [
+  {
+    id: "MiniMax-H3",
+    name: "MiniMax H3",
+    description: "MiniMax-H3 V2 video generation through metaso. Supports text, first/last frames, and reference image, video, or audio inputs.",
+    provider: "metaso",
+    capabilities: ["text-to-video", "image-to-video", "audio-to-video"],
+    coverImage: "/providers/metaso.ico",
+    pricingDescription: "768P ¥0.09/output s · 2K ¥0.15/output s · first 5 images free, then ¥0.05/image · audio free · reference video uses the same output-second rate",
+    pageUrl: "https://metaso.cn/",
   },
 ];
 
@@ -1255,6 +1270,7 @@ export async function GET(
   const kieKey = request.headers.get("X-Kie-Key") || process.env.KIE_API_KEY || null;
   const wavespeedKey = request.headers.get("X-WaveSpeed-Key") || process.env.WAVESPEED_API_KEY || null;
   const openaiKey = request.headers.get("X-OpenAI-API-Key") || process.env.OPENAI_API_KEY || null;
+  const metasoKey = request.headers.get("X-Metaso-API-Key") || process.env.METASO_API_KEY || null;
 
   // Build list of all available providers (have keys from env or client headers)
   const availableProviders: string[] = ["gemini"]; // Gemini always available
@@ -1263,12 +1279,14 @@ export async function GET(
   if (kieKey) availableProviders.push("kie");
   if (wavespeedKey) availableProviders.push("wavespeed");
   if (openaiKey) availableProviders.push("openai");
+  if (metasoKey) availableProviders.push("metaso");
 
   // Determine which providers to fetch from (gemini/kie/openai handled separately as hardcoded)
   const providersToFetch: ProviderType[] = [];
   let includeGemini = false;
   let includeKie = false;
   let includeOpenai = false;
+  let includeMetaso = false;
 
   if (providerFilter) {
     if (providerFilter === "gemini") {
@@ -1315,6 +1333,18 @@ export async function GET(
           { status: 400 }
         );
       }
+    } else if (providerFilter === "metaso") {
+      if (metasoKey) {
+        includeMetaso = true;
+      } else {
+        return NextResponse.json<ModelsErrorResponse>(
+          {
+            success: false,
+            error: "metaso API key required. Add METASO_API_KEY to .env.local or configure in Settings.",
+          },
+          { status: 400 }
+        );
+      }
     } else if (providerFilter === "replicate" && replicateKey) {
       providersToFetch.push("replicate");
     } else if (providerFilter === "fal" && falKey) {
@@ -1325,6 +1355,7 @@ export async function GET(
     includeGemini = true; // Gemini always available
     includeKie = kieKey ? true : false; // Kie only if API key is configured
     includeOpenai = openaiKey ? true : false; // OpenAI only if API key is configured
+    includeMetaso = metasoKey ? true : false; // metaso only if API key is configured
     if (wavespeedKey) {
       providersToFetch.push("wavespeed"); // WaveSpeed if key is configured
     }
@@ -1337,12 +1368,12 @@ export async function GET(
   }
 
   // Gemini/Kie/OpenAI are handled as hardcoded, so we don't fail if no external providers
-  if (providersToFetch.length === 0 && !includeGemini && !includeKie && !includeOpenai) {
+  if (providersToFetch.length === 0 && !includeGemini && !includeKie && !includeOpenai && !includeMetaso) {
     return NextResponse.json<ModelsErrorResponse>(
       {
         success: false,
         error:
-          "No providers available. Add REPLICATE_API_KEY, FAL_API_KEY, KIE_API_KEY, WAVESPEED_API_KEY, or OPENAI_API_KEY to .env.local or configure in Settings.",
+          "No providers available. Add REPLICATE_API_KEY, FAL_API_KEY, KIE_API_KEY, WAVESPEED_API_KEY, OPENAI_API_KEY, or METASO_API_KEY to .env.local or configure in Settings.",
       },
       { status: 400 }
     );
@@ -1398,6 +1429,21 @@ export async function GET(
       success: true,
       count: openaiModels.length,
       cached: true, // Hardcoded models are effectively "cached"
+    };
+    anyFromCache = true;
+  }
+
+  // Add metaso models if included (hardcoded, no discovery API call needed)
+  if (includeMetaso) {
+    let metasoModels = METASO_MODELS;
+    if (searchQuery) {
+      metasoModels = filterModelsBySearch(metasoModels, searchQuery);
+    }
+    allModels.push(...metasoModels);
+    providerResults["metaso"] = {
+      success: true,
+      count: metasoModels.length,
+      cached: true,
     };
     anyFromCache = true;
   }

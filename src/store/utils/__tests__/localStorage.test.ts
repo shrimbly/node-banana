@@ -252,6 +252,10 @@ describe("localStorage utilities", () => {
       // Should also have the default providers that were missing
       expect(result.providers.replicate).toBeDefined();
       expect(result.providers.fal).toBeDefined();
+      expect(result.providers.metaso).toMatchObject({
+        id: "metaso",
+        apiKeyEnvVar: "METASO_API_KEY",
+      });
     });
 
     it("returns default on invalid JSON", () => {

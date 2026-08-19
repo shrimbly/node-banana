@@ -76,6 +76,10 @@ export interface ProviderModel {
     amount: number;
     currency: string;
   };
+  /** Human-readable pricing for models with resolution/input-dependent billing */
+  pricingDescription?: string;
+  /** Optional source page for the displayed pricing */
+  pricingSource?: string;
   /** Optional URL to the model's page on the provider's website */
   pageUrl?: string;
 }

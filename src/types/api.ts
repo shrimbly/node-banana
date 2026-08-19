@@ -30,10 +30,10 @@ export interface GenerateResponse {
   model3dUrl?: string; // For 3D models, return GLB URL directly
   contentType?: "image" | "video" | "3d" | "audio";
   error?: string;
-  // Client-side polling fields (for long-running Kie tasks)
+  // Client-side polling fields (for long-running provider tasks)
   polling?: boolean; // true = task submitted, poll for completion
-  taskId?: string; // Kie task ID to poll
-  pollProvider?: string; // 'kie' — tells poll endpoint which provider
+  taskId?: string; // Provider task ID to poll
+  pollProvider?: string; // Tells the poll endpoint which provider owns the task
   pollModelId?: string; // model ID for result handling
   pollModelName?: string; // display name for error messages
   pollMediaType?: string; // 'video' | 'image' | 'audio' — for result handling

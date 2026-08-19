@@ -19,6 +19,7 @@ import { generateWithFalQueue } from "./providers/fal";
 import { submitKieTask } from "./providers/kie";
 import { generateWithWaveSpeed } from "./providers/wavespeed";
 import { generateWithOpenAI } from "./providers/openai";
+import { MetasoApiError, submitMetasoTask } from "./providers/metaso";
 import { buildMediaResponse } from "./shared";
 
 export const maxDuration = 600; // 10 minute timeout for video generation polling
@@ -331,6 +332,81 @@ export async function POST(request: NextRequest) {
             error: error instanceof Error ? error.message : "Task submission failed",
           },
           { status: 500 }
+        );
+      }
+    }
+
+    if (provider === "metaso") {
+      if (!selectedModel?.modelId || !selectedModel?.displayName) {
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: "selectedModel with modelId and displayName is required for metaso" },
+          { status: 400 }
+        );
+      }
+      if (mediaType && mediaType !== "video") {
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: "metaso MiniMax-H3 supports video generation only" },
+          { status: 400 }
+        );
+      }
+
+      const metasoApiKey = request.headers.get("X-Metaso-API-Key") || process.env.METASO_API_KEY;
+      if (!metasoApiKey) {
+        return NextResponse.json<GenerateResponse>(
+          {
+            success: false,
+            error: "metaso API key not configured. Add METASO_API_KEY to .env.local or configure in Settings.",
+          },
+          { status: 401 }
+        );
+      }
+
+      const processedDynamicInputs: Record<string, string | string[]> = {};
+      if (dynamicInputs) {
+        for (const [key, value] of Object.entries(dynamicInputs)) {
+          if (value === null || value === undefined || value === "") continue;
+          processedDynamicInputs[key] = value;
+        }
+      }
+
+      const genInput: GenerationInput = {
+        model: {
+          id: selectedModel.modelId,
+          name: selectedModel.displayName,
+          provider: "metaso",
+          capabilities: ["text-to-video", "image-to-video", "audio-to-video"],
+          description: null,
+        },
+        prompt: prompt || "",
+        images: images ? [...images] : [],
+        parameters,
+        dynamicInputs: processedDynamicInputs,
+      };
+
+      try {
+        const { taskId } = await submitMetasoTask(
+          requestId,
+          metasoApiKey,
+          genInput,
+          process.env.METASO_API_BASE_URL
+        );
+        return NextResponse.json<GenerateResponse>({
+          success: true,
+          polling: true,
+          taskId,
+          pollProvider: "metaso",
+          pollModelId: selectedModel.modelId,
+          pollModelName: selectedModel.displayName,
+          pollMediaType: "video",
+        });
+      } catch (error) {
+        const status = error instanceof MetasoApiError ? error.status : 400;
+        return NextResponse.json<GenerateResponse>(
+          {
+            success: false,
+            error: error instanceof Error ? error.message : "metaso task submission failed",
+          },
+          { status: status >= 400 && status <= 599 ? status : 500 }
         );
       }
     }

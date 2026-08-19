@@ -3292,10 +3292,12 @@ export function useProviderApiKeys() {
       kieApiKey: state.providerSettings.providers.kie?.apiKey ?? null,
       wavespeedApiKey: state.providerSettings.providers.wavespeed?.apiKey ?? null,
       openaiApiKey: state.providerSettings.providers.openai?.apiKey ?? null,
+      metasoApiKey: state.providerSettings.providers.metaso?.apiKey ?? null,
       // Provider enabled states (for conditional UI)
       replicateEnabled: state.providerSettings.providers.replicate?.enabled ?? false,
       kieEnabled: state.providerSettings.providers.kie?.enabled ?? false,
       openaiEnabled: state.providerSettings.providers.openai?.enabled ?? false,
+      metasoEnabled: state.providerSettings.providers.metaso?.enabled ?? false,
     }))
   );
 }

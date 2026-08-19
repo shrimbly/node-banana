@@ -4,12 +4,13 @@
  * Fetches parameter schema for a specific model from its provider.
  * Returns simplified parameter list for UI rendering.
  *
- * GET /api/models/:modelId?provider=replicate|fal|wavespeed
+ * GET /api/models/:modelId?provider=replicate|fal|wavespeed|metaso
  *
  * Headers:
  *   - X-Replicate-Key: Required for Replicate models
  *   - X-Fal-Key: Optional for fal.ai models
  *   - X-WaveSpeed-Key: Optional for WaveSpeed models
+ *   - X-Metaso-API-Key: Optional for metaso models
  *
  * Response:
  *   {
@@ -1209,6 +1210,48 @@ function getKieSchema(modelId: string): ExtractedSchema {
   return schemas[modelId] || { parameters: [], inputs: [] };
 }
 
+/** Static MiniMax-H3 V2 schema for the independent metaso provider. */
+function getMetasoSchema(modelId: string): ExtractedSchema {
+  if (modelId !== "MiniMax-H3") return { parameters: [], inputs: [] };
+
+  return {
+    parameters: [
+      {
+        name: "resolution",
+        type: "string",
+        description: "Output resolution. metaso bills 768P at ¥0.09/s and 2K at ¥0.15/s.",
+        enum: ["768P", "2K"],
+        default: "768P",
+        required: true,
+      },
+      {
+        name: "duration",
+        type: "integer",
+        description: "Generated video duration in seconds",
+        default: 5,
+        minimum: 4,
+        maximum: 15,
+        required: true,
+      },
+      {
+        name: "ratio",
+        type: "string",
+        description: "Text-to-video requires a concrete ratio; frame inputs use adaptive.",
+        enum: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9", "adaptive"],
+        default: "16:9",
+      },
+    ],
+    inputs: [
+      { name: "prompt", type: "text", required: true, label: "Prompt" },
+      { name: "first_frame", type: "image", required: false, label: "First Frame" },
+      { name: "last_frame", type: "image", required: false, label: "Last Frame" },
+      { name: "reference_images", type: "image", required: false, label: "Reference Image", isArray: true },
+      { name: "reference_videos", type: "video", required: false, label: "Reference Video", isArray: true },
+      { name: "reference_audios", type: "audio", required: false, label: "Reference Audio", isArray: true },
+    ],
+  };
+}
+
 /**
  * Get schema for Gemini video models (native Veo via Gemini API)
  * Returns null if the model is not a Gemini video model.
@@ -1570,11 +1613,11 @@ export async function GET(
   const decodedModelId = decodeURIComponent(modelId);
   const provider = request.nextUrl.searchParams.get("provider") as ProviderType | null;
 
-  if (!provider || (provider !== "replicate" && provider !== "fal" && provider !== "kie" && provider !== "wavespeed" && provider !== "gemini" && provider !== "openai")) {
+  if (!provider || (provider !== "replicate" && provider !== "fal" && provider !== "kie" && provider !== "wavespeed" && provider !== "gemini" && provider !== "openai" && provider !== "metaso")) {
     return NextResponse.json<SchemaErrorResponse>(
       {
         success: false,
-        error: "Invalid or missing provider. Use ?provider=replicate, ?provider=fal, ?provider=kie, ?provider=wavespeed, ?provider=openai, or ?provider=gemini",
+        error: "Invalid or missing provider. Use ?provider=replicate, ?provider=fal, ?provider=kie, ?provider=wavespeed, ?provider=openai, ?provider=metaso, or ?provider=gemini",
       },
       { status: 400 }
     );
@@ -1629,6 +1672,8 @@ export async function GET(
     } else if (provider === "openai") {
       // OpenAI uses hardcoded schemas (no schema discovery API for image models)
       result = getOpenAiSchema(decodedModelId);
+    } else if (provider === "metaso") {
+      result = getMetasoSchema(decodedModelId);
     } else {
       // User-provided key takes precedence over env variable
       const apiKey = request.headers.get("X-Fal-Key") || process.env.FAL_API_KEY || null;

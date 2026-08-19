@@ -78,6 +78,8 @@ const getProviderIcon = (provider: ProviderType) => {
       return <FalIcon />;
     case "wavespeed":
       return <WaveSpeedIcon />;
+    case "metaso":
+      return <img src="/providers/metaso.ico" alt="" className="w-4 h-4 rounded-sm" />;
     default:
       return null;
   }
@@ -168,6 +170,7 @@ export function ProjectSetupModal({
     fal: false,
     kie: false,
     wavespeed: false,
+    metaso: false,
   });
   const [overrideActive, setOverrideActive] = useState<Record<ProviderType, boolean>>({
     gemini: false,
@@ -177,6 +180,7 @@ export function ProjectSetupModal({
     fal: false,
     kie: false,
     wavespeed: false,
+    metaso: false,
   });
   const [envStatus, setEnvStatus] = useState<EnvStatusResponse | null>(null);
 
@@ -211,7 +215,7 @@ export function ProjectSetupModal({
 
       // Sync local providers state
       setLocalProviders(providerSettings);
-      setShowApiKey({ gemini: false, openai: false, anthropic: false, replicate: false, fal: false, kie: false, wavespeed: false });
+      setShowApiKey({ gemini: false, openai: false, anthropic: false, replicate: false, fal: false, kie: false, wavespeed: false, metaso: false });
       // Initialize override as active if user already has a key set
       setOverrideActive({
         gemini: !!providerSettings.providers.gemini?.apiKey,
@@ -221,6 +225,7 @@ export function ProjectSetupModal({
         fal: !!providerSettings.providers.fal?.apiKey,
         kie: !!providerSettings.providers.kie?.apiKey,
         wavespeed: !!providerSettings.providers.wavespeed?.apiKey,
+        metaso: !!providerSettings.providers.metaso?.apiKey,
       });
       setError(null);
 
@@ -320,7 +325,7 @@ export function ProjectSetupModal({
 
   const handleSaveProviders = () => {
     // Save each provider's settings
-    const providerIds: ProviderType[] = ["gemini", "openai", "anthropic", "replicate", "fal", "kie", "wavespeed"];
+    const providerIds: ProviderType[] = ["gemini", "openai", "anthropic", "replicate", "fal", "kie", "wavespeed", "metaso"];
     for (const providerId of providerIds) {
       const local = localProviders.providers[providerId];
       const current = providerSettings.providers[providerId];
@@ -835,6 +840,61 @@ export function ProjectSetupModal({
               </div>
             </div>
 
+            {/* metaso Provider */}
+            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <img src="/providers/metaso.ico" alt="" className="w-4 h-4 rounded-sm" />
+                  <div>
+                    <div className="text-sm font-medium text-neutral-100">metaso</div>
+                    <div className="text-[10px] text-neutral-500">MiniMax H3 · 768P ¥0.09/output s · 2K ¥0.15/output s</div>
+                  </div>
+                </div>
+                {envStatus?.metaso && !overrideActive.metaso ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-green-400">Configured via .env</span>
+                    <button
+                      type="button"
+                      onClick={() => setOverrideActive((prev) => ({ ...prev, metaso: true }))}
+                      className="px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
+                    >
+                      Override
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type={showApiKey.metaso ? "text" : "password"}
+                      value={localProviders.providers.metaso?.apiKey || ""}
+                      onChange={(e) => updateLocalProvider("metaso", { apiKey: e.target.value || null })}
+                      placeholder="..."
+                      aria-label="metaso API key"
+                      className="w-48 px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey((prev) => ({ ...prev, metaso: !prev.metaso }))}
+                      className="text-xs text-neutral-400 hover:text-neutral-200"
+                    >
+                      {showApiKey.metaso ? "Hide" : "Show"}
+                    </button>
+                    {envStatus?.metaso && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOverrideActive((prev) => ({ ...prev, metaso: false }));
+                          updateLocalProvider("metaso", { apiKey: null });
+                        }}
+                        className="text-xs text-neutral-500 hover:text-neutral-300"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
             {/* WaveSpeed Provider */}
             <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
               <div className="flex items-center justify-between">
@@ -1283,6 +1343,9 @@ export function ProjectSetupModal({
                   provider: model.provider,
                   modelId: model.id,
                   displayName: model.name,
+                  pricing: model.pricing,
+                  pricingDescription: model.pricingDescription,
+                  pricingSource: model.pricingSource,
                 }
               }
             }));
@@ -1304,6 +1367,9 @@ export function ProjectSetupModal({
                   provider: model.provider,
                   modelId: model.id,
                   displayName: model.name,
+                  pricing: model.pricing,
+                  pricingDescription: model.pricingDescription,
+                  pricingSource: model.pricingSource,
                 }
               }
             }));
