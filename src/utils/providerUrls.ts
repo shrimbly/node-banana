@@ -23,6 +23,8 @@ export function getModelPageUrl(
       return `https://wavespeed.ai`;
     case "openai":
       return `https://platform.openai.com/docs/guides/images`;
+    case "orcarouter":
+      return `https://www.orcarouter.ai`;
     default:
       return null;
   }
@@ -45,6 +47,8 @@ export function getProviderDisplayName(provider: ProviderType): string {
       return "WaveSpeed";
     case "openai":
       return "OpenAI";
+    case "orcarouter":
+      return "OrcaRouter";
     default:
       return provider;
   }

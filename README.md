@@ -44,7 +44,7 @@ Node Banana is a node-based workflow editor for AI media generation. Drag nodes 
 | **Audio Generation** | Text-to-speech and AI audio generation |
 | **3D Generation** | Generate 3D models or use them as node inputs |
 | **Image Annotation** | Full-screen editor with drawing tools (rectangles, circles, arrows, freehand, text) |
-| **Text Generation** | Generate text using Google Gemini, OpenAI, or Anthropic models |
+| **Text Generation** | Generate text using Google Gemini, OpenAI, Anthropic, or OrcaRouter models |
 | **Workflow Chaining** | Connect multiple nodes to create complex multi-step pipelines |
 | **Group Locking** | Lock node groups to skip them during execution |
 | **Save/Load** | Export and import workflows as JSON files |
@@ -59,6 +59,7 @@ Node Banana is a node-based workflow editor for AI media generation. Drag nodes 
 | [Kie.ai](https://kie.ai/) | Supported |
 | [WaveSpeed](https://wavespeed.ai/) | Supported |
 | [OpenAI](https://openai.com/) | LLM only |
+| [OrcaRouter](https://www.orcarouter.ai) | LLM + image generation |
 
 ## Getting Started
 
@@ -90,6 +91,7 @@ REPLICATE_API_KEY=your_replicate_api_key    # Optional
 FAL_API_KEY=your_fal_api_key                # Optional
 KIE_API_KEY=your_kie_api_key                # Optional
 WAVESPEED_API_KEY=your_wavespeed_api_key    # Optional
+ORCAROUTER_API_KEY=your_orcarouter_api_key  # Optional (sk-orca-...)
 ```
 
 API keys can also be entered in the app (Settings → Providers), which is the
@@ -143,7 +145,7 @@ The `/examples` directory contains example workflow files. To try them:
 | **Generate Video** | AI video generation |
 | **Generate Audio** | Text-to-speech and AI audio generation |
 | **Generate 3D** | AI 3D model generation |
-| **LLM** | AI text generation (Gemini, OpenAI, Anthropic) |
+| **LLM** | AI text generation (Gemini, OpenAI, Anthropic, OrcaRouter) |
 | **Annotation** | Draw on images with full-screen editor |
 | **Split Grid** | Split image into grid cells |
 | **Video Stitch** | Combine video clips into a single output |

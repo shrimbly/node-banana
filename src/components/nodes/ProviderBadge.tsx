@@ -3,7 +3,7 @@ import { ProviderType } from "@/types";
 
 /** Provider badge component - shows provider icon for all providers */
 export function ProviderBadge({ provider }: { provider: ProviderType }) {
-  const providerName = provider === "gemini" ? "Gemini" : provider === "replicate" ? "Replicate" : provider === "kie" ? "Kie.ai" : provider === "wavespeed" ? "WaveSpeed" : provider === "openai" ? "OpenAI" : "fal.ai";
+  const providerName = provider === "gemini" ? "Gemini" : provider === "replicate" ? "Replicate" : provider === "kie" ? "Kie.ai" : provider === "wavespeed" ? "WaveSpeed" : provider === "openai" ? "OpenAI" : provider === "orcarouter" ? "OrcaRouter" : "fal.ai";
 
   return (
     <span className="text-neutral-500 shrink-0" title={providerName}>

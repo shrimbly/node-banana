@@ -1570,11 +1570,11 @@ export async function GET(
   const decodedModelId = decodeURIComponent(modelId);
   const provider = request.nextUrl.searchParams.get("provider") as ProviderType | null;
 
-  if (!provider || (provider !== "replicate" && provider !== "fal" && provider !== "kie" && provider !== "wavespeed" && provider !== "gemini" && provider !== "openai")) {
+  if (!provider || (provider !== "replicate" && provider !== "fal" && provider !== "kie" && provider !== "wavespeed" && provider !== "gemini" && provider !== "openai" && provider !== "orcarouter")) {
     return NextResponse.json<SchemaErrorResponse>(
       {
         success: false,
-        error: "Invalid or missing provider. Use ?provider=replicate, ?provider=fal, ?provider=kie, ?provider=wavespeed, ?provider=openai, or ?provider=gemini",
+        error: "Invalid or missing provider. Use ?provider=replicate, ?provider=fal, ?provider=kie, ?provider=wavespeed, ?provider=openai, ?provider=orcarouter, or ?provider=gemini",
       },
       { status: 400 }
     );
@@ -1628,6 +1628,9 @@ export async function GET(
       result = await fetchWaveSpeedSchema(decodedModelId, apiKey);
     } else if (provider === "openai") {
       // OpenAI uses hardcoded schemas (no schema discovery API for image models)
+      result = getOpenAiSchema(decodedModelId);
+    } else if (provider === "orcarouter") {
+      // OrcaRouter serves OpenAI-compatible image models with the same schema
       result = getOpenAiSchema(decodedModelId);
     } else {
       // User-provided key takes precedence over env variable

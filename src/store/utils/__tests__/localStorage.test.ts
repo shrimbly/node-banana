@@ -252,6 +252,7 @@ describe("localStorage utilities", () => {
       // Should also have the default providers that were missing
       expect(result.providers.replicate).toBeDefined();
       expect(result.providers.fal).toBeDefined();
+      expect(result.providers.orcarouter).toBeDefined();
     });
 
     it("returns default on invalid JSON", () => {

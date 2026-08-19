@@ -869,4 +869,237 @@ describe("/api/llm route", () => {
       );
     });
   });
+
+  describe("OrcaRouter provider", () => {
+    beforeEach(() => {
+      global.fetch = mockFetch;
+    });
+
+    it("should generate text successfully with OrcaRouter", async () => {
+      process.env.ORCAROUTER_API_KEY = "sk-orca-test-key";
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            choices: [{ message: { content: "OrcaRouter response text" } }],
+          }),
+      });
+
+      const request = createMockPostRequest({
+        prompt: "Test prompt",
+        provider: "orcarouter",
+        model: "orcarouter/auto",
+        temperature: 0.7,
+        maxTokens: 1024,
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.text).toBe("OrcaRouter response text");
+
+      // Verify fetch was called with correct parameters
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://api.orcarouter.ai/v1/chat/completions",
+        expect.objectContaining({
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer sk-orca-test-key",
+          },
+          body: JSON.stringify({
+            model: "orcarouter/auto",
+            messages: [{ role: "user", content: "Test prompt" }],
+            temperature: 0.7,
+            max_tokens: 1024,
+          }),
+        })
+      );
+    });
+
+    it("should handle vision input (images + prompt)", async () => {
+      process.env.ORCAROUTER_API_KEY = "sk-orca-test-key";
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            choices: [{ message: { content: "Image description from OrcaRouter" } }],
+          }),
+      });
+
+      const request = createMockPostRequest({
+        prompt: "Describe this image",
+        images: ["data:image/png;base64,iVBORw0KGgo="],
+        provider: "orcarouter",
+        model: "orcarouter/auto",
+        temperature: 0.7,
+        maxTokens: 1024,
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.text).toBe("Image description from OrcaRouter");
+
+      // Verify fetch was called with vision content structure
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://api.orcarouter.ai/v1/chat/completions",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            model: "orcarouter/auto",
+            messages: [
+              {
+                role: "user",
+                content: [
+                  { type: "text", text: "Describe this image" },
+                  { type: "image_url", image_url: { url: "data:image/png;base64,iVBORw0KGgo=" } },
+                ],
+              },
+            ],
+            temperature: 0.7,
+            max_tokens: 1024,
+          }),
+        })
+      );
+    });
+
+    it("should reject missing OrcaRouter API key", async () => {
+      delete process.env.ORCAROUTER_API_KEY;
+
+      const request = createMockPostRequest({
+        prompt: "Test prompt",
+        provider: "orcarouter",
+        model: "orcarouter/auto",
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data.success).toBe(false);
+      expect(data.error).toContain("ORCAROUTER_API_KEY not configured");
+    });
+
+    it("should use X-OrcaRouter-API-Key header over env var", async () => {
+      process.env.ORCAROUTER_API_KEY = "env-orca-key";
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            choices: [{ message: { content: "Response with header key" } }],
+          }),
+      });
+
+      const request = createMockPostRequest(
+        {
+          prompt: "Test prompt",
+          provider: "orcarouter",
+          model: "orcarouter/auto",
+        },
+        { "X-OrcaRouter-API-Key": "header-orca-key" }
+      );
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+
+      // Verify fetch was called with header key (takes precedence)
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://api.orcarouter.ai/v1/chat/completions",
+        expect.objectContaining({
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: "Bearer header-orca-key",
+          },
+        })
+      );
+    });
+
+    it("should return 429 on rate limit errors", async () => {
+      process.env.ORCAROUTER_API_KEY = "sk-orca-test-key";
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        json: () =>
+          Promise.resolve({
+            error: { message: "429 Rate limit exceeded" },
+          }),
+      });
+
+      const request = createMockPostRequest({
+        prompt: "Test prompt",
+        provider: "orcarouter",
+        model: "orcarouter/auto",
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(429);
+      expect(data.success).toBe(false);
+      expect(data.error).toBe("Rate limit reached. Please wait and try again.");
+    });
+
+    it("should handle OrcaRouter API error responses", async () => {
+      process.env.ORCAROUTER_API_KEY = "sk-orca-test-key";
+
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        json: () =>
+          Promise.resolve({
+            error: { message: "Invalid API key" },
+          }),
+      });
+
+      const request = createMockPostRequest({
+        prompt: "Test prompt",
+        provider: "orcarouter",
+        model: "orcarouter/auto",
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data.success).toBe(false);
+      expect(data.error).toBe("Invalid API key");
+    });
+
+    it("should handle no text in OrcaRouter response", async () => {
+      process.env.ORCAROUTER_API_KEY = "sk-orca-test-key";
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            choices: [{ message: { content: null } }],
+          }),
+      });
+
+      const request = createMockPostRequest({
+        prompt: "Test prompt",
+        provider: "orcarouter",
+        model: "orcarouter/auto",
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data.success).toBe(false);
+      expect(data.error).toBe("No text in OrcaRouter response");
+    });
+  });
 });

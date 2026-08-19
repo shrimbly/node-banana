@@ -29,6 +29,10 @@ const ANTHROPIC_MODEL_MAP: Record<string, string> = {
   "claude-opus-4.6": "claude-opus-4-6",
 };
 
+const ORCAROUTER_MODEL_MAP: Record<string, string> = {
+  "orcarouter/auto": "orcarouter/auto",
+};
+
 async function generateWithGoogle(
   prompt: string,
   model: LLMModelType,
@@ -289,6 +293,90 @@ async function generateWithAnthropic(
   return text;
 }
 
+async function generateWithOrcaRouter(
+  prompt: string,
+  model: LLMModelType,
+  temperature: number,
+  maxTokens: number,
+  images?: string[],
+  requestId?: string,
+  userApiKey?: string | null
+): Promise<string> {
+  // User-provided key takes precedence over env variable
+  const apiKey = userApiKey || process.env.ORCAROUTER_API_KEY;
+  if (!apiKey) {
+    logger.error('api.error', 'ORCAROUTER_API_KEY not configured', { requestId });
+    throw new Error("ORCAROUTER_API_KEY not configured. Add it to .env.local or configure in Settings.");
+  }
+
+  const modelId = ORCAROUTER_MODEL_MAP[model] || model;
+
+  logger.info('api.llm', 'Calling OrcaRouter API', {
+    requestId,
+    model: modelId,
+    temperature,
+    maxTokens,
+    imageCount: images?.length || 0,
+    promptLength: prompt.length,
+  });
+
+  // Build content array for vision if images are provided
+  let content: string | Array<{ type: string; text?: string; image_url?: { url: string } }>;
+  if (images && images.length > 0) {
+    content = [
+      { type: "text", text: prompt },
+      ...images.map((img) => ({
+        type: "image_url" as const,
+        image_url: { url: img },
+      })),
+    ];
+  } else {
+    content = prompt;
+  }
+
+  const startTime = Date.now();
+  const response = await fetch("https://api.orcarouter.ai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: modelId,
+      messages: [{ role: "user", content }],
+      temperature,
+      max_tokens: maxTokens,
+    }),
+  });
+  const duration = Date.now() - startTime;
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    logger.error('api.error', 'OrcaRouter API request failed', {
+      requestId,
+      status: response.status,
+      error: error.error?.message,
+    });
+    throw new Error(error.error?.message || `OrcaRouter API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content;
+
+  if (!text) {
+    logger.error('api.error', 'No text in OrcaRouter response', { requestId });
+    throw new Error("No text in OrcaRouter response");
+  }
+
+  logger.info('api.llm', 'OrcaRouter API response received', {
+    requestId,
+    duration,
+    responseLength: text.length,
+  });
+
+  return text;
+}
+
 export async function POST(request: NextRequest) {
   const requestId = generateRequestId();
 
@@ -297,6 +385,7 @@ export async function POST(request: NextRequest) {
     const geminiApiKey = request.headers.get("X-Gemini-API-Key");
     const openaiApiKey = request.headers.get("X-OpenAI-API-Key");
     const anthropicApiKey = request.headers.get("X-Anthropic-API-Key");
+    const orcarouterApiKey = request.headers.get("X-OrcaRouter-API-Key");
 
     const body: LLMGenerateRequest = await request.json();
     const {
@@ -335,6 +424,8 @@ export async function POST(request: NextRequest) {
       text = await generateWithOpenAI(prompt, model, temperature, maxTokens, images, requestId, openaiApiKey);
     } else if (provider === "anthropic") {
       text = await generateWithAnthropic(prompt, model, temperature, maxTokens, images, requestId, anthropicApiKey);
+    } else if (provider === "orcarouter") {
+      text = await generateWithOrcaRouter(prompt, model, temperature, maxTokens, images, requestId, orcarouterApiKey);
     } else {
       logger.warn('api.llm', 'Unknown provider requested', { requestId, provider });
       return NextResponse.json<LLMGenerateResponse>(

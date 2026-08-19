@@ -75,6 +75,7 @@ function getProvidersHash(providers: {
   kie: boolean;
   wavespeed: boolean;
   openai: boolean;
+  orcarouter: boolean;
 }): string {
   // Fixed order keeps the hash deterministic across renders.
   return [
@@ -83,6 +84,7 @@ function getProvidersHash(providers: {
     providers.kie ? "k" : "",
     providers.wavespeed ? "w" : "",
     providers.openai ? "o" : "",
+    providers.orcarouter ? "or" : "",
   ].join("");
 }
 
@@ -186,7 +188,7 @@ export function ModelSearchDialog({
     trackModelUsage,
   } = useWorkflowStore();
   // Use stable selector for API keys to prevent unnecessary re-fetches
-  const { replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, openaiApiKey } = useProviderApiKeys();
+  const { replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, openaiApiKey, orcarouterApiKey } = useProviderApiKeys();
   const { screenToFlowPosition } = useReactFlow();
 
   // State
@@ -244,6 +246,7 @@ export function ModelSearchDialog({
       kie: !!kieApiKey,
       wavespeed: !!wavespeedApiKey,
       openai: !!openaiApiKey,
+      orcarouter: !!orcarouterApiKey,
     });
     const cacheKey = `${providersHash}:${providerFilter}:${capabilityFilter}:${debouncedSearch}`;
 
@@ -303,6 +306,9 @@ export function ModelSearchDialog({
       if (openaiApiKey) {
         headers["X-OpenAI-API-Key"] = openaiApiKey;
       }
+      if (orcarouterApiKey) {
+        headers["X-OrcaRouter-API-Key"] = orcarouterApiKey;
+      }
 
       const response = await deduplicatedFetch(`/api/models?${params.toString()}`, {
         headers,
@@ -344,7 +350,7 @@ export function ModelSearchDialog({
         setIsLoading(false);
       }
     }
-  }, [debouncedSearch, providerFilter, capabilityFilter, replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, openaiApiKey]);
+  }, [debouncedSearch, providerFilter, capabilityFilter, replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, openaiApiKey, orcarouterApiKey]);
 
   // Fetch models when filters change
   useEffect(() => {
@@ -490,6 +496,8 @@ export function ModelSearchDialog({
         return "WaveSpeed";
       case "openai":
         return "OpenAI";
+      case "orcarouter":
+        return "OrcaRouter";
       default:
         return provider;
     }
@@ -503,12 +511,13 @@ export function ModelSearchDialog({
     if (kieApiKey) providers.add("kie");
     if (wavespeedApiKey) providers.add("wavespeed");
     if (openaiApiKey) providers.add("openai");
+    if (orcarouterApiKey) providers.add("orcarouter");
     // Server-side keys (from env vars, reported by /api/models)
     for (const p of serverAvailableProviders) {
       providers.add(p as ProviderType);
     }
     return providers;
-  }, [replicateApiKey, kieApiKey, wavespeedApiKey, openaiApiKey, serverAvailableProviders]);
+  }, [replicateApiKey, kieApiKey, wavespeedApiKey, openaiApiKey, orcarouterApiKey, serverAvailableProviders]);
 
   // Reset provider filter if current selection becomes unavailable
   useEffect(() => {

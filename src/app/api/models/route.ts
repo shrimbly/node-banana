@@ -607,6 +607,21 @@ const OPENAI_IMAGE_MODELS: ProviderModel[] = [
   },
 ];
 
+// OrcaRouter serves OpenAI-compatible models through a single gateway key; the
+// routed model ids are the upstream providers' own (e.g. gpt-image-2).
+const ORCAROUTER_IMAGE_MODELS: ProviderModel[] = [
+  {
+    id: "gpt-image-2",
+    name: "GPT Image 2 (via OrcaRouter)",
+    description: "OpenAI gpt-image-2 routed through OrcaRouter — best-in-class text rendering, photorealism, and precise editing. Supports text-to-image and image-to-image.",
+    provider: "orcarouter",
+    capabilities: ["text-to-image", "image-to-image"],
+    coverImage: undefined,
+    pricing: { type: "per-run", amount: 0.05, currency: "USD" },
+    pageUrl: "https://www.orcarouter.ai",
+  },
+];
+
 // WaveSpeed models are now fetched dynamically from https://api.wavespeed.ai/api/v3/models
 
 // ============ Replicate Types ============
@@ -1255,6 +1270,7 @@ export async function GET(
   const kieKey = request.headers.get("X-Kie-Key") || process.env.KIE_API_KEY || null;
   const wavespeedKey = request.headers.get("X-WaveSpeed-Key") || process.env.WAVESPEED_API_KEY || null;
   const openaiKey = request.headers.get("X-OpenAI-API-Key") || process.env.OPENAI_API_KEY || null;
+  const orcarouterKey = request.headers.get("X-OrcaRouter-API-Key") || process.env.ORCAROUTER_API_KEY || null;
 
   // Build list of all available providers (have keys from env or client headers)
   const availableProviders: string[] = ["gemini"]; // Gemini always available
@@ -1263,12 +1279,14 @@ export async function GET(
   if (kieKey) availableProviders.push("kie");
   if (wavespeedKey) availableProviders.push("wavespeed");
   if (openaiKey) availableProviders.push("openai");
+  if (orcarouterKey) availableProviders.push("orcarouter");
 
-  // Determine which providers to fetch from (gemini/kie/openai handled separately as hardcoded)
+  // Determine which providers to fetch from (gemini/kie/openai/orcarouter handled separately as hardcoded)
   const providersToFetch: ProviderType[] = [];
   let includeGemini = false;
   let includeKie = false;
   let includeOpenai = false;
+  let includeOrcarouter = false;
 
   if (providerFilter) {
     if (providerFilter === "gemini") {
@@ -1315,6 +1333,19 @@ export async function GET(
           { status: 400 }
         );
       }
+    } else if (providerFilter === "orcarouter") {
+      // Only OrcaRouter requested - no external API calls needed (hardcoded models)
+      if (orcarouterKey) {
+        includeOrcarouter = true;
+      } else {
+        return NextResponse.json<ModelsErrorResponse>(
+          {
+            success: false,
+            error: "OrcaRouter API key required. Add ORCAROUTER_API_KEY to .env.local or configure in Settings.",
+          },
+          { status: 400 }
+        );
+      }
     } else if (providerFilter === "replicate" && replicateKey) {
       providersToFetch.push("replicate");
     } else if (providerFilter === "fal" && falKey) {
@@ -1325,6 +1356,7 @@ export async function GET(
     includeGemini = true; // Gemini always available
     includeKie = kieKey ? true : false; // Kie only if API key is configured
     includeOpenai = openaiKey ? true : false; // OpenAI only if API key is configured
+    includeOrcarouter = orcarouterKey ? true : false; // OrcaRouter only if API key is configured
     if (wavespeedKey) {
       providersToFetch.push("wavespeed"); // WaveSpeed if key is configured
     }
@@ -1336,13 +1368,13 @@ export async function GET(
     }
   }
 
-  // Gemini/Kie/OpenAI are handled as hardcoded, so we don't fail if no external providers
-  if (providersToFetch.length === 0 && !includeGemini && !includeKie && !includeOpenai) {
+  // Gemini/Kie/OpenAI/OrcaRouter are handled as hardcoded, so we don't fail if no external providers
+  if (providersToFetch.length === 0 && !includeGemini && !includeKie && !includeOpenai && !includeOrcarouter) {
     return NextResponse.json<ModelsErrorResponse>(
       {
         success: false,
         error:
-          "No providers available. Add REPLICATE_API_KEY, FAL_API_KEY, KIE_API_KEY, WAVESPEED_API_KEY, or OPENAI_API_KEY to .env.local or configure in Settings.",
+          "No providers available. Add REPLICATE_API_KEY, FAL_API_KEY, KIE_API_KEY, WAVESPEED_API_KEY, OPENAI_API_KEY, or ORCAROUTER_API_KEY to .env.local or configure in Settings.",
       },
       { status: 400 }
     );
@@ -1397,6 +1429,22 @@ export async function GET(
     providerResults["openai"] = {
       success: true,
       count: openaiModels.length,
+      cached: true, // Hardcoded models are effectively "cached"
+    };
+    anyFromCache = true;
+  }
+
+  // Add OrcaRouter models if included (hardcoded, no API call needed)
+  if (includeOrcarouter) {
+    // Filter by search query if provided
+    let orcarouterModels = ORCAROUTER_IMAGE_MODELS;
+    if (searchQuery) {
+      orcarouterModels = filterModelsBySearch(orcarouterModels, searchQuery);
+    }
+    allModels.push(...orcarouterModels);
+    providerResults["orcarouter"] = {
+      success: true,
+      count: orcarouterModels.length,
       cached: true, // Hardcoded models are effectively "cached"
     };
     anyFromCache = true;
