@@ -89,6 +89,7 @@ const defaultProviderSettings: ProviderSettings = {
     fal: { id: "fal", name: "fal.ai", enabled: true, apiKey: null },
     kie: { id: "kie", name: "Kie.ai", enabled: false, apiKey: null },
     wavespeed: { id: "wavespeed", name: "WaveSpeed", enabled: false, apiKey: null },
+    metaso: { id: "metaso", name: "metaso", enabled: false, apiKey: null },
   },
 };
 

@@ -6,7 +6,7 @@
  */
 
 // Provider Types for multi-provider support (image/video generation)
-export type ProviderType = "gemini" | "openai" | "anthropic" | "replicate" | "fal" | "kie" | "wavespeed";
+export type ProviderType = "gemini" | "openai" | "anthropic" | "replicate" | "fal" | "kie" | "wavespeed" | "metaso";
 
 // Model pricing info (stored when model is selected)
 export interface SelectedModelPricing {
@@ -20,6 +20,8 @@ export interface SelectedModel {
   modelId: string;
   displayName: string;
   pricing?: SelectedModelPricing;  // Optional pricing info from provider API
+  pricingDescription?: string;  // Human-readable provider pricing when a single scalar is insufficient
+  pricingSource?: string;  // Optional first-party/source page for the displayed pricing
   capabilities?: string[];  // Model capabilities (e.g., "text-to-image", "image-to-3d")
 }
 

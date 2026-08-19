@@ -75,6 +75,7 @@ function getProvidersHash(providers: {
   kie: boolean;
   wavespeed: boolean;
   openai: boolean;
+  metaso: boolean;
 }): string {
   // Fixed order keeps the hash deterministic across renders.
   return [
@@ -83,6 +84,7 @@ function getProvidersHash(providers: {
     providers.kie ? "k" : "",
     providers.wavespeed ? "w" : "",
     providers.openai ? "o" : "",
+    providers.metaso ? "m" : "",
   ].join("");
 }
 
@@ -111,6 +113,10 @@ const KieIcon = () => (
   <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
     <path d="M6 3h3.5v7L17 3h4l-8 8.5L21 21h-4l-7.5-8.5V21H6V3z" />
   </svg>
+);
+
+const MetasoIcon = () => (
+  <img src="/providers/metaso.ico" alt="" className="w-3.5 h-3.5 rounded-sm" />
 );
 
 const WaveSpeedIcon = () => (
@@ -186,7 +192,7 @@ export function ModelSearchDialog({
     trackModelUsage,
   } = useWorkflowStore();
   // Use stable selector for API keys to prevent unnecessary re-fetches
-  const { replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, openaiApiKey } = useProviderApiKeys();
+  const { replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, openaiApiKey, metasoApiKey } = useProviderApiKeys();
   const { screenToFlowPosition } = useReactFlow();
 
   // State
@@ -244,6 +250,7 @@ export function ModelSearchDialog({
       kie: !!kieApiKey,
       wavespeed: !!wavespeedApiKey,
       openai: !!openaiApiKey,
+      metaso: !!metasoApiKey,
     });
     const cacheKey = `${providersHash}:${providerFilter}:${capabilityFilter}:${debouncedSearch}`;
 
@@ -303,6 +310,9 @@ export function ModelSearchDialog({
       if (openaiApiKey) {
         headers["X-OpenAI-API-Key"] = openaiApiKey;
       }
+      if (metasoApiKey) {
+        headers["X-Metaso-API-Key"] = metasoApiKey;
+      }
 
       const response = await deduplicatedFetch(`/api/models?${params.toString()}`, {
         headers,
@@ -344,7 +354,7 @@ export function ModelSearchDialog({
         setIsLoading(false);
       }
     }
-  }, [debouncedSearch, providerFilter, capabilityFilter, replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, openaiApiKey]);
+  }, [debouncedSearch, providerFilter, capabilityFilter, replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, openaiApiKey, metasoApiKey]);
 
   // Fetch models when filters change
   useEffect(() => {
@@ -420,6 +430,9 @@ export function ModelSearchDialog({
           modelId: model.id,
           displayName: model.name,
           capabilities: model.capabilities,
+          pricing: model.pricing,
+          pricingDescription: model.pricingDescription,
+          pricingSource: model.pricingSource,
         },
       });
 
@@ -470,6 +483,8 @@ export function ModelSearchDialog({
         return "bg-purple-500/20 text-purple-300";
       case "openai":
         return "bg-teal-500/20 text-teal-300";
+      case "metaso":
+        return "bg-sky-500/20 text-sky-300";
       default:
         return "bg-neutral-500/20 text-neutral-300";
     }
@@ -490,6 +505,8 @@ export function ModelSearchDialog({
         return "WaveSpeed";
       case "openai":
         return "OpenAI";
+      case "metaso":
+        return "metaso";
       default:
         return provider;
     }
@@ -503,12 +520,13 @@ export function ModelSearchDialog({
     if (kieApiKey) providers.add("kie");
     if (wavespeedApiKey) providers.add("wavespeed");
     if (openaiApiKey) providers.add("openai");
+    if (metasoApiKey) providers.add("metaso");
     // Server-side keys (from env vars, reported by /api/models)
     for (const p of serverAvailableProviders) {
       providers.add(p as ProviderType);
     }
     return providers;
-  }, [replicateApiKey, kieApiKey, wavespeedApiKey, openaiApiKey, serverAvailableProviders]);
+  }, [replicateApiKey, kieApiKey, wavespeedApiKey, openaiApiKey, metasoApiKey, serverAvailableProviders]);
 
   // Reset provider filter if current selection becomes unavailable
   useEffect(() => {
@@ -577,6 +595,8 @@ export function ModelSearchDialog({
         return `https://fal.ai/models/${model.id}`;
       case "wavespeed":
         return `https://wavespeed.ai`;
+      case "metaso":
+        return `https://metaso.cn/`;
       default:
         return null;
     }
@@ -790,6 +810,19 @@ export function ModelSearchDialog({
                   }`}
                 >
                   <OpenAIIcon />
+                </button>
+              )}
+              {availableProviders.has("metaso") && (
+                <button
+                  onClick={() => setProviderFilter("metaso")}
+                  title="metaso"
+                  className={`p-2 rounded transition-colors ${
+                    providerFilter === "metaso"
+                      ? "bg-sky-500/20 text-sky-300"
+                      : "text-neutral-400 hover:text-sky-300 hover:bg-neutral-700"
+                  }`}
+                >
+                  <MetasoIcon />
                 </button>
               )}
             </div>
@@ -1093,6 +1126,12 @@ export function ModelSearchDialog({
                       </span>
                       {getCapabilityBadges(model.capabilities)}
                     </div>
+
+                    {model.pricingDescription && (
+                      <p className="mt-1.5 text-[11px] text-sky-300">
+                        {model.pricingDescription}
+                      </p>
+                    )}
 
                     {/* Description - more lines */}
                     {model.description && (

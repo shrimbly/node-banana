@@ -9,10 +9,11 @@ function makeSettings(overrides: Partial<Record<string, { apiKey: string | null 
     fal: { id: "fal", name: "fal.ai", enabled: true, apiKey: null },
     kie: { id: "kie", name: "Kie.ai", enabled: true, apiKey: null },
     wavespeed: { id: "wavespeed", name: "WaveSpeed", enabled: true, apiKey: null },
+    metaso: { id: "metaso", name: "metaso", enabled: true, apiKey: null },
     openai: { id: "openai", name: "OpenAI", enabled: true, apiKey: null },
   };
   for (const [key, val] of Object.entries(overrides)) {
-    if (defaults[key]) {
+    if (defaults[key] && val) {
       defaults[key].apiKey = val.apiKey;
     }
   }
@@ -53,6 +54,12 @@ describe("buildGenerateHeaders", () => {
     const settings = makeSettings({ wavespeed: { apiKey: "ws-key" } });
     const headers = buildGenerateHeaders("wavespeed", settings);
     expect(headers["X-WaveSpeed-Key"]).toBe("ws-key");
+  });
+
+  it("should add metaso API key header", () => {
+    const settings = makeSettings({ metaso: { apiKey: "metaso-key" } });
+    const headers = buildGenerateHeaders("metaso", settings);
+    expect(headers["X-Metaso-API-Key"]).toBe("metaso-key");
   });
 
   it("should not add header when API key is null", () => {

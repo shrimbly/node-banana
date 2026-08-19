@@ -50,6 +50,7 @@ const defaultProviderSettings: ProviderSettings = {
     fal: { id: "fal", name: "fal.ai", enabled: false, apiKey: null },
     kie: { id: "kie", name: "Kie.ai", enabled: false, apiKey: null },
     wavespeed: { id: "wavespeed", name: "WaveSpeed", enabled: false, apiKey: null },
+    metaso: { id: "metaso", name: "metaso", enabled: false, apiKey: null },
   },
 };
 
@@ -179,6 +180,8 @@ describe("ProjectSetupModal", () => {
       expect(screen.getByText("Google Gemini")).toBeInTheDocument();
       expect(screen.getByText("OpenAI")).toBeInTheDocument();
       expect(screen.getByText("Replicate")).toBeInTheDocument();
+      expect(screen.getByText("metaso")).toBeInTheDocument();
+      expect(screen.getByText(/768P ¥0\.09\/output s/)).toBeInTheDocument();
       expect(screen.getByText("fal.ai")).toBeInTheDocument();
     });
   });

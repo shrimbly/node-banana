@@ -54,7 +54,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   // Use stable selector for API keys to prevent unnecessary re-fetches
-  const { geminiApiKey, replicateApiKey, falApiKey, kieApiKey, replicateEnabled, kieEnabled } = useProviderApiKeys();
+  const { geminiApiKey, replicateApiKey, falApiKey, kieApiKey, metasoApiKey, replicateEnabled, kieEnabled, metasoEnabled } = useProviderApiKeys();
   const [externalModels, setExternalModels] = useState<ProviderModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelsFetchError, setModelsFetchError] = useState<string | null>(null);
@@ -99,8 +99,11 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
     if (kieEnabled && kieApiKey) {
       providers.push({ id: "kie", name: "Kie.ai" });
     }
+    if (metasoEnabled && metasoApiKey) {
+      providers.push({ id: "metaso", name: "metaso" });
+    }
     return providers;
-  }, [geminiApiKey, replicateEnabled, replicateApiKey, kieEnabled, kieApiKey]);
+  }, [geminiApiKey, replicateEnabled, replicateApiKey, kieEnabled, kieApiKey, metasoEnabled, metasoApiKey]);
 
   // Fetch models from external providers when provider changes
   const fetchModels = useCallback(async () => {
@@ -120,6 +123,9 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
       }
       if (kieApiKey) {
         headers["X-Kie-Key"] = kieApiKey;
+      }
+      if (metasoApiKey) {
+        headers["X-Metaso-API-Key"] = metasoApiKey;
       }
       const response = await deduplicatedFetch(`/api/models?provider=${currentProvider}&capabilities=${capabilities}`, { headers });
       if (response.ok) {
@@ -143,7 +149,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
     } finally {
       setIsLoadingModels(false);
     }
-  }, [currentProvider, geminiApiKey, replicateApiKey, falApiKey, kieApiKey]);
+  }, [currentProvider, geminiApiKey, replicateApiKey, falApiKey, kieApiKey, metasoApiKey]);
 
   useEffect(() => {
     fetchModels();
@@ -182,6 +188,9 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
           provider: currentProvider,
           modelId: model.id,
           displayName: model.name,
+          pricing: model.pricing,
+          pricingDescription: model.pricingDescription,
+          pricingSource: model.pricingSource,
         };
         // Clear parameters when changing models (different models have different schemas)
         // Set inputSchema immediately for Veo models so handles render in the same update
@@ -268,6 +277,9 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
       provider: model.provider,
       modelId: model.id,
       displayName: model.name,
+      pricing: model.pricing,
+      pricingDescription: model.pricingDescription,
+      pricingSource: model.pricingSource,
     };
     // Set inputSchema immediately for Veo models so handles render in the same update
     updateNodeData(id, {
@@ -326,6 +338,11 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
           )}
 
           {/* Primary tab: external provider parameters */}
+          {settingsTab === "primary" && nodeData.selectedModel?.pricingDescription && (
+            <p className="text-[10px] text-sky-300 mb-1.5">
+              {nodeData.selectedModel.pricingDescription}
+            </p>
+          )}
           {settingsTab === "primary" && nodeData.selectedModel?.modelId && (
             <ModelParameters
               modelId={nodeData.selectedModel.modelId}

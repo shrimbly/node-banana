@@ -30,8 +30,11 @@ vi.mock("@/store/workflowStore", () => ({
     falApiKey: "test-fal-key",
     kieApiKey: null,
     wavespeedApiKey: null,
+    openaiApiKey: null,
+    metasoApiKey: null,
     replicateEnabled: true,
     kieEnabled: false,
+    metasoEnabled: false,
   }),
 }));
 
@@ -75,6 +78,7 @@ const defaultProviderSettings: ProviderSettings = {
     fal: { id: "fal", name: "fal.ai", enabled: true, apiKey: "test-fal-key" },
     kie: { id: "kie", name: "Kie.ai", enabled: false, apiKey: null },
     wavespeed: { id: "wavespeed", name: "WaveSpeed", enabled: false, apiKey: null },
+    metaso: { id: "metaso", name: "metaso", enabled: false, apiKey: null },
   },
 };
 
@@ -409,6 +413,34 @@ describe("ModelSearchDialog", () => {
         expect(imgImgBadges.length).toBeGreaterThanOrEqual(1); // FLUX
         expect(txtVidBadges.length).toBeGreaterThanOrEqual(1); // Kling Video
         expect(imgVidBadges.length).toBeGreaterThanOrEqual(1); // Kling Video
+      });
+    });
+
+    it("should show metaso CNY rates on the model card", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          success: true,
+          availableProviders: ["metaso"],
+          models: [{
+            id: "MiniMax-H3",
+            name: "MiniMax H3",
+            description: "H3 V2 video generation",
+            provider: "metaso",
+            capabilities: ["text-to-video"],
+            pricingDescription: "768P ¥0.09/output s · 2K ¥0.15/output s · first 5 images free, then ¥0.05/image · audio free · reference video uses the same output-second rate",
+          }],
+        }),
+      });
+
+      render(
+        <TestWrapper>
+          <ModelSearchDialog isOpen={true} onClose={vi.fn()} />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("768P ¥0.09/output s · 2K ¥0.15/output s · first 5 images free, then ¥0.05/image · audio free · reference video uses the same output-second rate")).toBeInTheDocument();
       });
     });
 
