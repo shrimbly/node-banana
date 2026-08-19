@@ -18,8 +18,9 @@ npm run test:run # Run all tests once (CI mode)
 Create `.env.local` in the root directory:
 ```
 GEMINI_API_KEY=your_gemini_api_key
-OPENAI_API_KEY=your_openai_api_key  # Optional, for OpenAI LLM provider
-KIE_API_KEY=your_kie_api_key        # Optional, for Kie.ai models (Sora, Veo, Kling, etc.)
+OPENAI_API_KEY=your_openai_api_key        # Optional, for OpenAI LLM provider
+KIE_API_KEY=your_kie_api_key              # Optional, for Kie.ai models (Sora, Veo, Kling, etc.)
+ORCAROUTER_API_KEY=your_orcarouter_api_key # Optional, for OrcaRouter LLM/image generation
 ```
 
 ## Architecture Overview
@@ -71,6 +72,8 @@ Image generation models (these exist and are recently released):
 LLM models:
 - Google: `gemini-2.5-flash`, `gemini-3-flash-preview`, `gemini-3-pro-preview`
 - OpenAI: `gpt-4.1-mini`, `gpt-4.1-nano`
+- Anthropic: `claude-sonnet-4.5`, `claude-haiku-4.5`, `claude-opus-4.6`
+- OrcaRouter: `orcarouter/auto` (routes to the best model for the task)
 
 ## Node Types
 
@@ -313,7 +316,7 @@ All routes in `src/app/api/`:
 | Route | Timeout | Purpose |
 |-------|---------|---------|
 | `/api/generate` | 5 min | Image generation via Gemini |
-| `/api/llm` | 1 min | Text generation (Google/OpenAI) |
+| `/api/llm` | 1 min | Text generation (Google/OpenAI/Anthropic/OrcaRouter) |
 | `/api/workflow` | default | Save/load workflow files |
 | `/api/save-generation` | default | Auto-save generated images |
 | `/api/logs` | default | Session logging |

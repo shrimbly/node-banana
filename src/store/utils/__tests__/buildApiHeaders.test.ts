@@ -10,6 +10,8 @@ function makeSettings(overrides: Partial<Record<string, { apiKey: string | null 
     kie: { id: "kie", name: "Kie.ai", enabled: true, apiKey: null },
     wavespeed: { id: "wavespeed", name: "WaveSpeed", enabled: true, apiKey: null },
     openai: { id: "openai", name: "OpenAI", enabled: true, apiKey: null },
+    anthropic: { id: "anthropic", name: "Anthropic", enabled: true, apiKey: null },
+    orcarouter: { id: "orcarouter", name: "OrcaRouter", enabled: true, apiKey: null },
   };
   for (const [key, val] of Object.entries(overrides)) {
     if (defaults[key]) {
@@ -55,6 +57,12 @@ describe("buildGenerateHeaders", () => {
     expect(headers["X-WaveSpeed-Key"]).toBe("ws-key");
   });
 
+  it("should add OrcaRouter API key header", () => {
+    const settings = makeSettings({ orcarouter: { apiKey: "sk-orca-key" } });
+    const headers = buildGenerateHeaders("orcarouter", settings);
+    expect(headers["X-OrcaRouter-API-Key"]).toBe("sk-orca-key");
+  });
+
   it("should not add header when API key is null", () => {
     const headers = buildGenerateHeaders("gemini", makeSettings());
     expect(headers["X-Gemini-API-Key"]).toBeUndefined();
@@ -82,6 +90,12 @@ describe("buildLlmHeaders", () => {
     const settings = makeSettings({ openai: { apiKey: "oai-key" } });
     const headers = buildLlmHeaders("openai", settings);
     expect(headers["X-OpenAI-API-Key"]).toBe("oai-key");
+  });
+
+  it("should add OrcaRouter API key for orcarouter provider", () => {
+    const settings = makeSettings({ orcarouter: { apiKey: "sk-orca-key" } });
+    const headers = buildLlmHeaders("orcarouter", settings);
+    expect(headers["X-OrcaRouter-API-Key"]).toBe("sk-orca-key");
   });
 
   it("should not add header when API key is null", () => {

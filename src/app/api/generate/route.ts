@@ -19,6 +19,7 @@ import { generateWithFalQueue } from "./providers/fal";
 import { submitKieTask } from "./providers/kie";
 import { generateWithWaveSpeed } from "./providers/wavespeed";
 import { generateWithOpenAI } from "./providers/openai";
+import { generateWithOrcaRouter } from "./providers/orcarouter";
 import { buildMediaResponse } from "./shared";
 
 export const maxDuration = 600; // 10 minute timeout for video generation polling
@@ -470,6 +471,85 @@ export async function POST(request: NextRequest) {
       };
 
       const result = await generateWithOpenAI(requestId, openaiApiKey, genInput);
+
+      if (!result.success) {
+        return NextResponse.json<GenerateResponse>(
+          {
+            success: false,
+            error: result.error || "Generation failed",
+          },
+          { status: 500 }
+        );
+      }
+
+      // Return first output
+      const output = result.outputs?.[0];
+      if (!output?.data && !output?.url) {
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: "No output in generation result" },
+          { status: 500 }
+        );
+      }
+
+      return buildMediaResponse(output);
+    }
+
+    if (provider === "orcarouter") {
+      if (!selectedModel?.modelId || !selectedModel?.displayName) {
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: "selectedModel with modelId and displayName is required for OrcaRouter" },
+          { status: 400 }
+        );
+      }
+
+      // User-provided key takes precedence over env variable
+      const orcarouterApiKey = request.headers.get("X-OrcaRouter-API-Key") || process.env.ORCAROUTER_API_KEY;
+      if (!orcarouterApiKey) {
+        return NextResponse.json<GenerateResponse>(
+          {
+            success: false,
+            error: "OrcaRouter API key not configured. Add ORCAROUTER_API_KEY to .env.local or configure in Settings.",
+          },
+          { status: 401 }
+        );
+      }
+
+      // Keep Data URIs as-is since localhost URLs won't work
+      const processedImages: string[] = images ? [...images] : [];
+
+      // Process dynamicInputs: filter empty values
+      let processedDynamicInputs: Record<string, string | string[]> | undefined = undefined;
+
+      if (dynamicInputs) {
+        processedDynamicInputs = {};
+        for (const key of Object.keys(dynamicInputs)) {
+          const value = dynamicInputs[key];
+
+          // Skip empty/null/undefined values
+          if (value === null || value === undefined || value === '') {
+            continue;
+          }
+
+          processedDynamicInputs[key] = value;
+        }
+      }
+
+      // Build generation input
+      const genInput: GenerationInput = {
+        model: {
+          id: selectedModel.modelId,
+          name: selectedModel.displayName,
+          provider: "orcarouter",
+          capabilities: capabilitiesForMediaType(mediaType),
+          description: null,
+        },
+        prompt: prompt || "",
+        images: processedImages,
+        parameters,
+        dynamicInputs: processedDynamicInputs,
+      };
+
+      const result = await generateWithOrcaRouter(requestId, orcarouterApiKey, genInput);
 
       if (!result.success) {
         return NextResponse.json<GenerateResponse>(

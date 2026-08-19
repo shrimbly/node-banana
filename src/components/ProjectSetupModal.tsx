@@ -18,6 +18,7 @@ const LLM_PROVIDERS: { value: LLMProvider; label: string }[] = [
   { value: "google", label: "Google" },
   { value: "openai", label: "OpenAI" },
   { value: "anthropic", label: "Anthropic" },
+  { value: "orcarouter", label: "OrcaRouter" },
 ];
 
 const LLM_MODELS: Record<LLMProvider, { value: LLMModelType; label: string }[]> = {
@@ -35,6 +36,9 @@ const LLM_MODELS: Record<LLMProvider, { value: LLMModelType; label: string }[]> 
     { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5" },
     { value: "claude-haiku-4.5", label: "Claude Haiku 4.5" },
     { value: "claude-opus-4.6", label: "Claude Opus 4.6" },
+  ],
+  orcarouter: [
+    { value: "orcarouter/auto", label: "OrcaRouter Auto" },
   ],
 };
 
@@ -168,6 +172,7 @@ export function ProjectSetupModal({
     fal: false,
     kie: false,
     wavespeed: false,
+    orcarouter: false,
   });
   const [overrideActive, setOverrideActive] = useState<Record<ProviderType, boolean>>({
     gemini: false,
@@ -177,6 +182,7 @@ export function ProjectSetupModal({
     fal: false,
     kie: false,
     wavespeed: false,
+    orcarouter: false,
   });
   const [envStatus, setEnvStatus] = useState<EnvStatusResponse | null>(null);
 
@@ -211,7 +217,7 @@ export function ProjectSetupModal({
 
       // Sync local providers state
       setLocalProviders(providerSettings);
-      setShowApiKey({ gemini: false, openai: false, anthropic: false, replicate: false, fal: false, kie: false, wavespeed: false });
+      setShowApiKey({ gemini: false, openai: false, anthropic: false, replicate: false, fal: false, kie: false, wavespeed: false, orcarouter: false });
       // Initialize override as active if user already has a key set
       setOverrideActive({
         gemini: !!providerSettings.providers.gemini?.apiKey,
@@ -221,6 +227,7 @@ export function ProjectSetupModal({
         fal: !!providerSettings.providers.fal?.apiKey,
         kie: !!providerSettings.providers.kie?.apiKey,
         wavespeed: !!providerSettings.providers.wavespeed?.apiKey,
+        orcarouter: !!providerSettings.providers.orcarouter?.apiKey,
       });
       setError(null);
 
@@ -872,6 +879,54 @@ export function ProjectSetupModal({
                         onClick={() => {
                           setOverrideActive((prev) => ({ ...prev, wavespeed: false }));
                           updateLocalProvider("wavespeed", { apiKey: null });
+                        }}
+                        className="text-xs text-neutral-500 hover:text-neutral-300"
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* OrcaRouter Provider */}
+            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-neutral-100">OrcaRouter</span>
+                {envStatus?.orcarouter && !overrideActive.orcarouter ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-green-400">Configured via .env</span>
+                    <button
+                      type="button"
+                      onClick={() => setOverrideActive((prev) => ({ ...prev, orcarouter: true }))}
+                      className="px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
+                    >
+                      Override
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type={showApiKey.orcarouter ? "text" : "password"}
+                      value={localProviders.providers.orcarouter?.apiKey || ""}
+                      onChange={(e) => updateLocalProvider("orcarouter", { apiKey: e.target.value || null })}
+                      placeholder="sk-orca-..."
+                      className="w-48 px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey((prev) => ({ ...prev, orcarouter: !prev.orcarouter }))}
+                      className="text-xs text-neutral-400 hover:text-neutral-200"
+                    >
+                      {showApiKey.orcarouter ? "Hide" : "Show"}
+                    </button>
+                    {envStatus?.orcarouter && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setOverrideActive((prev) => ({ ...prev, orcarouter: false }));
+                          updateLocalProvider("orcarouter", { apiKey: null });
                         }}
                         className="text-xs text-neutral-500 hover:text-neutral-300"
                       >

@@ -49,6 +49,7 @@ const LLM_PROVIDERS: { value: LLMProvider; label: string }[] = [
   { value: "google", label: "Google" },
   { value: "openai", label: "OpenAI" },
   { value: "anthropic", label: "Anthropic" },
+  { value: "orcarouter", label: "OrcaRouter" },
 ];
 
 const LLM_MODELS: Record<LLMProvider, { value: LLMModelType; label: string }[]> = {
@@ -66,6 +67,9 @@ const LLM_MODELS: Record<LLMProvider, { value: LLMModelType; label: string }[]> 
     { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5" },
     { value: "claude-haiku-4.5", label: "Claude Haiku 4.5" },
     { value: "claude-opus-4.6", label: "Claude Opus 4.6" },
+  ],
+  orcarouter: [
+    { value: "orcarouter/auto", label: "OrcaRouter Auto" },
   ],
 };
 
@@ -191,7 +195,7 @@ function GenerateImageControls({ node }: { node: Node }) {
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
-  const { replicateApiKey, kieApiKey, openaiApiKey, replicateEnabled, kieEnabled, openaiEnabled } = useProviderApiKeys();
+  const { replicateApiKey, kieApiKey, openaiApiKey, orcarouterApiKey, replicateEnabled, kieEnabled, openaiEnabled, orcarouterEnabled } = useProviderApiKeys();
   const [isBrowseDialogOpen, setIsBrowseDialogOpen] = useState(false);
 
   const currentProvider: ProviderType = nodeData.selectedModel?.provider || "gemini";
@@ -210,8 +214,11 @@ function GenerateImageControls({ node }: { node: Node }) {
     if (openaiEnabled && openaiApiKey) {
       providers.push({ id: "openai", name: "OpenAI" });
     }
+    if (orcarouterEnabled && orcarouterApiKey) {
+      providers.push({ id: "orcarouter", name: "OrcaRouter" });
+    }
     return providers;
-  }, [replicateEnabled, replicateApiKey, kieEnabled, kieApiKey, openaiEnabled, openaiApiKey]);
+  }, [replicateEnabled, replicateApiKey, kieEnabled, kieApiKey, openaiEnabled, openaiApiKey, orcarouterEnabled, orcarouterApiKey]);
 
   const handleAspectRatioChange = useCallback(
     (e: React.ChangeEvent<HTMLSelectElement>) => {

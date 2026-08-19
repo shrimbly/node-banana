@@ -71,6 +71,7 @@ const providers: ProviderInfo[] = [
   { id: "replicate", name: "Replicate", icon: ReplicateIcon, apiKeyUrl: "https://replicate.com/account/api-tokens" },
   { id: "kie", name: "Kie.ai", icon: KieIcon, apiKeyUrl: "https://kie.ai/api-key" },
   { id: "wavespeed", name: "WaveSpeed", icon: WaveSpeedIcon, apiKeyUrl: "https://wavespeed.ai/accesskey" },
+  { id: "orcarouter", name: "OrcaRouter", icon: OpenAIIcon, apiKeyUrl: "https://www.orcarouter.ai" },
 ];
 
 export function FTUXApiKeysStep({}: FTUXStepProps) {
@@ -85,6 +86,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
     fal: false,
     kie: false,
     wavespeed: false,
+    orcarouter: false,
   });
   const [localKeys, setLocalKeys] = useState<Record<ProviderType, string>>(() => {
     const keys: Record<ProviderType, string> = {
@@ -95,6 +97,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
       fal: "",
       kie: "",
       wavespeed: "",
+      orcarouter: "",
     };
     for (const id of Object.keys(keys) as ProviderType[]) {
       const saved = providerSettings.providers[id]?.apiKey;

@@ -58,7 +58,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   const adaptiveOutputImage = useAdaptiveImageSrc(data.outputImage, id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   // Use stable selector for API keys to prevent unnecessary re-fetches
-  const { replicateApiKey, falApiKey, kieApiKey, openaiApiKey, replicateEnabled, kieEnabled, openaiEnabled } = useProviderApiKeys();
+  const { replicateApiKey, falApiKey, kieApiKey, openaiApiKey, orcarouterApiKey, replicateEnabled, kieEnabled, openaiEnabled, orcarouterEnabled } = useProviderApiKeys();
   const [externalModels, setExternalModels] = useState<ProviderModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelsFetchError, setModelsFetchError] = useState<string | null>(null);
@@ -103,8 +103,12 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
     if (openaiEnabled && openaiApiKey) {
       providers.push({ id: "openai", name: "OpenAI" });
     }
+    // Add OrcaRouter if configured
+    if (orcarouterEnabled && orcarouterApiKey) {
+      providers.push({ id: "orcarouter", name: "OrcaRouter" });
+    }
     return providers;
-  }, [replicateEnabled, replicateApiKey, kieEnabled, kieApiKey, openaiEnabled, openaiApiKey]);
+  }, [replicateEnabled, replicateApiKey, kieEnabled, kieApiKey, openaiEnabled, openaiApiKey, orcarouterEnabled, orcarouterApiKey]);
 
   // Migrate legacy data: derive selectedModel from model field if missing
   useEffect(() => {
@@ -143,6 +147,9 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
       }
       if (openaiApiKey) {
         headers["X-OpenAI-API-Key"] = openaiApiKey;
+      }
+      if (orcarouterApiKey) {
+        headers["X-OrcaRouter-API-Key"] = orcarouterApiKey;
       }
       const response = await deduplicatedFetch(`/api/models?provider=${currentProvider}&capabilities=${capabilities}`, { headers });
       if (response.ok) {

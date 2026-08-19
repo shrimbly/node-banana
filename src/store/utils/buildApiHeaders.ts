@@ -18,6 +18,7 @@ const PROVIDER_HEADER_MAP: Record<ProviderType, string> = {
   wavespeed: "X-WaveSpeed-Key",
   openai: "X-OpenAI-API-Key",
   anthropic: "X-Anthropic-API-Key",
+  orcarouter: "X-OrcaRouter-API-Key",
 };
 
 /**
@@ -70,6 +71,11 @@ export function buildLlmHeaders(
     const anthropicConfig = providerSettings.providers.anthropic;
     if (anthropicConfig?.apiKey) {
       headers["X-Anthropic-API-Key"] = anthropicConfig.apiKey;
+    }
+  } else if (llmProvider === "orcarouter") {
+    const orcarouterConfig = providerSettings.providers.orcarouter;
+    if (orcarouterConfig?.apiKey) {
+      headers["X-OrcaRouter-API-Key"] = orcarouterConfig.apiKey;
     }
   }
 
