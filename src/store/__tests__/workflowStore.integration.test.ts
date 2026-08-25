@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act } from "@testing-library/react";
 import { useWorkflowStore } from "../workflowStore";
 import type { WorkflowNode, WorkflowEdge } from "@/types";
-import { LAST_WORKFLOW_DIRECTORY_KEY } from "../utils/localStorage";
+import { LAST_WORKFLOW_DIRECTORY_KEY, STORAGE_KEY } from "../utils/localStorage";
 
 // Mock the Toast hook
 vi.mock("@/components/Toast", () => ({
@@ -2349,6 +2349,58 @@ describe("workflowStore integration tests", () => {
 
         expect(globalThis.localStorage.getItem(LAST_WORKFLOW_DIRECTORY_KEY)).toBe(
           "/projects/remembered"
+        );
+      });
+
+      it("derives the generations directory when a loaded workflow has no saved config", async () => {
+        delete mockLocalStorage[STORAGE_KEY];
+
+        await useWorkflowStore.getState().loadWorkflow(
+          {
+            version: 1,
+            id: "workflow-with-history",
+            name: "Workflow with history",
+            nodes: [],
+            edges: [],
+            edgeStyle: "angular",
+          },
+          "/projects/workflow-with-history"
+        );
+
+        expect(useWorkflowStore.getState().generationsPath).toBe(
+          "/projects/workflow-with-history/generations"
+        );
+      });
+
+      it("ignores a saved generations directory from an old project location", async () => {
+        globalThis.localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          "workflow-with-stale-config": {
+            workflowId: "workflow-with-stale-config",
+            name: "Workflow with stale config",
+            directoryPath: "/projects/old-location",
+            generationsPath: "/projects/old-location/generations",
+            lastSavedAt: 1,
+          },
+        }));
+
+        expect(globalThis.localStorage.getItem(STORAGE_KEY)).toContain(
+          "/projects/old-location/generations"
+        );
+
+        await useWorkflowStore.getState().loadWorkflow(
+          {
+            version: 1,
+            id: "workflow-with-stale-config",
+            name: "Workflow with stale config",
+            nodes: [],
+            edges: [],
+            edgeStyle: "angular",
+          },
+          "/projects/current-location"
+        );
+
+        expect(useWorkflowStore.getState().generationsPath).toBe(
+          "/projects/current-location/generations"
         );
       });
     });
