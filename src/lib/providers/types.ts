@@ -75,6 +75,8 @@ export interface ProviderModel {
     type: "per-run" | "per-second";
     amount: number;
     currency: string;
+    /** Provider billing unit, e.g. image, megapixel, or video_second. */
+    unit?: string;
   };
   /** Optional URL to the model's page on the provider's website */
   pageUrl?: string;
