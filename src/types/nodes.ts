@@ -209,6 +209,12 @@ export interface ModelInputDef {
   description?: string;
 }
 
+/** Required non-connectable fields reported by a model's input schema. */
+export interface RequiredModelParameter {
+  name: string;
+  label: string;
+}
+
 /**
  * Nano Banana node - AI image generation
  */
@@ -227,6 +233,7 @@ export interface NanoBananaNodeData extends BaseNodeData {
   parameters?: Record<string, unknown>; // Model-specific parameters for external providers
   fallbackParameters?: Record<string, unknown>; // Parameters for fallback model
   inputSchema?: ModelInputDef[]; // Model's input schema for dynamic handles
+  requiredModelParameters?: RequiredModelParameter[];
   parametersExpanded?: boolean; // Collapse state for inline parameter display
   _settingsPanelHeight?: number; // Measured settings panel height for reload correction
   status: NodeStatus;
@@ -252,6 +259,7 @@ export interface GenerateVideoNodeData extends BaseNodeData {
   parameters?: Record<string, unknown>; // Model-specific parameters
   fallbackParameters?: Record<string, unknown>; // Parameters for fallback model
   inputSchema?: ModelInputDef[]; // Model's input schema for dynamic handles
+  requiredModelParameters?: RequiredModelParameter[];
   parametersExpanded?: boolean; // Collapse state for inline parameter display
   _settingsPanelHeight?: number; // Measured settings panel height for reload correction
   status: NodeStatus;
@@ -283,6 +291,7 @@ export interface Generate3DNodeData extends BaseNodeData {
   parameters?: Record<string, unknown>;
   fallbackParameters?: Record<string, unknown>; // Parameters for fallback model
   inputSchema?: ModelInputDef[];
+  requiredModelParameters?: RequiredModelParameter[];
   parametersExpanded?: boolean; // Collapse state for inline parameter display
   _settingsPanelHeight?: number; // Measured settings panel height for reload correction
   status: NodeStatus;
@@ -315,6 +324,7 @@ export interface GenerateAudioNodeData extends BaseNodeData {
   parameters?: Record<string, unknown>; // Model-specific parameters (voice, speed, etc.)
   fallbackParameters?: Record<string, unknown>; // Parameters for fallback model
   inputSchema?: ModelInputDef[]; // Model's input schema for dynamic handles
+  requiredModelParameters?: RequiredModelParameter[];
   parametersExpanded?: boolean; // Collapse state for inline parameter display
   _settingsPanelHeight?: number; // Measured settings panel height for reload correction
   status: NodeStatus;

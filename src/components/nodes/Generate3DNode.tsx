@@ -5,7 +5,7 @@ import { Handle, Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
 import { BaseNode } from "./BaseNode";
 import { ModelParameters } from "./ModelParameters";
 import { useWorkflowStore, useProviderApiKeys } from "@/store/workflowStore";
-import { Generate3DNodeData, ProviderType, SelectedModel, ModelInputDef } from "@/types";
+import { Generate3DNodeData, ProviderType, SelectedModel, ModelInputDef, RequiredModelParameter } from "@/types";
 import { ProviderModel, ModelCapability } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { useToast } from "@/components/Toast";
@@ -65,6 +65,13 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
     [id, updateNodeData]
   );
 
+  const handleRequiredParametersLoaded = useCallback(
+    (requiredModelParameters: RequiredModelParameter[]) => {
+      updateNodeData(id, { requiredModelParameters });
+    },
+    [id, updateNodeData]
+  );
+
   // Handle parameters expand/collapse - resize node height
   const { setNodes } = useReactFlow();
   const handleParametersExpandChange = useCallback(
@@ -98,7 +105,7 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
       modelId: model.id,
       displayName: model.name,
     };
-    updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+    updateNodeData(id, { selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined, requiredModelParameters: [] });
     setIsBrowseDialogOpen(false);
   }, [id, updateNodeData]);
 
@@ -179,6 +186,7 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
                   parameters={nodeData.parameters || {}}
                   onParametersChange={handleParametersChange}
                   onInputsLoaded={handleInputsLoaded}
+                  onRequiredParametersLoaded={handleRequiredParametersLoaded}
                 />
               )}
             </>
@@ -478,6 +486,7 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
             onParametersChange={handleParametersChange}
             onExpandChange={handleParametersExpandChange}
             onInputsLoaded={handleInputsLoaded}
+            onRequiredParametersLoaded={handleRequiredParametersLoaded}
           />
         )}
 

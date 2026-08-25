@@ -11,6 +11,10 @@ import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
 import { resolveGenerationCost } from "./generationCost";
 import type { NodeExecutionContext } from "./types";
+import {
+  formatMissingRequiredModelParameters,
+  getMissingRequiredModelParameters,
+} from "@/utils/requiredModelParameters";
 
 export interface Generate3DOptions {
   /** When true, falls back to stored inputImages/inputPrompt if no connections provide them. */
@@ -217,6 +221,16 @@ export async function executeGenerate3D(
   if (!primaryModel.modelId) {
     updateNodeData(node.id, { status: "error", error: "No model selected" });
     throw new Error("No model selected");
+  }
+
+  const missingParameters = getMissingRequiredModelParameters(
+    nodeData.requiredModelParameters,
+    nodeData.parameters
+  );
+  if (missingParameters.length > 0) {
+    const error = formatMissingRequiredModelParameters(missingParameters);
+    updateNodeData(node.id, { status: "error", error });
+    throw new Error(error);
   }
 
   await runWithFallback({

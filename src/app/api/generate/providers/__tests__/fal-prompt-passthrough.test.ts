@@ -28,7 +28,7 @@ function makeInput(overrides: Partial<GenerationInput> = {}): GenerationInput {
     },
     prompt: "a photo of a cat",
     images: [],
-    parameters: {},
+    parameters: { preview_text: "A clear voice sample" },
     ...overrides,
   };
 }
@@ -80,7 +80,9 @@ function createMockFetch() {
                               properties: {
                                 prompt: { type: "string", description: "Text prompt" },
                                 image_url: { type: "string", description: "Input image URL" },
+                                preview_text: { type: "string", description: "Voice sample text" },
                               },
+                              required: ["prompt", "preview_text"],
                             },
                           },
                         },
@@ -227,5 +229,36 @@ describe("fal.ai prompt passthrough with dynamicInputs", () => {
 
     expect(capturedQueueBody).not.toBeNull();
     expect(capturedQueueBody!.prompt).toBe("a cat");
+  });
+
+  it("does not submit to fal when a required schema field is empty", async () => {
+    const submission = await submitFalTask("test-req", "test-api-key", makeInput({
+      parameters: {},
+    }));
+
+    expect(submission).toEqual({
+      error: "Test Model: Missing required field: Preview Text",
+    });
+    expect(capturedQueueBody).toBeNull();
+  });
+
+  it("turns a polling 422 into a field-specific error", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        detail: [{ loc: ["body", "preview_text"], msg: "Field required" }],
+      }),
+      { status: 422 }
+    )));
+
+    const result = await fetchFalMediaResult("test-req", "test-api-key", {
+      taskId: "fal-ai/test-model::test-422",
+      modelName: "Test Model",
+      capabilities: ["text-to-image"],
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "Test Model: Missing required field: Preview Text",
+    });
   });
 });

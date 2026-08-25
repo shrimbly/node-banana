@@ -33,6 +33,10 @@ import {
   ComfyAppNodeData,
   MatchMode,
 } from "@/types";
+import {
+  formatMissingRequiredModelParameters,
+  getMissingRequiredModelParameters,
+} from "@/utils/requiredModelParameters";
 
 /**
  * Return type for getConnectedInputs
@@ -471,6 +475,19 @@ export function validateWorkflowPure(
     errors.push("Workflow is empty");
     return { valid: false, errors };
   }
+
+  nodes
+    .filter((node) => ["nanoBanana", "generateVideo", "generate3d", "generateAudio"].includes(node.type))
+    .forEach((node) => {
+      const data = node.data as NanoBananaNodeData | GenerateVideoNodeData | Generate3DNodeData | GenerateAudioNodeData;
+      const missingParameters = getMissingRequiredModelParameters(
+        data.requiredModelParameters,
+        data.parameters
+      );
+      if (missingParameters.length > 0) {
+        errors.push(`${node.type} node "${node.id}" ${formatMissingRequiredModelParameters(missingParameters).toLowerCase()}`);
+      }
+    });
 
   // Check each Nano Banana node has required inputs (text required, image optional)
   // Loop edges are excluded because they carry no data on the first iteration.

@@ -20,6 +20,7 @@ import {
  */
 interface FalInputMapping extends InputMapping {
   parameterTypes: ParameterTypeInfo;
+  requiredParams: Set<string>;
 }
 
 /**
@@ -43,6 +44,57 @@ function finiteNonNegativeNumber(value: unknown): number | null {
 function parseBillableUnits(value: string | null): number | null {
   if (!value || value.trim() === "") return null;
   return finiteNonNegativeNumber(Number(value));
+}
+
+function formatFieldName(name: string): string {
+  return name
+    .replace(/_url$/, "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function hasRequestValue(value: unknown): boolean {
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return value !== undefined && value !== null;
+}
+
+async function describeFalHttpError(response: Response): Promise<string> {
+  const errorText = await response.text();
+  if (!errorText) return `HTTP ${response.status}`;
+
+  try {
+    const errorJson = JSON.parse(errorText) as {
+      error?: unknown;
+      detail?: unknown;
+      message?: unknown;
+    };
+    if (typeof errorJson.error === "object" && errorJson.error && "message" in errorJson.error) {
+      const message = (errorJson.error as { message?: unknown }).message;
+      if (typeof message === "string") return message;
+    }
+    if (Array.isArray(errorJson.detail)) {
+      return errorJson.detail.map((detail) => {
+        const item = detail as { msg?: unknown; loc?: unknown };
+        const field = Array.isArray(item.loc)
+          ? item.loc.filter((part): part is string => typeof part === "string" && part !== "body").at(-1)
+          : undefined;
+        if (typeof item.msg === "string") {
+          return field && /^field required$/i.test(item.msg)
+            ? `Missing required field: ${formatFieldName(field)}`
+            : field ? `${formatFieldName(field)}: ${item.msg}` : item.msg;
+        }
+        return JSON.stringify(detail);
+      }).join("; ");
+    }
+    if (typeof errorJson.detail === "string") return errorJson.detail;
+    if (typeof errorJson.message === "string") return errorJson.message;
+    if (typeof errorJson.error === "string") return errorJson.error;
+  } catch {
+    // Preserve non-JSON provider error bodies below.
+  }
+
+  return errorText;
 }
 
 /**
@@ -119,6 +171,7 @@ async function getFalInputMapping(modelId: string, apiKey: string | null): Promi
   const arrayParams = new Set<string>();
   const schemaArrayParams = new Set<string>();
   const parameterTypes: ParameterTypeInfo = {};
+  const requiredParams = new Set<string>();
 
   try {
     // Use fal.ai Model Search API with OpenAPI expansion
@@ -131,13 +184,13 @@ async function getFalInputMapping(modelId: string, apiKey: string | null): Promi
     const response = await fetch(url, { headers });
 
     if (!response.ok) {
-      return { paramMap, arrayParams, schemaArrayParams, parameterTypes };
+      return { paramMap, arrayParams, schemaArrayParams, parameterTypes, requiredParams };
     }
 
     const data = await response.json();
     const modelData = data.models?.[0];
     if (!modelData?.openapi) {
-      return { paramMap, arrayParams, schemaArrayParams, parameterTypes };
+      return { paramMap, arrayParams, schemaArrayParams, parameterTypes, requiredParams };
     }
 
     // Extract input schema from OpenAPI spec (same logic as /api/models/[modelId])
@@ -164,11 +217,16 @@ async function getFalInputMapping(modelId: string, apiKey: string | null): Promi
     }
 
     if (!inputSchema) {
-      return { paramMap, arrayParams, schemaArrayParams, parameterTypes };
+      return { paramMap, arrayParams, schemaArrayParams, parameterTypes, requiredParams };
     }
 
     const properties = inputSchema.properties as Record<string, unknown> | undefined;
-    if (!properties) return { paramMap, arrayParams, schemaArrayParams, parameterTypes };
+    if (!properties) return { paramMap, arrayParams, schemaArrayParams, parameterTypes, requiredParams };
+
+    const required = inputSchema.required;
+    for (const name of Array.isArray(required) ? required : []) {
+      if (typeof name === "string") requiredParams.add(name);
+    }
 
     // First pass: detect all array-typed properties and extract parameter types
     // This is used for dynamicInputs which use schema names directly
@@ -216,12 +274,12 @@ async function getFalInputMapping(modelId: string, apiKey: string | null): Promi
       }
     }
 
-    const result = { paramMap, arrayParams, schemaArrayParams, parameterTypes };
+    const result = { paramMap, arrayParams, schemaArrayParams, parameterTypes, requiredParams };
     falInputMappingCache.set(modelId, { result, timestamp: Date.now() });
     return result;
   } catch {
     // Schema parsing failed - return defaults without caching so next call retries
-    return { paramMap, arrayParams, schemaArrayParams, parameterTypes };
+    return { paramMap, arrayParams, schemaArrayParams, parameterTypes, requiredParams };
   }
 }
 
@@ -327,7 +385,7 @@ export async function submitFalTask(
   console.log(`[API:${requestId}] Dynamic inputs: ${hasDynamicInputs ? Object.keys(input.dynamicInputs!).join(", ") : "none"}, API key: ${apiKey ? "yes" : "no"}`);
 
   // Fetch schema for type coercion and input mapping (cached)
-  const { paramMap, arrayParams, schemaArrayParams, parameterTypes } = await getFalInputMapping(modelId, apiKey);
+  const { paramMap, arrayParams, schemaArrayParams, parameterTypes, requiredParams } = await getFalInputMapping(modelId, apiKey);
 
   // Build request body - parameters are applied per-path below to avoid double-spreading
   const requestBody: Record<string, unknown> = {};
@@ -403,6 +461,13 @@ export async function submitFalTask(
     }
   }
 
+  const missingFields = [...requiredParams].filter((name) => !hasRequestValue(requestBody[name]));
+  if (missingFields.length > 0) {
+    return {
+      error: `${input.model.name}: Missing required field${missingFields.length === 1 ? "" : "s"}: ${missingFields.map(formatFieldName).join(", ")}`,
+    };
+  }
+
   // Build headers
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -420,28 +485,7 @@ export async function submitFalTask(
   });
 
   if (!submitResponse.ok) {
-    const errorText = await submitResponse.text();
-    let errorDetail = errorText || `HTTP ${submitResponse.status}`;
-    try {
-      const errorJson = JSON.parse(errorText);
-      if (typeof errorJson.error === 'object' && errorJson.error?.message) {
-        errorDetail = errorJson.error.message;
-      } else if (errorJson.detail) {
-        if (Array.isArray(errorJson.detail)) {
-          errorDetail = errorJson.detail.map((d: { msg?: string; loc?: string[] }) =>
-            d.msg || JSON.stringify(d)
-          ).join('; ');
-        } else {
-          errorDetail = errorJson.detail;
-        }
-      } else if (errorJson.message) {
-        errorDetail = errorJson.message;
-      } else if (typeof errorJson.error === 'string') {
-        errorDetail = errorJson.error;
-      }
-    } catch {
-      // Keep original text if not JSON
-    }
+    const errorDetail = await describeFalHttpError(submitResponse);
 
     if (submitResponse.status === 429) {
       return {
@@ -638,10 +682,11 @@ export async function fetchFalMediaResult(
   );
 
   if (!resultResponse.ok) {
-    console.error(`[API:${requestId}] Failed to fetch result: ${resultResponse.status}`);
+    const errorDetail = await describeFalHttpError(resultResponse);
+    console.error(`[API:${requestId}] Failed to fetch result: ${resultResponse.status} ${errorDetail}`);
     return {
       success: false,
-      error: `${modelName}: Failed to fetch result (${resultResponse.status})`,
+      error: `${modelName}: ${errorDetail}`,
     };
   }
 

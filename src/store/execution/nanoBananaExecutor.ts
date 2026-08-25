@@ -15,6 +15,10 @@ import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
 import { resolveGenerationCost } from "./generationCost";
 import type { NodeExecutionContext } from "./types";
+import {
+  formatMissingRequiredModelParameters,
+  getMissingRequiredModelParameters,
+} from "@/utils/requiredModelParameters";
 
 export interface NanoBananaOptions {
   /** When true, falls back to stored inputImages/inputPrompt if no connections provide them. */
@@ -79,6 +83,16 @@ export async function executeNanoBanana(
       error: "Missing text input",
     });
     throw new Error("Missing text input");
+  }
+
+  const missingParameters = getMissingRequiredModelParameters(
+    nodeData.requiredModelParameters,
+    nodeData.parameters
+  );
+  if (missingParameters.length > 0) {
+    const error = formatMissingRequiredModelParameters(missingParameters);
+    updateNodeData(node.id, { status: "error", error });
+    throw new Error(error);
   }
 
   // Capture promptText as a definitely-non-null string for use inside the closure.

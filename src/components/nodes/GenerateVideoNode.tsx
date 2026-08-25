@@ -6,7 +6,7 @@ import { BaseNode } from "./BaseNode";
 import { ModelParameters } from "./ModelParameters";
 import { useWorkflowStore, useProviderApiKeys } from "@/store/workflowStore";
 import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
-import { GenerateVideoNodeData, ProviderType, SelectedModel, ModelInputDef } from "@/types";
+import { GenerateVideoNodeData, ProviderType, SelectedModel, ModelInputDef, RequiredModelParameter } from "@/types";
 import { ProviderModel, ModelCapability } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { getVideoDimensions } from "@/utils/nodeDimensions";
@@ -167,7 +167,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
         displayName: "Select model...",
       };
       // Clear parameters and schema when switching providers
-      updateNodeData(id, { selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined });
+      updateNodeData(id, { selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined, requiredModelParameters: [] });
     },
     [id, updateNodeData]
   );
@@ -189,6 +189,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
           selectedModel: newSelectedModel,
           parameters: {},
           inputSchema: buildVeoInputSchema(model.id),
+          requiredModelParameters: [],
         });
       }
     },
@@ -210,6 +211,13 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
   const handleInputsLoaded = useCallback(
     (inputs: ModelInputDef[]) => {
       updateNodeData(id, { inputSchema: inputs });
+    },
+    [id, updateNodeData]
+  );
+
+  const handleRequiredParametersLoaded = useCallback(
+    (requiredModelParameters: RequiredModelParameter[]) => {
+      updateNodeData(id, { requiredModelParameters });
     },
     [id, updateNodeData]
   );
@@ -282,6 +290,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
       selectedModel: newSelectedModel,
       parameters: {},
       inputSchema: buildVeoInputSchema(model.id),
+      requiredModelParameters: [],
     });
     setIsBrowseDialogOpen(false);
   }, [id, updateNodeData]);
@@ -353,6 +362,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
               parameters={nodeData.parameters || {}}
               onParametersChange={handleParametersChange}
               onInputsLoaded={handleInputsLoaded}
+              onRequiredParametersLoaded={handleRequiredParametersLoaded}
             />
           )}
 
@@ -830,6 +840,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
           onParametersChange={handleParametersChange}
           onExpandChange={handleParametersExpandChange}
           onInputsLoaded={handleInputsLoaded}
+          onRequiredParametersLoaded={handleRequiredParametersLoaded}
         />
       </div>
     )}

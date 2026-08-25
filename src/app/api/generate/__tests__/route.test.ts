@@ -3091,8 +3091,8 @@ describe("/api/generate route", () => {
 
       expect(response.status).toBe(500);
       expect(data.success).toBe(false);
-      expect(data.error).toContain("Field required");
-      expect(data.error).toContain("Invalid value");
+      expect(data.error).toContain("Missing required field: Prompt");
+      expect(data.error).toContain("Steps: Invalid value");
     });
 
     it("should handle no media URL in response", async () => {

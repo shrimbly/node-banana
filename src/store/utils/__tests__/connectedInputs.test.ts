@@ -416,6 +416,18 @@ describe("validateWorkflowPure", () => {
     expect(result.errors[0]).toContain("missing text input");
   });
 
+  it("should detect missing required model parameters", () => {
+    const nodes = [makeNode("audio", "generateAudio", {
+      requiredModelParameters: [{ name: "preview_text", label: "Preview Text" }],
+      parameters: {},
+    })];
+
+    const result = validateWorkflowPure(nodes, []);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('generateAudio node "audio" missing required field: preview text');
+  });
+
   it("should detect missing input on generateVideo when nothing is connected", () => {
     const nodes = [makeNode("vid", "generateVideo")];
     const result = validateWorkflowPure(nodes, []);

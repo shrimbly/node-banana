@@ -6,7 +6,7 @@ import { BaseNode } from "./BaseNode";
 import { ProviderBadge } from "./ProviderBadge";
 import { ModelParameters } from "./ModelParameters";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { GenerateAudioNodeData, ProviderType, SelectedModel, ModelInputDef } from "@/types";
+import { GenerateAudioNodeData, ProviderType, SelectedModel, ModelInputDef, RequiredModelParameter } from "@/types";
 import { ProviderModel } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { useAudioVisualization } from "@/hooks/useAudioVisualization";
@@ -102,6 +102,13 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
     [id, updateNodeData]
   );
 
+  const handleRequiredParametersLoaded = useCallback(
+    (requiredModelParameters: RequiredModelParameter[]) => {
+      updateNodeData(id, { requiredModelParameters });
+    },
+    [id, updateNodeData]
+  );
+
   const { setNodes } = useReactFlow();
   const handleParametersExpandChange = useCallback(
     (expanded: boolean, parameterCount: number) => {
@@ -159,7 +166,7 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
       modelId: model.id,
       displayName: model.name,
     };
-    updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+    updateNodeData(id, { selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined, requiredModelParameters: [] });
     setIsBrowseDialogOpen(false);
   }, [id, updateNodeData]);
 
@@ -256,6 +263,7 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
                     parameters={nodeData.parameters || {}}
                     onParametersChange={handleParametersChange}
                     onInputsLoaded={handleInputsLoaded}
+                    onRequiredParametersLoaded={handleRequiredParametersLoaded}
                   />
                 )}
               </>
@@ -281,6 +289,7 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
             parameters={nodeData.parameters || {}}
             onParametersChange={handleParametersChange}
             onInputsLoaded={handleInputsLoaded}
+            onRequiredParametersLoaded={handleRequiredParametersLoaded}
             onExpandChange={handleParametersExpandChange}
           />
         )}

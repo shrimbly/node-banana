@@ -6,7 +6,7 @@ import { BaseNode } from "./BaseNode";
 import { ModelParameters } from "./ModelParameters";
 import { useWorkflowStore, saveNanoBananaDefaults, useProviderApiKeys } from "@/store/workflowStore";
 import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
-import { NanoBananaNodeData, AspectRatio, Resolution, MODEL_DISPLAY_NAMES, ProviderType, SelectedModel, ModelInputDef, GEMINI_IMAGE_MODELS, ModelType } from "@/types";
+import { NanoBananaNodeData, AspectRatio, Resolution, MODEL_DISPLAY_NAMES, ProviderType, SelectedModel, ModelInputDef, RequiredModelParameter, GEMINI_IMAGE_MODELS, ModelType } from "@/types";
 import { ProviderModel, ModelCapability } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { getImageDimensions } from "@/utils/nodeDimensions";
@@ -193,7 +193,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
           displayName: GEMINI_IMAGE_MODELS.find(m => m.value === (nodeData.model || "nano-banana-pro"))?.label || "Nano Banana Pro",
         };
         // Clear parameters when switching providers (different providers have different schemas)
-        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined, requiredModelParameters: [] });
       } else {
         // Set placeholder for external provider
         const newSelectedModel: SelectedModel = {
@@ -202,7 +202,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
           displayName: "Select model...",
         };
         // Clear parameters when switching providers
-        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined, requiredModelParameters: [] });
       }
     },
     [id, nodeData.model, updateNodeData]
@@ -221,7 +221,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
           capabilities: model.capabilities,
         };
         // Clear parameters when changing models (different models have different schemas)
-        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined, requiredModelParameters: [] });
       }
     },
     [id, currentProvider, externalModels, updateNodeData]
@@ -295,6 +295,13 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
     [id, updateNodeData]
   );
 
+  const handleRequiredParametersLoaded = useCallback(
+    (requiredModelParameters: RequiredModelParameter[]) => {
+      updateNodeData(id, { requiredModelParameters });
+    },
+    [id, updateNodeData]
+  );
+
   // Handle parameters expand/collapse - resize node height
   const { setNodes } = useReactFlow();
   const handleParametersExpandChange = useCallback(
@@ -363,7 +370,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
       displayName: model.name,
       capabilities: model.capabilities,
     };
-    updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+    updateNodeData(id, { selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined, requiredModelParameters: [] });
     setIsBrowseDialogOpen(false);
   }, [id, updateNodeData]);
 
@@ -579,6 +586,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                   parameters={nodeData.parameters || {}}
                   onParametersChange={handleParametersChange}
                   onInputsLoaded={handleInputsLoaded}
+                  onRequiredParametersLoaded={handleRequiredParametersLoaded}
                 />
               )}
             </>
