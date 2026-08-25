@@ -45,6 +45,7 @@ export interface NodeExecutionContext {
   addToGlobalHistory: (item: Omit<ImageHistoryItem, "id">) => void;
   generationsPath: string | null;
   saveDirectoryPath: string | null;
+  workflowId?: string | null;
   trackSaveGeneration: (key: string, promise: Promise<void>) => void;
   appendOutputGalleryImage: (targetId: string, image: string) => void;
   appendOutputGalleryVideo: (targetId: string, video: string) => void;

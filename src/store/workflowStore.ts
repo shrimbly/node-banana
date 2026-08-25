@@ -15,6 +15,7 @@ import {
   WorkflowEdge,
   NodeType,
   NanoBananaNodeData,
+  GenerateVideoNodeData,
   OutputGalleryNodeData,
   SplitGridNodeData,
   WorkflowNodeData,
@@ -90,6 +91,7 @@ import {
   executeImageCompare,
   executeNanoBanana,
   executeGenerateVideo,
+  applyVideoGenerationResult,
   executeGenerate3D,
   executeGenerateAudio,
   executeLlmGenerate,
@@ -107,8 +109,17 @@ import {
   executeConditionalSwitch,
   executeComfyApp,
   runBatchIfApplicable,
+  pollGenerateTask,
+  pollLocalGenerationRun,
 } from "./execution";
 import type { NodeExecutionContext } from "./execution";
+import { buildGenerateHeaders } from "./utils/buildApiHeaders";
+import {
+  getGenerationRunsForWorkflow,
+  acknowledgeGenerationRun,
+  acknowledgeSavedVideoRuns,
+  updateGenerationRun,
+} from "./utils/generationRuns";
 export type { LevelGroup } from "./utils/executionUtils";
 export { CONCURRENCY_SETTINGS_KEY } from "./utils/executionUtils";
 
@@ -371,6 +382,7 @@ interface WorkflowStore {
   saveAsFile: (name: string) => Promise<boolean>;
   initializeAutoSave: () => void;
   cleanupAutoSave: () => void;
+  recoverPendingGenerationRuns: () => void;
 
   // Cost tracking state
   incurredCost: number;
@@ -477,6 +489,7 @@ let hoverRafId: number | null = null;
 
 // Track pending save-generation syncs to ensure IDs are resolved before workflow save
 const pendingImageSyncs = new Map<string, Promise<void>>();
+const recoveringGenerationRunIds = new Set<string>();
 
 // Wait for all pending image syncs to complete (with timeout to prevent infinite hangs)
 async function waitForPendingImageSyncs(timeout: number = 60000): Promise<void> {
@@ -1561,6 +1574,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     addToGlobalHistory: (item) => get().addToGlobalHistory(item),
     generationsPath: get().generationsPath,
     saveDirectoryPath: get().saveDirectoryPath,
+    workflowId: get().workflowId,
     trackSaveGeneration: (key: string, promise: Promise<void>) => {
       pendingImageSyncs.set(key, promise);
       promise.finally(() => pendingImageSyncs.delete(key));
@@ -2697,6 +2711,10 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     // Recompute dimming after loading workflow
     get().recomputeDimmedNodes();
 
+    // Reattach any provider-agnostic video runs that outlived the previous page.
+    // This only schedules recovery; opening a project must not block on a long render.
+    get().recoverPendingGenerationRuns();
+
     if (directoryPath) {
       setLastWorkflowDirectory(directoryPath);
     }
@@ -2983,6 +3001,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
           useExternalImageStorage,
         });
         setLastWorkflowDirectory(saveDirectoryPath);
+        acknowledgeSavedVideoRuns(workflow.nodes);
 
         return true;
       } else {
@@ -3045,6 +3064,143 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         await state.saveToFile();
       }
     }, 90 * 1000); // 90 seconds
+  },
+
+  recoverPendingGenerationRuns: () => {
+    const workflowId = get().workflowId;
+    if (!workflowId) return;
+
+    const runs = getGenerationRunsForWorkflow(workflowId);
+    for (const run of runs) {
+      if (recoveringGenerationRunIds.has(run.runId)) continue;
+      const node = get().nodes.find(
+        (candidate) => candidate.id === run.nodeId && candidate.type === "generateVideo"
+      );
+      if (!node) continue;
+
+      const nodeData = node.data as GenerateVideoNodeData;
+      // If this run is already in the workflow file, that file is the durable
+      // acknowledgement and the local recovery record can be discarded.
+      if ((nodeData.videoHistory || []).some((item) => item.runId === run.runId)) {
+        acknowledgeGenerationRun(run.runId);
+        continue;
+      }
+      if (run.status === "failed") {
+        recordVideoGenerationFailure(get()._buildExecutionContext(node), {
+          model: {
+            provider: run.provider,
+            modelId: run.modelId,
+            displayName: run.modelName,
+          },
+          prompt: run.prompt,
+          runId: run.runId,
+          error: run.error || "Video generation failed",
+        });
+        continue;
+      }
+
+      get().updateNodeData(node.id, {
+        status: "loading",
+        error: null,
+        activeRunId: run.runId,
+        runStatus: run.status,
+      });
+      recoveringGenerationRunIds.add(run.runId);
+
+      void (async () => {
+        try {
+          const headers = buildGenerateHeaders(run.provider, get().providerSettings);
+          let result;
+
+          if (run.status === "provider-polling" && run.providerTaskId && run.pollProvider) {
+            result = await pollGenerateTask({
+              taskId: run.providerTaskId,
+              provider: run.pollProvider,
+              modelId: run.modelId,
+              modelName: run.modelName,
+              mediaType: run.mediaType,
+              headers,
+            });
+          } else {
+            result = await pollLocalGenerationRun(run.runId);
+            if (result.polling && result.taskId && result.pollProvider) {
+              updateGenerationRun(run.runId, {
+                status: "provider-polling",
+                providerTaskId: result.taskId,
+                pollProvider: result.pollProvider,
+              });
+              result = await pollGenerateTask({
+                taskId: result.taskId,
+                provider: result.pollProvider,
+                modelId: result.pollModelId || run.modelId,
+                modelName: result.pollModelName || run.modelName,
+                mediaType: result.pollMediaType || run.mediaType,
+                headers,
+              });
+            }
+          }
+
+          const fresh = get();
+          const freshNode = fresh.nodes.find(
+            (candidate) => candidate.id === run.nodeId && candidate.type === "generateVideo"
+          );
+          if (fresh.workflowId !== run.workflowId || !freshNode) return;
+          const freshData = freshNode.data as GenerateVideoNodeData;
+          if (freshData.activeRunId !== run.runId) return;
+
+          if (!result.success) {
+            const message = result.error || "Recovered video generation failed";
+            fresh.updateNodeData(run.nodeId, {
+              status: "error",
+              error: message,
+              activeRunId: null,
+              runStatus: null,
+            });
+            updateGenerationRun(run.runId, { status: "failed", error: message });
+            return;
+          }
+
+          await applyVideoGenerationResult(fresh._buildExecutionContext(freshNode), {
+            result,
+            model: {
+              provider: run.provider,
+              modelId: run.modelId,
+              displayName: run.modelName,
+            },
+            prompt: run.prompt,
+            runId: run.runId,
+          });
+        } catch (error) {
+          const fresh = get();
+          const message = error instanceof Error ? error.message : "Could not recover generation";
+          updateGenerationRun(run.runId, { status: "failed", error: message });
+
+          const freshNode = fresh.nodes.find(
+            (candidate) => candidate.id === run.nodeId && candidate.type === "generateVideo"
+          );
+          if (
+            fresh.workflowId !== run.workflowId ||
+            !freshNode ||
+            (freshNode.data as GenerateVideoNodeData).activeRunId !== run.runId
+          ) {
+            return;
+          }
+
+          recordVideoGenerationFailure(fresh._buildExecutionContext(freshNode), {
+            model: {
+              provider: run.provider,
+              modelId: run.modelId,
+              displayName: run.modelName,
+            },
+            prompt: run.prompt,
+            runId: run.runId,
+            error: message,
+          });
+        } finally {
+          recoveringGenerationRunIds.delete(run.runId);
+        }
+      })();
+    }
   },
 
   cleanupAutoSave: () => {

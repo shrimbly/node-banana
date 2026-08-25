@@ -179,6 +179,8 @@ export interface CarouselImageItem {
  */
 export interface CarouselVideoItem {
   id: string;
+  /** Stable generation run id used to de-duplicate reload recovery. */
+  runId?: string;
   timestamp: number;
   prompt: string;
   model: string; // Model ID for video (not ModelType since external providers)
@@ -245,6 +247,10 @@ export interface GenerateVideoNodeData extends BaseNodeData {
   error: string | null;
   videoHistory: CarouselVideoItem[]; // Carousel history (IDs only)
   selectedVideoHistoryIndex: number; // Currently selected video in carousel
+  /** Local recovery run currently attached to this node. */
+  activeRunId?: string | null;
+  /** Provider/broker status shown while an interrupted run is being recovered. */
+  runStatus?: string | null;
   fallbackModel?: SelectedModel; // JSON-compatible with Node Banana Pro
   __usedFallback?: boolean; // Set by runWithFallback on successful fallback
   __fallbackModelUsed?: string; // Display name of fallback model that succeeded

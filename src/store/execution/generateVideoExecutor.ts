@@ -5,9 +5,11 @@
  * Used by both executeWorkflow and regenerateNode.
  */
 
-import type { GenerateVideoNodeData, SelectedModel } from "@/types";
+import type { GenerateResponse, GenerateVideoNodeData, SelectedModel } from "@/types";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
+import { updateGenerationRun } from "@/store/utils/generationRuns";
 import { pollGenerateTask } from "./pollTaskCompletion";
+import { submitPersistentGeneration } from "./persistentGeneration";
 import { runWithFallback } from "./runWithFallback";
 import { resolveGenerationCost } from "./generationCost";
 import type { NodeExecutionContext } from "./types";
@@ -15,6 +17,120 @@ import type { NodeExecutionContext } from "./types";
 export interface GenerateVideoOptions {
   /** When true, falls back to stored inputImages/inputPrompt if no connections provide them. */
   useStoredFallback?: boolean;
+}
+
+export async function applyVideoGenerationResult(
+  ctx: NodeExecutionContext,
+  options: {
+    result: GenerateResponse;
+    model: SelectedModel;
+    prompt: string;
+    runId: string;
+  }
+): Promise<void> {
+  const {
+    node,
+    updateNodeData,
+    getFreshNode,
+    generationsPath,
+    getEdges,
+    getNodes,
+    trackSaveGeneration,
+    appendOutputGalleryVideo,
+    appendOutputGalleryImage,
+  } = ctx;
+  const { result, model, prompt, runId } = options;
+  const videoData = result.video || result.videoUrl;
+  const outputContent = videoData || result.image;
+
+  if (!result.success || !outputContent) {
+    throw new Error(result.error || "Video generation failed");
+  }
+
+  const currentData = (getFreshNode(node.id)?.data || node.data) as GenerateVideoNodeData;
+  const generationCost = resolveGenerationCost(model, result.generationCost);
+  const timestamp = Date.now();
+  const videoId = `${timestamp}`;
+  const existingHistory = currentData.videoHistory || [];
+  const alreadyApplied = existingHistory.some((item) => item.runId === runId);
+  const updatedHistory = alreadyApplied
+    ? existingHistory
+    : [
+        {
+          id: videoId,
+          runId,
+          timestamp,
+          prompt,
+          model: model.modelId,
+          generationCost,
+        },
+        ...existingHistory,
+      ].slice(0, 50);
+
+  if (alreadyApplied) {
+    updateNodeData(node.id, {
+      status: "complete",
+      error: null,
+      activeRunId: null,
+      runStatus: null,
+    });
+    updateGenerationRun(runId, { status: "completed", error: undefined });
+    return;
+  }
+
+  updateNodeData(node.id, {
+    outputVideo: outputContent,
+    status: "complete",
+    error: null,
+    videoHistory: updatedHistory,
+    selectedVideoHistoryIndex: 0,
+    activeRunId: null,
+    runStatus: null,
+  });
+
+  const currentEdges = getEdges();
+  const currentNodes = getNodes();
+  currentEdges
+    .filter((edge) => edge.source === node.id)
+    .forEach((edge) => {
+      const target = currentNodes.find((candidate) => candidate.id === edge.target);
+      if (target?.type !== "outputGallery") return;
+      if (videoData) appendOutputGalleryVideo(target.id, outputContent);
+      else appendOutputGalleryImage(target.id, outputContent);
+    });
+
+  if (generationsPath) {
+    const saveContent = videoData ? { video: videoData } : { image: result.image };
+    const savePromise = fetch("/api/save-generation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        directoryPath: generationsPath,
+        ...saveContent,
+        prompt,
+        imageId: videoId,
+      }),
+    })
+      .then((response) => response.json())
+      .then((saveResult) => {
+        if (!saveResult.success || !saveResult.imageId || saveResult.imageId === videoId) return;
+        const fresh = getFreshNode(node.id);
+        if (!fresh) return;
+        const data = fresh.data as GenerateVideoNodeData;
+        const history = [...(data.videoHistory || [])];
+        const index = history.findIndex((item) => item.runId === runId);
+        if (index !== -1) {
+          history[index] = { ...history[index], id: saveResult.imageId };
+          updateNodeData(node.id, { videoHistory: history });
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to save video generation:", error);
+      });
+    trackSaveGeneration(videoId, savePromise);
+  }
+
+  updateGenerationRun(runId, { status: "completed", error: undefined });
 }
 
 export async function executeGenerateVideo(
@@ -28,12 +144,6 @@ export async function executeGenerateVideo(
     getFreshNode,
     signal,
     providerSettings,
-    generationsPath,
-    getEdges,
-    getNodes,
-    trackSaveGeneration,
-    appendOutputGalleryVideo,
-    appendOutputGalleryImage,
   } = ctx;
 
   const { useStoredFallback = false } = options;
@@ -105,40 +215,44 @@ export async function executeGenerateVideo(
     };
 
     try {
-      const response = await fetch("/api/generate", {
-        method: "POST",
+      let runId = "";
+      const submitted = await submitPersistentGeneration({
+        workflowId: ctx.workflowId ?? null,
+        nodeId: node.id,
+        model: modelToUse,
+        prompt: text || "",
         headers,
-        body: JSON.stringify(requestPayload),
-        ...(signal ? { signal } : {}),
+        payload: requestPayload,
+        signal,
+        onCreated: (run) => {
+          runId = run.runId;
+          updateNodeData(node.id, {
+            activeRunId: run.runId,
+            runStatus: "submitting",
+          });
+        },
       });
+      let result = submitted.result;
+      runId = submitted.run.runId;
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorMessage = `HTTP ${response.status}`;
-        try {
-          const errorJson = JSON.parse(errorText);
-          errorMessage = errorJson.error || errorMessage;
-        } catch {
-          if (errorText) errorMessage += ` - ${errorText.substring(0, 200)}`;
-        }
-
-        updateNodeData(node.id, {
-          status: "error",
-          error: errorMessage,
-        });
-        throw new Error(errorMessage);
-      }
-
-      let result = await response.json();
-
-      // Handle polling response (long-running Kie tasks)
+      // Some providers return their durable task id before the final result.
       if (result.polling) {
+        if (!result.taskId) {
+          throw new Error("Provider returned a polling response without a task id");
+        }
+        const pollProvider = result.pollProvider || provider;
+        updateGenerationRun(runId, {
+          status: "provider-polling",
+          providerTaskId: result.taskId,
+          pollProvider,
+        });
+        updateNodeData(node.id, { runStatus: pollProvider });
         result = await pollGenerateTask({
           taskId: result.taskId,
-          provider: result.pollProvider,
-          modelId: result.pollModelId,
-          modelName: result.pollModelName,
-          mediaType: result.pollMediaType,
+          provider: pollProvider,
+          modelId: result.pollModelId || modelToUse.modelId,
+          modelName: result.pollModelName || modelToUse.displayName,
+          mediaType: result.pollMediaType || "video",
           headers,
           signal,
         });
@@ -152,99 +266,26 @@ export async function executeGenerateVideo(
         }
       }
 
-      // Handle video response (video or videoUrl field)
-      const videoData = result.video || result.videoUrl;
-      if (result.success && (videoData || result.image)) {
-        const generationCost = resolveGenerationCost(
-          modelToUse,
-          result.generationCost
-        );
-        const outputContent = videoData || result.image;
-        const timestamp = Date.now();
-        const videoId = `${timestamp}`;
-
-        // Add to node's video history
-        const newHistoryItem = {
-          id: videoId,
-          timestamp,
-          prompt: text || "",
-          model: modelToUse.modelId || "",
-          generationCost,
-        };
-        const updatedHistory = [newHistoryItem, ...(nodeData.videoHistory || [])].slice(0, 50);
-
-        updateNodeData(node.id, {
-          outputVideo: outputContent,
-          status: "complete",
-          error: null,
-          videoHistory: updatedHistory,
-          selectedVideoHistoryIndex: 0,
-        });
-
-        // Push this result to downstream outputGallery nodes so a batch run
-        // collects every item, not just the final one (mirrors the image path).
-        // executeOutputGallery de-dupes, so the final item is not double-added.
-        if (outputContent) {
-          const currentEdges = getEdges();
-          const currentNodes = getNodes();
-          currentEdges
-            .filter((e) => e.source === node.id)
-            .forEach((e) => {
-              const target = currentNodes.find((n) => n.id === e.target);
-              if (target?.type === "outputGallery") {
-                if (videoData) {
-                  appendOutputGalleryVideo(target.id, outputContent);
-                } else {
-                  appendOutputGalleryImage(target.id, outputContent);
-                }
-              }
-            });
-        }
-
-        // Auto-save to generations folder if configured
-        if (generationsPath) {
-          const saveContent = videoData
-            ? { video: videoData }
-            : { image: result.image };
-
-          const savePromise = fetch("/api/save-generation", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              directoryPath: generationsPath,
-              ...saveContent,
-              prompt: text,
-              imageId: videoId,
-            }),
-          })
-            .then((res) => res.json())
-            .then((saveResult) => {
-              if (saveResult.success && saveResult.imageId && saveResult.imageId !== videoId) {
-                const currentNode = getNodes().find((n) => n.id === node.id);
-                if (currentNode) {
-                  const currentData = currentNode.data as GenerateVideoNodeData;
-                  const histCopy = [...(currentData.videoHistory || [])];
-                  const entryIndex = histCopy.findIndex((h) => h.id === videoId);
-                  if (entryIndex !== -1) {
-                    histCopy[entryIndex] = { ...histCopy[entryIndex], id: saveResult.imageId };
-                    updateNodeData(node.id, { videoHistory: histCopy });
-                  }
-                }
-              }
-            })
-            .catch((err) => {
-              console.error("Failed to save video generation:", err);
-            });
-
-          trackSaveGeneration(videoId, savePromise);
-        }
-      } else {
+      if (!result.success || !(result.video || result.videoUrl || result.image)) {
         updateNodeData(node.id, {
           status: "error",
+          error: result.error || "Video generation failed",
+          activeRunId: null,
+          runStatus: null,
+        });
+        updateGenerationRun(runId, {
+          status: "failed",
           error: result.error || "Video generation failed",
         });
         throw new Error(result.error || "Video generation failed");
       }
+
+      await applyVideoGenerationResult(ctx, {
+        result,
+        model: modelToUse,
+        prompt: text || "",
+        runId,
+      });
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         throw error;

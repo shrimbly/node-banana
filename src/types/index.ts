@@ -9,6 +9,7 @@
 export * from "./annotation";
 export * from "./nodes";
 export * from "./providers";
+export * from "./generationRuns";
 export * from "./models";
 export * from "./workflow";
 export * from "./api";

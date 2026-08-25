@@ -6,6 +6,43 @@ import type { WorkflowNode } from "@/types";
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
 
+vi.mock("../persistentGeneration", () => ({
+  submitPersistentGeneration: vi.fn(async (options: any) => {
+    const run = {
+      version: 1 as const,
+      runId: "test-run-id",
+      workflowId: options.workflowId ?? null,
+      nodeId: options.nodeId,
+      nodeType: "generateVideo" as const,
+      provider: options.model.provider,
+      modelId: options.model.modelId,
+      modelName: options.model.displayName,
+      mediaType: "video" as const,
+      prompt: options.prompt,
+      status: "running" as const,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    options.onCreated?.(run);
+    const response = await fetch("/api/generate", {
+      method: "POST",
+      headers: options.headers,
+      body: JSON.stringify(options.payload),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      let message = `HTTP ${response.status}`;
+      try {
+        message = JSON.parse(text).error || message;
+      } catch {
+        // Keep the HTTP fallback.
+      }
+      throw new Error(message);
+    }
+    return { run, result: await response.json() };
+  }),
+}));
+
 const defaultProviderSettings = {
   providers: {
     gemini: { apiKey: "" },
