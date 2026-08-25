@@ -142,6 +142,57 @@ function getPaneCenter() {
 
 // Capability filter options
 type CapabilityFilter = "all" | "image" | "video" | "3d" | "audio";
+type ModelTypeFilter = "all" | ModelCapability;
+
+const CAPABILITY_META: Record<
+  ModelCapability,
+  { label: string; badgeLabel: string; badgeClassName: string }
+> = {
+  "text-to-image": {
+    label: "Text → Image",
+    badgeLabel: "txt→img",
+    badgeClassName: "bg-green-500/20 text-green-300",
+  },
+  "image-to-image": {
+    label: "Image → Image",
+    badgeLabel: "img→img",
+    badgeClassName: "bg-cyan-500/20 text-cyan-300",
+  },
+  "text-to-video": {
+    label: "Text → Video",
+    badgeLabel: "txt→vid",
+    badgeClassName: "bg-purple-500/20 text-purple-300",
+  },
+  "image-to-video": {
+    label: "Image → Video",
+    badgeLabel: "img→vid",
+    badgeClassName: "bg-pink-500/20 text-pink-300",
+  },
+  "text-to-3d": {
+    label: "Text → 3D",
+    badgeLabel: "txt→3d",
+    badgeClassName: "bg-orange-500/20 text-orange-300",
+  },
+  "image-to-3d": {
+    label: "Image → 3D",
+    badgeLabel: "img→3d",
+    badgeClassName: "bg-amber-500/20 text-amber-300",
+  },
+  "text-to-audio": {
+    label: "Text → Audio",
+    badgeLabel: "txt→audio",
+    badgeClassName: "bg-fuchsia-500/20 text-fuchsia-300",
+  },
+  "audio-to-video": {
+    label: "Audio → Video",
+    badgeLabel: "audio→vid",
+    badgeClassName: "bg-violet-500/20 text-violet-300",
+  },
+};
+
+const CAPABILITY_ORDER = (Object.keys(CAPABILITY_META) as ModelCapability[]).sort(
+  (a, b) => CAPABILITY_META[a].label.localeCompare(CAPABILITY_META[b].label)
+);
 
 // API response type
 interface ModelsResponse {
@@ -197,6 +248,8 @@ export function ModelSearchDialog({
   );
   const [capabilityFilter, setCapabilityFilter] =
     useState<CapabilityFilter>(initialCapabilityFilter || "all");
+  const [modelTypeFilter, setModelTypeFilter] =
+    useState<ModelTypeFilter>("all");
   const [models, setModels] = useState<ProviderModel[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -517,14 +570,39 @@ export function ModelSearchDialog({
     }
   }, [providerFilter, availableProviders]);
 
+  // Keep the operation filter in sync with the capability badges in the
+  // currently loaded catalogue (already narrowed by media/provider/search).
+  const availableModelTypes = useMemo(() => {
+    const available = new Set(models.flatMap((model) => model.capabilities));
+    // Preserve the active option when a provider/search change has no matches,
+    // so the controlled select never becomes blank and the user can reset it.
+    if (modelTypeFilter !== "all") available.add(modelTypeFilter);
+    return CAPABILITY_ORDER.filter((capability) => available.has(capability));
+  }, [models, modelTypeFilter]);
+
+  const filteredModels = useMemo(() => {
+    if (modelTypeFilter === "all") return models;
+    return models.filter((model) => model.capabilities.includes(modelTypeFilter));
+  }, [models, modelTypeFilter]);
+
   // Filter recent models by capability
   const filteredRecentModels = useMemo(() => {
     return recentModels
       .filter((recent) => {
         // Find matching model in current models list to check capabilities
         const matchingModel = models.find((m) => m.id === recent.modelId);
-        if (!matchingModel && capabilityFilter !== "all") {
+        if (
+          !matchingModel &&
+          (capabilityFilter !== "all" || modelTypeFilter !== "all")
+        ) {
           // If model not loaded yet and filter is active, exclude it
+          return false;
+        }
+        if (
+          matchingModel &&
+          modelTypeFilter !== "all" &&
+          !matchingModel.capabilities.includes(modelTypeFilter)
+        ) {
           return false;
         }
         if (capabilityFilter === "all") return true;
@@ -550,7 +628,7 @@ export function ModelSearchDialog({
         return true;
       })
       .slice(0, 4); // Show max 4
-  }, [recentModels, models, capabilityFilter]);
+  }, [recentModels, models, capabilityFilter, modelTypeFilter]);
 
   // Get display name with suffix for fal.ai models to differentiate variants
   const getDisplayName = (model: ProviderModel): string => {
@@ -584,60 +662,19 @@ export function ModelSearchDialog({
 
   // Get capability badges - show all capabilities to differentiate similar models
   const getCapabilityBadges = (capabilities: ModelCapability[]) => {
-    const badges: React.ReactNode[] = [];
+    return capabilities.map((capability) => {
+      const meta = CAPABILITY_META[capability];
+      if (!meta) return null;
 
-    capabilities.forEach((cap) => {
-      let color = "";
-      let label = "";
-
-      switch (cap) {
-        case "text-to-image":
-          color = "bg-green-500/20 text-green-300";
-          label = "txt→img";
-          break;
-        case "image-to-image":
-          color = "bg-cyan-500/20 text-cyan-300";
-          label = "img→img";
-          break;
-        case "text-to-video":
-          color = "bg-purple-500/20 text-purple-300";
-          label = "txt→vid";
-          break;
-        case "image-to-video":
-          color = "bg-pink-500/20 text-pink-300";
-          label = "img→vid";
-          break;
-        case "text-to-3d":
-          color = "bg-orange-500/20 text-orange-300";
-          label = "txt→3d";
-          break;
-        case "image-to-3d":
-          color = "bg-amber-500/20 text-amber-300";
-          label = "img→3d";
-          break;
-        case "text-to-audio":
-          color = "bg-fuchsia-500/20 text-fuchsia-300";
-          label = "txt→audio";
-          break;
-        case "audio-to-video":
-          color = "bg-violet-500/20 text-violet-300";
-          label = "audio→vid";
-          break;
-      }
-
-      if (label) {
-        badges.push(
-          <span
-            key={cap}
-            className={`text-[10px] px-1.5 py-0.5 rounded ${color}`}
-          >
-            {label}
-          </span>
-        );
-      }
+      return (
+        <span
+          key={capability}
+          className={`text-[10px] px-1.5 py-0.5 rounded ${meta.badgeClassName}`}
+        >
+          {meta.badgeLabel}
+        </span>
+      );
     });
-
-    return badges;
   };
 
   if (!isOpen) return null;
@@ -675,9 +712,9 @@ export function ModelSearchDialog({
 
         {/* Filter Bar */}
         <div className="px-6 py-4 border-b border-neutral-700">
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap xl:flex-nowrap gap-3">
             {/* Search Input */}
-            <div className="flex-1 relative">
+            <div className="flex-1 sm:min-w-64 relative">
               <svg
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400"
                 fill="none"
@@ -796,10 +833,12 @@ export function ModelSearchDialog({
 
             {/* Capability Filter */}
             <select
+              aria-label="Filter by output type"
               value={capabilityFilter}
-              onChange={(e) =>
-                setCapabilityFilter(e.target.value as CapabilityFilter)
-              }
+              onChange={(e) => {
+                setCapabilityFilter(e.target.value as CapabilityFilter);
+                setModelTypeFilter("all");
+              }}
               className="px-3 py-2 text-sm bg-neutral-700 border border-neutral-600 rounded text-neutral-100 focus:outline-none focus:ring-1 focus:ring-neutral-500"
             >
               <option value="all">All Types</option>
@@ -807,6 +846,23 @@ export function ModelSearchDialog({
               <option value="video">Video</option>
               <option value="3d">3D</option>
               <option value="audio">Audio</option>
+            </select>
+
+            {/* Exact model operation, sourced from the same capabilities as badges */}
+            <select
+              aria-label="Filter by model type"
+              value={modelTypeFilter}
+              onChange={(e) =>
+                setModelTypeFilter(e.target.value as ModelTypeFilter)
+              }
+              className="px-3 py-2 text-sm bg-neutral-700 border border-neutral-600 rounded text-neutral-100 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+            >
+              <option value="all">All Models</option>
+              {availableModelTypes.map((capability) => (
+                <option key={capability} value={capability}>
+                  {CAPABILITY_META[capability].label}
+                </option>
+              ))}
             </select>
 
             {/* Refresh Cache */}
@@ -887,7 +943,7 @@ export function ModelSearchDialog({
                 Try Again
               </button>
             </div>
-          ) : models.length === 0 ? (
+          ) : filteredModels.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 gap-2">
               {showClearOption && onClearSelection && (
                 <button
@@ -1009,7 +1065,7 @@ export function ModelSearchDialog({
 
               {/* Main Model List */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {models.map((model) => (
+              {filteredModels.map((model) => (
                 <button
                   key={`${model.provider}-${model.id}`}
                   onClick={() => handleSelectModel(model)}
@@ -1126,9 +1182,9 @@ export function ModelSearchDialog({
         </div>
 
         {/* Footer with model count */}
-        {!isLoading && !error && models.length > 0 && (
+        {!isLoading && !error && filteredModels.length > 0 && (
           <div className="px-6 py-3 border-t border-neutral-700 text-xs text-neutral-400">
-            {models.length} model{models.length !== 1 ? "s" : ""} found
+            {filteredModels.length} model{filteredModels.length !== 1 ? "s" : ""} found
           </div>
         )}
       </div>

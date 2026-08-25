@@ -353,6 +353,47 @@ describe("ModelSearchDialog", () => {
         expect(fetchCall).toMatch(/capabilities=text-to-video[,%].*image-to-video/);
       });
     });
+
+    it("should list exact model types from the capabilities shown on cards", async () => {
+      render(
+        <TestWrapper>
+          <ModelSearchDialog isOpen={true} onClose={vi.fn()} />
+        </TestWrapper>
+      );
+
+      const modelTypeSelect = await screen.findByLabelText("Filter by model type");
+
+      await waitFor(() => {
+        expect(modelTypeSelect).toHaveTextContent("Text → Image");
+        expect(modelTypeSelect).toHaveTextContent("Image → Image");
+        expect(modelTypeSelect).toHaveTextContent("Text → Video");
+        expect(modelTypeSelect).toHaveTextContent("Image → Video");
+        expect(modelTypeSelect).toHaveTextContent("Image → 3D");
+      });
+      expect(modelTypeSelect).not.toHaveTextContent("Audio → Video");
+    });
+
+    it("should filter models by their exact model type without refetching", async () => {
+      render(
+        <TestWrapper>
+          <ModelSearchDialog isOpen={true} onClose={vi.fn()} />
+        </TestWrapper>
+      );
+
+      await screen.findByText("Kling Video Pro");
+      mockFetch.mockClear();
+
+      fireEvent.change(screen.getByLabelText("Filter by model type"), {
+        target: { value: "image-to-video" },
+      });
+
+      expect(screen.getByText("Kling Video Pro")).toBeInTheDocument();
+      expect(screen.queryByText("FLUX.1 Dev")).not.toBeInTheDocument();
+      expect(screen.queryByText("SDXL")).not.toBeInTheDocument();
+      expect(screen.queryByText("TripoSR")).not.toBeInTheDocument();
+      expect(screen.getByText("1 model found")).toBeInTheDocument();
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
   });
 
   describe("Model Card Rendering", () => {
