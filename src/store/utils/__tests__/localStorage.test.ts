@@ -6,6 +6,7 @@ import {
   PROVIDER_SETTINGS_KEY,
   NODE_DEFAULTS_KEY,
   CANVAS_NAVIGATION_KEY,
+  LAST_WORKFLOW_DIRECTORY_KEY,
   loadSaveConfigs,
   saveSaveConfig,
   loadWorkflowCostData,
@@ -23,6 +24,9 @@ import {
   getLLMDefaults,
   getCanvasNavigationSettings,
   saveCanvasNavigationSettings,
+  getLastWorkflowDirectory,
+  setLastWorkflowDirectory,
+  clearLastWorkflowDirectory,
 } from "../localStorage";
 import { defaultCanvasNavigationSettings } from "@/types";
 
@@ -438,6 +442,29 @@ describe("localStorage utilities", () => {
 
       const stored = JSON.parse(localStorageMock.getItem(CANVAS_NAVIGATION_KEY)!);
       expect(stored).toEqual(settings);
+    });
+  });
+
+  describe("last workflow directory", () => {
+    it("returns null when no workflow has been opened", () => {
+      expect(getLastWorkflowDirectory()).toBeNull();
+    });
+
+    it("stores and retrieves the workflow directory", () => {
+      setLastWorkflowDirectory("/projects/banana-workflow");
+
+      expect(localStorageMock.getItem(LAST_WORKFLOW_DIRECTORY_KEY)).toBe(
+        "/projects/banana-workflow"
+      );
+      expect(getLastWorkflowDirectory()).toBe("/projects/banana-workflow");
+    });
+
+    it("clears a stale workflow directory", () => {
+      setLastWorkflowDirectory("/projects/missing-workflow");
+
+      clearLastWorkflowDirectory();
+
+      expect(getLastWorkflowDirectory()).toBeNull();
     });
   });
 });

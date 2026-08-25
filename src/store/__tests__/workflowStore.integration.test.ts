@@ -11,6 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act } from "@testing-library/react";
 import { useWorkflowStore } from "../workflowStore";
 import type { WorkflowNode, WorkflowEdge } from "@/types";
+import { LAST_WORKFLOW_DIRECTORY_KEY } from "../utils/localStorage";
 
 // Mock the Toast hook
 vi.mock("@/components/Toast", () => ({
@@ -2330,6 +2331,44 @@ describe("workflowStore integration tests", () => {
         const data = useWorkflowStore.getState().nodes[0].data as Record<string, unknown>;
         expect(data.selectedHistoryIndex).toBe(1);
       });
+
+      it("remembers the loaded workflow directory", async () => {
+        delete mockLocalStorage[LAST_WORKFLOW_DIRECTORY_KEY];
+
+        await useWorkflowStore.getState().loadWorkflow(
+          {
+            version: 1,
+            id: "remembered-workflow",
+            name: "Remembered",
+            nodes: [],
+            edges: [],
+            edgeStyle: "angular",
+          },
+          "/projects/remembered"
+        );
+
+        expect(globalThis.localStorage.getItem(LAST_WORKFLOW_DIRECTORY_KEY)).toBe(
+          "/projects/remembered"
+        );
+      });
+    });
+  });
+
+  describe("workflow metadata", () => {
+    it("remembers a new project's directory", () => {
+      delete mockLocalStorage[LAST_WORKFLOW_DIRECTORY_KEY];
+
+      useWorkflowStore
+        .getState()
+        .setWorkflowMetadata(
+          "new-workflow",
+          "New workflow",
+          "/projects/new-workflow"
+        );
+
+      expect(globalThis.localStorage.getItem(LAST_WORKFLOW_DIRECTORY_KEY)).toBe(
+        "/projects/new-workflow"
+      );
     });
   });
 

@@ -48,6 +48,7 @@ import {
   generateWorkflowId,
   getCanvasNavigationSettings,
   saveCanvasNavigationSettings,
+  setLastWorkflowDirectory,
 } from "./utils/localStorage";
 import {
   createDefaultNodeData,
@@ -2685,6 +2686,10 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     // Recompute dimming after loading workflow
     get().recomputeDimmedNodes();
+
+    if (directoryPath) {
+      setLastWorkflowDirectory(directoryPath);
+    }
   },
 
   clearWorkflow: () => {
@@ -2764,6 +2769,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       saveDirectoryPath: path,
       generationsPath: derivedGenerationsPath,
     });
+    setLastWorkflowDirectory(path);
   },
 
   setWorkflowName: (name: string) => {
@@ -2966,6 +2972,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
           lastSavedAt: timestamp,
           useExternalImageStorage,
         });
+        setLastWorkflowDirectory(saveDirectoryPath);
 
         return true;
       } else {

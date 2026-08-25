@@ -11,6 +11,7 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { FTUXModal } from "@/components/onboarding/FTUXModal";
 import { getFTUXCompleted, setFTUXCompleted } from "@/store/utils/localStorage";
 import { useFTUXStore } from "@/store/ftuxStore";
+import { WorkflowRestoreGate } from "@/components/WorkflowRestoreGate";
 
 export default function Home() {
   const initializeAutoSave = useWorkflowStore(
@@ -58,46 +59,48 @@ export default function Home() {
     <ReactFlowProvider>
       <div className="h-screen flex flex-col">
         <Header />
-        <ErrorBoundary
-          label="Canvas"
-          onError={(error, info) =>
-            console.error("Canvas crashed:", error, info)
-          }
-          fallback={(error, reset) => (
-            <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
-              <div className="text-sm font-semibold text-red-400">
-                The canvas hit an unexpected error
+        <WorkflowRestoreGate>
+          <ErrorBoundary
+            label="Canvas"
+            onError={(error, info) =>
+              console.error("Canvas crashed:", error, info)
+            }
+            fallback={(error, reset) => (
+              <div className="flex-1 flex flex-col items-center justify-center gap-3 p-6 text-center">
+                <div className="text-sm font-semibold text-red-400">
+                  The canvas hit an unexpected error
+                </div>
+                <div className="text-xs text-neutral-400 max-w-md break-words">
+                  {error.message || "Unexpected render error"}
+                </div>
+                <div className="text-xs text-neutral-500 max-w-md">
+                  Your workflow is still in memory. Try recovering the canvas, or
+                  reload the page.
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={reset}
+                    className="px-3 py-1.5 text-xs rounded-md border border-red-500 text-red-300 hover:bg-red-500/10"
+                  >
+                    Try to recover
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => window.location.reload()}
+                    className="px-3 py-1.5 text-xs rounded-md border border-neutral-600 text-neutral-300 hover:bg-neutral-700/40"
+                  >
+                    Reload page
+                  </button>
+                </div>
               </div>
-              <div className="text-xs text-neutral-400 max-w-md break-words">
-                {error.message || "Unexpected render error"}
-              </div>
-              <div className="text-xs text-neutral-500 max-w-md">
-                Your workflow is still in memory. Try recovering the canvas, or
-                reload the page.
-              </div>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={reset}
-                  className="px-3 py-1.5 text-xs rounded-md border border-red-500 text-red-300 hover:bg-red-500/10"
-                >
-                  Try to recover
-                </button>
-                <button
-                  type="button"
-                  onClick={() => window.location.reload()}
-                  className="px-3 py-1.5 text-xs rounded-md border border-neutral-600 text-neutral-300 hover:bg-neutral-700/40"
-                >
-                  Reload page
-                </button>
-              </div>
-            </div>
-          )}
-        >
-          <WorkflowCanvas />
-        </ErrorBoundary>
-        <FloatingActionBar />
-        <AnnotationModal />
+            )}
+          >
+            <WorkflowCanvas />
+          </ErrorBoundary>
+          <FloatingActionBar />
+          <AnnotationModal />
+        </WorkflowRestoreGate>
         {showFTUX && (
           <FTUXModal
             onComplete={handleFTUXComplete}

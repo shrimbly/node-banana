@@ -217,6 +217,7 @@ All routes in `src/app/api/`:
 - `node-banana-workflow-configs` - Project metadata (paths)
 - `node-banana-workflow-costs` - Cost tracking per workflow
 - `node-banana-nanoBanana-defaults` - Sticky generation settings
+- `node-banana-last-workflow-directory` - Last opened workflow directory for reload restoration
 
 ## Git Workflow
 
