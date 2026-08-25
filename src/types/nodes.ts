@@ -172,6 +172,11 @@ export interface CarouselImageItem {
   aspectRatio: AspectRatio;
   model: ModelType | string;
   generationCost?: GenerationCostReceipt;
+  /**
+   * Failure detail for this specific attempt. Failed attempts are kept as
+   * carousel entries so earlier successful generations remain navigable.
+   */
+  error?: string;
 }
 
 /**

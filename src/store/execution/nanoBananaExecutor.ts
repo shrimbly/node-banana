@@ -264,10 +264,8 @@ export async function executeNanoBanana(
           trackSaveGeneration(imageId, savePromise);
         }
       } else {
-        updateNodeData(node.id, {
-          status: "error",
-          error: result.error || "Generation failed",
-        });
+        // The catch block below records every failure exactly once, including
+        // successful HTTP responses whose payload reports success: false.
         throw new Error(result.error || "Generation failed");
       }
     } catch (error) {
@@ -285,7 +283,25 @@ export async function executeNanoBanana(
         errorMessage = error.message;
       }
 
+      const freshErrorNode = getFreshNode(node.id);
+      const currentErrorData = (freshErrorNode?.data || node.data) as NanoBananaNodeData;
+      const timestamp = Date.now();
+
       updateNodeData(node.id, {
+        outputImage: null,
+        outputImageRef: undefined,
+        imageHistory: [
+          {
+            id: `${timestamp}`,
+            timestamp,
+            prompt: finalPrompt,
+            aspectRatio: nodeData.aspectRatio,
+            model: modelToUse.modelId,
+            error: errorMessage,
+          },
+          ...(currentErrorData.imageHistory || []),
+        ].slice(0, 50),
+        selectedHistoryIndex: 0,
         status: "error",
         error: errorMessage,
       });

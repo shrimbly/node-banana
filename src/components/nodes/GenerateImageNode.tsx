@@ -347,6 +347,13 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
       status: "idle",
       error: null,
     }),
+    isUnloadable: (item) => Boolean(item.error),
+    buildUnloadableUpdate: (item, newIndex) => ({
+      outputImage: null,
+      selectedHistoryIndex: newIndex,
+      status: "error",
+      error: item.error,
+    }),
   });
 
   // Handle model selection from browse dialog
@@ -385,12 +392,23 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   const supportsResolution = currentModelId === "nano-banana-pro" || currentModelId === "nano-banana-2";
   const aspectRatios = currentModelId === "nano-banana-2" ? EXTENDED_ASPECT_RATIOS : BASE_ASPECT_RATIOS;
   const resolutions = currentModelId === "nano-banana-2" ? RESOLUTIONS_NB2 : RESOLUTIONS_PRO;
+  // The selected index is normalized before this point, so it is safe to use
+  // for both display and history lookup.
   const hasCarouselImages = (nodeData.imageHistory || []).length > 1;
   const selectedHistoryIndex = normalizeGenerationHistoryIndex(
     nodeData.selectedHistoryIndex,
     nodeData.imageHistory?.length || 0
   );
-  const activeGenerationCost = nodeData.imageHistory?.[selectedHistoryIndex]?.generationCost;
+  const activeHistoryItem = nodeData.imageHistory?.[selectedHistoryIndex];
+  const selectedItemError = activeHistoryItem?.error ?? null;
+  const statusError = nodeData.status === "error"
+    ? nodeData.error || "Failed"
+    : null;
+  // New failures are stored on their own history entry; older workflows only
+  // have the node-level status, so keep that as a display fallback.
+  const failureMessage = selectedItemError ?? statusError;
+  const activeEntryFailed = Boolean(failureMessage);
+  const activeGenerationCost = activeHistoryItem?.generationCost;
   const showGenerationCost =
     activeGenerationCost?.provider === "fal" &&
     nodeData.status !== "loading" &&
@@ -621,13 +639,17 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
         data-tutorial="generate-output-area"
       >
         {/* Preview area */}
-        {nodeData.outputImage ? (
+        {nodeData.outputImage || activeEntryFailed ? (
           <>
-            <img
-              src={adaptiveOutputImage ?? undefined}
-              alt="Generated"
-              className="w-full h-full object-cover"
-            />
+            {nodeData.outputImage ? (
+              <img
+                src={adaptiveOutputImage ?? undefined}
+                alt="Generated"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full bg-neutral-900/40" />
+            )}
             {(showGenerationCost || nodeData.__usedFallback) && (
               <div className="absolute top-1 left-1 z-10 flex flex-col items-start gap-1">
                 {showGenerationCost && activeGenerationCost && (
@@ -667,8 +689,8 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                 </svg>
               </div>
             )}
-            {/* Error overlay when generation failed */}
-            {nodeData.status === "error" && (
+            {/* Error overlay when the selected generation attempt failed */}
+            {activeEntryFailed && (
               <div className="absolute inset-0 bg-red-900/40 flex flex-col items-center justify-center gap-1 px-3">
                 <svg
                   className="w-6 h-6 text-white"
@@ -680,12 +702,12 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span className="text-white text-xs font-medium">Generation failed</span>
-                {nodeData.error && (
+                {failureMessage && (
                   <span
                     className="text-white/70 text-[10px] text-center line-clamp-3"
-                    title={nodeData.error}
+                    title={failureMessage ?? undefined}
                   >
-                    {nodeData.error}
+                    {failureMessage}
                   </span>
                 )}
               </div>
@@ -717,7 +739,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
             {/* Download + Clear buttons */}
             <div className="absolute top-1 right-1 flex items-center gap-0.5">
               <button
-                onClick={() => downloadMedia(nodeData.outputImage!, "image").catch(() => {})}
+                onClick={() => nodeData.outputImage && downloadMedia(nodeData.outputImage, "image").catch(() => {})}
                 className="w-5 h-5 bg-neutral-900/80 hover:bg-neutral-700 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
                 title="Download image"
               >

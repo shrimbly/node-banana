@@ -267,6 +267,51 @@ describe("executeNanoBanana", () => {
     await expect(executeNanoBanana(ctx)).rejects.toThrow("Bad prompt");
   });
 
+  it("preserves failed attempts as carousel entries", async () => {
+    const existingImage = {
+      id: "existing-image",
+      timestamp: 1,
+      prompt: "old prompt",
+      aspectRatio: "1:1" as const,
+      model: "nano-banana",
+    };
+    const node = makeNode({
+      outputImage: "data:image/png;base64,previous-success",
+      outputImageRef: "existing-image",
+      imageHistory: [existingImage],
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ success: false, error: "Provider exploded" }),
+    });
+
+    const ctx = makeCtx(node);
+    await expect(executeNanoBanana(ctx)).rejects.toThrow("Provider exploded");
+
+    const calls = (ctx.updateNodeData as ReturnType<typeof vi.fn>).mock.calls;
+    const errorCalls = calls.filter(
+      (c: unknown[]) => (c[1] as Record<string, unknown>).status === "error"
+    );
+    expect(errorCalls).toHaveLength(1);
+    const errorCall = errorCalls[0];
+    const payload = errorCall![1] as {
+      outputImage: string | null;
+      outputImageRef?: string;
+      selectedHistoryIndex: number;
+      imageHistory: Array<Record<string, unknown>>;
+    };
+
+    expect(payload.outputImage).toBeNull();
+    expect(payload.outputImageRef).toBeUndefined();
+    expect(payload.selectedHistoryIndex).toBe(0);
+    expect(payload.imageHistory).toHaveLength(2);
+    expect(payload.imageHistory[0]).toEqual(expect.objectContaining({
+      error: "Provider exploded",
+      prompt: "test prompt",
+    }));
+    expect(payload.imageHistory[1]).toBe(existingImage);
+  });
+
   it("should use text from dynamicInputs.prompt when no direct text", async () => {
     const node = makeNode();
     const ctx = makeCtx(node, {
