@@ -92,6 +92,12 @@ export interface AudioData {
   duration: number;
 }
 
+export interface StitchResult {
+  blob: Blob;
+  /** Non-fatal issue surfaced to the caller, e.g. no supported audio codec found. */
+  warning: string | null;
+}
+
 /**
  * Check if the device encoder supports AVC encoding
  */
@@ -141,7 +147,7 @@ export async function stitchVideosAsync(
   audioData?: AudioData | null,
   onProgress?: (progress: StitchProgress) => void,
   signal?: AbortSignal
-): Promise<Blob> {
+): Promise<StitchResult> {
   try {
     // Initialize progress
     const initialProgress: StitchProgress = {
@@ -334,6 +340,7 @@ export async function stitchVideosAsync(
     let audioSource: AudioBufferSource | null = null;
     let pendingAudioBuffer: AudioBuffer | null = null;
     let outputStarted = false;
+    let audioWarning: string | null = null;
 
     if (effectiveAudioData) {
       updateProgress('processing', 'Detecting supported audio codec...', 11);
@@ -347,7 +354,8 @@ export async function stitchVideosAsync(
       });
 
       if (!audioCodec) {
-        console.warn('[VideoStitch] No supported audio codec found, continuing without audio');
+        audioWarning = 'No supported audio codec found on this device — output has no sound.';
+        console.warn('[VideoStitch] ' + audioWarning);
         updateProgress('processing', 'Warning: no supported audio codec — audio skipped', 10);
       } else {
         updateProgress('processing', `Adding audio track (${audioCodec})...`, 10);
@@ -513,7 +521,7 @@ export async function stitchVideosAsync(
       100
     );
 
-    return outputBlob;
+    return { blob: outputBlob, warning: audioWarning };
     } finally {
       // Clean up encoding resources on error
       pendingAudioBuffer = null;
@@ -598,7 +606,7 @@ export const useStitchVideos = (): UseStitchVideosReturn => {
           onProgress?.(p);
         });
 
-        return result;
+        return result.blob;
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Video stitching failed';
         setProgress({

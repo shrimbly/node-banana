@@ -407,6 +407,7 @@ export interface VideoStitchNodeData extends BaseNodeData {
   error: string | null;
   progress: number;               // 0-100 processing progress
   encoderSupported: boolean | null; // null = not checked yet, true/false after check
+  warning: string | null;         // Non-fatal issue, e.g. no supported audio codec found
 }
 
 /**
@@ -436,6 +437,7 @@ export interface VideoTrimNodeData extends BaseNodeData {
   error: string | null;
   progress: number;           // 0-100 processing progress
   encoderSupported: boolean | null;
+  warning: string | null;     // Non-fatal issue, e.g. no supported audio codec found
 }
 
 /**

@@ -185,7 +185,10 @@ describe("executeVideoStitch — cancellation", () => {
       blob: () => Promise.resolve(new Blob(["v"], { type: "video/mp4" })),
     });
     // Large output routes through URL.createObjectURL (mocked), avoiding FileReader.
-    mockStitchVideosAsync.mockResolvedValue({ size: 21 * 1024 * 1024, type: "video/mp4" } as Blob);
+    mockStitchVideosAsync.mockResolvedValue({
+      blob: { size: 21 * 1024 * 1024, type: "video/mp4" } as Blob,
+      warning: null,
+    });
     const controller = new AbortController();
     const ctx = makeTwoVideoCtx(makeStitchNode(), controller.signal);
 

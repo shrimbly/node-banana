@@ -101,6 +101,7 @@ const createNodeData = (overrides: Partial<VideoStitchNodeData> = {}): VideoStit
   error: null,
   progress: 0,
   encoderSupported: true,
+  warning: null,
   ...overrides,
 });
 

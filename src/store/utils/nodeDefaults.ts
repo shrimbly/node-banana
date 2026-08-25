@@ -309,6 +309,7 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         error: null,
         progress: 0,
         encoderSupported: null,
+        warning: null,
       };
     case "easeCurve":
       return {
@@ -332,6 +333,7 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         error: null,
         progress: 0,
         encoderSupported: null,
+        warning: null,
       } as VideoTrimNodeData;
     case "videoFrameGrab":
       return {

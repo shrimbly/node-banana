@@ -25,7 +25,7 @@ export async function executeVideoStitch(ctx: NodeExecutionContext): Promise<voi
     throw new Error("Browser does not support video encoding");
   }
 
-  updateNodeData(node.id, { status: "loading", progress: 0, error: null });
+  updateNodeData(node.id, { status: "loading", progress: 0, error: null, warning: null });
 
   try {
     const inputs = getConnectedInputs(node.id);
@@ -75,7 +75,7 @@ export async function executeVideoStitch(ctx: NodeExecutionContext): Promise<voi
     }
 
     const { stitchVideosAsync } = await import("@/hooks/useStitchVideos");
-    const outputBlob = await stitchVideosAsync(
+    const { blob: outputBlob, warning: stitchWarning } = await stitchVideosAsync(
       loopedBlobs,
       audioData,
       (progress) => {
@@ -113,6 +113,7 @@ export async function executeVideoStitch(ctx: NodeExecutionContext): Promise<voi
       status: "complete",
       progress: 100,
       error: null,
+      warning: stitchWarning,
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
@@ -145,7 +146,7 @@ export async function executeVideoTrim(ctx: NodeExecutionContext): Promise<void>
     throw new Error("Browser does not support video encoding");
   }
 
-  updateNodeData(node.id, { status: "loading", progress: 0, error: null });
+  updateNodeData(node.id, { status: "loading", progress: 0, error: null, warning: null });
 
   try {
     const inputs = getConnectedInputs(node.id);
@@ -181,7 +182,7 @@ export async function executeVideoTrim(ctx: NodeExecutionContext): Promise<void>
     }
 
     const { trimVideoAsync } = await import("@/hooks/useTrimVideo");
-    const outputBlob = await trimVideoAsync(
+    const { blob: outputBlob, warning: trimWarning } = await trimVideoAsync(
       videoBlob,
       startTime,
       endTime,
@@ -223,6 +224,7 @@ export async function executeVideoTrim(ctx: NodeExecutionContext): Promise<void>
       status: "complete",
       progress: 100,
       error: null,
+      warning: trimWarning,
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {

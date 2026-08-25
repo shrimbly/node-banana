@@ -614,6 +614,13 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
             </button>
           </div>
         )}
+
+        {/* Warning display (e.g. output has no audio) */}
+        {nodeData.status === "complete" && nodeData.warning && (
+          <div className="shrink-0 px-2 py-1.5 bg-amber-900/30 border border-amber-700/50 rounded">
+            <p className="text-[10px] text-amber-400 break-words">{nodeData.warning}</p>
+          </div>
+        )}
       </div>
     </BaseNode>
   );
