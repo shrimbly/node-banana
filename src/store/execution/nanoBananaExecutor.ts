@@ -151,7 +151,7 @@ export async function executeNanoBanana(
 
       let result = await response.json();
 
-      // Handle polling response (long-running Kie tasks)
+      // Handle polling response (long-running Kie and fal queue tasks)
       if (result.polling) {
         result = await pollGenerateTask({
           taskId: result.taskId,

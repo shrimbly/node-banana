@@ -42,6 +42,7 @@ vi.mock("@/lib/images", () => ({
 }));
 
 import { POST } from "../route";
+import { POST as POLL } from "../poll/route";
 import { clearFalInputMappingCache } from "../shared";
 
 // Store original env
@@ -2174,6 +2175,71 @@ describe("/api/generate route", () => {
       });
     }
 
+    /**
+     * fal submits and returns a polling envelope, so a completed generation is
+     * now two calls: POST /api/generate, then POST /api/generate/poll with the
+     * durable task id. This helper runs both and returns the final payload.
+     */
+    async function runFalGeneration(
+      request: NextRequest,
+      headers: Record<string, string> = { "X-Fal-API-Key": "test-fal-key" }
+    ) {
+      const submitResponse = await POST(request);
+      const submitData = await submitResponse.json();
+      if (!submitData.polling) return { response: submitResponse, data: submitData };
+
+      const pollResponse = await POLL(
+        new NextRequest("http://localhost:3000/api/generate/poll", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...headers },
+          body: JSON.stringify({
+            taskId: submitData.taskId,
+            provider: submitData.pollProvider,
+            modelId: submitData.pollModelId,
+            modelName: submitData.pollModelName,
+            mediaType: submitData.pollMediaType,
+          }),
+        })
+      );
+      return { response: pollResponse, data: await pollResponse.json() };
+    }
+
+    it("returns a durable Fal task id before the generation completes", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ models: [] }),
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ request_id: "test-req-id" }),
+      });
+
+      const response = await POST(createMockPostRequest(
+        {
+          prompt: "A beautiful landscape",
+          selectedModel: {
+            provider: "fal",
+            modelId: "fal-ai/flux/schnell",
+            displayName: "Flux Schnell",
+          },
+        },
+        { "X-Fal-API-Key": "test-fal-key" }
+      ));
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data).toMatchObject({
+        success: true,
+        polling: true,
+        taskId: "fal-ai/flux/schnell::test-req-id",
+        pollProvider: "fal",
+        pollModelId: "fal-ai/flux/schnell",
+        pollModelName: "Flux Schnell",
+        pollMediaType: "image",
+      });
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
     it("should generate image successfully via fal.ai (images array response)", async () => {
       // Schema fetch (for input mapping when no dynamicInputs)
       mockFetch.mockResolvedValueOnce({
@@ -2200,8 +2266,7 @@ describe("/api/generate route", () => {
         { "X-Fal-API-Key": "test-fal-key" }
       );
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -2251,8 +2316,7 @@ describe("/api/generate route", () => {
         { "X-Fal-API-Key": "test-fal-key" }
       );
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -2285,8 +2349,7 @@ describe("/api/generate route", () => {
         },
       });
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request, {});
 
       // Should proceed without key (no 401 early return)
       expect(response.status).toBe(200);
@@ -2319,8 +2382,7 @@ describe("/api/generate route", () => {
         { "X-Fal-API-Key": "test-fal-key" }
       );
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(500);
       expect(data.success).toBe(false);
@@ -2353,8 +2415,7 @@ describe("/api/generate route", () => {
         },
       });
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       // Without API key, request proceeds but may get rate-limited by fal.ai
       expect(response.status).toBe(500);
@@ -2388,8 +2449,7 @@ describe("/api/generate route", () => {
         { "X-Fal-API-Key": "test-fal-key" }
       );
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -2422,8 +2482,7 @@ describe("/api/generate route", () => {
         { "X-Fal-API-Key": "test-fal-key" }
       );
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -2473,8 +2532,7 @@ describe("/api/generate route", () => {
         { "X-Fal-API-Key": "test-fal-key" }
       );
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -2518,8 +2576,7 @@ describe("/api/generate route", () => {
         { "X-Fal-API-Key": "test-fal-key" }
       );
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -2572,8 +2629,7 @@ describe("/api/generate route", () => {
         { "X-Fal-API-Key": "test-fal-key" }
       );
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -2618,8 +2674,7 @@ describe("/api/generate route", () => {
         },
       });
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -2669,8 +2724,7 @@ describe("/api/generate route", () => {
         { "X-Fal-API-Key": "test-fal-key" }
       );
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -2724,8 +2778,7 @@ describe("/api/generate route", () => {
         { "X-Fal-API-Key": "test-fal-key" }
       );
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -2995,8 +3048,7 @@ describe("/api/generate route", () => {
         { "X-Fal-API-Key": "test-fal-key" }
       );
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(500);
       expect(data.success).toBe(false);
@@ -3078,8 +3130,7 @@ describe("/api/generate route", () => {
         { "X-Fal-API-Key": "test-fal-key" }
       );
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(500);
       expect(data.success).toBe(false);
@@ -3123,8 +3174,7 @@ describe("/api/generate route", () => {
         { "X-Fal-API-Key": "test-fal-key" }
       );
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -3169,8 +3219,7 @@ describe("/api/generate route", () => {
         { "X-Fal-API-Key": "test-fal-key" }
       );
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
@@ -3215,8 +3264,7 @@ describe("/api/generate route", () => {
         { "X-Fal-API-Key": "test-fal-key" }
       );
 
-      const response = await POST(request);
-      const data = await response.json();
+      const { response, data } = await runFalGeneration(request);
 
       expect(response.status).toBe(500);
       expect(data.success).toBe(false);

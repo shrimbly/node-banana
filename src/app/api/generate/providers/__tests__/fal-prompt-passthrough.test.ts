@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { generateWithFalQueue, clearFalInputMappingCache } from "../fal";
+import {
+  submitFalTask,
+  fetchFalMediaResult,
+  clearFalInputMappingCache,
+} from "../fal";
 import type { GenerationInput } from "@/lib/providers/types";
 
 /**
@@ -163,19 +167,27 @@ describe("fal.ai prompt passthrough with dynamicInputs", () => {
       },
     });
 
-    await generateWithFalQueue("test-req", "test-api-key", input);
+    await submitFalTask("test-req", "test-api-key", input);
 
     expect(capturedQueueBody).not.toBeNull();
     expect(capturedQueueBody!.prompt).toBe("a photo of a cat");
     expect(capturedQueueBody!.image_url).toBe("https://cdn.example.com/img.png");
   });
 
+  it("returns a task id that survives the request that created it", async () => {
+    const submission = await submitFalTask("test-req", "test-api-key", makeInput());
+
+    expect(submission).toEqual({
+      taskId: "fal-ai/test-model::test-123::https%3A%2F%2Fqueue.fal.run%2Ffal-ai%2Ftest-model%2Frequests%2Ftest-123%2Fstatus::https%3A%2F%2Fqueue.fal.run%2Ffal-ai%2Ftest-model%2Frequests%2Ftest-123",
+    });
+  });
+
   it("returns the final request cost from billed units and live pricing", async () => {
-    const result = await generateWithFalQueue(
-      "test-req",
-      "test-api-key",
-      makeInput()
-    );
+    const result = await fetchFalMediaResult("test-req", "test-api-key", {
+      taskId: "fal-ai/test-model::test-123",
+      modelName: "Test Model",
+      capabilities: ["text-to-image"],
+    });
 
     expect(result.generationCost).toEqual(expect.objectContaining({
       provider: "fal",
@@ -198,7 +210,7 @@ describe("fal.ai prompt passthrough with dynamicInputs", () => {
       },
     });
 
-    await generateWithFalQueue("test-req", "test-api-key", input);
+    await submitFalTask("test-req", "test-api-key", input);
 
     expect(capturedQueueBody).not.toBeNull();
     // dynamicInputs value wins - not overwritten by input.prompt
@@ -211,7 +223,7 @@ describe("fal.ai prompt passthrough with dynamicInputs", () => {
       dynamicInputs: undefined,
     });
 
-    await generateWithFalQueue("test-req", "test-api-key", input);
+    await submitFalTask("test-req", "test-api-key", input);
 
     expect(capturedQueueBody).not.toBeNull();
     expect(capturedQueueBody!.prompt).toBe("a cat");

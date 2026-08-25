@@ -7,15 +7,16 @@
  * - For local development, server.requestTimeout must be set in server.js (Node.js default is 5 minutes)
  * 
  * FAL.AI QUEUE API NOTE:
- * Uses generateWithFalQueue with async queue submission + polling.
- * Images are uploaded to fal CDN before submission to avoid payload size issues.
+ * Submits to fal's queue and returns a polling envelope immediately; the client
+ * drives completion through /api/generate/poll. Images are uploaded to fal CDN
+ * before submission to avoid payload size issues.
  */
 import { NextRequest, NextResponse } from "next/server";
 import { GenerateRequest, GenerateResponse, ModelType, SelectedModel, ProviderType } from "@/types";
 import { GenerationInput, ModelCapability } from "@/lib/providers/types";
 import { generateWithGemini, generateWithGeminiVideo } from "./providers/gemini";
 import { generateWithReplicate } from "./providers/replicate";
-import { generateWithFalQueue } from "./providers/fal";
+import { submitFalTask } from "./providers/fal";
 import { submitKieTask } from "./providers/kie";
 import { generateWithWaveSpeed } from "./providers/wavespeed";
 import { generateWithOpenAI } from "./providers/openai";
@@ -197,7 +198,7 @@ export async function POST(request: NextRequest) {
         console.warn(`[API:${requestId}] No FAL API key configured. Proceeding without auth (rate-limited).`);
       }
 
-      // Pass images as-is; generateWithFalQueue uploads base64 to CDN internally
+      // Pass images as-is; submitFalTask uploads base64 to CDN internally
       const processedImages: string[] = images ? [...images] : [];
 
       // Process dynamicInputs: filter empty values
@@ -213,7 +214,7 @@ export async function POST(request: NextRequest) {
             continue;
           }
 
-          // Keep the value as-is; CDN upload happens in generateWithFalQueue
+          // Keep the value as-is; CDN upload happens in submitFalTask
           processedDynamicInputs[key] = value;
         }
       }
@@ -233,28 +234,26 @@ export async function POST(request: NextRequest) {
         dynamicInputs: processedDynamicInputs,
       };
 
-      const result = await generateWithFalQueue(requestId, falApiKey, genInput);
-
-      if (!result.success) {
+      // Submit and return immediately — the client polls for completion.
+      // Holding this connection open for the length of a generation is what
+      // made long videos fail once the request outlived a proxy/fetch timeout.
+      const submission = await submitFalTask(requestId, falApiKey, genInput);
+      if ("error" in submission) {
         return NextResponse.json<GenerateResponse>(
-          {
-            success: false,
-            error: result.error || "Generation failed",
-          },
+          { success: false, error: submission.error },
           { status: 500 }
         );
       }
 
-      // Return first output
-      const output = result.outputs?.[0];
-      if (!output?.data && !output?.url) {
-        return NextResponse.json<GenerateResponse>(
-          { success: false, error: "No output in generation result" },
-          { status: 500 }
-        );
-      }
-
-      return buildMediaResponse(output, result.generationCost);
+      return NextResponse.json<GenerateResponse>({
+        success: true,
+        polling: true,
+        taskId: submission.taskId,
+        pollProvider: "fal",
+        pollModelId: selectedModel.modelId,
+        pollModelName: selectedModel.displayName,
+        pollMediaType: mediaType || "image",
+      });
     }
 
     if (provider === "kie") {
