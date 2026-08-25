@@ -17,7 +17,6 @@ import { SettingsTabBar } from "./SettingsTabBar";
 import { browseRegistry } from "@/utils/browseRegistry";
 import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { HandleLabel } from "./HandleLabel";
-import { useErrorToast } from "@/hooks/useErrorToast";
 import { GenerationCostBadge } from "./GenerationCostBadge";
 
 // 3D generation capabilities
@@ -117,9 +116,6 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
   const handleToggleParams = useCallback(() => {
     updateNodeData(id, { parametersExpanded: !isParamsExpanded });
   }, [id, isParamsExpanded, updateNodeData]);
-
-  // Show toast when generation fails
-  useErrorToast(nodeData.status, nodeData.error, "3D generation failed");
 
   const handleClear3D = useCallback(() => {
     updateNodeData(id, { output3dUrl: null, generationCost: undefined, savedFilename: null, savedFilePath: null, status: "idle", error: null });

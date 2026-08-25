@@ -22,7 +22,6 @@ import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { HandleLabel } from "./HandleLabel";
 import { useLoadGenerationById } from "@/hooks/useLoadGenerationById";
 import { useGenerationCarousel } from "@/hooks/useGenerationCarousel";
-import { useErrorToast } from "@/hooks/useErrorToast";
 import { useAutoResizeOnMedia } from "@/hooks/useAutoResizeOnMedia";
 import { GenerationCostBadge } from "./GenerationCostBadge";
 
@@ -266,7 +265,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
     buildUnloadableUpdate: (item, newIndex) => ({
       outputVideo: null,
       selectedVideoHistoryIndex: newIndex,
-      status: "error",
+      status: "idle",
       error: item.error,
     }),
   });
@@ -316,9 +315,6 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
     activeGenerationCost?.provider === "fal" &&
     nodeData.status !== "loading" &&
     !activeEntryFailed;
-
-  // Show toast when generation fails
-  useErrorToast(nodeData.status, nodeData.error, "Video generation failed");
 
   // Auto-resize node when output video changes
   useAutoResizeOnMedia(id, nodeData.outputVideo, getVideoDimensions);

@@ -21,7 +21,6 @@ import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { HandleLabel } from "./HandleLabel";
 import { useLoadGenerationById } from "@/hooks/useLoadGenerationById";
 import { useGenerationCarousel } from "@/hooks/useGenerationCarousel";
-import { useErrorToast } from "@/hooks/useErrorToast";
 import { useAutoResizeOnMedia } from "@/hooks/useAutoResizeOnMedia";
 import { GenerationCostBadge } from "./GenerationCostBadge";
 import { normalizeGenerationHistoryIndex } from "@/utils/generationCarousel";
@@ -351,7 +350,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
     buildUnloadableUpdate: (item, newIndex) => ({
       outputImage: null,
       selectedHistoryIndex: newIndex,
-      status: "error",
+      status: "idle",
       error: item.error,
     }),
   });
@@ -412,7 +411,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   const showGenerationCost =
     activeGenerationCost?.provider === "fal" &&
     nodeData.status !== "loading" &&
-    nodeData.status !== "error";
+    !activeEntryFailed;
 
   // Count visible Gemini controls to match ModelParameters grid/max-width rules
   const geminiControlCount = 2 // Model + Aspect Ratio (always)
@@ -440,9 +439,6 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
       observer.disconnect();
     };
   }, [useGeminiGrid]);
-
-  // Show toast when generation fails
-  useErrorToast(nodeData.status, nodeData.error, "Generation failed");
 
   // Auto-resize node when output image changes
   useAutoResizeOnMedia(id, nodeData.outputImage, getImageDimensions);
