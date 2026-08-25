@@ -20,6 +20,7 @@ import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { HandleLabel } from "./HandleLabel";
 import { useLoadGenerationById } from "@/hooks/useLoadGenerationById";
 import { useGenerationCarousel } from "@/hooks/useGenerationCarousel";
+import { GenerationCostBadge } from "./GenerationCostBadge";
 
 type GenerateAudioNodeType = Node<GenerateAudioNodeData, "generateAudio">;
 
@@ -146,6 +147,11 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
       error: null,
     }),
   });
+  const activeGenerationCost = nodeData.audioHistory?.[nodeData.selectedAudioHistoryIndex || 0]?.generationCost;
+  const showGenerationCost =
+    activeGenerationCost?.provider === "fal" &&
+    nodeData.status !== "loading" &&
+    nodeData.status !== "error";
 
   const handleBrowseModelSelect = useCallback((model: ProviderModel) => {
     const newSelectedModel: SelectedModel = {
@@ -282,12 +288,19 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
         {/* Output audio player */}
         {nodeData.outputAudio && (
           <div className="relative group mt-2">
-            {nodeData.__usedFallback && (
-              <div
-                className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-emerald-900/70 text-emerald-300 text-[9px] font-medium pointer-events-auto z-10"
-                title={`Primary failed: ${nodeData.__primaryError ?? "unknown"}\nUsed fallback: ${nodeData.__fallbackModelUsed ?? ""}`}
-              >
-                Fallback used
+            {(showGenerationCost || nodeData.__usedFallback) && (
+              <div className="absolute top-1 left-1 z-10 flex flex-col items-start gap-1">
+                {showGenerationCost && activeGenerationCost && (
+                  <GenerationCostBadge receipt={activeGenerationCost} />
+                )}
+                {nodeData.__usedFallback && (
+                  <div
+                    className="px-1.5 py-0.5 rounded bg-emerald-900/70 text-emerald-300 text-[9px] font-medium pointer-events-auto"
+                    title={`Primary failed: ${nodeData.__primaryError ?? "unknown"}\nUsed fallback: ${nodeData.__fallbackModelUsed ?? ""}`}
+                  >
+                    Fallback used
+                  </div>
+                )}
               </div>
             )}
             {/* Waveform visualization */}

@@ -202,13 +202,26 @@ describe("executeGenerateVideo", () => {
     expect((completeCall![1] as Record<string, unknown>).outputVideo).toBe("data:image/png;base64,preview");
   });
 
-  it("should track cost for fal provider", async () => {
+  it("should not feed the fal receipt into the legacy cost counter", async () => {
     const node = makeNode({
-      selectedModel: { provider: "fal", modelId: "fal-vid", displayName: "Fal", pricing: { amount: 0.25 } },
+      selectedModel: { provider: "fal", modelId: "fal-vid", displayName: "Fal" },
     });
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ success: true, video: "data:video/mp4;base64,out" }),
+      json: () => Promise.resolve({
+        success: true,
+        video: "data:video/mp4;base64,out",
+        generationCost: {
+          provider: "fal",
+          requestId: "fal-video-request-1",
+          modelId: "fal-vid",
+          units: 5,
+          unit: "seconds",
+          unitPrice: 0.05,
+          currency: "USD",
+          cost: 0.25,
+        },
+      }),
     });
 
     const ctx = makeCtx(node, {
@@ -216,7 +229,7 @@ describe("executeGenerateVideo", () => {
     });
     await executeGenerateVideo(ctx);
 
-    expect(ctx.addIncurredCost).toHaveBeenCalledWith(0.25);
+    expect(ctx.addIncurredCost).not.toHaveBeenCalled();
   });
 
   it("should throw on HTTP error", async () => {

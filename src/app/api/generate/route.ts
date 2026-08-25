@@ -254,7 +254,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      return buildMediaResponse(output);
+      return buildMediaResponse(output, result.generationCost);
     }
 
     if (provider === "kie") {

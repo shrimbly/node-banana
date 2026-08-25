@@ -41,6 +41,23 @@ function createMockFetch() {
   return vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
 
+    // Account-specific price lookup after a successful result
+    if (urlStr.includes("api.fal.ai/v1/models/pricing")) {
+      return new Response(
+        JSON.stringify({
+          prices: [
+            {
+              endpoint_id: "fal-ai/test-model",
+              unit_price: 0.025,
+              unit: "megapixels",
+              currency: "USD",
+            },
+          ],
+        }),
+        { status: 200 }
+      );
+    }
+
     // Schema request (fal.ai model search API with OpenAPI expansion)
     if (urlStr.includes("api.fal.ai/v1/models")) {
       return new Response(
@@ -102,7 +119,13 @@ function createMockFetch() {
         JSON.stringify({
           images: [{ url: "https://cdn.fal.ai/test/image.png" }],
         }),
-        { status: 200 }
+        {
+          status: 200,
+          headers: {
+            "X-Fal-Billable-Units": "1.5",
+            "X-Fal-Request-Id": "provider-request-123",
+          },
+        }
       );
     }
 
@@ -145,6 +168,25 @@ describe("fal.ai prompt passthrough with dynamicInputs", () => {
     expect(capturedQueueBody).not.toBeNull();
     expect(capturedQueueBody!.prompt).toBe("a photo of a cat");
     expect(capturedQueueBody!.image_url).toBe("https://cdn.example.com/img.png");
+  });
+
+  it("returns the final request cost from billed units and live pricing", async () => {
+    const result = await generateWithFalQueue(
+      "test-req",
+      "test-api-key",
+      makeInput()
+    );
+
+    expect(result.generationCost).toEqual(expect.objectContaining({
+      provider: "fal",
+      requestId: "provider-request-123",
+      modelId: "fal-ai/test-model",
+      units: 1.5,
+      unit: "megapixels",
+      unitPrice: 0.025,
+      currency: "USD",
+    }));
+    expect(result.generationCost?.cost).toBeCloseTo(0.0375);
   });
 
   it("does not duplicate prompt when dynamicInputs already contains prompt", async () => {

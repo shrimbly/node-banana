@@ -6,6 +6,7 @@
  */
 
 import { GenerationInput, GenerationOutput } from "@/lib/providers/types";
+import type { GenerationCostReceipt } from "@/types";
 import { validateMediaUrl } from "@/utils/urlValidation";
 import {
   INPUT_PATTERNS,
@@ -30,6 +31,77 @@ const FAL_MAPPING_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 /** Clear the fal schema mapping cache (exported for testing) */
 export function clearFalInputMappingCache() {
   falInputMappingCache.clear();
+}
+
+function finiteNonNegativeNumber(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+  return value;
+}
+
+function parseBillableUnits(value: string | null): number | null {
+  if (!value || value.trim() === "") return null;
+  return finiteNonNegativeNumber(Number(value));
+}
+
+/**
+ * Build a request-level cost receipt without making generation success depend
+ * on fal's separate pricing service. Missing headers, keys, or pricing yield a
+ * complete receipt with a null cost so the UI can render an honest dash.
+ */
+async function buildFalGenerationCost(
+  modelId: string,
+  requestId: string,
+  units: number | null,
+  apiKey: string | null
+): Promise<GenerationCostReceipt> {
+  const unavailable: GenerationCostReceipt = {
+    provider: "fal",
+    requestId,
+    modelId,
+    units,
+    unit: null,
+    unitPrice: null,
+    currency: null,
+    cost: null,
+  };
+
+  if (!apiKey) return unavailable;
+
+  try {
+    const response = await fetch(
+      `https://api.fal.ai/v1/models/pricing?endpoint_id=${encodeURIComponent(modelId)}`,
+      { headers: { Authorization: `Key ${apiKey}` } }
+    );
+
+    if (!response.ok) {
+      console.warn(`[fal.ai] Pricing lookup failed for ${modelId}: ${response.status}`);
+      return unavailable;
+    }
+
+    const data = await response.json();
+    const price = Array.isArray(data.prices)
+      ? data.prices.find((item: { endpoint_id?: unknown }) => item.endpoint_id === modelId)
+      : null;
+    const unitPrice = finiteNonNegativeNumber(price?.unit_price);
+    const unit = typeof price?.unit === "string" && price.unit ? price.unit : null;
+    const currency = typeof price?.currency === "string" && price.currency ? price.currency : null;
+
+    return {
+      ...unavailable,
+      unit,
+      unitPrice,
+      currency,
+      cost: units !== null && unitPrice !== null ? units * unitPrice : null,
+    };
+  } catch (error) {
+    console.warn(
+      `[fal.ai] Pricing lookup failed for ${modelId}:`,
+      error instanceof Error ? error.message : "Unknown error"
+    );
+    return unavailable;
+  }
 }
 
 /**
@@ -469,6 +541,22 @@ export async function generateWithFalQueue(
         };
       }
 
+      const billedUnits = parseBillableUnits(
+        resultResponse.headers?.get?.("x-fal-billable-units") ?? null
+      );
+      const providerRequestId =
+        resultResponse.headers?.get?.("x-fal-request-id") || falRequestId;
+      let generationCostPromise: Promise<GenerationCostReceipt> | null = null;
+      const getGenerationCost = () => {
+        generationCostPromise ??= buildFalGenerationCost(
+          modelId,
+          providerRequestId,
+          billedUnits,
+          apiKey
+        );
+        return generationCostPromise;
+      };
+
       const result = await resultResponse.json();
 
       // Extract media URL from result
@@ -514,6 +602,7 @@ export async function generateWithFalQueue(
         console.log(`[API:${requestId}] SUCCESS - Returning 3D model URL`);
         return {
           success: true,
+          generationCost: await getGenerationCost(),
           outputs: [
             {
               type: "3d",
@@ -553,6 +642,7 @@ export async function generateWithFalQueue(
           console.log(`[API:${requestId}] SUCCESS - Returning URL for oversized video (${(mediaContentLength / (1024 * 1024)).toFixed(0)}MB)`);
           return {
             success: true,
+            generationCost: await getGenerationCost(),
             outputs: [{ type: "video", data: "", url: mediaUrl }],
           };
         }
@@ -569,6 +659,7 @@ export async function generateWithFalQueue(
         console.log(`[API:${requestId}] SUCCESS - Returning audio`);
         return {
           success: true,
+          generationCost: await getGenerationCost(),
           outputs: [{
             type: "audio",
             data: `data:${audioContentType};base64,${audioBase64}`,
@@ -590,6 +681,7 @@ export async function generateWithFalQueue(
           console.log(`[API:${requestId}] SUCCESS - Returning URL for oversized video (${mediaSizeMB.toFixed(0)}MB)`);
           return {
             success: true,
+            generationCost: await getGenerationCost(),
             outputs: [{ type: "video", data: "", url: mediaUrl }],
           };
         }
@@ -603,6 +695,7 @@ export async function generateWithFalQueue(
         console.log(`[API:${requestId}] SUCCESS - Returning URL for large video`);
         return {
           success: true,
+          generationCost: await getGenerationCost(),
           outputs: [
             {
               type: "video",
@@ -618,6 +711,7 @@ export async function generateWithFalQueue(
 
       return {
         success: true,
+        generationCost: await getGenerationCost(),
         outputs: [
           {
             type: isVideo ? "video" : "image",

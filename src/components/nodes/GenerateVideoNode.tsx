@@ -24,6 +24,7 @@ import { useLoadGenerationById } from "@/hooks/useLoadGenerationById";
 import { useGenerationCarousel } from "@/hooks/useGenerationCarousel";
 import { useErrorToast } from "@/hooks/useErrorToast";
 import { useAutoResizeOnMedia } from "@/hooks/useAutoResizeOnMedia";
+import { GenerationCostBadge } from "./GenerationCostBadge";
 
 // Video generation capabilities
 const VIDEO_CAPABILITIES: ModelCapability[] = ["text-to-video", "image-to-video", "audio-to-video"];
@@ -292,6 +293,11 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
   ), [currentProvider]);
 
   const hasCarouselVideos = (nodeData.videoHistory || []).length > 1;
+  const activeGenerationCost = nodeData.videoHistory?.[nodeData.selectedVideoHistoryIndex || 0]?.generationCost;
+  const showGenerationCost =
+    activeGenerationCost?.provider === "fal" &&
+    nodeData.status !== "loading" &&
+    nodeData.status !== "error";
 
   // Show toast when generation fails
   useErrorToast(nodeData.status, nodeData.error, "Video generation failed");
@@ -620,12 +626,19 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
               className="w-full h-full object-cover"
               playsInline
             />
-            {nodeData.__usedFallback && (
-              <div
-                className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-emerald-900/70 text-emerald-300 text-[9px] font-medium pointer-events-auto z-10"
-                title={`Primary failed: ${nodeData.__primaryError ?? "unknown"}\nUsed fallback: ${nodeData.__fallbackModelUsed ?? ""}`}
-              >
-                Fallback used
+            {(showGenerationCost || nodeData.__usedFallback) && (
+              <div className="absolute top-1 left-1 z-10 flex flex-col items-start gap-1">
+                {showGenerationCost && activeGenerationCost && (
+                  <GenerationCostBadge receipt={activeGenerationCost} />
+                )}
+                {nodeData.__usedFallback && (
+                  <div
+                    className="px-1.5 py-0.5 rounded bg-emerald-900/70 text-emerald-300 text-[9px] font-medium pointer-events-auto"
+                    title={`Primary failed: ${nodeData.__primaryError ?? "unknown"}\nUsed fallback: ${nodeData.__fallbackModelUsed ?? ""}`}
+                  >
+                    Fallback used
+                  </div>
+                )}
               </div>
             )}
             {/* Loading overlay for generation */}

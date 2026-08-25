@@ -9,6 +9,7 @@ import type { Generate3DNodeData, SelectedModel } from "@/types";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
+import { resolveGenerationCost } from "./generationCost";
 import type { NodeExecutionContext } from "./types";
 
 export interface Generate3DOptions {
@@ -133,8 +134,13 @@ export async function executeGenerate3D(
       }
 
       if (result.success && result.model3dUrl) {
+        const generationCost = resolveGenerationCost(
+          modelToUse,
+          result.generationCost
+        );
         updateNodeData(node.id, {
           output3dUrl: result.model3dUrl,
+          generationCost,
           status: "complete",
           error: null,
           savedFilename: null,
@@ -142,7 +148,7 @@ export async function executeGenerate3D(
         });
 
         // Track cost if applicable
-        if (modelToUse.pricing) {
+        if (modelToUse.provider !== "fal" && modelToUse.pricing) {
           addIncurredCost(modelToUse.pricing.amount);
         }
 

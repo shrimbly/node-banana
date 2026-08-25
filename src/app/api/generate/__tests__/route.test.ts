@@ -2133,6 +2133,10 @@ describe("/api/generate route", () => {
       // Result fetch
       mockFetch.mockResolvedValueOnce({
         ok: true,
+        headers: new Headers({
+          "x-fal-billable-units": "1.5",
+          "x-fal-request-id": "provider-test-req-id",
+        }),
         json: () => Promise.resolve(resultPayload),
       });
       // Media fetch
@@ -2140,6 +2144,18 @@ describe("/api/generate route", () => {
         ok: true,
         headers: new Headers({ "content-type": mediaContentType }),
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(mediaSize)),
+      });
+      // Account-specific price lookup
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          prices: [{
+            endpoint_id: "fal-ai/flux/schnell",
+            unit_price: 0.02,
+            unit: "images",
+            currency: "USD",
+          }],
+        }),
       });
     }
 
@@ -2191,6 +2207,12 @@ describe("/api/generate route", () => {
       expect(data.success).toBe(true);
       expect(data.image).toContain("data:image/png;base64,");
       expect(data.contentType).toBe("image");
+      expect(data.generationCost).toEqual(expect.objectContaining({
+        provider: "fal",
+        requestId: "provider-test-req-id",
+        units: 1.5,
+      }));
+      expect(data.generationCost.cost).toBeCloseTo(0.03);
 
       // Verify API key was passed correctly (check queue submit call, which is the 2nd call after schema fetch)
       expect(mockFetch).toHaveBeenCalledWith(

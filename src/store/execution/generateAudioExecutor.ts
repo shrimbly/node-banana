@@ -9,6 +9,7 @@ import type { GenerateAudioNodeData, SelectedModel } from "@/types";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
+import { resolveGenerationCost } from "./generationCost";
 import type { NodeExecutionContext } from "./types";
 
 export interface GenerateAudioOptions {
@@ -27,7 +28,6 @@ export async function executeGenerateAudio(
     getFreshNode,
     signal,
     providerSettings,
-    addIncurredCost,
     generationsPath,
     getNodes,
     trackSaveGeneration,
@@ -148,6 +148,10 @@ export async function executeGenerateAudio(
       // Handle audio response (audio or audioUrl field)
       const audioData = result.audio || result.audioUrl;
       if (result.success && audioData) {
+        const generationCost = resolveGenerationCost(
+          modelToUse,
+          result.generationCost
+        );
         const timestamp = Date.now();
         const audioId = `${timestamp}`;
 
@@ -157,6 +161,7 @@ export async function executeGenerateAudio(
           timestamp,
           prompt: text || "",
           model: modelToUse.modelId || "",
+          generationCost,
         };
         const updatedHistory = [newHistoryItem, ...(nodeData.audioHistory || [])].slice(0, 50);
 
@@ -167,11 +172,6 @@ export async function executeGenerateAudio(
           audioHistory: updatedHistory,
           selectedAudioHistoryIndex: 0,
         });
-
-        // Track cost
-        if (modelToUse.provider === "fal" && modelToUse.pricing) {
-          addIncurredCost(modelToUse.pricing.amount);
-        }
 
         // Auto-save to generations folder if configured
         if (generationsPath) {

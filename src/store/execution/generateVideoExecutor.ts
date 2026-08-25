@@ -9,6 +9,7 @@ import type { GenerateVideoNodeData, SelectedModel } from "@/types";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
+import { resolveGenerationCost } from "./generationCost";
 import type { NodeExecutionContext } from "./types";
 
 export interface GenerateVideoOptions {
@@ -27,7 +28,6 @@ export async function executeGenerateVideo(
     getFreshNode,
     signal,
     providerSettings,
-    addIncurredCost,
     generationsPath,
     getEdges,
     getNodes,
@@ -155,6 +155,10 @@ export async function executeGenerateVideo(
       // Handle video response (video or videoUrl field)
       const videoData = result.video || result.videoUrl;
       if (result.success && (videoData || result.image)) {
+        const generationCost = resolveGenerationCost(
+          modelToUse,
+          result.generationCost
+        );
         const outputContent = videoData || result.image;
         const timestamp = Date.now();
         const videoId = `${timestamp}`;
@@ -165,6 +169,7 @@ export async function executeGenerateVideo(
           timestamp,
           prompt: text || "",
           model: modelToUse.modelId || "",
+          generationCost,
         };
         const updatedHistory = [newHistoryItem, ...(nodeData.videoHistory || [])].slice(0, 50);
 
@@ -194,11 +199,6 @@ export async function executeGenerateVideo(
                 }
               }
             });
-        }
-
-        // Track cost
-        if (modelToUse.provider === "fal" && modelToUse.pricing) {
-          addIncurredCost(modelToUse.pricing.amount);
         }
 
         // Auto-save to generations folder if configured

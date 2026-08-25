@@ -13,6 +13,7 @@ import { calculateGenerationCost } from "@/utils/costCalculator";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
+import { resolveGenerationCost } from "./generationCost";
 import type { NodeExecutionContext } from "./types";
 
 export interface NanoBananaOptions {
@@ -172,6 +173,10 @@ export async function executeNanoBanana(
       }
 
       if (result.success && result.image) {
+        const generationCost = resolveGenerationCost(
+          modelToUse,
+          result.generationCost
+        );
         const timestamp = Date.now();
         const imageId = `${timestamp}`;
 
@@ -181,7 +186,8 @@ export async function executeNanoBanana(
           timestamp,
           prompt: finalPrompt,
           aspectRatio: nodeData.aspectRatio,
-          model: nodeData.model,
+          model: modelToUse.modelId,
+          generationCost,
         });
 
         // Add to node's carousel history
@@ -190,7 +196,8 @@ export async function executeNanoBanana(
           timestamp,
           prompt: finalPrompt,
           aspectRatio: nodeData.aspectRatio,
-          model: nodeData.model,
+          model: modelToUse.modelId,
+          generationCost,
         };
         const updatedHistory = [newHistoryItem, ...(nodeData.imageHistory || [])].slice(0, 50);
 
@@ -216,7 +223,7 @@ export async function executeNanoBanana(
           });
 
         // Track cost
-        if ((modelToUse.provider === "fal" || modelToUse.provider === "openai") && modelToUse.pricing) {
+        if (modelToUse.provider === "openai" && modelToUse.pricing) {
           addIncurredCost(modelToUse.pricing.amount);
         } else if (modelToUse.provider === "gemini") {
           const generationCost = calculateGenerationCost(nodeData.model, nodeData.resolution);

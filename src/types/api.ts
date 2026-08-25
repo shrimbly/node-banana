@@ -6,7 +6,7 @@
  */
 
 import type { AspectRatio, Resolution, ModelType } from "./models";
-import type { LLMProvider, LLMModelType } from "./providers";
+import type { GenerationCostReceipt, LLMProvider, LLMModelType } from "./providers";
 
 // API Request/Response types for Image Generation
 export interface GenerateRequest {
@@ -29,6 +29,7 @@ export interface GenerateResponse {
   audioUrl?: string; // For large audio, return URL directly
   model3dUrl?: string; // For 3D models, return GLB URL directly
   contentType?: "image" | "video" | "3d" | "audio";
+  generationCost?: GenerationCostReceipt;
   error?: string;
   // Client-side polling fields (for long-running Kie tasks)
   polling?: boolean; // true = task submitted, poll for completion

@@ -18,6 +18,7 @@ import { browseRegistry } from "@/utils/browseRegistry";
 import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { HandleLabel } from "./HandleLabel";
 import { useErrorToast } from "@/hooks/useErrorToast";
+import { GenerationCostBadge } from "./GenerationCostBadge";
 
 // 3D generation capabilities
 const THREE_D_CAPABILITIES: ModelCapability[] = ["text-to-3d", "image-to-3d"];
@@ -121,8 +122,13 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
   useErrorToast(nodeData.status, nodeData.error, "3D generation failed");
 
   const handleClear3D = useCallback(() => {
-    updateNodeData(id, { output3dUrl: null, savedFilename: null, savedFilePath: null, status: "idle", error: null });
+    updateNodeData(id, { output3dUrl: null, generationCost: undefined, savedFilename: null, savedFilePath: null, status: "idle", error: null });
   }, [id, updateNodeData]);
+
+  const showGenerationCost =
+    nodeData.generationCost?.provider === "fal" &&
+    nodeData.status !== "loading" &&
+    nodeData.status !== "error";
 
   return (
     <>
@@ -349,12 +355,19 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
         {/* Preview area */}
         {nodeData.output3dUrl ? (
           <div className="relative w-full flex-1 min-h-[80px] flex flex-col items-center justify-center gap-2 bg-neutral-800 rounded border border-neutral-700 p-3">
-            {nodeData.__usedFallback && (
-              <div
-                className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-emerald-900/70 text-emerald-300 text-[9px] font-medium pointer-events-auto z-10"
-                title={`Primary failed: ${nodeData.__primaryError ?? "unknown"}\nUsed fallback: ${nodeData.__fallbackModelUsed ?? ""}`}
-              >
-                Fallback used
+            {(showGenerationCost || nodeData.__usedFallback) && (
+              <div className="absolute top-1 left-1 z-10 flex flex-col items-start gap-1">
+                {showGenerationCost && nodeData.generationCost && (
+                  <GenerationCostBadge receipt={nodeData.generationCost} />
+                )}
+                {nodeData.__usedFallback && (
+                  <div
+                    className="px-1.5 py-0.5 rounded bg-emerald-900/70 text-emerald-300 text-[9px] font-medium pointer-events-auto"
+                    title={`Primary failed: ${nodeData.__primaryError ?? "unknown"}\nUsed fallback: ${nodeData.__fallbackModelUsed ?? ""}`}
+                  >
+                    Fallback used
+                  </div>
+                )}
               </div>
             )}
             <svg className="w-8 h-8 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

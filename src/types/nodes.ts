@@ -17,7 +17,13 @@ export type { AnnotationNodeData, BaseNodeData };
 
 // Import from domain files to avoid circular dependencies
 import type { AspectRatio, Resolution, ModelType } from "./models";
-import type { LLMProvider, LLMModelType, SelectedModel, ProviderType } from "./providers";
+import type {
+  GenerationCostReceipt,
+  LLMProvider,
+  LLMModelType,
+  SelectedModel,
+  ProviderType,
+} from "./providers";
 import type { ComfyAppDefinition, ComfyWorkflowInspection } from "@/lib/comfy/types";
 
 export type { ComfyAppDefinition, ComfyWorkflowInspection };
@@ -153,6 +159,7 @@ export interface ImageHistoryItem {
   aspectRatio: AspectRatio;
   /** A Gemini model, or a free-form producer name (e.g. a ComfyUI app). */
   model: ModelType | string;
+  generationCost?: GenerationCostReceipt;
 }
 
 /**
@@ -163,7 +170,8 @@ export interface CarouselImageItem {
   timestamp: number;
   prompt: string;
   aspectRatio: AspectRatio;
-  model: ModelType;
+  model: ModelType | string;
+  generationCost?: GenerationCostReceipt;
 }
 
 /**
@@ -174,6 +182,7 @@ export interface CarouselVideoItem {
   timestamp: number;
   prompt: string;
   model: string; // Model ID for video (not ModelType since external providers)
+  generationCost?: GenerationCostReceipt;
 }
 
 /**
@@ -250,6 +259,7 @@ export interface Generate3DNodeData extends BaseNodeData {
   inputImageRefs?: string[];
   inputPrompt: string | null;
   output3dUrl: string | null;
+  generationCost?: GenerationCostReceipt;
   savedFilename: string | null;
   savedFilePath: string | null;
   selectedModel?: SelectedModel;
@@ -274,6 +284,7 @@ export interface CarouselAudioItem {
   timestamp: number;
   prompt: string;
   model: string; // Model ID for audio (not ModelType since external providers)
+  generationCost?: GenerationCostReceipt;
 }
 
 /**

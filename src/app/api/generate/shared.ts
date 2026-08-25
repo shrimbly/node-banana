@@ -6,7 +6,7 @@
  * without shipping non-handler exports through a Next.js route file.
  */
 import { NextResponse } from "next/server";
-import type { GenerateResponse } from "@/types";
+import type { GenerateResponse, GenerationCostReceipt } from "@/types";
 import { clearFalInputMappingCache as _clearFalInputMappingCache } from "./providers/fal";
 
 /**
@@ -19,12 +19,16 @@ export const clearFalInputMappingCache = _clearFalInputMappingCache;
  * Build the final NextResponse for a completed generation output.
  * Shared by the synchronous generate route and the async poll route.
  */
-export function buildMediaResponse(output: { type: string; data: string; url?: string }): NextResponse {
+export function buildMediaResponse(
+  output: { type: string; data: string; url?: string },
+  generationCost?: GenerationCostReceipt
+): NextResponse {
   if (output.type === "3d") {
     return NextResponse.json<GenerateResponse>({
       success: true,
       model3dUrl: output.url,
       contentType: "3d",
+      generationCost,
     });
   }
 
@@ -35,6 +39,7 @@ export function buildMediaResponse(output: { type: string; data: string; url?: s
       video: isLarge ? undefined : output.data,
       videoUrl: isLarge ? output.url : undefined,
       contentType: "video",
+      generationCost,
     });
   }
 
@@ -45,6 +50,7 @@ export function buildMediaResponse(output: { type: string; data: string; url?: s
       audio: isLarge ? undefined : output.data,
       audioUrl: isLarge ? output.url : undefined,
       contentType: "audio",
+      generationCost,
     });
   }
 
@@ -52,5 +58,6 @@ export function buildMediaResponse(output: { type: string; data: string; url?: s
     success: true,
     image: output.data,
     contentType: "image",
+    generationCost,
   });
 }
