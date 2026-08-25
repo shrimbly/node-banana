@@ -163,6 +163,7 @@ describe("executeNanoBanana", () => {
     );
     expect(completeCall).toBeDefined();
     expect((completeCall![1] as Record<string, unknown>).outputImage).toBe("data:image/png;base64,result");
+    expect((completeCall![1] as Record<string, unknown>)).toHaveProperty("outputImageRef", undefined);
   });
 
   it("should add to global history on success", async () => {

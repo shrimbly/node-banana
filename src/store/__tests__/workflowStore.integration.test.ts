@@ -2305,6 +2305,31 @@ describe("workflowStore integration tests", () => {
 
         expect(useWorkflowStore.getState().viewedCommentNodeIds.size).toBe(0);
       });
+
+      it("should normalize an invalid generation history index", async () => {
+        const store = useWorkflowStore.getState();
+        await store.loadWorkflow({
+          version: 1,
+          id: "test-workflow",
+          name: "Test",
+          nodes: [
+            createTestNode("nanoBanana-1", "nanoBanana", {
+              model: "nano-banana",
+              imageHistory: [
+                { id: "older", timestamp: 1 },
+                { id: "latest", timestamp: 2 },
+              ],
+              selectedHistoryIndex: 99,
+              outputImage: "data:image/png;base64,latest",
+            }),
+          ],
+          edges: [],
+          edgeStyle: "curved",
+        });
+
+        const data = useWorkflowStore.getState().nodes[0].data as Record<string, unknown>;
+        expect(data.selectedHistoryIndex).toBe(1);
+      });
     });
   });
 

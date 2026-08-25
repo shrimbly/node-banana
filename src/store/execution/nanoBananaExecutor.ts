@@ -196,6 +196,7 @@ export async function executeNanoBanana(
 
         updateNodeData(node.id, {
           outputImage: result.image,
+          outputImageRef: undefined,
           status: "complete",
           error: null,
           imageHistory: updatedHistory,

@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { WorkflowNodeData } from "@/types";
+import { normalizeGenerationHistoryIndex } from "@/utils/generationCarousel";
 
 interface HistoryItem {
   id: string;
@@ -38,7 +39,7 @@ export function useGenerationCarousel<T extends HistoryItem>({
       const items = history || [];
       if (items.length === 0 || isLoading) return;
 
-      const current = currentIndex || 0;
+      const current = normalizeGenerationHistoryIndex(currentIndex, items.length);
       const newIndex =
         direction === "previous"
           ? current === 0

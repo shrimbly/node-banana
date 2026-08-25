@@ -23,6 +23,7 @@ import { useLoadGenerationById } from "@/hooks/useLoadGenerationById";
 import { useGenerationCarousel } from "@/hooks/useGenerationCarousel";
 import { useErrorToast } from "@/hooks/useErrorToast";
 import { useAutoResizeOnMedia } from "@/hooks/useAutoResizeOnMedia";
+import { normalizeGenerationHistoryIndex } from "@/utils/generationCarousel";
 
 /** Reorder items so they read column-first in a row-based CSS grid.
  *  e.g. [1,2,3,4,5,6,7,8] with 2 cols → [1,5,2,6,3,7,4,8] */
@@ -338,6 +339,9 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
     loadFn: loadImageById,
     buildUpdate: (image, newIndex) => ({
       outputImage: image,
+      // The history ID lives in the configured generations directory. Clear the
+      // workflow-local ref so the next save externalizes this active image safely.
+      outputImageRef: undefined,
       selectedHistoryIndex: newIndex,
       status: "idle",
       error: null,
@@ -381,6 +385,10 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   const aspectRatios = currentModelId === "nano-banana-2" ? EXTENDED_ASPECT_RATIOS : BASE_ASPECT_RATIOS;
   const resolutions = currentModelId === "nano-banana-2" ? RESOLUTIONS_NB2 : RESOLUTIONS_PRO;
   const hasCarouselImages = (nodeData.imageHistory || []).length > 1;
+  const selectedHistoryIndex = normalizeGenerationHistoryIndex(
+    nodeData.selectedHistoryIndex,
+    nodeData.imageHistory?.length || 0
+  );
 
   // Count visible Gemini controls to match ModelParameters grid/max-width rules
   const geminiControlCount = 2 // Model + Aspect Ratio (always)
@@ -714,7 +722,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                 <button
                   onClick={handleCarouselPrevious}
                   disabled={isLoadingCarouselImage}
-                  className="w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
+                  className="nodrag nopan w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
                   title="Previous image"
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -722,12 +730,12 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                   </svg>
                 </button>
                 <span className="text-[10px] text-white/70 min-w-[32px] text-center">
-                  {(nodeData.selectedHistoryIndex || 0) + 1} / {(nodeData.imageHistory || []).length}
+                  {selectedHistoryIndex + 1} / {(nodeData.imageHistory || []).length}
                 </span>
                 <button
                   onClick={handleCarouselNext}
                   disabled={isLoadingCarouselImage}
-                  className="w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
+                  className="nodrag nopan w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
                   title="Next image"
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

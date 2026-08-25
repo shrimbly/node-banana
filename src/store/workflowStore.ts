@@ -1,5 +1,6 @@
 import { create, StateCreator } from "zustand";
 import { useShallow } from "zustand/shallow";
+import { normalizeGenerationHistoryIndex } from "@/utils/generationCarousel";
 import {
   Connection,
   EdgeChange,
@@ -2546,20 +2547,26 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     workflow.nodes = workflow.nodes.map((node) => {
       if (node.type === "nanoBanana") {
         const data = node.data as NanoBananaNodeData;
-        if (data.model && !data.selectedModel) {
-          const displayName = MODEL_DISPLAY_NAMES[data.model] || data.model;
-          return {
-            ...node,
-            data: {
-              ...data,
-              selectedModel: {
-                provider: "gemini" as ProviderType,
-                modelId: data.model,
-                displayName,
-              },
-            },
-          };
-        }
+        const selectedHistoryIndex = normalizeGenerationHistoryIndex(
+          data.selectedHistoryIndex,
+          data.imageHistory?.length || 0
+        );
+        const selectedModel = data.selectedModel ?? (data.model
+          ? {
+              provider: "gemini" as ProviderType,
+              modelId: data.model,
+              displayName: MODEL_DISPLAY_NAMES[data.model] || data.model,
+            }
+          : undefined);
+
+        return {
+          ...node,
+          data: {
+            ...data,
+            selectedHistoryIndex,
+            ...(selectedModel ? { selectedModel } : {}),
+          },
+        };
       }
       return node;
     }) as WorkflowNode[];
