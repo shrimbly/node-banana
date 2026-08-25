@@ -474,7 +474,7 @@ describe("GenerateImageNode", () => {
         </TestWrapper>
       );
 
-      expect(screen.getByText("1 / 2")).toBeInTheDocument();
+      expect(screen.getByText("2 / 2")).toBeInTheDocument();
     });
   });
 

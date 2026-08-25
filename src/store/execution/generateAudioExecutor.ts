@@ -10,6 +10,7 @@ import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
 import { resolveGenerationCost } from "./generationCost";
+import { appendGenerationHistory } from "@/utils/generationCarousel";
 import type { NodeExecutionContext } from "./types";
 import {
   formatMissingRequiredModelParameters,
@@ -177,14 +178,14 @@ export async function executeGenerateAudio(
           model: modelToUse.modelId || "",
           generationCost,
         };
-        const updatedHistory = [newHistoryItem, ...(nodeData.audioHistory || [])].slice(0, 50);
+        const updatedHistory = appendGenerationHistory(nodeData.audioHistory, newHistoryItem);
 
         updateNodeData(node.id, {
           outputAudio: audioData,
           status: "complete",
           error: null,
           audioHistory: updatedHistory,
-          selectedAudioHistoryIndex: 0,
+          selectedAudioHistoryIndex: updatedHistory.length - 1,
         });
 
         // Auto-save to generations folder if configured

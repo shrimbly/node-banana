@@ -374,7 +374,7 @@ describe("executeOutputGallery", () => {
     await executeOutputGallery(ctx);
 
     expect(ctx.updateNodeData).toHaveBeenCalledWith("gal", {
-      images: ["new1.png", "new2.png", "existing.png"],
+      images: ["existing.png", "new1.png", "new2.png"],
     });
   });
 
@@ -394,7 +394,7 @@ describe("executeOutputGallery", () => {
     await executeOutputGallery(ctx);
 
     expect(ctx.updateNodeData).toHaveBeenCalledWith("gal", {
-      images: ["new.png", "existing.png"],
+      images: ["existing.png", "new.png"],
     });
   });
 

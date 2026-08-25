@@ -322,13 +322,13 @@ describe("executeGenerateVideo", () => {
     const payload = errorCall![1] as Record<string, unknown>;
     const history = payload.videoHistory as Array<Record<string, unknown>>;
     expect(history).toHaveLength(2);
-    expect(history[0].error).toBe("fetch failed");
     // The earlier success keeps its own clean entry.
-    expect(history[1]).toMatchObject({ id: "ok-1" });
-    expect(history[1].error).toBeUndefined();
+    expect(history[0]).toMatchObject({ id: "ok-1" });
+    expect(history[0].error).toBeUndefined();
+    expect(history[1].error).toBe("fetch failed");
     // The failed attempt owns no video, so it cannot sit on top of the old one.
     expect(payload.outputVideo).toBeNull();
-    expect(payload.selectedVideoHistoryIndex).toBe(0);
+    expect(payload.selectedVideoHistoryIndex).toBe(1);
   });
 
   it("should use stored fallback in regenerate mode", async () => {

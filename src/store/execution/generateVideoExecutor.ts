@@ -12,6 +12,7 @@ import { pollGenerateTask } from "./pollTaskCompletion";
 import { submitPersistentGeneration } from "./persistentGeneration";
 import { runWithFallback } from "./runWithFallback";
 import { resolveGenerationCost } from "./generationCost";
+import { appendGenerationHistory } from "@/utils/generationCarousel";
 import type { NodeExecutionContext } from "./types";
 import {
   formatMissingRequiredModelParameters,
@@ -43,17 +44,14 @@ export function recordVideoGenerationFailure(
   if (runId && existingHistory.some((item) => item.runId === runId)) return;
 
   const timestamp = Date.now();
-  const history = [
-    {
-      id: `failed-${runId || timestamp}`,
-      runId: runId || undefined,
-      timestamp,
-      prompt,
-      model: model.modelId,
-      error,
-    },
-    ...existingHistory,
-  ].slice(0, 50);
+  const history = appendGenerationHistory(existingHistory, {
+    id: `failed-${runId || timestamp}`,
+    runId: runId || undefined,
+    timestamp,
+    prompt,
+    model: model.modelId,
+    error,
+  });
 
   updateNodeData(node.id, {
     status: "error",
@@ -63,7 +61,7 @@ export function recordVideoGenerationFailure(
     // to that earlier result.
     outputVideo: null,
     videoHistory: history,
-    selectedVideoHistoryIndex: 0,
+    selectedVideoHistoryIndex: history.length - 1,
     activeRunId: null,
     runStatus: null,
   });
@@ -105,17 +103,14 @@ export async function applyVideoGenerationResult(
   const alreadyApplied = existingHistory.some((item) => item.runId === runId);
   const updatedHistory = alreadyApplied
     ? existingHistory
-    : [
-        {
-          id: videoId,
-          runId,
-          timestamp,
-          prompt,
-          model: model.modelId,
-          generationCost,
-        },
-        ...existingHistory,
-      ].slice(0, 50);
+    : appendGenerationHistory(existingHistory, {
+        id: videoId,
+        runId,
+        timestamp,
+        prompt,
+        model: model.modelId,
+        generationCost,
+      });
 
   if (alreadyApplied) {
     updateNodeData(node.id, {
@@ -133,7 +128,7 @@ export async function applyVideoGenerationResult(
     status: "complete",
     error: null,
     videoHistory: updatedHistory,
-    selectedVideoHistoryIndex: 0,
+    selectedVideoHistoryIndex: updatedHistory.length - 1,
     activeRunId: null,
     runStatus: null,
   });

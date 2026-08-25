@@ -10,6 +10,7 @@ import type {
   SelectedModel,
 } from "@/types";
 import { calculateGenerationCost } from "@/utils/costCalculator";
+import { appendGenerationHistory } from "@/utils/generationCarousel";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
@@ -213,7 +214,7 @@ export async function executeNanoBanana(
           model: modelToUse.modelId,
           generationCost,
         };
-        const updatedHistory = [newHistoryItem, ...(nodeData.imageHistory || [])].slice(0, 50);
+        const updatedHistory = appendGenerationHistory(nodeData.imageHistory, newHistoryItem);
 
         updateNodeData(node.id, {
           outputImage: result.image,
@@ -221,7 +222,7 @@ export async function executeNanoBanana(
           status: "complete",
           error: null,
           imageHistory: updatedHistory,
-          selectedHistoryIndex: 0,
+          selectedHistoryIndex: updatedHistory.length - 1,
         });
 
         // Push new image to connected downstream outputGallery nodes (atomic append)
@@ -301,21 +302,19 @@ export async function executeNanoBanana(
       const currentErrorData = (freshErrorNode?.data || node.data) as NanoBananaNodeData;
       const timestamp = Date.now();
 
+      const updatedHistory = appendGenerationHistory(currentErrorData.imageHistory, {
+        id: `${timestamp}`,
+        timestamp,
+        prompt: finalPrompt,
+        aspectRatio: nodeData.aspectRatio,
+        model: modelToUse.modelId,
+        error: errorMessage,
+      });
       updateNodeData(node.id, {
         outputImage: null,
         outputImageRef: undefined,
-        imageHistory: [
-          {
-            id: `${timestamp}`,
-            timestamp,
-            prompt: finalPrompt,
-            aspectRatio: nodeData.aspectRatio,
-            model: modelToUse.modelId,
-            error: errorMessage,
-          },
-          ...(currentErrorData.imageHistory || []),
-        ].slice(0, 50),
-        selectedHistoryIndex: 0,
+        imageHistory: updatedHistory,
+        selectedHistoryIndex: updatedHistory.length - 1,
         status: "error",
         error: errorMessage,
       });

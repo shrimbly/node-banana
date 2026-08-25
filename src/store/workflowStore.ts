@@ -1,6 +1,6 @@
 import { create, StateCreator } from "zustand";
 import { useShallow } from "zustand/shallow";
-import { normalizeGenerationHistoryIndex } from "@/utils/generationCarousel";
+import { normalizeGenerationHistoryIndex, sortGenerationHistory } from "@/utils/generationCarousel";
 import {
   Connection,
   EdgeChange,
@@ -16,6 +16,7 @@ import {
   NodeType,
   NanoBananaNodeData,
   GenerateVideoNodeData,
+  GenerateAudioNodeData,
   OutputGalleryNodeData,
   SplitGridNodeData,
   WorkflowNodeData,
@@ -2563,9 +2564,15 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     workflow.nodes = workflow.nodes.map((node) => {
       if (node.type === "nanoBanana") {
         const data = node.data as NanoBananaNodeData;
-        const selectedHistoryIndex = normalizeGenerationHistoryIndex(
+        const previousSelectedHistoryIndex = normalizeGenerationHistoryIndex(
           data.selectedHistoryIndex,
           data.imageHistory?.length || 0
+        );
+        const selectedHistoryId = data.imageHistory?.[previousSelectedHistoryIndex]?.id;
+        const imageHistory = sortGenerationHistory(data.imageHistory);
+        const selectedHistoryIndex = Math.max(
+          0,
+          imageHistory.findIndex((item) => item.id === selectedHistoryId)
         );
         const selectedModel = data.selectedModel ?? (data.model
           ? {
@@ -2579,10 +2586,39 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
           ...node,
           data: {
             ...data,
+            imageHistory,
             selectedHistoryIndex,
             ...(selectedModel ? { selectedModel } : {}),
           },
         };
+      }
+      if (node.type === "generateVideo") {
+        const data = node.data as GenerateVideoNodeData;
+        const previousSelectedHistoryIndex = normalizeGenerationHistoryIndex(
+          data.selectedVideoHistoryIndex,
+          data.videoHistory?.length || 0
+        );
+        const selectedHistoryId = data.videoHistory?.[previousSelectedHistoryIndex]?.id;
+        const videoHistory = sortGenerationHistory(data.videoHistory);
+        const selectedVideoHistoryIndex = Math.max(
+          0,
+          videoHistory.findIndex((item) => item.id === selectedHistoryId)
+        );
+        return { ...node, data: { ...data, videoHistory, selectedVideoHistoryIndex } };
+      }
+      if (node.type === "generateAudio") {
+        const data = node.data as GenerateAudioNodeData;
+        const previousSelectedHistoryIndex = normalizeGenerationHistoryIndex(
+          data.selectedAudioHistoryIndex,
+          data.audioHistory?.length || 0
+        );
+        const selectedHistoryId = data.audioHistory?.[previousSelectedHistoryIndex]?.id;
+        const audioHistory = sortGenerationHistory(data.audioHistory);
+        const selectedAudioHistoryIndex = Math.max(
+          0,
+          audioHistory.findIndex((item) => item.id === selectedHistoryId)
+        );
+        return { ...node, data: { ...data, audioHistory, selectedAudioHistoryIndex } };
       }
       return node;
     }) as WorkflowNode[];

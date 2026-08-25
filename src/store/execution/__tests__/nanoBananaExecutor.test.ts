@@ -303,13 +303,13 @@ describe("executeNanoBanana", () => {
 
     expect(payload.outputImage).toBeNull();
     expect(payload.outputImageRef).toBeUndefined();
-    expect(payload.selectedHistoryIndex).toBe(0);
+    expect(payload.selectedHistoryIndex).toBe(1);
     expect(payload.imageHistory).toHaveLength(2);
-    expect(payload.imageHistory[0]).toEqual(expect.objectContaining({
+    expect(payload.imageHistory[0]).toBe(existingImage);
+    expect(payload.imageHistory[1]).toEqual(expect.objectContaining({
       error: "Provider exploded",
       prompt: "test prompt",
     }));
-    expect(payload.imageHistory[1]).toBe(existingImage);
   });
 
   it("should use text from dynamicInputs.prompt when no direct text", async () => {
