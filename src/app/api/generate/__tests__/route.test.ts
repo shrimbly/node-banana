@@ -2146,15 +2146,16 @@ describe("/api/generate route", () => {
         headers: new Headers({ "content-type": mediaContentType }),
         arrayBuffer: () => Promise.resolve(new ArrayBuffer(mediaSize)),
       });
-      // Account-specific price lookup
+      // Exact final billing event
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({
-          prices: [{
+          billing_events: [{
+            request_id: "provider-test-req-id",
             endpoint_id: "fal-ai/flux/schnell",
+            output_units: 1.5,
             unit_price: 0.02,
-            unit: "images",
-            currency: "USD",
+            cost_total: 0.03,
           }],
         }),
       });

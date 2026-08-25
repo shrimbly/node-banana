@@ -46,6 +46,14 @@ function parseBillableUnits(value: string | null): number | null {
   return finiteNonNegativeNumber(Number(value));
 }
 
+interface FalBillingEvent {
+  request_id?: unknown;
+  output_units?: unknown;
+  unit_price?: unknown;
+  cost_total?: unknown;
+  cost_estimate_nano_usd?: unknown;
+}
+
 function formatFieldName(name: string): string {
   return name
     .replace(/_url$/, "")
@@ -98,9 +106,9 @@ async function describeFalHttpError(response: Response): Promise<string> {
 }
 
 /**
- * Build a request-level cost receipt without making generation success depend
- * on fal's separate pricing service. Missing headers, keys, or pricing yield a
- * complete receipt with a null cost so the UI can render an honest dash.
+ * Build a request-level cost receipt from fal's billing event for this exact
+ * request. Model pricing may be fallback compute pricing rather than the
+ * amount charged for a marketplace model.
  */
 async function buildFalGenerationCost(
   modelId: string,
@@ -122,34 +130,40 @@ async function buildFalGenerationCost(
   if (!apiKey) return unavailable;
 
   try {
-    const response = await fetch(
-      `https://api.fal.ai/v1/models/pricing?endpoint_id=${encodeURIComponent(modelId)}`,
-      { headers: { Authorization: `Key ${apiKey}` } }
-    );
+    const url = new URL("https://api.fal.ai/v1/models/billing-events");
+    url.searchParams.set("request_id", requestId);
+    url.searchParams.set("limit", "1");
+    const response = await fetch(url, {
+      headers: { Authorization: `Key ${apiKey}` },
+    });
 
     if (!response.ok) {
-      console.warn(`[fal.ai] Pricing lookup failed for ${modelId}: ${response.status}`);
+      console.warn(`[fal.ai] Billing lookup failed for ${requestId}: ${response.status}`);
       return unavailable;
     }
 
-    const data = await response.json();
-    const price = Array.isArray(data.prices)
-      ? data.prices.find((item: { endpoint_id?: unknown }) => item.endpoint_id === modelId)
+    const data = await response.json() as { billing_events?: unknown };
+    const event = Array.isArray(data.billing_events)
+      ? data.billing_events.find(
+        (item: FalBillingEvent) => item.request_id === requestId
+      ) as FalBillingEvent | undefined
       : null;
-    const unitPrice = finiteNonNegativeNumber(price?.unit_price);
-    const unit = typeof price?.unit === "string" && price.unit ? price.unit : null;
-    const currency = typeof price?.currency === "string" && price.currency ? price.currency : null;
+    const eventUnits = finiteNonNegativeNumber(event?.output_units);
+    const unitPrice = finiteNonNegativeNumber(event?.unit_price);
+    const directCost = finiteNonNegativeNumber(event?.cost_total);
+    const nanoCost = finiteNonNegativeNumber(event?.cost_estimate_nano_usd);
+    const cost = directCost ?? (nanoCost === null ? null : nanoCost / 1_000_000_000);
 
     return {
       ...unavailable,
-      unit,
+      units: eventUnits ?? units,
       unitPrice,
-      currency,
-      cost: units !== null && unitPrice !== null ? units * unitPrice : null,
+      currency: cost === null ? null : "USD",
+      cost,
     };
   } catch (error) {
     console.warn(
-      `[fal.ai] Pricing lookup failed for ${modelId}:`,
+      `[fal.ai] Billing lookup failed for ${requestId}:`,
       error instanceof Error ? error.message : "Unknown error"
     );
     return unavailable;

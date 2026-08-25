@@ -45,16 +45,17 @@ function createMockFetch() {
   return vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
 
-    // Account-specific price lookup after a successful result
-    if (urlStr.includes("api.fal.ai/v1/models/pricing")) {
+    // Exact final cost recorded by fal for this successful request.
+    if (urlStr.includes("api.fal.ai/v1/models/billing-events")) {
       return new Response(
         JSON.stringify({
-          prices: [
+          billing_events: [
             {
+              request_id: "provider-request-123",
               endpoint_id: "fal-ai/test-model",
-              unit_price: 0.025,
-              unit: "megapixels",
-              currency: "USD",
+              output_units: 6,
+              unit_price: 0.05,
+              cost_total: 0.30,
             },
           ],
         }),
@@ -184,7 +185,7 @@ describe("fal.ai prompt passthrough with dynamicInputs", () => {
     });
   });
 
-  it("returns the final request cost from billed units and live pricing", async () => {
+  it("returns the exact billed cost instead of fallback compute pricing", async () => {
     const result = await fetchFalMediaResult("test-req", "test-api-key", {
       taskId: "fal-ai/test-model::test-123",
       modelName: "Test Model",
@@ -195,12 +196,12 @@ describe("fal.ai prompt passthrough with dynamicInputs", () => {
       provider: "fal",
       requestId: "provider-request-123",
       modelId: "fal-ai/test-model",
-      units: 1.5,
-      unit: "megapixels",
-      unitPrice: 0.025,
+      units: 6,
+      unit: null,
+      unitPrice: 0.05,
       currency: "USD",
     }));
-    expect(result.generationCost?.cost).toBeCloseTo(0.0375);
+    expect(result.generationCost?.cost).toBeCloseTo(0.30);
   });
 
   it("does not duplicate prompt when dynamicInputs already contains prompt", async () => {
