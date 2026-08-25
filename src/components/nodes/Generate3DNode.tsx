@@ -423,12 +423,19 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
             )}
             {/* Error overlay */}
             {nodeData.status === "error" && (
-              <div className="absolute inset-0 bg-red-900/40 rounded flex flex-col items-center justify-center gap-1">
+              <div className="absolute inset-0 bg-red-900/40 rounded flex flex-col items-center justify-center gap-1 px-3">
                 <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span className="text-white text-xs font-medium">Generation failed</span>
-                <span className="text-white/70 text-[10px]">See toast for details</span>
+                {nodeData.error && (
+                  <span
+                    className="text-white/70 text-[10px] text-center line-clamp-3"
+                    title={nodeData.error}
+                  >
+                    {nodeData.error}
+                  </span>
+                )}
               </div>
             )}
             <div className="absolute top-1 right-1">

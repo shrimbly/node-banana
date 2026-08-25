@@ -92,6 +92,7 @@ import {
   executeNanoBanana,
   executeGenerateVideo,
   applyVideoGenerationResult,
+  recordVideoGenerationFailure,
   executeGenerate3D,
   executeGenerateAudio,
   executeLlmGenerate,
@@ -3150,11 +3151,15 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
           if (!result.success) {
             const message = result.error || "Recovered video generation failed";
-            fresh.updateNodeData(run.nodeId, {
-              status: "error",
+            recordVideoGenerationFailure(fresh._buildExecutionContext(freshNode), {
+              model: {
+                provider: run.provider,
+                modelId: run.modelId,
+                displayName: run.modelName,
+              },
+              prompt: run.prompt,
+              runId: run.runId,
               error: message,
-              activeRunId: null,
-              runStatus: null,
             });
             updateGenerationRun(run.runId, { status: "failed", error: message });
             return;

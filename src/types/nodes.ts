@@ -185,6 +185,12 @@ export interface CarouselVideoItem {
   prompt: string;
   model: string; // Model ID for video (not ModelType since external providers)
   generationCost?: GenerationCostReceipt;
+  /**
+   * Failure detail for this specific attempt. Present only when the
+   * generation failed, so a failed run is kept as its own carousel entry
+   * instead of marking the whole node (and its earlier successes) as broken.
+   */
+  error?: string;
 }
 
 /**

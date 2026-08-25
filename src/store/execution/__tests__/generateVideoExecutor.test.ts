@@ -293,6 +293,44 @@ describe("executeGenerateVideo", () => {
     await expect(executeGenerateVideo(ctx)).rejects.toThrow("Bad video");
   });
 
+  it("records a failure as its own history entry and keeps earlier successes intact", async () => {
+    const previousSuccess = {
+      id: "ok-1",
+      runId: "run-ok-1",
+      timestamp: 1,
+      prompt: "first",
+      model: "fal-video-model",
+    };
+    const node = makeNode({
+      videoHistory: [previousSuccess],
+      outputVideo: "data:video/mp4;base64,previous",
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ success: false, error: "fetch failed" }),
+    });
+
+    const ctx = makeCtx(node, { getFreshNode: vi.fn().mockReturnValue(node) });
+    await expect(executeGenerateVideo(ctx)).rejects.toThrow("fetch failed");
+
+    const calls = (ctx.updateNodeData as ReturnType<typeof vi.fn>).mock.calls;
+    const errorCall = calls.find(
+      (c: unknown[]) => (c[1] as Record<string, unknown>).status === "error"
+    );
+    expect(errorCall).toBeDefined();
+
+    const payload = errorCall![1] as Record<string, unknown>;
+    const history = payload.videoHistory as Array<Record<string, unknown>>;
+    expect(history).toHaveLength(2);
+    expect(history[0].error).toBe("fetch failed");
+    // The earlier success keeps its own clean entry.
+    expect(history[1]).toMatchObject({ id: "ok-1" });
+    expect(history[1].error).toBeUndefined();
+    // The failed attempt owns no video, so it cannot sit on top of the old one.
+    expect(payload.outputVideo).toBeNull();
+    expect(payload.selectedVideoHistoryIndex).toBe(0);
+  });
+
   it("should use stored fallback in regenerate mode", async () => {
     const node = makeNode({
       inputImages: ["stored-img.png"],

@@ -255,14 +255,15 @@ describe("GenerateImageNode", () => {
         <TestWrapper>
           <GenerateImageNode {...createNodeProps({
             status: "error",
-            error: "Generation failed",
+            error: "Upstream provider rejected the request",
             outputImage: "data:image/png;base64,abc123",
           })} />
         </TestWrapper>
       );
 
       expect(screen.getByText("Generation failed")).toBeInTheDocument();
-      expect(screen.getByText("See toast for details")).toBeInTheDocument();
+      expect(screen.getByText("Upstream provider rejected the request")).toBeInTheDocument();
+      expect(screen.queryByText("See toast for details")).not.toBeInTheDocument();
     });
 
     it("should show 'Failed' when error message is null", () => {

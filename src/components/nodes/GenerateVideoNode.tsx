@@ -261,6 +261,14 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
       status: "idle",
       error: null,
     }),
+    // Failed attempts have no stored video; selecting one shows its own error.
+    isUnloadable: (item) => Boolean(item.error),
+    buildUnloadableUpdate: (item, newIndex) => ({
+      outputVideo: null,
+      selectedVideoHistoryIndex: newIndex,
+      status: "error",
+      error: item.error,
+    }),
   });
 
   // Handle model selection from browse dialog
@@ -293,11 +301,21 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
   ), [currentProvider]);
 
   const hasCarouselVideos = (nodeData.videoHistory || []).length > 1;
-  const activeGenerationCost = nodeData.videoHistory?.[nodeData.selectedVideoHistoryIndex || 0]?.generationCost;
+  const activeHistoryItem = nodeData.videoHistory?.[nodeData.selectedVideoHistoryIndex || 0];
+  const activeGenerationCost = activeHistoryItem?.generationCost;
+  // A failure belongs to the attempt that produced it. When history exists the
+  // selected entry decides what is shown, so earlier successes stay clean and
+  // only the failed attempt carries its message.
+  const activeEntryFailed = Boolean(activeHistoryItem?.error);
+  const failureMessage = activeHistoryItem
+    ? activeHistoryItem.error ?? null
+    : nodeData.status === "error"
+      ? nodeData.error || "Generation failed"
+      : null;
   const showGenerationCost =
     activeGenerationCost?.provider === "fal" &&
     nodeData.status !== "loading" &&
-    nodeData.status !== "error";
+    !activeEntryFailed;
 
   // Show toast when generation fails
   useErrorToast(nodeData.status, nodeData.error, "Video generation failed");
@@ -614,18 +632,22 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
 
       <div className="relative w-full h-full min-h-0 overflow-hidden rounded-lg">
         {/* Preview area */}
-        {nodeData.outputVideo ? (
+        {nodeData.outputVideo || activeEntryFailed ? (
           <>
-            <video
-              ref={videoAutoplayRef}
-              key={nodeData.videoHistory?.[nodeData.selectedVideoHistoryIndex || 0]?.id}
-              src={videoBlobUrl ?? undefined}
-              controls
-              loop
-              muted
-              className="w-full h-full object-cover"
-              playsInline
-            />
+            {nodeData.outputVideo ? (
+              <video
+                ref={videoAutoplayRef}
+                key={activeHistoryItem?.id}
+                src={videoBlobUrl ?? undefined}
+                controls
+                loop
+                muted
+                className="w-full h-full object-cover"
+                playsInline
+              />
+            ) : (
+              <div className="w-full h-full bg-neutral-900/40" />
+            )}
             {(showGenerationCost || nodeData.__usedFallback) && (
               <div className="absolute top-1 left-1 z-10 flex flex-col items-start gap-1">
                 {showGenerationCost && activeGenerationCost && (
@@ -666,8 +688,8 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
               </div>
             )}
             {/* Error overlay when generation failed */}
-            {nodeData.status === "error" && (
-              <div className="absolute inset-0 bg-red-900/40 flex flex-col items-center justify-center gap-1">
+            {activeEntryFailed && (
+              <div className="absolute inset-0 bg-red-900/40 flex flex-col items-center justify-center gap-1 px-3">
                 <svg
                   className="w-6 h-6 text-white"
                   fill="none"
@@ -678,7 +700,14 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span className="text-white text-xs font-medium">Generation failed</span>
-                <span className="text-white/70 text-[10px]">See toast for details</span>
+                {failureMessage && (
+                  <span
+                    className="text-white/70 text-[10px] text-center line-clamp-3"
+                    title={failureMessage}
+                  >
+                    {failureMessage}
+                  </span>
+                )}
               </div>
             )}
             {/* Loading overlay for carousel navigation */}
@@ -707,15 +736,17 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
             )}
             {/* Download + Clear buttons */}
             <div className="absolute top-1 right-1 flex items-center gap-0.5">
-              <button
-                onClick={() => downloadMedia(nodeData.outputVideo!, "video").catch(() => {})}
-                className="w-5 h-5 bg-neutral-900/80 hover:bg-neutral-700 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-                title="Download video"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-              </button>
+              {nodeData.outputVideo && (
+                <button
+                  onClick={() => downloadMedia(nodeData.outputVideo!, "video").catch(() => {})}
+                  className="w-5 h-5 bg-neutral-900/80 hover:bg-neutral-700 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
+                  title="Download video"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                </button>
+              )}
               <button
                 onClick={handleClearVideo}
                 className="w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"

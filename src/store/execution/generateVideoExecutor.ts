@@ -19,6 +19,52 @@ export interface GenerateVideoOptions {
   useStoredFallback?: boolean;
 }
 
+/**
+ * Records a failed attempt as its own carousel entry.
+ *
+ * A failure belongs to the attempt that produced it, not to the node as a
+ * whole: earlier successful generations stay viewable and stay clean, and the
+ * failed entry carries its own message instead of stamping an error over the
+ * previous result.
+ */
+export function recordVideoGenerationFailure(
+  ctx: Pick<NodeExecutionContext, "node" | "updateNodeData" | "getFreshNode">,
+  options: { model: SelectedModel; prompt: string; runId: string; error: string }
+): void {
+  const { node, updateNodeData, getFreshNode } = ctx;
+  const { model, prompt, runId, error } = options;
+
+  const currentData = (getFreshNode(node.id)?.data || node.data) as GenerateVideoNodeData;
+  const existingHistory = currentData.videoHistory || [];
+  if (runId && existingHistory.some((item) => item.runId === runId)) return;
+
+  const timestamp = Date.now();
+  const history = [
+    {
+      id: `failed-${runId || timestamp}`,
+      runId: runId || undefined,
+      timestamp,
+      prompt,
+      model: model.modelId,
+      error,
+    },
+    ...existingHistory,
+  ].slice(0, 50);
+
+  updateNodeData(node.id, {
+    status: "error",
+    error,
+    // The failed attempt has no video of its own; showing the previous
+    // generation underneath the error made the failure look like it belonged
+    // to that earlier result.
+    outputVideo: null,
+    videoHistory: history,
+    selectedVideoHistoryIndex: 0,
+    activeRunId: null,
+    runStatus: null,
+  });
+}
+
 export async function applyVideoGenerationResult(
   ctx: NodeExecutionContext,
   options: {
@@ -214,8 +260,8 @@ export async function executeGenerateVideo(
       mediaType: "video" as const,
     };
 
+    let runId = "";
     try {
-      let runId = "";
       const submitted = await submitPersistentGeneration({
         workflowId: ctx.workflowId ?? null,
         nodeId: node.id,
@@ -258,25 +304,11 @@ export async function executeGenerateVideo(
         });
 
         if (!result.success) {
-          updateNodeData(node.id, {
-            status: "error",
-            error: result.error || "Video generation failed",
-          });
           throw new Error(result.error || "Video generation failed");
         }
       }
 
       if (!result.success || !(result.video || result.videoUrl || result.image)) {
-        updateNodeData(node.id, {
-          status: "error",
-          error: result.error || "Video generation failed",
-          activeRunId: null,
-          runStatus: null,
-        });
-        updateGenerationRun(runId, {
-          status: "failed",
-          error: result.error || "Video generation failed",
-        });
         throw new Error(result.error || "Video generation failed");
       }
 
@@ -300,10 +332,13 @@ export async function executeGenerateVideo(
         errorMessage = error.message;
       }
 
-      updateNodeData(node.id, {
-        status: "error",
+      recordVideoGenerationFailure(ctx, {
+        model: modelToUse,
+        prompt: text || "",
+        runId,
         error: errorMessage,
       });
+      if (runId) updateGenerationRun(runId, { status: "failed", error: errorMessage });
       throw new Error(errorMessage);
     }
   };

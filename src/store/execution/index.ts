@@ -25,7 +25,11 @@ export {
 export { executeNanoBanana } from "./nanoBananaExecutor";
 export type { NanoBananaOptions } from "./nanoBananaExecutor";
 
-export { executeGenerateVideo, applyVideoGenerationResult } from "./generateVideoExecutor";
+export {
+  executeGenerateVideo,
+  applyVideoGenerationResult,
+  recordVideoGenerationFailure,
+} from "./generateVideoExecutor";
 export type { GenerateVideoOptions } from "./generateVideoExecutor";
 export { pollGenerateTask } from "./pollTaskCompletion";
 export { pollLocalGenerationRun } from "./persistentGeneration";
