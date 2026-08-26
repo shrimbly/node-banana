@@ -186,15 +186,16 @@ describe("useStitchVideos", () => {
     it("returns a video/mp4 Blob", async () => {
       const blob = new Blob(["video1"], { type: "video/mp4" });
       const result = await stitchVideosAsync([blob]);
-      expect(result).toBeInstanceOf(Blob);
-      expect(result.type).toBe("video/mp4");
+      expect(result.blob).toBeInstanceOf(Blob);
+      expect(result.blob.type).toBe("video/mp4");
+      expect(result.warning).toBeNull();
     });
 
     it("processes multiple video blobs", async () => {
       const blob1 = new Blob(["video1"], { type: "video/mp4" });
       const blob2 = new Blob(["video2"], { type: "video/mp4" });
       const result = await stitchVideosAsync([blob1, blob2]);
-      expect(result).toBeInstanceOf(Blob);
+      expect(result.blob).toBeInstanceOf(Blob);
     });
 
     it("reports error status on failure", async () => {
@@ -234,7 +235,8 @@ describe("useStitchVideos", () => {
         duration: 1.0,
       });
 
-      expect(result).toBeInstanceOf(Blob);
+      expect(result.blob).toBeInstanceOf(Blob);
+      expect(result.warning).toMatch(/no supported audio codec/i);
       expect(mockAddAudioTrack).not.toHaveBeenCalled();
     });
 

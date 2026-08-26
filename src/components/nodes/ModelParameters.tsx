@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { ProviderType, ModelInputDef } from "@/types";
+import { ProviderType, ModelInputDef, RequiredModelParameter } from "@/types";
 import { ModelParameter } from "@/lib/providers/types";
 import { useProviderApiKeys } from "@/store/workflowStore";
 import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
@@ -61,6 +61,19 @@ interface ModelParametersProps {
   onParametersChange: (parameters: Record<string, unknown>) => void;
   onExpandChange?: (expanded: boolean, parameterCount: number) => void;
   onInputsLoaded?: (inputs: ModelInputDef[]) => void;
+  onRequiredParametersLoaded?: (parameters: RequiredModelParameter[]) => void;
+}
+
+function getRequiredParameters(parameters: ModelParameter[]): RequiredModelParameter[] {
+  return parameters
+    .filter((parameter) => parameter.required && parameter.default === undefined)
+    .map((parameter) => ({
+      name: parameter.name,
+      label: parameter.name
+        .replace(/_url$/, "")
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (character) => character.toUpperCase()),
+    }));
 }
 
 /**
@@ -75,6 +88,7 @@ function ModelParametersInner({
   onParametersChange,
   onExpandChange,
   onInputsLoaded,
+  onRequiredParametersLoaded,
 }: ModelParametersProps) {
   const [schema, setSchema] = useState<ModelParameter[]>([]);
   // Tracks which `${provider}:${modelId}` the current `schema` belongs to.
@@ -93,6 +107,7 @@ function ModelParametersInner({
       setSchema([]);
       setSchemaKey("");
       onInputsLoaded?.([]);
+      onRequiredParametersLoaded?.([]);
       return;
     }
 
@@ -110,6 +125,7 @@ function ModelParametersInner({
         setSchema(cached.parameters);
         setSchemaKey(currentKey);
         onInputsLoaded?.(cached.inputs);
+        onRequiredParametersLoaded?.(getRequiredParameters(cached.parameters));
         return;
       }
 
@@ -157,12 +173,14 @@ function ModelParametersInner({
         if (onInputsLoaded) {
           onInputsLoaded(inputs);
         }
+        onRequiredParametersLoaded?.(getRequiredParameters(params));
       } catch (err) {
         if (cancelled) return;
         console.error("Failed to fetch model schema:", err);
         setError(err instanceof Error ? err.message : "Failed to fetch schema");
         setSchema([]);
         setSchemaKey(currentKey);
+        onRequiredParametersLoaded?.([]);
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -173,7 +191,7 @@ function ModelParametersInner({
     return () => {
       cancelled = true;
     };
-  }, [modelId, provider, replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, onInputsLoaded]);
+  }, [modelId, provider, replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, onInputsLoaded, onRequiredParametersLoaded]);
 
   // Pre-populate schema defaults into parameters
   useEffect(() => {
@@ -347,7 +365,7 @@ function ParameterInputInner({ param, name, value, onChange }: ParameterInputPro
           className="text-[11px] text-neutral-400 shrink-0"
           title={param.description || undefined}
         >
-          {displayName}
+          {displayName}{param.required && <span className="text-red-400"> *</span>}
         </label>
         <select
           value={(value as string) ?? ""}
@@ -366,6 +384,7 @@ function ParameterInputInner({ param, name, value, onChange }: ParameterInputPro
             }
           }}
           className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 rounded-md bg-[#1a1a1a] focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
+          required={param.required}
         >
           <option value="">Default</option>
           {param.enum.map((opt) => (
@@ -394,7 +413,7 @@ function ParameterInputInner({ param, name, value, onChange }: ParameterInputPro
           onChange={(e) => handleChange(e.target.checked)}
           className="nodrag nopan w-3 h-3 rounded bg-[#1a1a1a] text-neutral-600 focus:ring-1 focus:ring-neutral-600 focus:ring-offset-0"
         />
-        <span>{displayName}</span>
+        <span>{displayName}{param.required && <span className="text-red-400"> *</span>}</span>
       </label>
     );
   }
@@ -424,6 +443,7 @@ function ParameterInputInner({ param, name, value, onChange }: ParameterInputPro
             title={param.description || undefined}
           >
             {displayName}
+            {param.required && <span className="text-red-400">*</span>}
             {hasMin && hasMax && (
               <span className="text-neutral-500 text-[9px]">
                 ({param.minimum}-{param.maximum})
@@ -450,6 +470,7 @@ function ParameterInputInner({ param, name, value, onChange }: ParameterInputPro
               }
             }}
             placeholder={param.default !== undefined ? `${param.default}` : undefined}
+            required={param.required}
             className={`nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 rounded-md bg-[#1a1a1a] focus:outline-none focus:ring-1 text-white placeholder:text-neutral-500 ${
               validationError
                 ? "ring-1 ring-red-500"
@@ -476,7 +497,7 @@ function ParameterInputInner({ param, name, value, onChange }: ParameterInputPro
         className="text-[11px] text-neutral-400 shrink-0"
         title={param.description || undefined}
       >
-        {displayName}
+        {displayName}{param.required && <span className="text-red-400"> *</span>}
       </label>
       <input
         type="text"
@@ -490,6 +511,7 @@ function ParameterInputInner({ param, name, value, onChange }: ParameterInputPro
           handleChange(localValue || undefined);
         }}
         placeholder={param.default !== undefined ? `${param.default}` : undefined}
+        required={param.required}
         className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 rounded-md bg-[#1a1a1a] focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white placeholder:text-neutral-500"
       />
     </div>

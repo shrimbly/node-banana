@@ -68,6 +68,24 @@ describe("getConnectedInputsPure", () => {
     expect(result.images).toEqual(["data:image/png;base64,nb"]);
   });
 
+  it("should expose the active carousel image rather than the newest history entry", () => {
+    const activeImage = "data:image/png;base64,active-older";
+    const nodes = [
+      makeNode("nb", "nanoBanana", {
+        outputImage: activeImage,
+        outputImageRef: "older",
+        selectedHistoryIndex: 1,
+        imageHistory: [{ id: "latest" }, { id: "older" }],
+      }),
+      makeNode("out", "output"),
+    ];
+    const edges = [makeEdge("nb", "out", "image")];
+
+    const result = getConnectedInputsPure("out", nodes, edges);
+
+    expect(result.images).toEqual([activeImage]);
+  });
+
   it("should extract video from generateVideo source", () => {
     const nodes = [
       makeNode("vid", "generateVideo", { outputVideo: "data:video/mp4;base64,vid" }),
@@ -396,6 +414,18 @@ describe("validateWorkflowPure", () => {
     const result = validateWorkflowPure(nodes, []);
     expect(result.valid).toBe(false);
     expect(result.errors[0]).toContain("missing text input");
+  });
+
+  it("should detect missing required model parameters", () => {
+    const nodes = [makeNode("audio", "generateAudio", {
+      requiredModelParameters: [{ name: "preview_text", label: "Preview Text" }],
+      parameters: {},
+    })];
+
+    const result = validateWorkflowPure(nodes, []);
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('generateAudio node "audio" missing required field: preview text');
   });
 
   it("should detect missing input on generateVideo when nothing is connected", () => {

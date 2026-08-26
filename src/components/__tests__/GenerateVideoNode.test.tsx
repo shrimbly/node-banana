@@ -271,19 +271,45 @@ describe("GenerateVideoNode", () => {
       expect(screen.getByText("Video generation failed")).toBeInTheDocument();
     });
 
-    it("should show error overlay when status is error with existing output", () => {
+    it("shows the failure detail on the failed history entry", () => {
       render(
         <TestWrapper>
           <GenerateVideoNode {...createNodeProps({
             status: "error",
-            error: "Generation failed",
-            outputVideo: "data:video/mp4;base64,abc123",
+            error: "fetch failed",
+            outputVideo: null,
+            videoHistory: [
+              { id: "failed-run-2", runId: "run-2", timestamp: 2, prompt: "p", model: "m", error: "fetch failed" },
+              { id: "ok-1", runId: "run-1", timestamp: 1, prompt: "p", model: "m" },
+            ],
+            selectedVideoHistoryIndex: 0,
           })} />
         </TestWrapper>
       );
 
       expect(screen.getByText("Generation failed")).toBeInTheDocument();
-      expect(screen.getByText("See toast for details")).toBeInTheDocument();
+      expect(screen.getByText("fetch failed")).toBeInTheDocument();
+      expect(screen.queryByText("See toast for details")).not.toBeInTheDocument();
+    });
+
+    it("keeps an earlier successful generation free of the error overlay", () => {
+      render(
+        <TestWrapper>
+          <GenerateVideoNode {...createNodeProps({
+            status: "idle",
+            error: null,
+            outputVideo: "data:video/mp4;base64,abc123",
+            videoHistory: [
+              { id: "failed-run-2", runId: "run-2", timestamp: 2, prompt: "p", model: "m", error: "fetch failed" },
+              { id: "ok-1", runId: "run-1", timestamp: 1, prompt: "p", model: "m" },
+            ],
+            selectedVideoHistoryIndex: 1,
+          })} />
+        </TestWrapper>
+      );
+
+      expect(screen.queryByText("Generation failed")).not.toBeInTheDocument();
+      expect(screen.queryByText("fetch failed")).not.toBeInTheDocument();
     });
 
     it("should show 'Failed' when error message is null", () => {

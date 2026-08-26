@@ -307,13 +307,13 @@ export async function executeOutputGallery(ctx: NodeExecutionContext): Promise<v
   const existingImages = new Set(galleryImages);
   const newImages = images.filter((img) => !existingImages.has(img));
   if (newImages.length > 0) {
-    updates.images = [...newImages, ...galleryImages];
+    updates.images = [...galleryImages, ...newImages];
   }
 
   const existingVideos = new Set(galleryVideos);
   const newVideos = videos.filter((v) => !existingVideos.has(v));
   if (newVideos.length > 0) {
-    updates.videos = [...newVideos, ...galleryVideos];
+    updates.videos = [...galleryVideos, ...newVideos];
   }
 
   if (Object.keys(updates).length > 0) {

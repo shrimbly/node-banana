@@ -23,6 +23,24 @@ export interface SelectedModel {
   capabilities?: string[];  // Model capabilities (e.g., "text-to-image", "image-to-3d")
 }
 
+/**
+ * Cost receipt for one completed provider request.
+ *
+ * This is intentionally separate from SelectedModelPricing: model pricing is
+ * an estimate for a future run, while this object belongs to one concrete
+ * result and travels with that result through history and persistence.
+ */
+export interface GenerationCostReceipt {
+  provider: ProviderType;
+  requestId: string | null;
+  modelId: string;
+  units: number | null;
+  unit: string | null;
+  unitPrice: number | null;
+  currency: string | null;
+  cost: number | null;
+}
+
 export interface ProviderConfig {
   id: ProviderType;
   name: string;

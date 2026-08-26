@@ -6,7 +6,7 @@
  * AI services for model discovery and generation.
  */
 
-import { ProviderType } from "@/types";
+import { GenerationCostReceipt, ProviderType } from "@/types";
 
 /**
  * Model capabilities - what operations a model can perform
@@ -75,6 +75,8 @@ export interface ProviderModel {
     type: "per-run" | "per-second";
     amount: number;
     currency: string;
+    /** Provider billing unit, e.g. image, megapixel, or video_second. */
+    unit?: string;
   };
   /** Optional URL to the model's page on the provider's website */
   pageUrl?: string;
@@ -111,6 +113,8 @@ export interface GenerationOutput {
     /** Original URL if applicable (e.g., from provider CDN) */
     url?: string;
   }>;
+  /** Cost receipt for this concrete provider request, when available. */
+  generationCost?: GenerationCostReceipt;
   /** Error message if success is false */
   error?: string;
 }

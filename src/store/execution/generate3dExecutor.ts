@@ -9,7 +9,12 @@ import type { Generate3DNodeData, SelectedModel } from "@/types";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
+import { resolveGenerationCost } from "./generationCost";
 import type { NodeExecutionContext } from "./types";
+import {
+  formatMissingRequiredModelParameters,
+  getMissingRequiredModelParameters,
+} from "@/utils/requiredModelParameters";
 
 export interface Generate3DOptions {
   /** When true, falls back to stored inputImages/inputPrompt if no connections provide them. */
@@ -111,7 +116,7 @@ export async function executeGenerate3D(
 
       let result = await response.json();
 
-      // Handle polling response (long-running Kie tasks)
+      // Handle polling response (long-running Kie and fal queue tasks)
       if (result.polling) {
         result = await pollGenerateTask({
           taskId: result.taskId,
@@ -133,8 +138,13 @@ export async function executeGenerate3D(
       }
 
       if (result.success && result.model3dUrl) {
+        const generationCost = resolveGenerationCost(
+          modelToUse,
+          result.generationCost
+        );
         updateNodeData(node.id, {
           output3dUrl: result.model3dUrl,
+          generationCost,
           status: "complete",
           error: null,
           savedFilename: null,
@@ -142,7 +152,7 @@ export async function executeGenerate3D(
         });
 
         // Track cost if applicable
-        if (modelToUse.pricing) {
+        if (modelToUse.provider !== "fal" && modelToUse.pricing) {
           addIncurredCost(modelToUse.pricing.amount);
         }
 
@@ -211,6 +221,16 @@ export async function executeGenerate3D(
   if (!primaryModel.modelId) {
     updateNodeData(node.id, { status: "error", error: "No model selected" });
     throw new Error("No model selected");
+  }
+
+  const missingParameters = getMissingRequiredModelParameters(
+    nodeData.requiredModelParameters,
+    nodeData.parameters
+  );
+  if (missingParameters.length > 0) {
+    const error = formatMissingRequiredModelParameters(missingParameters);
+    updateNodeData(node.id, { status: "error", error });
+    throw new Error(error);
   }
 
   await runWithFallback({

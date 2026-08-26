@@ -33,6 +33,12 @@ export interface TrimProgress {
   error?: string;
 }
 
+export interface TrimResult {
+  blob: Blob;
+  /** Non-fatal issue surfaced to the caller, e.g. no supported audio codec found. */
+  warning: string | null;
+}
+
 /**
  * Standalone async function to trim a video blob to a start/end time range.
  * Preserves embedded audio by trimming it to match the video trim range.
@@ -43,7 +49,7 @@ export async function trimVideoAsync(
   endTime: number,
   onProgress?: (progress: TrimProgress) => void,
   signal?: AbortSignal
-): Promise<Blob> {
+): Promise<TrimResult> {
   const updateProgress = (
     status: TrimProgress['status'],
     message: string,
@@ -96,6 +102,7 @@ export async function trimVideoAsync(
     let audioSource: AudioBufferSource | null = null;
     let output: Output | null = null;
     let outputStarted = false;
+    let audioWarning: string | null = null;
 
     try {
       const videoTracks = await input.getVideoTracks();
@@ -178,7 +185,7 @@ export async function trimVideoAsync(
                 : concatenated;
 
             // Find supported audio codec
-            const audioCodec = await getFirstEncodableAudioCodec(['aac', 'mp3'], {
+            const audioCodec = await getFirstEncodableAudioCodec(['aac', 'opus', 'mp3'], {
               numberOfChannels: numChannels,
               sampleRate,
               bitrate: 128000,
@@ -194,13 +201,16 @@ export async function trimVideoAsync(
 
               updateProgress('processing', `Audio track ready (${audioCodec})`, 14);
             } else {
-              console.warn('No supported audio codec found, output will be video-only');
+              audioWarning = 'No supported audio codec found on this device — output has no sound.';
+              console.warn(audioWarning);
             }
           }
         }
       } catch (audioErr) {
         // A user Stop must not be swallowed by the graceful audio-degradation path.
         if (audioErr instanceof DOMException && audioErr.name === "AbortError") throw audioErr;
+        const audioErrMessage = audioErr instanceof Error ? audioErr.message : String(audioErr);
+        audioWarning = `Audio extraction failed, output has no sound: ${audioErrMessage}`;
         console.warn('Audio extraction failed, continuing without audio:', audioErr);
       }
 
@@ -292,7 +302,7 @@ export async function trimVideoAsync(
         100
       );
 
-      return outputBlob;
+      return { blob: outputBlob, warning: audioWarning };
     } finally {
       // Cleanup
       if (audioSource) {

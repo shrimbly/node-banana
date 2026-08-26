@@ -255,14 +255,15 @@ describe("GenerateImageNode", () => {
         <TestWrapper>
           <GenerateImageNode {...createNodeProps({
             status: "error",
-            error: "Generation failed",
+            error: "Upstream provider rejected the request",
             outputImage: "data:image/png;base64,abc123",
           })} />
         </TestWrapper>
       );
 
       expect(screen.getByText("Generation failed")).toBeInTheDocument();
-      expect(screen.getByText("See toast for details")).toBeInTheDocument();
+      expect(screen.getByText("Upstream provider rejected the request")).toBeInTheDocument();
+      expect(screen.queryByText("See toast for details")).not.toBeInTheDocument();
     });
 
     it("should show 'Failed' when error message is null", () => {
@@ -362,6 +363,24 @@ describe("GenerateImageNode", () => {
       expect(screen.getByTitle("Next image")).toBeInTheDocument();
     });
 
+    it("should keep carousel controls out of React Flow node dragging", () => {
+      render(
+        <TestWrapper>
+          <GenerateImageNode {...createNodeProps({
+            outputImage: "data:image/png;base64,abc123",
+            imageHistory: [
+              { id: "img1", timestamp: 2, prompt: "test1", aspectRatio: "1:1", model: "nano-banana" },
+              { id: "img2", timestamp: 1, prompt: "test2", aspectRatio: "1:1", model: "nano-banana" },
+            ],
+            selectedHistoryIndex: 0,
+          })} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByTitle("Previous image")).toHaveClass("nodrag", "nopan");
+      expect(screen.getByTitle("Next image")).toHaveClass("nodrag", "nopan");
+    });
+
     it("should show current position in carousel", () => {
       render(
         <TestWrapper>
@@ -378,6 +397,84 @@ describe("GenerateImageNode", () => {
       );
 
       expect(screen.getByText("2 / 3")).toBeInTheDocument();
+    });
+
+    it("should load and select the image reached by the next arrow", async () => {
+      const imageHistory = [
+        { id: "latest", timestamp: 2, prompt: "latest", aspectRatio: "1:1" as const, model: "nano-banana" as const },
+        { id: "older", timestamp: 1, prompt: "older", aspectRatio: "1:1" as const, model: "nano-banana" as const },
+      ];
+      const latestImage = "data:image/png;base64,bGF0ZXN0";
+      const olderImage = "data:image/png;base64,b2xkZXI=";
+
+      mockFetch.mockImplementation(async (url, init) => {
+        if (url === "/api/load-generation") {
+          const body = JSON.parse(String(init?.body));
+          expect(body.imageId).toBe("older");
+          return {
+            ok: true,
+            json: () => Promise.resolve({ success: true, image: olderImage }),
+          };
+        }
+        return {
+          ok: true,
+          json: () => Promise.resolve({ models: [], success: true }),
+        };
+      });
+
+      const { rerender } = render(
+        <TestWrapper>
+          <GenerateImageNode {...createNodeProps({
+            outputImage: latestImage,
+            outputImageRef: "latest",
+            imageHistory,
+            selectedHistoryIndex: 0,
+          })} />
+        </TestWrapper>
+      );
+
+      fireEvent.click(screen.getByTitle("Next image"));
+
+      await waitFor(() => {
+        expect(mockUpdateNodeData).toHaveBeenCalledWith("test-node-1", {
+          outputImage: olderImage,
+          outputImageRef: undefined,
+          selectedHistoryIndex: 1,
+          status: "idle",
+          error: null,
+        });
+      });
+
+      rerender(
+        <TestWrapper>
+          <GenerateImageNode {...createNodeProps({
+            outputImage: olderImage,
+            outputImageRef: "older",
+            imageHistory,
+            selectedHistoryIndex: 1,
+          })} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByAltText("Generated")).toHaveAttribute("src", olderImage);
+      expect(screen.getByText("2 / 2")).toBeInTheDocument();
+    });
+
+    it("should display a safe index when persisted selection is out of bounds", () => {
+      render(
+        <TestWrapper>
+          <GenerateImageNode {...createNodeProps({
+            outputImage: "data:image/png;base64,abc123",
+            imageHistory: [
+              { id: "img1", timestamp: 2, prompt: "one", aspectRatio: "1:1", model: "nano-banana" },
+              { id: "img2", timestamp: 1, prompt: "two", aspectRatio: "1:1", model: "nano-banana" },
+            ],
+            selectedHistoryIndex: 99,
+          })} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByText("2 / 2")).toBeInTheDocument();
     });
   });
 

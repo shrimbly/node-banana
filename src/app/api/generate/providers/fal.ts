@@ -6,6 +6,7 @@
  */
 
 import { GenerationInput, GenerationOutput } from "@/lib/providers/types";
+import type { GenerationCostReceipt } from "@/types";
 import { validateMediaUrl } from "@/utils/urlValidation";
 import {
   INPUT_PATTERNS,
@@ -19,6 +20,7 @@ import {
  */
 interface FalInputMapping extends InputMapping {
   parameterTypes: ParameterTypeInfo;
+  requiredParams: Set<string>;
 }
 
 /**
@@ -30,6 +32,142 @@ const FAL_MAPPING_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 /** Clear the fal schema mapping cache (exported for testing) */
 export function clearFalInputMappingCache() {
   falInputMappingCache.clear();
+}
+
+function finiteNonNegativeNumber(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return null;
+  }
+  return value;
+}
+
+function parseBillableUnits(value: string | null): number | null {
+  if (!value || value.trim() === "") return null;
+  return finiteNonNegativeNumber(Number(value));
+}
+
+interface FalBillingEvent {
+  request_id?: unknown;
+  output_units?: unknown;
+  unit_price?: unknown;
+  cost_total?: unknown;
+  cost_estimate_nano_usd?: unknown;
+}
+
+function formatFieldName(name: string): string {
+  return name
+    .replace(/_url$/, "")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function hasRequestValue(value: unknown): boolean {
+  if (typeof value === "string") return value.trim().length > 0;
+  if (Array.isArray(value)) return value.length > 0;
+  return value !== undefined && value !== null;
+}
+
+async function describeFalHttpError(response: Response): Promise<string> {
+  const errorText = await response.text();
+  if (!errorText) return `HTTP ${response.status}`;
+
+  try {
+    const errorJson = JSON.parse(errorText) as {
+      error?: unknown;
+      detail?: unknown;
+      message?: unknown;
+    };
+    if (typeof errorJson.error === "object" && errorJson.error && "message" in errorJson.error) {
+      const message = (errorJson.error as { message?: unknown }).message;
+      if (typeof message === "string") return message;
+    }
+    if (Array.isArray(errorJson.detail)) {
+      return errorJson.detail.map((detail) => {
+        const item = detail as { msg?: unknown; loc?: unknown };
+        const field = Array.isArray(item.loc)
+          ? item.loc.filter((part): part is string => typeof part === "string" && part !== "body").at(-1)
+          : undefined;
+        if (typeof item.msg === "string") {
+          return field && /^field required$/i.test(item.msg)
+            ? `Missing required field: ${formatFieldName(field)}`
+            : field ? `${formatFieldName(field)}: ${item.msg}` : item.msg;
+        }
+        return JSON.stringify(detail);
+      }).join("; ");
+    }
+    if (typeof errorJson.detail === "string") return errorJson.detail;
+    if (typeof errorJson.message === "string") return errorJson.message;
+    if (typeof errorJson.error === "string") return errorJson.error;
+  } catch {
+    // Preserve non-JSON provider error bodies below.
+  }
+
+  return errorText;
+}
+
+/**
+ * Build a request-level cost receipt from fal's billing event for this exact
+ * request. Model pricing may be fallback compute pricing rather than the
+ * amount charged for a marketplace model.
+ */
+async function buildFalGenerationCost(
+  modelId: string,
+  requestId: string,
+  units: number | null,
+  apiKey: string | null
+): Promise<GenerationCostReceipt> {
+  const unavailable: GenerationCostReceipt = {
+    provider: "fal",
+    requestId,
+    modelId,
+    units,
+    unit: null,
+    unitPrice: null,
+    currency: null,
+    cost: null,
+  };
+
+  if (!apiKey) return unavailable;
+
+  try {
+    const url = new URL("https://api.fal.ai/v1/models/billing-events");
+    url.searchParams.set("request_id", requestId);
+    url.searchParams.set("limit", "1");
+    const response = await fetch(url, {
+      headers: { Authorization: `Key ${apiKey}` },
+    });
+
+    if (!response.ok) {
+      console.warn(`[fal.ai] Billing lookup failed for ${requestId}: ${response.status}`);
+      return unavailable;
+    }
+
+    const data = await response.json() as { billing_events?: unknown };
+    const event = Array.isArray(data.billing_events)
+      ? data.billing_events.find(
+        (item: FalBillingEvent) => item.request_id === requestId
+      ) as FalBillingEvent | undefined
+      : null;
+    const eventUnits = finiteNonNegativeNumber(event?.output_units);
+    const unitPrice = finiteNonNegativeNumber(event?.unit_price);
+    const directCost = finiteNonNegativeNumber(event?.cost_total);
+    const nanoCost = finiteNonNegativeNumber(event?.cost_estimate_nano_usd);
+    const cost = directCost ?? (nanoCost === null ? null : nanoCost / 1_000_000_000);
+
+    return {
+      ...unavailable,
+      units: eventUnits ?? units,
+      unitPrice,
+      currency: cost === null ? null : "USD",
+      cost,
+    };
+  } catch (error) {
+    console.warn(
+      `[fal.ai] Billing lookup failed for ${requestId}:`,
+      error instanceof Error ? error.message : "Unknown error"
+    );
+    return unavailable;
+  }
 }
 
 /**
@@ -47,6 +185,7 @@ async function getFalInputMapping(modelId: string, apiKey: string | null): Promi
   const arrayParams = new Set<string>();
   const schemaArrayParams = new Set<string>();
   const parameterTypes: ParameterTypeInfo = {};
+  const requiredParams = new Set<string>();
 
   try {
     // Use fal.ai Model Search API with OpenAPI expansion
@@ -59,13 +198,13 @@ async function getFalInputMapping(modelId: string, apiKey: string | null): Promi
     const response = await fetch(url, { headers });
 
     if (!response.ok) {
-      return { paramMap, arrayParams, schemaArrayParams, parameterTypes };
+      return { paramMap, arrayParams, schemaArrayParams, parameterTypes, requiredParams };
     }
 
     const data = await response.json();
     const modelData = data.models?.[0];
     if (!modelData?.openapi) {
-      return { paramMap, arrayParams, schemaArrayParams, parameterTypes };
+      return { paramMap, arrayParams, schemaArrayParams, parameterTypes, requiredParams };
     }
 
     // Extract input schema from OpenAPI spec (same logic as /api/models/[modelId])
@@ -92,11 +231,16 @@ async function getFalInputMapping(modelId: string, apiKey: string | null): Promi
     }
 
     if (!inputSchema) {
-      return { paramMap, arrayParams, schemaArrayParams, parameterTypes };
+      return { paramMap, arrayParams, schemaArrayParams, parameterTypes, requiredParams };
     }
 
     const properties = inputSchema.properties as Record<string, unknown> | undefined;
-    if (!properties) return { paramMap, arrayParams, schemaArrayParams, parameterTypes };
+    if (!properties) return { paramMap, arrayParams, schemaArrayParams, parameterTypes, requiredParams };
+
+    const required = inputSchema.required;
+    for (const name of Array.isArray(required) ? required : []) {
+      if (typeof name === "string") requiredParams.add(name);
+    }
 
     // First pass: detect all array-typed properties and extract parameter types
     // This is used for dynamicInputs which use schema names directly
@@ -144,12 +288,12 @@ async function getFalInputMapping(modelId: string, apiKey: string | null): Promi
       }
     }
 
-    const result = { paramMap, arrayParams, schemaArrayParams, parameterTypes };
+    const result = { paramMap, arrayParams, schemaArrayParams, parameterTypes, requiredParams };
     falInputMappingCache.set(modelId, { result, timestamp: Date.now() });
     return result;
   } catch {
     // Schema parsing failed - return defaults without caching so next call retries
-    return { paramMap, arrayParams, schemaArrayParams, parameterTypes };
+    return { paramMap, arrayParams, schemaArrayParams, parameterTypes, requiredParams };
   }
 }
 
@@ -234,15 +378,20 @@ export async function uploadImageToFal(base64DataUrl: string, apiKey: string | n
 }
 
 /**
- * Generate using fal.ai Queue API
- * Uses async queue submission + polling (1s interval) instead of blocking fal.run.
+ * Submit a job to the fal.ai queue and return its durable task id.
+ *
+ * This intentionally does not wait for the result: holding a request open for
+ * the length of a generation breaks once the wait exceeds a proxy or fetch
+ * timeout, and it loses the job entirely on reload. Callers poll with
+ * `checkFalTaskOnce` and collect output with `fetchFalMediaResult`.
+ *
  * Images are uploaded to fal CDN before submission to avoid payload size issues.
  */
-export async function generateWithFalQueue(
+export async function submitFalTask(
   requestId: string,
   apiKey: string | null,
   input: GenerationInput
-): Promise<GenerationOutput> {
+): Promise<{ taskId: string } | { error: string }> {
   console.log(`[API:${requestId}] fal.ai queue generation - Model: ${input.model.id}, Images: ${input.images?.length || 0}, Prompt: ${input.prompt.length} chars`);
 
   const modelId = input.model.id;
@@ -250,7 +399,7 @@ export async function generateWithFalQueue(
   console.log(`[API:${requestId}] Dynamic inputs: ${hasDynamicInputs ? Object.keys(input.dynamicInputs!).join(", ") : "none"}, API key: ${apiKey ? "yes" : "no"}`);
 
   // Fetch schema for type coercion and input mapping (cached)
-  const { paramMap, arrayParams, schemaArrayParams, parameterTypes } = await getFalInputMapping(modelId, apiKey);
+  const { paramMap, arrayParams, schemaArrayParams, parameterTypes, requiredParams } = await getFalInputMapping(modelId, apiKey);
 
   // Build request body - parameters are applied per-path below to avoid double-spreading
   const requestBody: Record<string, unknown> = {};
@@ -326,6 +475,13 @@ export async function generateWithFalQueue(
     }
   }
 
+  const missingFields = [...requiredParams].filter((name) => !hasRequestValue(requestBody[name]));
+  if (missingFields.length > 0) {
+    return {
+      error: `${input.model.name}: Missing required field${missingFields.length === 1 ? "" : "s"}: ${missingFields.map(formatFieldName).join(", ")}`,
+    };
+  }
+
   // Build headers
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -343,40 +499,15 @@ export async function generateWithFalQueue(
   });
 
   if (!submitResponse.ok) {
-    const errorText = await submitResponse.text();
-    let errorDetail = errorText || `HTTP ${submitResponse.status}`;
-    try {
-      const errorJson = JSON.parse(errorText);
-      if (typeof errorJson.error === 'object' && errorJson.error?.message) {
-        errorDetail = errorJson.error.message;
-      } else if (errorJson.detail) {
-        if (Array.isArray(errorJson.detail)) {
-          errorDetail = errorJson.detail.map((d: { msg?: string; loc?: string[] }) =>
-            d.msg || JSON.stringify(d)
-          ).join('; ');
-        } else {
-          errorDetail = errorJson.detail;
-        }
-      } else if (errorJson.message) {
-        errorDetail = errorJson.message;
-      } else if (typeof errorJson.error === 'string') {
-        errorDetail = errorJson.error;
-      }
-    } catch {
-      // Keep original text if not JSON
-    }
+    const errorDetail = await describeFalHttpError(submitResponse);
 
     if (submitResponse.status === 429) {
       return {
-        success: false,
         error: `${input.model.name}: Rate limit exceeded. ${apiKey ? "Try again in a moment." : "Add an API key in settings for higher limits."}`,
       };
     }
 
-    return {
-      success: false,
-      error: `${input.model.name}: ${errorDetail}`,
-    };
+    return { error: `${input.model.name}: ${errorDetail}` };
   }
 
   const submitResult = await submitResponse.json();
@@ -385,258 +516,371 @@ export async function generateWithFalQueue(
 
   if (!falRequestId) {
     console.error(`[API:${requestId}] No request_id in queue submit response`);
+    return { error: "No request_id in queue response" };
+  }
+
+  const statusUrl = getFalQueueUrl(submitResult.status_url, true);
+  const responseUrl = getFalQueueUrl(submitResult.response_url, false);
+  console.log(`[API:${requestId}] Queue request submitted: ${falRequestId}`);
+
+  // Some models return queue URLs that cannot be inferred solely from their
+  // endpoint id. Keep Fal's URLs in the durable task id so reload recovery
+  // polls exactly the endpoint that accepted the job.
+  return {
+    taskId: createFalTaskId(modelId, falRequestId, statusUrl, responseUrl),
+  };
+}
+
+interface FalTaskIdParts {
+  modelId: string;
+  falRequestId: string;
+  statusUrl?: string;
+  responseUrl?: string;
+}
+
+function getFalQueueUrl(value: unknown, isStatusUrl: boolean): string | null {
+  if (typeof value !== "string") return null;
+  const urlCheck = validateMediaUrl(value);
+  if (!urlCheck.valid) return null;
+
+  try {
+    const parsed = new URL(value);
+    const expectedSuffix = isStatusUrl ? "/status" : "";
+    if (
+      parsed.origin !== "https://queue.fal.run" ||
+      !parsed.pathname.includes("/requests/") ||
+      (expectedSuffix && !parsed.pathname.endsWith(expectedSuffix))
+    ) {
+      return null;
+    }
+    return parsed.href;
+  } catch {
+    return null;
+  }
+}
+
+function createFalTaskId(
+  modelId: string,
+  falRequestId: string,
+  statusUrl: string | null,
+  responseUrl: string | null
+): string {
+  if (!statusUrl || !responseUrl) return `${modelId}::${falRequestId}`;
+  return `${modelId}::${falRequestId}::${encodeURIComponent(statusUrl)}::${encodeURIComponent(responseUrl)}`;
+}
+
+/** Splits the durable task id back into its queue request and provider URLs. */
+export function parseFalTaskId(taskId: string): FalTaskIdParts | null {
+  const parts = taskId.split("::");
+  if (parts.length !== 2 && parts.length !== 4) return null;
+  const [modelId, falRequestId, encodedStatusUrl, encodedResponseUrl] = parts;
+  // Model ids are path-like (for example, fal-ai/flux/schnell) and queue ids
+  // are UUID-like. Keeping this narrow prevents a client-held task id from
+  // changing which endpoint the server polls.
+  if (
+    !/^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(modelId) ||
+    modelId.includes("..") ||
+    !/^[A-Za-z0-9-]+$/.test(falRequestId)
+  ) {
+    return null;
+  }
+
+  if (!encodedStatusUrl || !encodedResponseUrl) return { modelId, falRequestId };
+
+  try {
+    const statusUrl = getFalQueueUrl(decodeURIComponent(encodedStatusUrl), true);
+    const responseUrl = getFalQueueUrl(decodeURIComponent(encodedResponseUrl), false);
+    return statusUrl && responseUrl ? { modelId, falRequestId, statusUrl, responseUrl } : null;
+  } catch {
+    return null;
+  }
+}
+
+function falQueueUrls(
+  task: FalTaskIdParts
+): { statusUrl: string; responseUrl: string } | null {
+  if (task.statusUrl && task.responseUrl) {
+    return { statusUrl: task.statusUrl, responseUrl: task.responseUrl };
+  }
+
+  const base = `https://queue.fal.run/${task.modelId}/requests/${encodeURIComponent(task.falRequestId)}`;
+  // The task id now arrives from the client, so confirm the composed URL still
+  // resolves to fal's queue host before we fetch it.
+  let parsed: URL;
+  try {
+    parsed = new URL(base);
+  } catch {
+    return null;
+  }
+  if (parsed.origin !== "https://queue.fal.run" || !parsed.pathname.includes("/requests/")) {
+    return null;
+  }
+  return { statusUrl: `${parsed.href}/status`, responseUrl: parsed.href };
+}
+
+/**
+ * Check a fal queue task once (no polling loop).
+ * Network hiccups report as "processing" so a single failed poll does not end
+ * a generation that is still running on fal's side.
+ */
+export async function checkFalTaskOnce(
+  requestId: string,
+  apiKey: string | null,
+  taskId: string
+): Promise<{ status: "processing" | "completed" | "failed"; error?: string }> {
+  const parsed = parseFalTaskId(taskId);
+  if (!parsed) return { status: "failed", error: "Malformed fal task id" };
+
+  const urls = falQueueUrls(parsed);
+  if (!urls) return { status: "failed", error: "Malformed fal task id" };
+  const { statusUrl } = urls;
+
+  let statusResponse: Response;
+  try {
+    statusResponse = await fetch(statusUrl, {
+      headers: apiKey ? { Authorization: `Key ${apiKey}` } : {},
+    });
+  } catch (err) {
+    console.warn(`[API:${requestId}] fal poll network error:`, err);
+    return { status: "processing" };
+  }
+
+  if (!statusResponse.ok) {
+    if (statusResponse.status === 429 || statusResponse.status >= 500) {
+      return { status: "processing" };
+    }
+    console.error(`[API:${requestId}] Failed to poll status: ${statusResponse.status}`);
+    return { status: "failed", error: `Failed to poll status: ${statusResponse.status}` };
+  }
+
+  const statusResult = await statusResponse.json().catch(() => null);
+  const status = statusResult?.status;
+
+  if (status === "COMPLETED") return { status: "completed" };
+  if (status === "FAILED") {
+    const errorMessage = statusResult?.error || "Generation failed";
+    console.error(`[API:${requestId}] Queue request failed: ${errorMessage}`);
+    return { status: "failed", error: String(errorMessage) };
+  }
+
+  // IN_QUEUE, IN_PROGRESS, or anything unrecognised: keep waiting.
+  return { status: "processing" };
+}
+
+export interface FalMediaResultInput {
+  taskId: string;
+  modelName: string;
+  capabilities: string[];
+}
+
+/**
+ * Fetch the final media for a completed fal queue task.
+ */
+export async function fetchFalMediaResult(
+  requestId: string,
+  apiKey: string | null,
+  info: FalMediaResultInput
+): Promise<GenerationOutput> {
+  const parsed = parseFalTaskId(info.taskId);
+  if (!parsed) return { success: false, error: "Malformed fal task id" };
+
+  const { modelId, falRequestId } = parsed;
+  const urls = falQueueUrls(parsed);
+  if (!urls) return { success: false, error: "Malformed fal task id" };
+  const { responseUrl } = urls;
+  const { capabilities, modelName } = info;
+
+  const resultResponse = await fetch(
+    responseUrl,
+    { headers: apiKey ? { "Authorization": `Key ${apiKey}` } : {} }
+  );
+
+  if (!resultResponse.ok) {
+    const errorDetail = await describeFalHttpError(resultResponse);
+    console.error(`[API:${requestId}] Failed to fetch result: ${resultResponse.status} ${errorDetail}`);
     return {
       success: false,
-      error: "No request_id in queue response",
+      error: `${modelName}: ${errorDetail}`,
     };
   }
 
-  // Use URLs from response if provided, with SSRF validation; fall back to constructed URLs
-  const fallbackStatusUrl = `https://queue.fal.run/${modelId}/requests/${falRequestId}/status`;
-  const fallbackResponseUrl = `https://queue.fal.run/${modelId}/requests/${falRequestId}`;
-  let statusUrl = fallbackStatusUrl;
-  let responseUrl = fallbackResponseUrl;
-
-  if (submitResult.status_url) {
-    const statusCheck = validateMediaUrl(submitResult.status_url);
-    if (statusCheck.valid && submitResult.status_url.startsWith('https://queue.fal.run/')) {
-      statusUrl = submitResult.status_url;
-    } else {
-      console.warn(`[API:${requestId}] fal.ai provided invalid status URL: ${submitResult.status_url} — falling back to constructed URL`);
-    }
-  }
-  if (submitResult.response_url) {
-    const responseCheck = validateMediaUrl(submitResult.response_url);
-    if (responseCheck.valid && submitResult.response_url.startsWith('https://queue.fal.run/')) {
-      responseUrl = submitResult.response_url;
-    } else {
-      console.warn(`[API:${requestId}] fal.ai provided invalid response URL: ${submitResult.response_url} — falling back to constructed URL`);
-    }
-  }
-
-  console.log(`[API:${requestId}] Queue request submitted: ${falRequestId}, status URL: ${statusUrl}`);
-
-  // Poll for completion
-  const maxWaitTime = 10 * 60 * 1000; // 10 minutes for video
-  const pollInterval = 1000; // 1 second (matches Replicate/WaveSpeed)
-  const startTime = Date.now();
-  let lastStatus = "";
-
-  while (true) {
-    if (Date.now() - startTime > maxWaitTime) {
-      console.error(`[API:${requestId}] Queue request timed out after 10 minutes`);
-      return {
-        success: false,
-        error: `${input.model.name}: Video generation timed out after 10 minutes`,
-      };
-    }
-
-    await new Promise(resolve => setTimeout(resolve, pollInterval));
-
-    const statusResponse = await fetch(
-      statusUrl,
-      { headers: apiKey ? { "Authorization": `Key ${apiKey}` } : {} }
+  const billedUnits = parseBillableUnits(
+    resultResponse.headers?.get?.("x-fal-billable-units") ?? null
+  );
+  const providerRequestId =
+    resultResponse.headers?.get?.("x-fal-request-id") || falRequestId;
+  let generationCostPromise: Promise<GenerationCostReceipt> | null = null;
+  const getGenerationCost = () => {
+    generationCostPromise ??= buildFalGenerationCost(
+      modelId,
+      providerRequestId,
+      billedUnits,
+      apiKey
     );
+    return generationCostPromise;
+  };
 
-    if (!statusResponse.ok) {
-      console.error(`[API:${requestId}] Failed to poll status: ${statusResponse.status}`);
-      return {
-        success: false,
-        error: `Failed to poll status: ${statusResponse.status}`,
-      };
-    }
+  const result = await resultResponse.json();
 
-    const statusResult = await statusResponse.json();
-    const status = statusResult.status;
+  // Extract media URL from result
+  let mediaUrl: string | null = null;
 
-    if (status !== lastStatus) {
-      console.log(`[API:${requestId}] Queue status: ${status}`);
-      lastStatus = status;
-    }
+  // Check for 3D model output (GLB mesh) — must check before images
+  if (result.model_mesh?.url) {
+    mediaUrl = result.model_mesh.url;
+  } else if (result.mesh?.url) {
+    mediaUrl = result.mesh.url;
+  } else if (result.glb?.url) {
+    mediaUrl = result.glb.url;
+  } else if (result.model_glb?.url) {
+    mediaUrl = result.model_glb.url;
+  } else if (result.model_urls?.glb?.url) {
+    mediaUrl = result.model_urls.glb.url;
+  } else if (result.video && result.video.url) {
+    mediaUrl = result.video.url;
+  } else if (result.audio && result.audio.url) {
+    mediaUrl = result.audio.url;
+  } else if (result.images && Array.isArray(result.images) && result.images.length > 0) {
+    mediaUrl = result.images[0].url;
+  } else if (result.image && result.image.url) {
+    mediaUrl = result.image.url;
+  } else if (result.output && typeof result.output === "string") {
+    mediaUrl = result.output;
+  }
 
-    if (status === "COMPLETED") {
-      // Fetch the result
-      const resultResponse = await fetch(
-        responseUrl,
-        { headers: apiKey ? { "Authorization": `Key ${apiKey}` } : {} }
-      );
+  if (!mediaUrl) {
+    console.error(`[API:${requestId}] No media URL found in queue result. Result keys: ${Object.keys(result).join(", ")}`);
+    return {
+      success: false,
+      error: "No media URL in response",
+    };
+  }
 
-      if (!resultResponse.ok) {
-        console.error(`[API:${requestId}] Failed to fetch result: ${resultResponse.status}`);
-        return {
-          success: false,
-          error: `Failed to fetch result: ${resultResponse.status}`,
-        };
-      }
+  const is3DModel = capabilities.some(c => c.includes("3d"));
+  const isVideoModel = capabilities.some(c => c.includes("video"));
+  const isAudioModel = capabilities.some(c => c.includes("audio"));
 
-      const result = await resultResponse.json();
+  // For 3D models, return URL directly (GLB files are binary — don't base64 encode)
+  if (is3DModel) {
+    console.log(`[API:${requestId}] SUCCESS - Returning 3D model URL`);
+    return {
+      success: true,
+      generationCost: await getGenerationCost(),
+      outputs: [
+        {
+          type: "3d",
+          data: "",
+          url: mediaUrl,
+        },
+      ],
+    };
+  }
 
-      // Extract media URL from result
-      let mediaUrl: string | null = null;
+  // Validate URL before fetching (SSRF protection)
+  const mediaUrlCheck = validateMediaUrl(mediaUrl);
+  if (!mediaUrlCheck.valid) {
+    return { success: false, error: `Invalid media URL: ${mediaUrlCheck.error}` };
+  }
 
-      // Check for 3D model output (GLB mesh) — must check before images
-      if (result.model_mesh?.url) {
-        mediaUrl = result.model_mesh.url;
-      } else if (result.mesh?.url) {
-        mediaUrl = result.mesh.url;
-      } else if (result.glb?.url) {
-        mediaUrl = result.glb.url;
-      } else if (result.model_glb?.url) {
-        mediaUrl = result.model_glb.url;
-      } else if (result.model_urls?.glb?.url) {
-        mediaUrl = result.model_urls.glb.url;
-      } else if (result.video && result.video.url) {
-        mediaUrl = result.video.url;
-      } else if (result.audio && result.audio.url) {
-        mediaUrl = result.audio.url;
-      } else if (result.images && Array.isArray(result.images) && result.images.length > 0) {
-        mediaUrl = result.images[0].url;
-      } else if (result.image && result.image.url) {
-        mediaUrl = result.image.url;
-      } else if (result.output && typeof result.output === "string") {
-        mediaUrl = result.output;
-      }
+  // Fetch the media and convert to base64
+  console.log(`[API:${requestId}] Fetching output from: ${mediaUrl.substring(0, 80)}...`);
+  const mediaResponse = await fetch(mediaUrl);
 
-      if (!mediaUrl) {
-        console.error(`[API:${requestId}] No media URL found in queue result. Result keys: ${Object.keys(result).join(", ")}`);
-        return {
-          success: false,
-          error: "No media URL in response",
-        };
-      }
+  if (!mediaResponse.ok) {
+    return {
+      success: false,
+      error: `Failed to fetch output: ${mediaResponse.status}`,
+    };
+  }
 
-      const is3DModel = input.model.capabilities.some(c => c.includes("3d"));
-      const isVideoModel = input.model.capabilities.some(c => c.includes("video"));
-      const isAudioModel = input.model.capabilities.some(c => c.includes("audio"));
+  // Detect actual media type from response content-type, falling back to model hints
+  const rawContentType = mediaResponse.headers.get("content-type") || "";
+  const isAudioResponse = rawContentType.startsWith("audio/") || (!rawContentType.startsWith("video/") && !rawContentType.startsWith("image/") && isAudioModel);
 
-      // For 3D models, return URL directly (GLB files are binary — don't base64 encode)
-      if (is3DModel) {
-        console.log(`[API:${requestId}] SUCCESS - Returning 3D model URL`);
-        return {
-          success: true,
-          outputs: [
-            {
-              type: "3d",
-              data: "",
-              url: mediaUrl,
-            },
-          ],
-        };
-      }
-
-      // Validate URL before fetching (SSRF protection)
-      const mediaUrlCheck = validateMediaUrl(mediaUrl);
-      if (!mediaUrlCheck.valid) {
-        return { success: false, error: `Invalid media URL: ${mediaUrlCheck.error}` };
-      }
-
-      // Fetch the media and convert to base64
-      console.log(`[API:${requestId}] Fetching output from: ${mediaUrl.substring(0, 80)}...`);
-      const mediaResponse = await fetch(mediaUrl);
-
-      if (!mediaResponse.ok) {
-        return {
-          success: false,
-          error: `Failed to fetch output: ${mediaResponse.status}`,
-        };
-      }
-
-      // Detect actual media type from response content-type, falling back to model hints
-      const rawContentType = mediaResponse.headers.get("content-type") || "";
-      const isAudioResponse = rawContentType.startsWith("audio/") || (!rawContentType.startsWith("video/") && !rawContentType.startsWith("image/") && isAudioModel);
-
-      // Enforce max media size via content-length before buffering the body (mirrors kie.ts)
-      const mediaContentLength = parseInt(mediaResponse.headers.get("content-length") || "0", 10);
-      if (mediaContentLength > MAX_MEDIA_SIZE) {
-        const isVideoResponse = rawContentType.startsWith("video/") || (!isAudioResponse && isVideoModel);
-        if (isVideoResponse) {
-          console.log(`[API:${requestId}] SUCCESS - Returning URL for oversized video (${(mediaContentLength / (1024 * 1024)).toFixed(0)}MB)`);
-          return {
-            success: true,
-            outputs: [{ type: "video", data: "", url: mediaUrl }],
-          };
-        }
-        return { success: false, error: `Media too large: ${(mediaContentLength / (1024 * 1024)).toFixed(0)}MB > 500MB limit` };
-      }
-
-      if (isAudioResponse) {
-        const audioContentType = rawContentType.startsWith("audio/") ? rawContentType : "audio/mpeg";
-        const audioBuffer = await mediaResponse.arrayBuffer();
-        if (audioBuffer.byteLength > MAX_MEDIA_SIZE) {
-          return { success: false, error: `Media too large: ${(audioBuffer.byteLength / (1024 * 1024)).toFixed(0)}MB > 500MB limit` };
-        }
-        const audioBase64 = Buffer.from(audioBuffer).toString("base64");
-        console.log(`[API:${requestId}] SUCCESS - Returning audio`);
-        return {
-          success: true,
-          outputs: [{
-            type: "audio",
-            data: `data:${audioContentType};base64,${audioBase64}`,
-            url: mediaUrl,
-          }],
-        };
-      }
-
-      const contentType = rawContentType || (isVideoModel ? "video/mp4" : "image/png");
-      const isVideo = contentType.startsWith("video/");
-
-      const mediaArrayBuffer = await mediaResponse.arrayBuffer();
-      const mediaSizeBytes = mediaArrayBuffer.byteLength;
-      const mediaSizeMB = mediaSizeBytes / (1024 * 1024);
-
-      // Post-download size guard in case content-length was missing/inaccurate (mirrors kie.ts)
-      if (mediaSizeBytes > MAX_MEDIA_SIZE) {
-        if (isVideo) {
-          console.log(`[API:${requestId}] SUCCESS - Returning URL for oversized video (${mediaSizeMB.toFixed(0)}MB)`);
-          return {
-            success: true,
-            outputs: [{ type: "video", data: "", url: mediaUrl }],
-          };
-        }
-        return { success: false, error: `Media too large: ${mediaSizeMB.toFixed(0)}MB > 500MB limit` };
-      }
-
-      console.log(`[API:${requestId}] Output: ${contentType}, ${mediaSizeMB.toFixed(2)}MB`);
-
-      // For very large videos (>20MB), return URL only (data left empty for consumers)
-      if (isVideo && mediaSizeMB > 20) {
-        console.log(`[API:${requestId}] SUCCESS - Returning URL for large video`);
-        return {
-          success: true,
-          outputs: [
-            {
-              type: "video",
-              data: "",
-              url: mediaUrl,
-            },
-          ],
-        };
-      }
-
-      const mediaBase64 = Buffer.from(mediaArrayBuffer).toString("base64");
-      console.log(`[API:${requestId}] SUCCESS - Returning ${isVideo ? "video" : "image"}`);
-
+  // Enforce max media size via content-length before buffering the body (mirrors kie.ts)
+  const mediaContentLength = parseInt(mediaResponse.headers.get("content-length") || "0", 10);
+  if (mediaContentLength > MAX_MEDIA_SIZE) {
+    const isVideoResponse = rawContentType.startsWith("video/") || (!isAudioResponse && isVideoModel);
+    if (isVideoResponse) {
+      console.log(`[API:${requestId}] SUCCESS - Returning URL for oversized video (${(mediaContentLength / (1024 * 1024)).toFixed(0)}MB)`);
       return {
         success: true,
-        outputs: [
-          {
-            type: isVideo ? "video" : "image",
-            data: `data:${contentType};base64,${mediaBase64}`,
-            url: mediaUrl,
-          },
-        ],
+        generationCost: await getGenerationCost(),
+        outputs: [{ type: "video", data: "", url: mediaUrl }],
       };
     }
-
-    if (status === "FAILED") {
-      const errorMessage = statusResult.error || "Video generation failed";
-      console.error(`[API:${requestId}] Queue request failed: ${errorMessage}`);
-      return {
-        success: false,
-        error: `${input.model.name}: ${errorMessage}`,
-      };
-    }
-
-    // Continue polling for IN_QUEUE, IN_PROGRESS, etc.
+    return { success: false, error: `Media too large: ${(mediaContentLength / (1024 * 1024)).toFixed(0)}MB > 500MB limit` };
   }
+
+  if (isAudioResponse) {
+    const audioContentType = rawContentType.startsWith("audio/") ? rawContentType : "audio/mpeg";
+    const audioBuffer = await mediaResponse.arrayBuffer();
+    if (audioBuffer.byteLength > MAX_MEDIA_SIZE) {
+      return { success: false, error: `Media too large: ${(audioBuffer.byteLength / (1024 * 1024)).toFixed(0)}MB > 500MB limit` };
+    }
+    const audioBase64 = Buffer.from(audioBuffer).toString("base64");
+    console.log(`[API:${requestId}] SUCCESS - Returning audio`);
+    return {
+      success: true,
+      generationCost: await getGenerationCost(),
+      outputs: [{
+        type: "audio",
+        data: `data:${audioContentType};base64,${audioBase64}`,
+        url: mediaUrl,
+      }],
+    };
+  }
+
+  const contentType = rawContentType || (isVideoModel ? "video/mp4" : "image/png");
+  const isVideo = contentType.startsWith("video/");
+
+  const mediaArrayBuffer = await mediaResponse.arrayBuffer();
+  const mediaSizeBytes = mediaArrayBuffer.byteLength;
+  const mediaSizeMB = mediaSizeBytes / (1024 * 1024);
+
+  // Post-download size guard in case content-length was missing/inaccurate (mirrors kie.ts)
+  if (mediaSizeBytes > MAX_MEDIA_SIZE) {
+    if (isVideo) {
+      console.log(`[API:${requestId}] SUCCESS - Returning URL for oversized video (${mediaSizeMB.toFixed(0)}MB)`);
+      return {
+        success: true,
+        generationCost: await getGenerationCost(),
+        outputs: [{ type: "video", data: "", url: mediaUrl }],
+      };
+    }
+    return { success: false, error: `Media too large: ${mediaSizeMB.toFixed(0)}MB > 500MB limit` };
+  }
+
+  console.log(`[API:${requestId}] Output: ${contentType}, ${mediaSizeMB.toFixed(2)}MB`);
+
+  // For very large videos (>20MB), return URL only (data left empty for consumers)
+  if (isVideo && mediaSizeMB > 20) {
+    console.log(`[API:${requestId}] SUCCESS - Returning URL for large video`);
+    return {
+      success: true,
+      generationCost: await getGenerationCost(),
+      outputs: [
+        {
+          type: "video",
+          data: "",
+          url: mediaUrl,
+        },
+      ],
+    };
+  }
+
+  const mediaBase64 = Buffer.from(mediaArrayBuffer).toString("base64");
+  console.log(`[API:${requestId}] SUCCESS - Returning ${isVideo ? "video" : "image"}`);
+
+  return {
+    success: true,
+    generationCost: await getGenerationCost(),
+    outputs: [
+      {
+        type: isVideo ? "video" : "image",
+        data: `data:${contentType};base64,${mediaBase64}`,
+        url: mediaUrl,
+      },
+    ],
+  };
 }

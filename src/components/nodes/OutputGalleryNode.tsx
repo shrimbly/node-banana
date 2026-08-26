@@ -260,18 +260,15 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
     const images = nodeData.images || [];
     const videos = nodeData.videos || [];
 
-    // Reverse so oldest items (end of array) appear at top, newest at bottom
-    const reversedImages = [...images].reverse();
-    const reversedVideos = [...videos].reverse();
-
-    for (let i = 0; i < reversedImages.length; i++) {
-      const nodeId = addNode("imageInput", { x: startX, y: currentY }, { image: reversedImages[i], filename: `gallery-image-${i + 1}.png` });
+    // Gallery arrays remain newest-first for compatibility with saved v1 workflows.
+    for (let i = 0; i < images.length; i++) {
+      const nodeId = addNode("imageInput", { x: startX, y: currentY }, { image: images[i], filename: `gallery-image-${i + 1}.png` });
       newNodeIds.push(nodeId);
       currentY += defaultNodeDimensions.imageInput.height + gap;
     }
 
-    for (let i = 0; i < reversedVideos.length; i++) {
-      const nodeId = addNode("videoInput", { x: startX, y: currentY }, { video: reversedVideos[i], filename: `gallery-video-${i + 1}.mp4` });
+    for (let i = 0; i < videos.length; i++) {
+      const nodeId = addNode("videoInput", { x: startX, y: currentY }, { video: videos[i], filename: `gallery-video-${i + 1}.mp4` });
       newNodeIds.push(nodeId);
       currentY += defaultNodeDimensions.videoInput.height + gap;
     }

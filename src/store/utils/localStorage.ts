@@ -22,6 +22,7 @@ export const NODE_DEFAULTS_KEY = "node-banana-node-defaults";
 export const CANVAS_NAVIGATION_KEY = "node-banana-canvas-navigation";
 export const LAST_PROJECT_BASE_DIR_KEY = "node-banana-last-project-dir";
 export const WORKFLOWS_DIRECTORY_KEY = "node-banana-workflows-directory";
+export const LAST_WORKFLOW_DIRECTORY_KEY = "node-banana-last-workflow-directory";
 export const FTUX_COMPLETED_KEY = "node-banana-ftux-completed";
 
 // Maximum recent models to store (show 4 in UI, keep 8 for persistence)
@@ -245,6 +246,22 @@ export const getWorkflowsDirectory = (): string | null => {
 export const setWorkflowsDirectory = (path: string): void => {
   if (typeof window === "undefined") return;
   localStorage.setItem(WORKFLOWS_DIRECTORY_KEY, path);
+};
+
+// Last opened workflow directory helpers
+export const getLastWorkflowDirectory = (): string | null => {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(LAST_WORKFLOW_DIRECTORY_KEY);
+};
+
+export const setLastWorkflowDirectory = (path: string): void => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(LAST_WORKFLOW_DIRECTORY_KEY, path);
+};
+
+export const clearLastWorkflowDirectory = (): void => {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(LAST_WORKFLOW_DIRECTORY_KEY);
 };
 
 // Workflow ID generator

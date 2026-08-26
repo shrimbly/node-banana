@@ -4,6 +4,11 @@
 
 export { generateWithGemini } from "./gemini";
 export { generateWithReplicate } from "./replicate";
-export { clearFalInputMappingCache, generateWithFalQueue } from "./fal";
+export {
+  clearFalInputMappingCache,
+  submitFalTask,
+  checkFalTaskOnce,
+  fetchFalMediaResult,
+} from "./fal";
 export { generateWithWaveSpeed } from "./wavespeed";
 export { generateWithOpenAI } from "./openai";

@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { generateWithFalQueue, clearFalInputMappingCache } from "../fal";
+import {
+  submitFalTask,
+  fetchFalMediaResult,
+  clearFalInputMappingCache,
+} from "../fal";
 import type { GenerationInput } from "@/lib/providers/types";
 
 /**
@@ -24,7 +28,7 @@ function makeInput(overrides: Partial<GenerationInput> = {}): GenerationInput {
     },
     prompt: "a photo of a cat",
     images: [],
-    parameters: {},
+    parameters: { preview_text: "A clear voice sample" },
     ...overrides,
   };
 }
@@ -40,6 +44,24 @@ function makeInput(overrides: Partial<GenerationInput> = {}): GenerationInput {
 function createMockFetch() {
   return vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     const urlStr = typeof url === "string" ? url : url instanceof URL ? url.toString() : url.url;
+
+    // Exact final cost recorded by fal for this successful request.
+    if (urlStr.includes("api.fal.ai/v1/models/billing-events")) {
+      return new Response(
+        JSON.stringify({
+          billing_events: [
+            {
+              request_id: "provider-request-123",
+              endpoint_id: "fal-ai/test-model",
+              output_units: 6,
+              unit_price: 0.05,
+              cost_total: 0.30,
+            },
+          ],
+        }),
+        { status: 200 }
+      );
+    }
 
     // Schema request (fal.ai model search API with OpenAPI expansion)
     if (urlStr.includes("api.fal.ai/v1/models")) {
@@ -59,7 +81,9 @@ function createMockFetch() {
                               properties: {
                                 prompt: { type: "string", description: "Text prompt" },
                                 image_url: { type: "string", description: "Input image URL" },
+                                preview_text: { type: "string", description: "Voice sample text" },
                               },
+                              required: ["prompt", "preview_text"],
                             },
                           },
                         },
@@ -102,7 +126,13 @@ function createMockFetch() {
         JSON.stringify({
           images: [{ url: "https://cdn.fal.ai/test/image.png" }],
         }),
-        { status: 200 }
+        {
+          status: 200,
+          headers: {
+            "X-Fal-Billable-Units": "1.5",
+            "X-Fal-Request-Id": "provider-request-123",
+          },
+        }
       );
     }
 
@@ -140,11 +170,38 @@ describe("fal.ai prompt passthrough with dynamicInputs", () => {
       },
     });
 
-    await generateWithFalQueue("test-req", "test-api-key", input);
+    await submitFalTask("test-req", "test-api-key", input);
 
     expect(capturedQueueBody).not.toBeNull();
     expect(capturedQueueBody!.prompt).toBe("a photo of a cat");
     expect(capturedQueueBody!.image_url).toBe("https://cdn.example.com/img.png");
+  });
+
+  it("returns a task id that survives the request that created it", async () => {
+    const submission = await submitFalTask("test-req", "test-api-key", makeInput());
+
+    expect(submission).toEqual({
+      taskId: "fal-ai/test-model::test-123::https%3A%2F%2Fqueue.fal.run%2Ffal-ai%2Ftest-model%2Frequests%2Ftest-123%2Fstatus::https%3A%2F%2Fqueue.fal.run%2Ffal-ai%2Ftest-model%2Frequests%2Ftest-123",
+    });
+  });
+
+  it("returns the exact billed cost instead of fallback compute pricing", async () => {
+    const result = await fetchFalMediaResult("test-req", "test-api-key", {
+      taskId: "fal-ai/test-model::test-123",
+      modelName: "Test Model",
+      capabilities: ["text-to-image"],
+    });
+
+    expect(result.generationCost).toEqual(expect.objectContaining({
+      provider: "fal",
+      requestId: "provider-request-123",
+      modelId: "fal-ai/test-model",
+      units: 6,
+      unit: null,
+      unitPrice: 0.05,
+      currency: "USD",
+    }));
+    expect(result.generationCost?.cost).toBeCloseTo(0.30);
   });
 
   it("does not duplicate prompt when dynamicInputs already contains prompt", async () => {
@@ -156,7 +213,7 @@ describe("fal.ai prompt passthrough with dynamicInputs", () => {
       },
     });
 
-    await generateWithFalQueue("test-req", "test-api-key", input);
+    await submitFalTask("test-req", "test-api-key", input);
 
     expect(capturedQueueBody).not.toBeNull();
     // dynamicInputs value wins - not overwritten by input.prompt
@@ -169,9 +226,40 @@ describe("fal.ai prompt passthrough with dynamicInputs", () => {
       dynamicInputs: undefined,
     });
 
-    await generateWithFalQueue("test-req", "test-api-key", input);
+    await submitFalTask("test-req", "test-api-key", input);
 
     expect(capturedQueueBody).not.toBeNull();
     expect(capturedQueueBody!.prompt).toBe("a cat");
+  });
+
+  it("does not submit to fal when a required schema field is empty", async () => {
+    const submission = await submitFalTask("test-req", "test-api-key", makeInput({
+      parameters: {},
+    }));
+
+    expect(submission).toEqual({
+      error: "Test Model: Missing required field: Preview Text",
+    });
+    expect(capturedQueueBody).toBeNull();
+  });
+
+  it("turns a polling 422 into a field-specific error", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(
+      JSON.stringify({
+        detail: [{ loc: ["body", "preview_text"], msg: "Field required" }],
+      }),
+      { status: 422 }
+    )));
+
+    const result = await fetchFalMediaResult("test-req", "test-api-key", {
+      taskId: "fal-ai/test-model::test-422",
+      modelName: "Test Model",
+      capabilities: ["text-to-image"],
+    });
+
+    expect(result).toEqual({
+      success: false,
+      error: "Test Model: Missing required field: Preview Text",
+    });
   });
 });

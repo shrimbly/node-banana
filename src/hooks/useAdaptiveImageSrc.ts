@@ -41,13 +41,16 @@ export function useAdaptiveImageSrc(
     (a, b) => a === b
   );
 
-  const [thumbnailSrc, setThumbnailSrc] = useState<string | null>(null);
+  const [thumbnail, setActiveThumbnail] = useState<{
+    fullSrc: string;
+    thumbnailSrc: string;
+  } | null>(null);
   const prevSrcRef = useRef<string | null>(null);
 
   // Eagerly generate thumbnail when fullSrc changes
   useEffect(() => {
     if (!fullSrc) {
-      setThumbnailSrc(null);
+      setActiveThumbnail(null);
       prevSrcRef.current = null;
       return;
     }
@@ -59,7 +62,7 @@ export function useAdaptiveImageSrc(
     // Check cache first
     const cached = getThumbnail(fullSrc);
     if (cached) {
-      setThumbnailSrc(cached);
+      setActiveThumbnail({ fullSrc, thumbnailSrc: cached });
       return;
     }
 
@@ -69,7 +72,7 @@ export function useAdaptiveImageSrc(
       existing
         .then((thumb) => {
           if (prevSrcRef.current === fullSrc) {
-            setThumbnailSrc(thumb);
+            setActiveThumbnail({ fullSrc, thumbnailSrc: thumb });
           }
         })
         .catch(() => {});
@@ -81,7 +84,7 @@ export function useAdaptiveImageSrc(
       .then((thumb) => {
         setThumbnail(fullSrc, thumb);
         if (prevSrcRef.current === fullSrc) {
-          setThumbnailSrc(thumb);
+          setActiveThumbnail({ fullSrc, thumbnailSrc: thumb });
         }
         return thumb;
       })
@@ -96,5 +99,7 @@ export function useAdaptiveImageSrc(
 
   if (!fullSrc) return null;
 
-  return shouldUseThumbnail && thumbnailSrc ? thumbnailSrc : fullSrc;
+  return shouldUseThumbnail && thumbnail?.fullSrc === fullSrc
+    ? thumbnail.thumbnailSrc
+    : fullSrc;
 }

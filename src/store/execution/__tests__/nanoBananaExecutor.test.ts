@@ -163,6 +163,7 @@ describe("executeNanoBanana", () => {
     );
     expect(completeCall).toBeDefined();
     expect((completeCall![1] as Record<string, unknown>).outputImage).toBe("data:image/png;base64,result");
+    expect((completeCall![1] as Record<string, unknown>)).toHaveProperty("outputImageRef", undefined);
   });
 
   it("should add to global history on success", async () => {
@@ -196,13 +197,26 @@ describe("executeNanoBanana", () => {
     expect(ctx.addIncurredCost).toHaveBeenCalledWith(0.05);
   });
 
-  it("should track cost for fal provider", async () => {
+  it("should store the fal receipt without feeding the legacy cost counter", async () => {
     const node = makeNode({
-      selectedModel: { provider: "fal", modelId: "fal-model", displayName: "Fal", pricing: { amount: 0.10 } },
+      selectedModel: { provider: "fal", modelId: "fal-model", displayName: "Fal" },
     });
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: () => Promise.resolve({ success: true, image: "data:image/png;base64,result" }),
+      json: () => Promise.resolve({
+        success: true,
+        image: "data:image/png;base64,result",
+        generationCost: {
+          provider: "fal",
+          requestId: "fal-request-1",
+          modelId: "fal-model",
+          units: 2,
+          unit: "images",
+          unitPrice: 0.05,
+          currency: "USD",
+          cost: 0.10,
+        },
+      }),
     });
 
     const ctx = makeCtx(node, {
@@ -210,7 +224,17 @@ describe("executeNanoBanana", () => {
     });
     await executeNanoBanana(ctx);
 
-    expect(ctx.addIncurredCost).toHaveBeenCalledWith(0.10);
+    expect(ctx.addIncurredCost).not.toHaveBeenCalled();
+
+    const calls = (ctx.updateNodeData as ReturnType<typeof vi.fn>).mock.calls;
+    const completeCall = calls.find(
+      (c: unknown[]) => (c[1] as Record<string, unknown>).status === "complete"
+    );
+    const history = (completeCall![1] as Record<string, unknown>).imageHistory as Array<Record<string, unknown>>;
+    expect(history[0].generationCost).toEqual(expect.objectContaining({
+      requestId: "fal-request-1",
+      cost: 0.10,
+    }));
   });
 
   it("should throw on HTTP error", async () => {
@@ -241,6 +265,51 @@ describe("executeNanoBanana", () => {
 
     const ctx = makeCtx(node);
     await expect(executeNanoBanana(ctx)).rejects.toThrow("Bad prompt");
+  });
+
+  it("preserves failed attempts as carousel entries", async () => {
+    const existingImage = {
+      id: "existing-image",
+      timestamp: 1,
+      prompt: "old prompt",
+      aspectRatio: "1:1" as const,
+      model: "nano-banana",
+    };
+    const node = makeNode({
+      outputImage: "data:image/png;base64,previous-success",
+      outputImageRef: "existing-image",
+      imageHistory: [existingImage],
+    });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ success: false, error: "Provider exploded" }),
+    });
+
+    const ctx = makeCtx(node);
+    await expect(executeNanoBanana(ctx)).rejects.toThrow("Provider exploded");
+
+    const calls = (ctx.updateNodeData as ReturnType<typeof vi.fn>).mock.calls;
+    const errorCalls = calls.filter(
+      (c: unknown[]) => (c[1] as Record<string, unknown>).status === "error"
+    );
+    expect(errorCalls).toHaveLength(1);
+    const errorCall = errorCalls[0];
+    const payload = errorCall![1] as {
+      outputImage: string | null;
+      outputImageRef?: string;
+      selectedHistoryIndex: number;
+      imageHistory: Array<Record<string, unknown>>;
+    };
+
+    expect(payload.outputImage).toBeNull();
+    expect(payload.outputImageRef).toBeUndefined();
+    expect(payload.selectedHistoryIndex).toBe(1);
+    expect(payload.imageHistory).toHaveLength(2);
+    expect(payload.imageHistory[0]).toBe(existingImage);
+    expect(payload.imageHistory[1]).toEqual(expect.objectContaining({
+      error: "Provider exploded",
+      prompt: "test prompt",
+    }));
   });
 
   it("should use text from dynamicInputs.prompt when no direct text", async () => {

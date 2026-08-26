@@ -14,6 +14,23 @@ const MODELS_CACHE_TTL = 48 * 60 * 60 * 1000; // 48 hours
 // Cap the number of cached entries to avoid unbounded localStorage growth.
 // Entries are pruned LRU-style (oldest timestamp first) on write.
 const MODELS_CACHE_MAX_ENTRIES = 20;
+const PRICING_CACHE_KEY_PREFIX = "node-banana-fal-pricing-cache-v1";
+const PRICING_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+type ModelPricing = NonNullable<ProviderModel["pricing"]>;
+
+interface PricingCacheEntry {
+  pricing: ModelPricing | null;
+  timestamp: number;
+}
+
+interface PricingResponse {
+  success: boolean;
+  prices?: Array<{
+    endpointId: string;
+    pricing: ModelPricing | null;
+  }>;
+}
 
 interface ModelsCacheEntry {
   models: ProviderModel[];
@@ -64,6 +81,110 @@ function setCachedModels(cacheKey: string, models: ProviderModel[], availablePro
   } catch {
     // Ignore cache errors
   }
+}
+
+function getPricingCacheKey(apiKey: string | null): string {
+  if (!apiKey) return `${PRICING_CACHE_KEY_PREFIX}:server`;
+
+  // A short non-cryptographic fingerprint keeps account-specific prices apart
+  // without putting the API key itself into the sessionStorage key.
+  let hash = 2166136261;
+  for (let index = 0; index < apiKey.length; index++) {
+    hash ^= apiKey.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `${PRICING_CACHE_KEY_PREFIX}:${(hash >>> 0).toString(36)}`;
+}
+
+function readPricingCache(storageKey: string): Record<string, PricingCacheEntry> {
+  try {
+    return JSON.parse(sessionStorage.getItem(storageKey) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function writePricingCache(
+  storageKey: string,
+  cache: Record<string, PricingCacheEntry>
+): void {
+  try {
+    sessionStorage.setItem(storageKey, JSON.stringify(cache));
+  } catch {
+    // Pricing is best-effort; a blocked/full sessionStorage should not break browsing.
+  }
+}
+
+function mergeModelPricing(
+  models: ProviderModel[],
+  prices: Map<string, ModelPricing>
+): ProviderModel[] {
+  let changed = false;
+  const nextModels = models.map((model) => {
+    const pricing = model.provider === "fal" ? prices.get(model.id) : undefined;
+    if (!pricing) return model;
+
+    const current = model.pricing;
+    if (
+      current?.amount === pricing.amount &&
+      current.currency === pricing.currency &&
+      current.type === pricing.type &&
+      current.unit === pricing.unit
+    ) {
+      return model;
+    }
+
+    changed = true;
+    return { ...model, pricing };
+  });
+
+  return changed ? nextModels : models;
+}
+
+function formatBillingUnit(rawUnit: string | undefined, type: ModelPricing["type"]): string {
+  if (!rawUnit) return type === "per-second" ? "sec" : "run";
+
+  const unit = rawUnit.toLowerCase().replace(/[_-]+/g, " ").trim();
+  const unitLabels: Record<string, string> = {
+    image: "image",
+    images: "image",
+    megapixel: "MP",
+    megapixels: "MP",
+    second: "sec",
+    seconds: "sec",
+    "video second": "sec",
+    "video seconds": "sec",
+    video: "video",
+    videos: "video",
+    request: "request",
+    requests: "request",
+    character: "char",
+    characters: "char",
+    token: "token",
+    tokens: "token",
+  };
+
+  return unitLabels[unit] ?? unit;
+}
+
+function formatModelPricing(pricing: ProviderModel["pricing"]): string | null {
+  if (!pricing) return null;
+
+  const maximumFractionDigits =
+    pricing.amount >= 1 ? 2 : pricing.amount >= 0.01 ? 3 : 6;
+  let amount: string;
+  try {
+    amount = new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: pricing.currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits,
+    }).format(pricing.amount);
+  } catch {
+    amount = `${pricing.amount} ${pricing.currency}`;
+  }
+
+  return `${amount} / ${formatBillingUnit(pricing.unit, pricing.type)}`;
 }
 
 // Build a short, stable hash of the configured providers so the cache key
@@ -142,6 +263,58 @@ function getPaneCenter() {
 
 // Capability filter options
 type CapabilityFilter = "all" | "image" | "video" | "3d" | "audio";
+type ModelTypeFilter = "all" | ModelCapability;
+type ModelSortOption = "default" | "price-asc" | "price-desc";
+
+const CAPABILITY_META: Record<
+  ModelCapability,
+  { label: string; badgeLabel: string; badgeClassName: string }
+> = {
+  "text-to-image": {
+    label: "Text → Image",
+    badgeLabel: "txt→img",
+    badgeClassName: "bg-green-500/20 text-green-300",
+  },
+  "image-to-image": {
+    label: "Image → Image",
+    badgeLabel: "img→img",
+    badgeClassName: "bg-cyan-500/20 text-cyan-300",
+  },
+  "text-to-video": {
+    label: "Text → Video",
+    badgeLabel: "txt→vid",
+    badgeClassName: "bg-purple-500/20 text-purple-300",
+  },
+  "image-to-video": {
+    label: "Image → Video",
+    badgeLabel: "img→vid",
+    badgeClassName: "bg-pink-500/20 text-pink-300",
+  },
+  "text-to-3d": {
+    label: "Text → 3D",
+    badgeLabel: "txt→3d",
+    badgeClassName: "bg-orange-500/20 text-orange-300",
+  },
+  "image-to-3d": {
+    label: "Image → 3D",
+    badgeLabel: "img→3d",
+    badgeClassName: "bg-amber-500/20 text-amber-300",
+  },
+  "text-to-audio": {
+    label: "Text → Audio",
+    badgeLabel: "txt→audio",
+    badgeClassName: "bg-fuchsia-500/20 text-fuchsia-300",
+  },
+  "audio-to-video": {
+    label: "Audio → Video",
+    badgeLabel: "audio→vid",
+    badgeClassName: "bg-violet-500/20 text-violet-300",
+  },
+};
+
+const CAPABILITY_ORDER = (Object.keys(CAPABILITY_META) as ModelCapability[]).sort(
+  (a, b) => CAPABILITY_META[a].label.localeCompare(CAPABILITY_META[b].label)
+);
 
 // API response type
 interface ModelsResponse {
@@ -197,7 +370,15 @@ export function ModelSearchDialog({
   );
   const [capabilityFilter, setCapabilityFilter] =
     useState<CapabilityFilter>(initialCapabilityFilter || "all");
+  const [modelTypeFilter, setModelTypeFilter] =
+    useState<ModelTypeFilter>("all");
+  const [modelSort, setModelSort] =
+    useState<ModelSortOption>("default");
   const [models, setModels] = useState<ProviderModel[]>([]);
+  const [pricingPendingIds, setPricingPendingIds] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [pricingRefreshToken, setPricingRefreshToken] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -207,6 +388,16 @@ export function ModelSearchDialog({
   const searchInputRef = useRef<HTMLInputElement>(null);
   // Track request version to ignore stale responses
   const requestVersionRef = useRef(0);
+
+  const falModelIdsKey = useMemo(
+    () =>
+      models
+        .filter((model) => model.provider === "fal")
+        .map((model) => model.id)
+        .sort()
+        .join("\n"),
+    [models]
+  );
 
   // Register modal with store
   useEffect(() => {
@@ -353,18 +544,113 @@ export function ModelSearchDialog({
     }
   }, [isOpen, fetchModels]);
 
+  // fal.ai exposes live unit pricing through a separate API. Keep it separate
+  // from the long-lived model catalogue cache: prices live only for this app
+  // session, survive page reloads, and are refreshed after an app restart.
+  useEffect(() => {
+    if (!isOpen || !falModelIdsKey) return;
+
+    const endpointIds = falModelIdsKey.split("\n");
+    const pricingCacheKey = getPricingCacheKey(falApiKey);
+    const cache = readPricingCache(pricingCacheKey);
+    const now = Date.now();
+    const cachedPrices = new Map<string, ModelPricing>();
+    const missingEndpointIds: string[] = [];
+    let cacheWasPruned = false;
+
+    for (const endpointId of endpointIds) {
+      const entry = cache[endpointId];
+      if (entry && now - entry.timestamp < PRICING_CACHE_TTL) {
+        if (entry.pricing) cachedPrices.set(endpointId, entry.pricing);
+      } else {
+        if (entry) {
+          delete cache[endpointId];
+          cacheWasPruned = true;
+        }
+        missingEndpointIds.push(endpointId);
+      }
+    }
+
+    if (cacheWasPruned) writePricingCache(pricingCacheKey, cache);
+    if (cachedPrices.size > 0) {
+      setModels((current) => mergeModelPricing(current, cachedPrices));
+    }
+    if (missingEndpointIds.length === 0) return;
+
+    const controller = new AbortController();
+    setPricingPendingIds((current) => {
+      const next = new Set(current);
+      missingEndpointIds.forEach((endpointId) => next.add(endpointId));
+      return next;
+    });
+
+    void (async () => {
+      try {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (falApiKey) headers["X-Fal-Key"] = falApiKey;
+
+        const response = await fetch("/api/providers/fal/pricing", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ endpointIds: missingEndpointIds }),
+          signal: controller.signal,
+        });
+        if (!response.ok) return;
+
+        const data = (await response.json()) as PricingResponse;
+        if (!data.success || !Array.isArray(data.prices)) return;
+
+        const received = new Map<string, ModelPricing>();
+        const updatedCache = readPricingCache(pricingCacheKey);
+        // Cache a null result as well, otherwise endpoints without fixed pricing
+        // would be requested again every time the dialog opens.
+        for (const endpointId of missingEndpointIds) {
+          updatedCache[endpointId] = { pricing: null, timestamp: now };
+        }
+        for (const result of data.prices) {
+          if (!missingEndpointIds.includes(result.endpointId)) continue;
+          updatedCache[result.endpointId] = {
+            pricing: result.pricing,
+            timestamp: now,
+          };
+          if (result.pricing) received.set(result.endpointId, result.pricing);
+        }
+        writePricingCache(pricingCacheKey, updatedCache);
+
+        if (received.size > 0) {
+          setModels((current) => mergeModelPricing(current, received));
+        }
+      } catch {
+        // Pricing is supplementary; keep model browsing usable when unavailable.
+      } finally {
+        setPricingPendingIds((current) => {
+          const next = new Set(current);
+          missingEndpointIds.forEach((endpointId) => next.delete(endpointId));
+          return next;
+        });
+      }
+    })();
+
+    return () => controller.abort();
+  }, [isOpen, falModelIdsKey, falApiKey, pricingRefreshToken]);
+
   // Clear all caches and re-fetch models from scratch
   const handleRefresh = useCallback(async () => {
     setIsRefreshing(true);
     try {
       // Clear localStorage model cache
       localStorage.removeItem(MODELS_CACHE_KEY);
+      // Clear live pricing for this browser session
+      sessionStorage.removeItem(getPricingCacheKey(falApiKey));
       // Clear localStorage schema cache (keep in sync with ModelParameters.tsx)
       localStorage.removeItem("node-banana-schema-cache");
       // Clear in-memory deduplicatedFetch cache
       clearFetchCache();
       // Re-fetch with cache bypass
       await fetchModels(true);
+      setPricingRefreshToken((current) => current + 1);
     } finally {
       setIsRefreshing(false);
     }
@@ -517,14 +803,53 @@ export function ModelSearchDialog({
     }
   }, [providerFilter, availableProviders]);
 
+  // Keep the operation filter in sync with the capability badges in the
+  // currently loaded catalogue (already narrowed by media/provider/search).
+  const availableModelTypes = useMemo(() => {
+    const available = new Set(models.flatMap((model) => model.capabilities));
+    // Preserve the active option when a provider/search change has no matches,
+    // so the controlled select never becomes blank and the user can reset it.
+    if (modelTypeFilter !== "all") available.add(modelTypeFilter);
+    return CAPABILITY_ORDER.filter((capability) => available.has(capability));
+  }, [models, modelTypeFilter]);
+
+  const filteredModels = useMemo(() => {
+    const filtered =
+      modelTypeFilter === "all"
+        ? models
+        : models.filter((model) => model.capabilities.includes(modelTypeFilter));
+
+    if (modelSort === "default") return filtered;
+
+    return [...filtered].sort((a, b) => {
+      // fal.ai is the only provider with live Browse Models pricing for now.
+      const aPrice = a.provider === "fal" ? a.pricing?.amount : undefined;
+      const bPrice = b.provider === "fal" ? b.pricing?.amount : undefined;
+      if (aPrice === undefined && bPrice === undefined) return 0;
+      if (aPrice === undefined) return 1;
+      if (bPrice === undefined) return -1;
+      return modelSort === "price-asc" ? aPrice - bPrice : bPrice - aPrice;
+    });
+  }, [models, modelTypeFilter, modelSort]);
+
   // Filter recent models by capability
   const filteredRecentModels = useMemo(() => {
     return recentModels
       .filter((recent) => {
         // Find matching model in current models list to check capabilities
         const matchingModel = models.find((m) => m.id === recent.modelId);
-        if (!matchingModel && capabilityFilter !== "all") {
+        if (
+          !matchingModel &&
+          (capabilityFilter !== "all" || modelTypeFilter !== "all")
+        ) {
           // If model not loaded yet and filter is active, exclude it
+          return false;
+        }
+        if (
+          matchingModel &&
+          modelTypeFilter !== "all" &&
+          !matchingModel.capabilities.includes(modelTypeFilter)
+        ) {
           return false;
         }
         if (capabilityFilter === "all") return true;
@@ -550,7 +875,7 @@ export function ModelSearchDialog({
         return true;
       })
       .slice(0, 4); // Show max 4
-  }, [recentModels, models, capabilityFilter]);
+  }, [recentModels, models, capabilityFilter, modelTypeFilter]);
 
   // Get display name with suffix for fal.ai models to differentiate variants
   const getDisplayName = (model: ProviderModel): string => {
@@ -584,60 +909,19 @@ export function ModelSearchDialog({
 
   // Get capability badges - show all capabilities to differentiate similar models
   const getCapabilityBadges = (capabilities: ModelCapability[]) => {
-    const badges: React.ReactNode[] = [];
+    return capabilities.map((capability) => {
+      const meta = CAPABILITY_META[capability];
+      if (!meta) return null;
 
-    capabilities.forEach((cap) => {
-      let color = "";
-      let label = "";
-
-      switch (cap) {
-        case "text-to-image":
-          color = "bg-green-500/20 text-green-300";
-          label = "txt→img";
-          break;
-        case "image-to-image":
-          color = "bg-cyan-500/20 text-cyan-300";
-          label = "img→img";
-          break;
-        case "text-to-video":
-          color = "bg-purple-500/20 text-purple-300";
-          label = "txt→vid";
-          break;
-        case "image-to-video":
-          color = "bg-pink-500/20 text-pink-300";
-          label = "img→vid";
-          break;
-        case "text-to-3d":
-          color = "bg-orange-500/20 text-orange-300";
-          label = "txt→3d";
-          break;
-        case "image-to-3d":
-          color = "bg-amber-500/20 text-amber-300";
-          label = "img→3d";
-          break;
-        case "text-to-audio":
-          color = "bg-fuchsia-500/20 text-fuchsia-300";
-          label = "txt→audio";
-          break;
-        case "audio-to-video":
-          color = "bg-violet-500/20 text-violet-300";
-          label = "audio→vid";
-          break;
-      }
-
-      if (label) {
-        badges.push(
-          <span
-            key={cap}
-            className={`text-[10px] px-1.5 py-0.5 rounded ${color}`}
-          >
-            {label}
-          </span>
-        );
-      }
+      return (
+        <span
+          key={capability}
+          className={`text-[10px] px-1.5 py-0.5 rounded ${meta.badgeClassName}`}
+        >
+          {meta.badgeLabel}
+        </span>
+      );
     });
-
-    return badges;
   };
 
   if (!isOpen) return null;
@@ -675,9 +959,9 @@ export function ModelSearchDialog({
 
         {/* Filter Bar */}
         <div className="px-6 py-4 border-b border-neutral-700">
-          <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap xl:flex-nowrap gap-3">
             {/* Search Input */}
-            <div className="flex-1 relative">
+            <div className="flex-1 sm:min-w-64 relative">
               <svg
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-400"
                 fill="none"
@@ -796,10 +1080,12 @@ export function ModelSearchDialog({
 
             {/* Capability Filter */}
             <select
+              aria-label="Filter by output type"
               value={capabilityFilter}
-              onChange={(e) =>
-                setCapabilityFilter(e.target.value as CapabilityFilter)
-              }
+              onChange={(e) => {
+                setCapabilityFilter(e.target.value as CapabilityFilter);
+                setModelTypeFilter("all");
+              }}
               className="px-3 py-2 text-sm bg-neutral-700 border border-neutral-600 rounded text-neutral-100 focus:outline-none focus:ring-1 focus:ring-neutral-500"
             >
               <option value="all">All Types</option>
@@ -807,6 +1093,38 @@ export function ModelSearchDialog({
               <option value="video">Video</option>
               <option value="3d">3D</option>
               <option value="audio">Audio</option>
+            </select>
+
+            {/* Exact model operation, sourced from the same capabilities as badges */}
+            <select
+              aria-label="Filter by model type"
+              value={modelTypeFilter}
+              onChange={(e) =>
+                setModelTypeFilter(e.target.value as ModelTypeFilter)
+              }
+              className="px-3 py-2 text-sm bg-neutral-700 border border-neutral-600 rounded text-neutral-100 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+            >
+              <option value="all">All Models</option>
+              {availableModelTypes.map((capability) => (
+                <option key={capability} value={capability}>
+                  {CAPABILITY_META[capability].label}
+                </option>
+              ))}
+            </select>
+
+            {/* Sort by the listed provider unit price; unknown prices stay last. */}
+            <select
+              aria-label="Sort models"
+              title="Sort by listed unit price; billing units may differ"
+              value={modelSort}
+              onChange={(e) =>
+                setModelSort(e.target.value as ModelSortOption)
+              }
+              className="px-3 py-2 text-sm bg-neutral-700 border border-neutral-600 rounded text-neutral-100 focus:outline-none focus:ring-1 focus:ring-neutral-500"
+            >
+              <option value="default">Default</option>
+              <option value="price-asc">Price: Low to High</option>
+              <option value="price-desc">Price: High to Low</option>
             </select>
 
             {/* Refresh Cache */}
@@ -887,7 +1205,7 @@ export function ModelSearchDialog({
                 Try Again
               </button>
             </div>
-          ) : models.length === 0 ? (
+          ) : filteredModels.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-48 gap-2">
               {showClearOption && onClearSelection && (
                 <button
@@ -1009,39 +1327,56 @@ export function ModelSearchDialog({
 
               {/* Main Model List */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {models.map((model) => (
+              {filteredModels.map((model) => (
                 <button
                   key={`${model.provider}-${model.id}`}
+                  data-model-card={model.id}
                   onClick={() => handleSelectModel(model)}
                   className="flex items-start gap-3 p-4 bg-neutral-700/50 hover:bg-neutral-700 border border-neutral-600/50 hover:border-neutral-500 rounded-lg transition-colors text-left cursor-pointer group"
                 >
-                  {/* Cover Image - larger */}
-                  <div className="w-20 h-20 rounded bg-neutral-600 overflow-hidden flex-shrink-0">
-                    {model.coverImage ? (
-                      <img
-                        src={model.coverImage}
-                        alt={model.name}
-                        className="w-full h-full object-cover"
-                        onError={(e) => {
-                          // Hide broken images
-                          (e.target as HTMLImageElement).style.display = "none";
-                        }}
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <svg
-                          className="w-8 h-8 text-neutral-500"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={1.5}
-                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                          />
-                        </svg>
+                  {/* Cover image and compact provider price */}
+                  <div className="w-20 flex-shrink-0">
+                    <div className="w-20 h-20 rounded bg-neutral-600 overflow-hidden">
+                      {model.coverImage ? (
+                        <img
+                          src={model.coverImage}
+                          alt={model.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            // Hide broken images
+                            (e.target as HTMLImageElement).style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <svg
+                            className="w-8 h-8 text-neutral-500"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={1.5}
+                              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                            />
+                          </svg>
+                        </div>
+                      )}
+                    </div>
+                    {model.provider === "fal" && (
+                      <div
+                        className="mt-1.5 min-h-4 text-[10px] leading-4 text-neutral-300 tabular-nums truncate"
+                        title={
+                          formatModelPricing(model.pricing) ??
+                          (pricingPendingIds.has(model.id)
+                            ? "Loading fal.ai pricing"
+                            : "fal.ai pricing unavailable")
+                        }
+                      >
+                        {formatModelPricing(model.pricing) ??
+                          (pricingPendingIds.has(model.id) ? "Loading…" : "—")}
                       </div>
                     )}
                   </div>
@@ -1126,9 +1461,9 @@ export function ModelSearchDialog({
         </div>
 
         {/* Footer with model count */}
-        {!isLoading && !error && models.length > 0 && (
+        {!isLoading && !error && filteredModels.length > 0 && (
           <div className="px-6 py-3 border-t border-neutral-700 text-xs text-neutral-400">
-            {models.length} model{models.length !== 1 ? "s" : ""} found
+            {filteredModels.length} model{filteredModels.length !== 1 ? "s" : ""} found
           </div>
         )}
       </div>

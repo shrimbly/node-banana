@@ -1,5 +1,6 @@
 import { WorkflowNode, WorkflowNodeData } from "@/types";
 import { WorkflowFile } from "@/store/workflowStore";
+import { normalizeGenerationHistoryIndex } from "@/utils/generationCarousel";
 import crypto from "crypto";
 
 /**
@@ -213,7 +214,10 @@ async function externalizeNodeMedia(
 
       // Handle output image - AI generated, save to generations
       // Use selectedHistoryIndex to get the correct history entry (not hardcoded 0)
-      const selectedIndex = d.selectedHistoryIndex || 0;
+      const selectedIndex = normalizeGenerationHistoryIndex(
+        d.selectedHistoryIndex,
+        d.imageHistory?.length || 0
+      );
       const expectedRef = d.imageHistory?.[selectedIndex]?.id;
 
       if (d.outputImageRef && isDataUrl(d.outputImage)) {
@@ -269,6 +273,7 @@ async function externalizeNodeMedia(
               prompt: item.prompt,
               aspectRatio: item.aspectRatio,
               model: item.model,
+              generationCost: item.generationCost,
             });
           } else {
             cleanedHistory.push(item);
@@ -283,6 +288,7 @@ async function externalizeNodeMedia(
         outputImage,
         outputImageRef,
         imageHistory: cleanedHistory,
+        selectedHistoryIndex: selectedIndex,
       };
       break;
     }
@@ -975,9 +981,15 @@ async function hydrateNodeMedia(
       const d = data as import("@/types").NanoBananaNodeData;
       let outputImage = d.outputImage;
       const inputImages = [...(d.inputImages || [])];
+      const selectedHistoryIndex = normalizeGenerationHistoryIndex(
+        d.selectedHistoryIndex,
+        d.imageHistory?.length || 0
+      );
+      const selectedHistoryRef = d.imageHistory?.[selectedHistoryIndex]?.id;
+      const outputImageRef = selectedHistoryRef || d.outputImageRef;
 
-      if (d.outputImageRef && !d.outputImage) {
-        outputImage = await loadMediaById(d.outputImageRef, workflowPath, loadedMedia, "image");
+      if (outputImageRef && !d.outputImage) {
+        outputImage = await loadMediaById(outputImageRef, workflowPath, loadedMedia, "image");
       }
 
       // Hydrate input images from refs
@@ -994,6 +1006,8 @@ async function hydrateNodeMedia(
         ...d,
         inputImages,
         outputImage,
+        outputImageRef,
+        selectedHistoryIndex,
       };
       break;
     }

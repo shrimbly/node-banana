@@ -6,7 +6,7 @@ import { BaseNode } from "./BaseNode";
 import { ModelParameters } from "./ModelParameters";
 import { useWorkflowStore, saveNanoBananaDefaults, useProviderApiKeys } from "@/store/workflowStore";
 import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
-import { NanoBananaNodeData, AspectRatio, Resolution, MODEL_DISPLAY_NAMES, ProviderType, SelectedModel, ModelInputDef, GEMINI_IMAGE_MODELS, ModelType } from "@/types";
+import { NanoBananaNodeData, AspectRatio, Resolution, MODEL_DISPLAY_NAMES, ProviderType, SelectedModel, ModelInputDef, RequiredModelParameter, GEMINI_IMAGE_MODELS, ModelType } from "@/types";
 import { ProviderModel, ModelCapability } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { getImageDimensions } from "@/utils/nodeDimensions";
@@ -21,8 +21,9 @@ import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { HandleLabel } from "./HandleLabel";
 import { useLoadGenerationById } from "@/hooks/useLoadGenerationById";
 import { useGenerationCarousel } from "@/hooks/useGenerationCarousel";
-import { useErrorToast } from "@/hooks/useErrorToast";
 import { useAutoResizeOnMedia } from "@/hooks/useAutoResizeOnMedia";
+import { GenerationCostBadge } from "./GenerationCostBadge";
+import { normalizeGenerationHistoryIndex } from "@/utils/generationCarousel";
 
 /** Reorder items so they read column-first in a row-based CSS grid.
  *  e.g. [1,2,3,4,5,6,7,8] with 2 cols → [1,5,2,6,3,7,4,8] */
@@ -192,7 +193,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
           displayName: GEMINI_IMAGE_MODELS.find(m => m.value === (nodeData.model || "nano-banana-pro"))?.label || "Nano Banana Pro",
         };
         // Clear parameters when switching providers (different providers have different schemas)
-        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined, requiredModelParameters: [] });
       } else {
         // Set placeholder for external provider
         const newSelectedModel: SelectedModel = {
@@ -201,7 +202,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
           displayName: "Select model...",
         };
         // Clear parameters when switching providers
-        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined, requiredModelParameters: [] });
       }
     },
     [id, nodeData.model, updateNodeData]
@@ -220,7 +221,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
           capabilities: model.capabilities,
         };
         // Clear parameters when changing models (different models have different schemas)
-        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined, requiredModelParameters: [] });
       }
     },
     [id, currentProvider, externalModels, updateNodeData]
@@ -294,6 +295,13 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
     [id, updateNodeData]
   );
 
+  const handleRequiredParametersLoaded = useCallback(
+    (requiredModelParameters: RequiredModelParameter[]) => {
+      updateNodeData(id, { requiredModelParameters });
+    },
+    [id, updateNodeData]
+  );
+
   // Handle parameters expand/collapse - resize node height
   const { setNodes } = useReactFlow();
   const handleParametersExpandChange = useCallback(
@@ -338,9 +346,19 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
     loadFn: loadImageById,
     buildUpdate: (image, newIndex) => ({
       outputImage: image,
+      // The history ID lives in the configured generations directory. Clear the
+      // workflow-local ref so the next save externalizes this active image safely.
+      outputImageRef: undefined,
       selectedHistoryIndex: newIndex,
       status: "idle",
       error: null,
+    }),
+    isUnloadable: (item) => Boolean(item.error),
+    buildUnloadableUpdate: (item, newIndex) => ({
+      outputImage: null,
+      selectedHistoryIndex: newIndex,
+      status: "idle",
+      error: item.error,
     }),
   });
 
@@ -352,7 +370,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
       displayName: model.name,
       capabilities: model.capabilities,
     };
-    updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+    updateNodeData(id, { selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined, requiredModelParameters: [] });
     setIsBrowseDialogOpen(false);
   }, [id, updateNodeData]);
 
@@ -380,7 +398,27 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   const supportsResolution = currentModelId === "nano-banana-pro" || currentModelId === "nano-banana-2";
   const aspectRatios = currentModelId === "nano-banana-2" ? EXTENDED_ASPECT_RATIOS : BASE_ASPECT_RATIOS;
   const resolutions = currentModelId === "nano-banana-2" ? RESOLUTIONS_NB2 : RESOLUTIONS_PRO;
+  // The selected index is normalized before this point, so it is safe to use
+  // for both display and history lookup.
   const hasCarouselImages = (nodeData.imageHistory || []).length > 1;
+  const selectedHistoryIndex = normalizeGenerationHistoryIndex(
+    nodeData.selectedHistoryIndex,
+    nodeData.imageHistory?.length || 0
+  );
+  const activeHistoryItem = nodeData.imageHistory?.[selectedHistoryIndex];
+  const selectedItemError = activeHistoryItem?.error ?? null;
+  const statusError = nodeData.status === "error"
+    ? nodeData.error || "Failed"
+    : null;
+  // New failures are stored on their own history entry; older workflows only
+  // have the node-level status, so keep that as a display fallback.
+  const failureMessage = selectedItemError ?? statusError;
+  const activeEntryFailed = Boolean(failureMessage);
+  const activeGenerationCost = activeHistoryItem?.generationCost;
+  const showGenerationCost =
+    activeGenerationCost?.provider === "fal" &&
+    nodeData.status !== "loading" &&
+    !activeEntryFailed;
 
   // Count visible Gemini controls to match ModelParameters grid/max-width rules
   const geminiControlCount = 2 // Model + Aspect Ratio (always)
@@ -408,9 +446,6 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
       observer.disconnect();
     };
   }, [useGeminiGrid]);
-
-  // Show toast when generation fails
-  useErrorToast(nodeData.status, nodeData.error, "Generation failed");
 
   // Auto-resize node when output image changes
   useAutoResizeOnMedia(id, nodeData.outputImage, getImageDimensions);
@@ -551,6 +586,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                   parameters={nodeData.parameters || {}}
                   onParametersChange={handleParametersChange}
                   onInputsLoaded={handleInputsLoaded}
+                  onRequiredParametersLoaded={handleRequiredParametersLoaded}
                 />
               )}
             </>
@@ -607,19 +643,30 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
         data-tutorial="generate-output-area"
       >
         {/* Preview area */}
-        {nodeData.outputImage ? (
+        {nodeData.outputImage || activeEntryFailed ? (
           <>
-            <img
-              src={adaptiveOutputImage ?? undefined}
-              alt="Generated"
-              className="w-full h-full object-cover"
-            />
-            {nodeData.__usedFallback && (
-              <div
-                className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-emerald-900/70 text-emerald-300 text-[9px] font-medium pointer-events-auto z-10"
-                title={`Primary failed: ${nodeData.__primaryError ?? "unknown"}\nUsed fallback: ${nodeData.__fallbackModelUsed ?? ""}`}
-              >
-                Fallback used
+            {nodeData.outputImage ? (
+              <img
+                src={adaptiveOutputImage ?? undefined}
+                alt="Generated"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full bg-neutral-900/40" />
+            )}
+            {(showGenerationCost || nodeData.__usedFallback) && (
+              <div className="absolute top-1 left-1 z-10 flex flex-col items-start gap-1">
+                {showGenerationCost && activeGenerationCost && (
+                  <GenerationCostBadge receipt={activeGenerationCost} />
+                )}
+                {nodeData.__usedFallback && (
+                  <div
+                    className="px-1.5 py-0.5 rounded bg-emerald-900/70 text-emerald-300 text-[9px] font-medium pointer-events-auto"
+                    title={`Primary failed: ${nodeData.__primaryError ?? "unknown"}\nUsed fallback: ${nodeData.__fallbackModelUsed ?? ""}`}
+                  >
+                    Fallback used
+                  </div>
+                )}
               </div>
             )}
             {/* Loading overlay for generation */}
@@ -646,9 +693,9 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                 </svg>
               </div>
             )}
-            {/* Error overlay when generation failed */}
-            {nodeData.status === "error" && (
-              <div className="absolute inset-0 bg-red-900/40 flex flex-col items-center justify-center gap-1">
+            {/* Error overlay when the selected generation attempt failed */}
+            {activeEntryFailed && (
+              <div className="absolute inset-0 bg-red-900/40 flex flex-col items-center justify-center gap-1 px-3">
                 <svg
                   className="w-6 h-6 text-white"
                   fill="none"
@@ -659,7 +706,14 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
                 <span className="text-white text-xs font-medium">Generation failed</span>
-                <span className="text-white/70 text-[10px]">See toast for details</span>
+                {failureMessage && (
+                  <span
+                    className="text-white/70 text-[10px] text-center line-clamp-3"
+                    title={failureMessage ?? undefined}
+                  >
+                    {failureMessage}
+                  </span>
+                )}
               </div>
             )}
             {/* Loading overlay for carousel navigation */}
@@ -689,7 +743,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
             {/* Download + Clear buttons */}
             <div className="absolute top-1 right-1 flex items-center gap-0.5">
               <button
-                onClick={() => downloadMedia(nodeData.outputImage!, "image").catch(() => {})}
+                onClick={() => nodeData.outputImage && downloadMedia(nodeData.outputImage, "image").catch(() => {})}
                 className="w-5 h-5 bg-neutral-900/80 hover:bg-neutral-700 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
                 title="Download image"
               >
@@ -714,7 +768,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                 <button
                   onClick={handleCarouselPrevious}
                   disabled={isLoadingCarouselImage}
-                  className="w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
+                  className="nodrag nopan w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
                   title="Previous image"
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -722,12 +776,12 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                   </svg>
                 </button>
                 <span className="text-[10px] text-white/70 min-w-[32px] text-center">
-                  {(nodeData.selectedHistoryIndex || 0) + 1} / {(nodeData.imageHistory || []).length}
+                  {selectedHistoryIndex + 1} / {(nodeData.imageHistory || []).length}
                 </span>
                 <button
                   onClick={handleCarouselNext}
                   disabled={isLoadingCarouselImage}
-                  className="w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
+                  className="nodrag nopan w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
                   title="Next image"
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

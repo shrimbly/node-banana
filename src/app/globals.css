@@ -31,6 +31,20 @@ body {
   touch-action: pan-y pinch-zoom;
 }
 
+/* Video previews use `object-cover` on the canvas. Once a user opens the
+   native player fullscreen, keep the whole frame visible instead of filling
+   the usually wide viewport and cropping portrait videos. */
+video:fullscreen,
+video:-webkit-full-screen {
+  object-fit: contain !important;
+  background: #000;
+}
+
+video:fullscreen::backdrop,
+video:-webkit-full-screen::backdrop {
+  background: #000;
+}
+
 /* React Flow customizations */
 .react-flow {
   /* Prevent browser back/forward swipe navigation when panning */

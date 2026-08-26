@@ -10,10 +10,16 @@ import type {
   SelectedModel,
 } from "@/types";
 import { calculateGenerationCost } from "@/utils/costCalculator";
+import { appendGenerationHistory } from "@/utils/generationCarousel";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
+import { resolveGenerationCost } from "./generationCost";
 import type { NodeExecutionContext } from "./types";
+import {
+  formatMissingRequiredModelParameters,
+  getMissingRequiredModelParameters,
+} from "@/utils/requiredModelParameters";
 
 export interface NanoBananaOptions {
   /** When true, falls back to stored inputImages/inputPrompt if no connections provide them. */
@@ -78,6 +84,16 @@ export async function executeNanoBanana(
       error: "Missing text input",
     });
     throw new Error("Missing text input");
+  }
+
+  const missingParameters = getMissingRequiredModelParameters(
+    nodeData.requiredModelParameters,
+    nodeData.parameters
+  );
+  if (missingParameters.length > 0) {
+    const error = formatMissingRequiredModelParameters(missingParameters);
+    updateNodeData(node.id, { status: "error", error });
+    throw new Error(error);
   }
 
   // Capture promptText as a definitely-non-null string for use inside the closure.
@@ -150,7 +166,7 @@ export async function executeNanoBanana(
 
       let result = await response.json();
 
-      // Handle polling response (long-running Kie tasks)
+      // Handle polling response (long-running Kie and fal queue tasks)
       if (result.polling) {
         result = await pollGenerateTask({
           taskId: result.taskId,
@@ -172,6 +188,10 @@ export async function executeNanoBanana(
       }
 
       if (result.success && result.image) {
+        const generationCost = resolveGenerationCost(
+          modelToUse,
+          result.generationCost
+        );
         const timestamp = Date.now();
         const imageId = `${timestamp}`;
 
@@ -181,7 +201,8 @@ export async function executeNanoBanana(
           timestamp,
           prompt: finalPrompt,
           aspectRatio: nodeData.aspectRatio,
-          model: nodeData.model,
+          model: modelToUse.modelId,
+          generationCost,
         });
 
         // Add to node's carousel history
@@ -190,16 +211,18 @@ export async function executeNanoBanana(
           timestamp,
           prompt: finalPrompt,
           aspectRatio: nodeData.aspectRatio,
-          model: nodeData.model,
+          model: modelToUse.modelId,
+          generationCost,
         };
-        const updatedHistory = [newHistoryItem, ...(nodeData.imageHistory || [])].slice(0, 50);
+        const updatedHistory = appendGenerationHistory(nodeData.imageHistory, newHistoryItem);
 
         updateNodeData(node.id, {
           outputImage: result.image,
+          outputImageRef: undefined,
           status: "complete",
           error: null,
           imageHistory: updatedHistory,
-          selectedHistoryIndex: 0,
+          selectedHistoryIndex: updatedHistory.length - 1,
         });
 
         // Push new image to connected downstream outputGallery nodes (atomic append)
@@ -215,7 +238,7 @@ export async function executeNanoBanana(
           });
 
         // Track cost
-        if ((modelToUse.provider === "fal" || modelToUse.provider === "openai") && modelToUse.pricing) {
+        if (modelToUse.provider === "openai" && modelToUse.pricing) {
           addIncurredCost(modelToUse.pricing.amount);
         } else if (modelToUse.provider === "gemini") {
           const generationCost = calculateGenerationCost(nodeData.model, nodeData.resolution);
@@ -256,10 +279,8 @@ export async function executeNanoBanana(
           trackSaveGeneration(imageId, savePromise);
         }
       } else {
-        updateNodeData(node.id, {
-          status: "error",
-          error: result.error || "Generation failed",
-        });
+        // The catch block below records every failure exactly once, including
+        // successful HTTP responses whose payload reports success: false.
         throw new Error(result.error || "Generation failed");
       }
     } catch (error) {
@@ -277,7 +298,23 @@ export async function executeNanoBanana(
         errorMessage = error.message;
       }
 
+      const freshErrorNode = getFreshNode(node.id);
+      const currentErrorData = (freshErrorNode?.data || node.data) as NanoBananaNodeData;
+      const timestamp = Date.now();
+
+      const updatedHistory = appendGenerationHistory(currentErrorData.imageHistory, {
+        id: `${timestamp}`,
+        timestamp,
+        prompt: finalPrompt,
+        aspectRatio: nodeData.aspectRatio,
+        model: modelToUse.modelId,
+        error: errorMessage,
+      });
       updateNodeData(node.id, {
+        outputImage: null,
+        outputImageRef: undefined,
+        imageHistory: updatedHistory,
+        selectedHistoryIndex: updatedHistory.length - 1,
         status: "error",
         error: errorMessage,
       });

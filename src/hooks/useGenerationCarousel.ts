@@ -1,6 +1,7 @@
 import { useCallback, useState } from "react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { WorkflowNodeData } from "@/types";
+import { normalizeGenerationHistoryIndex } from "@/utils/generationCarousel";
 
 interface HistoryItem {
   id: string;
@@ -16,6 +17,13 @@ interface UseGenerationCarouselParams<T extends HistoryItem> {
    * Kept node-specific so each node can write its own output/index fields.
    */
   buildUpdate: (media: string, newIndex: number) => Partial<WorkflowNodeData>;
+  /**
+   * Entries that have no stored media of their own, such as a failed
+   * generation. These are selectable but never hit `loadFn`.
+   */
+  isUnloadable?: (item: T) => boolean;
+  /** Builds the payload used when selecting an unloadable entry. */
+  buildUnloadableUpdate?: (item: T, newIndex: number) => Partial<WorkflowNodeData>;
 }
 
 /**
@@ -29,6 +37,8 @@ export function useGenerationCarousel<T extends HistoryItem>({
   currentIndex,
   loadFn,
   buildUpdate,
+  isUnloadable,
+  buildUnloadableUpdate,
 }: UseGenerationCarouselParams<T>) {
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const [isLoading, setIsLoading] = useState(false);
@@ -38,7 +48,7 @@ export function useGenerationCarousel<T extends HistoryItem>({
       const items = history || [];
       if (items.length === 0 || isLoading) return;
 
-      const current = currentIndex || 0;
+      const current = normalizeGenerationHistoryIndex(currentIndex, items.length);
       const newIndex =
         direction === "previous"
           ? current === 0
@@ -46,6 +56,11 @@ export function useGenerationCarousel<T extends HistoryItem>({
             : current - 1
           : (current + 1) % items.length;
       const item = items[newIndex];
+
+      if (isUnloadable?.(item) && buildUnloadableUpdate) {
+        updateNodeData(nodeId, buildUnloadableUpdate(item, newIndex));
+        return;
+      }
 
       setIsLoading(true);
       const media = await loadFn(item.id);
@@ -55,7 +70,17 @@ export function useGenerationCarousel<T extends HistoryItem>({
         updateNodeData(nodeId, buildUpdate(media, newIndex));
       }
     },
-    [nodeId, history, currentIndex, isLoading, loadFn, buildUpdate, updateNodeData]
+    [
+      nodeId,
+      history,
+      currentIndex,
+      isLoading,
+      loadFn,
+      buildUpdate,
+      isUnloadable,
+      buildUnloadableUpdate,
+      updateNodeData,
+    ]
   );
 
   const handlePrevious = useCallback(() => navigate("previous"), [navigate]);

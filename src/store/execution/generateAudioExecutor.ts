@@ -9,7 +9,13 @@ import type { GenerateAudioNodeData, SelectedModel } from "@/types";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
+import { resolveGenerationCost } from "./generationCost";
+import { appendGenerationHistory } from "@/utils/generationCarousel";
 import type { NodeExecutionContext } from "./types";
+import {
+  formatMissingRequiredModelParameters,
+  getMissingRequiredModelParameters,
+} from "@/utils/requiredModelParameters";
 
 export interface GenerateAudioOptions {
   /** When true, falls back to stored inputPrompt if no connections provide it. */
@@ -27,7 +33,6 @@ export async function executeGenerateAudio(
     getFreshNode,
     signal,
     providerSettings,
-    addIncurredCost,
     generationsPath,
     getNodes,
     trackSaveGeneration,
@@ -72,6 +77,16 @@ export async function executeGenerateAudio(
       error: "No model selected",
     });
     throw new Error("No model selected");
+  }
+
+  const missingParameters = getMissingRequiredModelParameters(
+    nodeData.requiredModelParameters,
+    nodeData.parameters
+  );
+  if (missingParameters.length > 0) {
+    const error = formatMissingRequiredModelParameters(missingParameters);
+    updateNodeData(node.id, { status: "error", error });
+    throw new Error(error);
   }
 
   updateNodeData(node.id, {
@@ -123,7 +138,7 @@ export async function executeGenerateAudio(
 
       let result = await response.json();
 
-      // Handle polling response (long-running Kie tasks)
+      // Handle polling response (long-running Kie and fal queue tasks)
       if (result.polling) {
         result = await pollGenerateTask({
           taskId: result.taskId,
@@ -148,6 +163,10 @@ export async function executeGenerateAudio(
       // Handle audio response (audio or audioUrl field)
       const audioData = result.audio || result.audioUrl;
       if (result.success && audioData) {
+        const generationCost = resolveGenerationCost(
+          modelToUse,
+          result.generationCost
+        );
         const timestamp = Date.now();
         const audioId = `${timestamp}`;
 
@@ -157,21 +176,17 @@ export async function executeGenerateAudio(
           timestamp,
           prompt: text || "",
           model: modelToUse.modelId || "",
+          generationCost,
         };
-        const updatedHistory = [newHistoryItem, ...(nodeData.audioHistory || [])].slice(0, 50);
+        const updatedHistory = appendGenerationHistory(nodeData.audioHistory, newHistoryItem);
 
         updateNodeData(node.id, {
           outputAudio: audioData,
           status: "complete",
           error: null,
           audioHistory: updatedHistory,
-          selectedAudioHistoryIndex: 0,
+          selectedAudioHistoryIndex: updatedHistory.length - 1,
         });
-
-        // Track cost
-        if (modelToUse.provider === "fal" && modelToUse.pricing) {
-          addIncurredCost(modelToUse.pricing.amount);
-        }
 
         // Auto-save to generations folder if configured
         if (generationsPath) {

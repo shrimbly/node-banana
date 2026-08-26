@@ -746,6 +746,33 @@ describe("ModelParameters", () => {
   });
 
   describe("Inputs Loading Callback", () => {
+    it("reports required parameters to the node", async () => {
+      const onRequiredParametersLoaded = vi.fn();
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({
+          parameters: [
+            createMockParameter({ name: "preview_text", type: "string", required: true }),
+            createMockParameter({ name: "speed", type: "number", required: true, default: 1 }),
+          ],
+          inputs: [],
+        }),
+      });
+
+      render(
+        <ModelParameters
+          {...defaultProps}
+          onRequiredParametersLoaded={onRequiredParametersLoaded}
+        />
+      );
+
+      await waitFor(() => {
+        expect(onRequiredParametersLoaded).toHaveBeenCalledWith([
+          { name: "preview_text", label: "Preview Text" },
+        ]);
+      });
+    });
+
     it("should call onInputsLoaded when inputs are in response", async () => {
       const onInputsLoaded = vi.fn();
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
