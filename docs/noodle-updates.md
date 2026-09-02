@@ -5,7 +5,7 @@ behave, hiding them, labelling them, and bundling them.
 
 **Branch:** `feature/noodle-updates` (off `develop`)
 **Started:** 2026-09-02
-**Status:** in progress — items 1 to 3 done, item 4 next
+**Status:** in progress — items 1 to 4 done, item 5 next
 
 ## Goal
 
@@ -52,13 +52,13 @@ save; they just leave selection and hit-testing.
 - [x] Hidden edges are not selectable and lose their selection when hidden
 - [x] Execution, validation, copy/paste and save/load are unaffected: the edge stays in the array with a data flag
 
-### 4. Noodle labels
+### 4. Noodle labels — done
 
-- [ ] `label` on edge data, edited inline from the toolbar or by double-clicking the edge
-- [ ] One `EdgeLabel` component via `EdgeLabelRenderer`, replacing the `foreignObject` loop badge and the SVG pause marker
-- [ ] Auto labels: data type, "Image N" sequence (today only shown in the toolbar), loop count, pause
-- [ ] Visibility setting: always / on hover or select / never
-- [ ] Placement along the path, offset when parallel edges stack
+- [x] `label` on edge data, edited in the toolbar's label field (Enter commits, Escape reverts). Decision: no double-click editing; selecting the noodle already puts the field on it
+- [x] One `EdgeLabel` component via `EdgeLabelRenderer`, replacing the `foreignObject` loop badge. The pause marker stays an SVG mark by the target, since its position is the information
+- [x] Auto labels: "Image N" order or the data type; loop count in the same pill
+- [x] Labels setting: always / on hover (hover, selection, or an attached selected node) / never. Typed labels always show
+- [x] Placed at the path midpoint, offset for parallel connections between the same nodes; hidden stubs reuse the label
 
 ### 5. Noodle grouping and bundling
 
@@ -95,7 +95,6 @@ the Router node stays for execution-time fan-out.
 ## Open questions
 
 - Bundling default: opt-in via the appearance settings first, automatic later once the rendering is proven.
-- Labels on hidden edges: show the label as the stub, or hide both?
 
 ## Non-goals
 
