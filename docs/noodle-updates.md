@@ -5,7 +5,7 @@ behave, hiding them, labelling them, and bundling them.
 
 **Branch:** `feature/noodle-updates` (off `develop`)
 **Started:** 2026-09-02
-**Status:** in progress — items 1 to 4 done, item 5 next
+**Status:** all five items implemented on the branch (2026-09-03); not yet merged
 
 ## Goal
 
@@ -60,16 +60,16 @@ save; they just leave selection and hit-testing.
 - [x] Labels setting: always / on hover (hover, selection, or an attached selected node) / never. Typed labels always show
 - [x] Placed at the path midpoint, offset for parallel connections between the same nodes; hidden stubs reuse the label
 
-### 5. Noodle grouping and bundling
+### 5. Noodle grouping and bundling — done
 
 Parallel connections read as one. Visual only: execution is unchanged and
 the Router node stays for execution-time fan-out.
 
-- [ ] Automatic bundling of edges that share a source and target node (off / on / auto above N)
-- [ ] Manual bundles from a selection, stored as `bundleId` on edge data
-- [ ] Bundle draws as one trunk fanning out at the handles, with a count badge; expands on hover or select
-- [ ] Toolbar acts on the whole bundle: pause, hide, delete, label, colour
-- [ ] Document when to use a bundle and when to use a Router node
+- [x] Automatic bundling of edges between the same two nodes: off (default), on (two or more), auto (three or more)
+- [x] Manual bundles from a same-pair multi-selection, stored as `bundleId`; Unbundle dissolves them
+- [x] Bundle draws as one trunk fanning out at the handles with a count badge; expands when a member is selected. Decision: no hover expansion, since members cannot share hover state without extra store traffic and selection already expands it
+- [x] Toolbar acts on the whole bundle: pause, hide, delete. No label or colour on bundles (colours are not user-changeable; a bundle label would hide the members' own)
+- [x] Bundle vs Router: a bundle is drawing only and keeps every connection as it is; a Router node is a real hub that fans one input out to many nodes at execution time. Use a bundle to tidy parallel wires, a Router to share one source
 
 ## Where the edge system stands today
 
@@ -94,7 +94,6 @@ the Router node stays for execution-time fan-out.
 
 ## Open questions
 
-- Bundling default: opt-in via the appearance settings first, automatic later once the rendering is proven.
 
 ## Non-goals
 
