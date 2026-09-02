@@ -293,6 +293,10 @@ interface WorkflowStore {
    */
   reconnectEdge: (edgeId: string, connection: Connection) => boolean;
   toggleEdgePause: (edgeId: string) => void;
+  /** Remove several edges as one undo step. */
+  removeEdges: (edgeIds: string[]) => void;
+  /** Pause or resume several edges as one undo step. */
+  setEdgesPause: (edgeIds: string[], hasPause: boolean) => void;
   setLoopCount: (edgeId: string, count: number) => void;
 
   // Copy/Paste operations
@@ -1110,6 +1114,37 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         edge.id === edgeId
           ? { ...edge, data: { ...edge.data, hasPause: !edge.data?.hasPause } }
           : edge
+      ),
+      hasUnsavedChanges: true,
+    }));
+  },
+
+  removeEdges: (edgeIds: string[]) => {
+    const ids = new Set(edgeIds);
+    const removed = get().edges.filter((e) => ids.has(e.id));
+    if (removed.length === 0) return;
+    pushUndoCheckpoint(get, set);
+    set((state) => ({
+      edges: state.edges.filter((edge) => !ids.has(edge.id)),
+      hasUnsavedChanges: true,
+    }));
+    deleteCheckpointActive = true;
+    try {
+      clearStaleInputImages(removed, get);
+    } finally {
+      deleteCheckpointActive = false;
+    }
+    get().recomputeDimmedNodes();
+    get().incrementManualChangeCount();
+  },
+
+  setEdgesPause: (edgeIds: string[], hasPause: boolean) => {
+    const ids = new Set(edgeIds);
+    if (!get().edges.some((e) => ids.has(e.id) && Boolean(e.data?.hasPause) !== hasPause)) return;
+    pushUndoCheckpoint(get, set);
+    set((state) => ({
+      edges: state.edges.map((edge) =>
+        ids.has(edge.id) ? { ...edge, data: { ...edge.data, hasPause } } : edge
       ),
       hasUnsavedChanges: true,
     }));

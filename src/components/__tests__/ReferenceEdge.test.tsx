@@ -42,6 +42,7 @@ const createDefaultProps = (overrides = {}) => ({
 // Default store state factory
 const createDefaultState = (overrides = {}) => ({
   edgeStyle: "angular" as const,
+  edges: [],
   edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true },
   nodes: [],
   ...overrides,

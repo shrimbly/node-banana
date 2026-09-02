@@ -59,7 +59,6 @@ import { EditableEdge, ReferenceEdge, SharedEdgeGradients } from "./edges";
 import { ConnectionDropMenu, MenuAction } from "./ConnectionDropMenu";
 import { NodeSearchMenu } from "./NodeSearchMenu";
 import { MultiSelectToolbar } from "./MultiSelectToolbar";
-import { EdgeToolbar } from "./EdgeToolbar";
 import { GlobalImageHistory } from "./GlobalImageHistory";
 import { GroupBackgroundsPortal, GroupControlsOverlay } from "./GroupsOverlay";
 import { NodeType, NanoBananaNodeData, HandleType, PromptNodeData, LLMGenerateNodeData, PromptConstructorNodeData, AvailableVariable, WorkflowNodeData } from "@/types";
@@ -2316,6 +2315,7 @@ export function WorkflowCanvas() {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         isValidConnection={isValidConnection}
+        elevateEdgesOnSelect
         fitView
         deleteKeyCode={isModalOpen ? null : ["Backspace", "Delete"]}
         multiSelectionKeyCode="Shift"
@@ -2571,7 +2571,6 @@ export function WorkflowCanvas() {
       <MultiSelectToolbar />
 
       {/* Edge toolbar */}
-      <EdgeToolbar />
 
       {/* Global image history */}
       <GlobalImageHistory />

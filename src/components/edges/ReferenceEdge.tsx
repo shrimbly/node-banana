@@ -9,6 +9,7 @@ import {
 import { useWorkflowStore } from "@/store/workflowStore";
 import { getSharedGradientId } from "./SharedEdgeGradients";
 import { EDGE_COLORS } from "@/lib/edges/colors";
+import { EdgeToolbar, useIsToolbarEdge } from "@/components/EdgeToolbar";
 
 export function ReferenceEdge({
   id,
@@ -20,10 +21,12 @@ export function ReferenceEdge({
   targetPosition,
   style,
   markerEnd,
+  selected,
   source,
   target,
 }: EdgeProps) {
   const appearance = useWorkflowStore((state) => state.edgeAppearance);
+  const carriesToolbar = useIsToolbarEdge(id);
 
   // Narrow selector: returns boolean, only re-renders when selection relevance changes
   const isConnectedToSelection = useWorkflowStore((state) => {
@@ -33,7 +36,7 @@ export function ReferenceEdge({
   });
 
   // Calculate the path - always use curved for reference edges for softer look
-  const [edgePath] = useMemo(() => {
+  const [edgePath, labelX, labelY] = useMemo(() => {
     return getBezierPath({
       sourceX,
       sourceY,
@@ -65,8 +68,11 @@ export function ReferenceEdge({
           strokeDasharray: "6 4",
           strokeLinecap: "round",
           strokeLinejoin: "round",
-        }}
+          "--edge-stroke-active": appearance.gradient ? `url(#${getSharedGradientId("reference", "active")})` : EDGE_COLORS.reference,
+        } as React.CSSProperties}
       />
+
+      {selected && carriesToolbar && <EdgeToolbar edgeId={id} x={labelX} y={labelY} />}
 
       {/* Invisible wider path for easier selection */}
       <path

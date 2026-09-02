@@ -71,10 +71,6 @@ vi.mock("@/components/MultiSelectToolbar", () => ({
   MultiSelectToolbar: () => <div data-testid="multi-select-toolbar" />,
 }));
 
-vi.mock("@/components/EdgeToolbar", () => ({
-  EdgeToolbar: () => <div data-testid="edge-toolbar" />,
-}));
-
 vi.mock("@/components/GlobalImageHistory", () => ({
   GlobalImageHistory: () => null,
 }));
@@ -327,16 +323,6 @@ describe("WorkflowCanvas", () => {
         (mockReactFlowProps.current?.onMoveEnd as (() => void) | undefined)?.();
       });
       expect(canvas).not.toHaveClass("canvas-native-navigation-active");
-    });
-
-    it("should render EdgeToolbar component", () => {
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-
-      expect(screen.getByTestId("edge-toolbar")).toBeInTheDocument();
     });
 
     it("should render MultiSelectToolbar component", () => {

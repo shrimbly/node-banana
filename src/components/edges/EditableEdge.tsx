@@ -14,6 +14,7 @@ import { NanoBananaNodeData, WorkflowEdgeData } from "@/types";
 import { getSharedGradientId } from "./SharedEdgeGradients";
 import { EDGE_COLORS, edgeColorKeyForHandles } from "@/lib/edges/colors";
 import { EDGE_THICKNESS_PX } from "@/lib/edges/appearance";
+import { EdgeToolbar, useIsToolbarEdge } from "@/components/EdgeToolbar";
 
 interface EdgeData extends WorkflowEdgeData {
   offsetX?: number;
@@ -41,6 +42,7 @@ export function EditableEdge({
   const edgeStyle = useWorkflowStore((state) => state.edgeStyle);
   const appearance = useWorkflowStore((state) => state.edgeAppearance);
   const [isDragging, setIsDragging] = useState(false);
+  const carriesToolbar = useIsToolbarEdge(id);
 
   // Narrow selector: returns boolean, only re-renders when selection relevance changes
   const isConnectedToSelection = useWorkflowStore((state) =>
@@ -59,27 +61,18 @@ export function EditableEdge({
     return (targetNode.data as NanoBananaNodeData).status === "loading";
   });
 
-  // Determine edge color based on handle type (magenta for loop edges, orange if paused)
-  const edgeColor = useMemo(() => {
-    if (edgeData?.isLoop) return EDGE_COLORS.loop;
-    if (hasPause) return EDGE_COLORS.pause;
-    return EDGE_COLORS[edgeColorKeyForHandles(sourceHandleId, targetHandleId)];
+  // Colour key: magenta for loop edges, orange if paused, else the data type
+  const colorKey = useMemo(() => {
+    if (edgeData?.isLoop) return "loop" as const;
+    if (hasPause) return "pause" as const;
+    return edgeColorKeyForHandles(sourceHandleId, targetHandleId);
   }, [edgeData?.isLoop, hasPause, sourceHandleId, targetHandleId]);
+  const edgeColor = EDGE_COLORS[colorKey];
 
-  // Reference shared gradient by color key + selection state
-  const gradientId = useMemo(() => {
-    if (edgeData?.isLoop) {
-      const selectionKey = isConnectedToSelection ? "active" : "dimmed";
-      return getSharedGradientId("loop", selectionKey);
-    }
-    if (hasPause) {
-      const selectionKey = isConnectedToSelection ? "active" : "dimmed";
-      return getSharedGradientId("pause", selectionKey);
-    }
-    const colorKey = edgeColorKeyForHandles(sourceHandleId, targetHandleId);
-    const selectionKey = isConnectedToSelection ? "active" : "dimmed";
-    return getSharedGradientId(colorKey, selectionKey);
-  }, [edgeData?.isLoop, hasPause, sourceHandleId, targetHandleId, isConnectedToSelection]);
+  // Shared gradient for the colour key + selection state; the "active" one
+  // also serves as the hover/selected stroke (see globals.css)
+  const gradientId = getSharedGradientId(colorKey, isConnectedToSelection ? "active" : "dimmed");
+  const activeGradientId = getSharedGradientId(colorKey, "active");
 
   // Calculate the path based on edge style
   const [edgePath, labelX, labelY] = useMemo(() => {
@@ -207,6 +200,7 @@ export function EditableEdge({
   const strokeWidth = EDGE_THICKNESS_PX[appearance.thickness];
   const stroke = appearance.gradient ? `url(#${gradientId})` : edgeColor;
   const strokeOpacity = appearance.gradient || isConnectedToSelection ? 1 : appearance.fadedOpacity;
+  const activeStroke = appearance.gradient ? `url(#${activeGradientId})` : edgeColor;
   const showPulse = isTargetLoading && appearance.loadingPulse;
 
   return (
@@ -222,8 +216,11 @@ export function EditableEdge({
           strokeWidth,
           strokeLinecap: "round",
           strokeLinejoin: "round",
-        }}
+          "--edge-stroke-active": activeStroke,
+        } as React.CSSProperties}
       />
+
+      {selected && carriesToolbar && <EdgeToolbar edgeId={id} x={labelX} y={labelY} />}
 
       {/* Animated pulse overlay when target is loading */}
       {showPulse && (

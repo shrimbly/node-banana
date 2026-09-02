@@ -24,6 +24,8 @@ vi.mock("@xyflow/react", async () => {
     useReactFlow: () => ({
       setEdges: mockSetEdges,
     }),
+    EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    useViewport: () => ({ x: 0, y: 0, zoom: 1 }),
   };
 });
 
@@ -57,6 +59,7 @@ const createDefaultProps = (overrides = {}) => ({
 // Default store state factory
 const createDefaultState = (overrides = {}) => ({
   edgeStyle: "angular" as const,
+  edges: [],
   edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true },
   nodes: [],
   ...overrides,
@@ -444,5 +447,63 @@ describe("EditableEdge appearance settings", () => {
       nodes: [{ id: "node-2", type: "nanoBanana", data: { status: "loading" }, position: { x: 0, y: 0 } }],
     });
     expect(renderEdge().querySelector('path[stroke-dasharray="20 30"]')).toBeNull();
+  });
+});
+
+describe("EditableEdge toolbar and highlight", () => {
+  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true };
+  const stateWith = (overrides: Record<string, unknown>) =>
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edgeAppearance: baseAppearance, ...overrides }))
+    );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("carries the toolbar when it is the first selected edge", () => {
+    stateWith({ edges: [{ id: "edge-1", selected: true, source: "node-1", target: "node-2", data: {} }] });
+    const { container } = render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps({ selected: true })} />
+      </TestWrapper>
+    );
+    expect(container.querySelector('[data-testid="edge-toolbar"]')).not.toBeNull();
+  });
+
+  it("leaves the toolbar to the first selected edge when several are selected", () => {
+    stateWith({
+      edges: [
+        { id: "edge-0", selected: true, source: "x", target: "y", data: {} },
+        { id: "edge-1", selected: true, source: "node-1", target: "node-2", data: {} },
+      ],
+    });
+    const { container } = render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps({ selected: true })} />
+      </TestWrapper>
+    );
+    expect(container.querySelector('[data-testid="edge-toolbar"]')).toBeNull();
+  });
+
+  it("shows no toolbar when not selected", () => {
+    stateWith({ edges: [{ id: "edge-1", selected: false, source: "node-1", target: "node-2", data: {} }] });
+    const { container } = render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps({ selected: false })} />
+      </TestWrapper>
+    );
+    expect(container.querySelector('[data-testid="edge-toolbar"]')).toBeNull();
+  });
+
+  it("exposes its active stroke for the hover and selected highlight", () => {
+    stateWith({});
+    const { container } = render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps()} />
+      </TestWrapper>
+    );
+    const style = container.querySelector(".react-flow__edge-path")?.getAttribute("style") ?? "";
+    expect(style).toContain("--edge-stroke-active: url(#edge-grad-image-active)");
   });
 });
