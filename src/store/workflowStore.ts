@@ -28,6 +28,7 @@ import {
   MODEL_DISPLAY_NAMES,
   EdgeStyle,
   EdgeAppearance,
+  WorkflowEdgeData,
 } from "@/types";
 import { UndoManager, UndoSnapshot, clonePreservingStrings } from "./undoHistory";
 import { useToast } from "@/components/Toast";
@@ -68,6 +69,7 @@ import {
   findLoopSubgraph,
   copyLoopOutput,
   revokeBlobUrl,
+  wouldCreateCycle,
 } from "./utils/executionUtils";
 import { getConnectedInputsPure, validateWorkflowPure, type ConnectedInputs } from "./utils/connectedInputs";
 import {
@@ -283,6 +285,13 @@ interface WorkflowStore {
   onConnect: (connection: Connection, edgeDataOverrides?: Record<string, unknown>) => void;
   addEdgeWithType: (connection: Connection, edgeType: string, edgeDataOverrides?: Record<string, unknown>) => void;
   removeEdge: (edgeId: string) => void;
+  /**
+   * Move one end of an existing edge to a new source/target (drag-to-replug).
+   * Keeps the edge's data (pause, creation order, offsets) and re-evaluates
+   * whether it forms a loop. Returns false when nothing changed: unknown edge,
+   * incomplete connection, or an identical edge already present.
+   */
+  reconnectEdge: (edgeId: string, connection: Connection) => boolean;
   toggleEdgePause: (edgeId: string) => void;
   setLoopCount: (edgeId: string, count: number) => void;
 
@@ -1043,6 +1052,55 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       }
     }
     get().incrementManualChangeCount();
+  },
+
+  reconnectEdge: (edgeId: string, connection: Connection) => {
+    const { edges } = get();
+    const oldEdge = edges.find((e) => e.id === edgeId);
+    if (!oldEdge || !connection.source || !connection.target) return false;
+
+    const others = edges.filter((e) => e.id !== edgeId);
+    const newId = `edge-${connection.source}-${connection.target}-${connection.sourceHandle || "default"}-${connection.targetHandle || "default"}`;
+    if (others.some((e) => e.id === newId)) return false;
+
+    const unchanged =
+      oldEdge.source === connection.source &&
+      oldEdge.target === connection.target &&
+      (oldEdge.sourceHandle ?? null) === (connection.sourceHandle ?? null) &&
+      (oldEdge.targetHandle ?? null) === (connection.targetHandle ?? null);
+    if (unchanged) return false;
+
+    pushUndoCheckpoint(get, set);
+
+    // Loop status depends on the new geometry; everything else carries over.
+    const { isLoop: _wasLoop, loopCount, ...kept } = (oldEdge.data ?? {}) as WorkflowEdgeData;
+    void _wasLoop;
+    const loops = wouldCreateCycle(connection.source, connection.target, others);
+    const data: WorkflowEdgeData = loops ? { ...kept, isLoop: true, loopCount: loopCount ?? 3 } : kept;
+
+    const newEdge: WorkflowEdge = {
+      ...oldEdge,
+      id: newId,
+      source: connection.source,
+      sourceHandle: connection.sourceHandle ?? undefined,
+      target: connection.target,
+      targetHandle: connection.targetHandle ?? undefined,
+      data,
+      selected: false,
+    };
+
+    set({ edges: [...others, newEdge], hasUnsavedChanges: true });
+
+    // The old target may have lost its only image source.
+    deleteCheckpointActive = true;
+    try {
+      clearStaleInputImages([oldEdge], get);
+    } finally {
+      deleteCheckpointActive = false;
+    }
+    get().recomputeDimmedNodes();
+    get().incrementManualChangeCount();
+    return true;
   },
 
   toggleEdgePause: (edgeId: string) => {

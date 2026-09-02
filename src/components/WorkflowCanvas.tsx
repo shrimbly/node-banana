@@ -366,6 +366,7 @@ export function WorkflowCanvas() {
     })));
   const onNodesChange = useWorkflowStore((state) => state.onNodesChange);
   const onEdgesChange = useWorkflowStore((state) => state.onEdgesChange);
+  const reconnectEdge = useWorkflowStore((state) => state.reconnectEdge);
   const onConnect = useWorkflowStore((state) => state.onConnect);
   const addNode = useWorkflowStore((state) => state.addNode);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
@@ -756,6 +757,17 @@ export function WorkflowCanvas() {
       return sourceType === targetType;
     },
     [nodes]
+  );
+
+  // Drag an edge end onto another handle. Generic router/switch handles are
+  // resolved only on first connection, so a re-plug onto one is left alone.
+  const handleReconnect = useCallback(
+    (oldEdge: Edge, connection: Connection) => {
+      if (!isValidConnection(connection)) return;
+      if (connection.targetHandle === "generic-input" || connection.sourceHandle === "generic-output") return;
+      reconnectEdge(oldEdge.id, connection);
+    },
+    [isValidConnection, reconnectEdge]
   );
 
   const handleConnect = useCallback(
@@ -2293,6 +2305,7 @@ export function WorkflowCanvas() {
         onEdgesChange={onEdgesChange}
         onConnect={handleConnect}
         onConnectEnd={handleConnectEnd}
+        onReconnect={handleReconnect}
         onMoveStart={() => { isPanningRef.current = true; setHoveredNodeId(null); document.documentElement.classList.add("canvas-interacting"); if (reactFlowWrapper.current) setCanvasPanningClass(true, reactFlowWrapper.current); }}
         onMoveEnd={() => { isPanningRef.current = false; document.documentElement.classList.remove("canvas-interacting"); if (reactFlowWrapper.current) setCanvasPanningClass(false, reactFlowWrapper.current); }}
         onNodeDragStart={() => { isDraggingNodeRef.current = true; document.documentElement.classList.add("canvas-interacting"); }}
