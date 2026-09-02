@@ -117,7 +117,7 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
           position={Position.Left}
           id="audio"
           data-handletype="audio"
-          style={{ top: "65%", background: "rgb(167, 139, 250)", zIndex: 10 }}
+          style={{ top: "65%", background: "var(--handle-color-audio)", zIndex: 10 }}
         />
         <HandleLabel label="Audio" side="target" color="var(--handle-color-audio)" top="calc(65% - 18px)" visible={showLabels} />
 

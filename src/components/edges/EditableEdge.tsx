@@ -11,26 +11,12 @@ import {
 import { useWorkflowStore } from "@/store/workflowStore";
 import { NanoBananaNodeData, WorkflowEdgeData } from "@/types";
 import { getSharedGradientId } from "./SharedEdgeGradients";
+import { EDGE_COLORS, edgeColorKeyForHandles } from "@/lib/edges/colors";
 
 interface EdgeData extends WorkflowEdgeData {
   offsetX?: number;
   offsetY?: number;
 }
-
-// Colors for different connection types (dimmed for softer appearance)
-const EDGE_COLORS: Record<string, string> = {
-  image: "#0d9668", // Green for image connections
-  prompt: "#2563eb", // Blue for prompt connections
-  default: "#64748b", // Gray for unknown
-  pause: "#ea580c", // Orange for paused edges
-  reference: "#52525b", // Gray for reference connections
-  video: "#ec4899", // Pink for video connections
-  audio: "#f97316", // Orange for audio connections
-  text: "#2563eb", // Blue for text connections
-  "3d": "#06b6d4", // Cyan for 3D connections
-  easeCurve: "#f59e0b", // Amber for ease curve connections
-  loop: "#d946ef", // Magenta for loop edges
-};
 
 export function EditableEdge({
   id,
@@ -74,11 +60,7 @@ export function EditableEdge({
   const edgeColor = useMemo(() => {
     if (edgeData?.isLoop) return EDGE_COLORS.loop;
     if (hasPause) return EDGE_COLORS.pause;
-    // Use source handle to determine color (or target if source is not available)
-    // Strip numeric suffixes (e.g., "image-0" -> "image") for lookup
-    const handleType = sourceHandleId || targetHandleId || "";
-    const normalizedType = handleType.replace(/-\d+$/, "");
-    return EDGE_COLORS[normalizedType] || EDGE_COLORS.default;
+    return EDGE_COLORS[edgeColorKeyForHandles(sourceHandleId, targetHandleId)];
   }, [edgeData?.isLoop, hasPause, sourceHandleId, targetHandleId]);
 
   // Reference shared gradient by color key + selection state
@@ -91,10 +73,7 @@ export function EditableEdge({
       const selectionKey = isConnectedToSelection ? "active" : "dimmed";
       return getSharedGradientId("pause", selectionKey);
     }
-    const handleType = sourceHandleId || targetHandleId || "default";
-    const normalizedType = handleType.replace(/-\d+$/, "");
-    // Use the normalized type if it exists in EDGE_COLORS, otherwise fall back to "default"
-    const colorKey = normalizedType in EDGE_COLORS ? normalizedType : "default";
+    const colorKey = edgeColorKeyForHandles(sourceHandleId, targetHandleId);
     const selectionKey = isConnectedToSelection ? "active" : "dimmed";
     return getSharedGradientId(colorKey, selectionKey);
   }, [edgeData?.isLoop, hasPause, sourceHandleId, targetHandleId, isConnectedToSelection]);

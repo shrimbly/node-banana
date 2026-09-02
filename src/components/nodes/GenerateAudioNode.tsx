@@ -429,7 +429,7 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
           position={Position.Right}
           id="audio"
           data-handletype="audio"
-          style={{ background: "rgb(167, 139, 250)" }}
+          style={{ background: "var(--handle-color-audio)" }}
         />
         <HandleLabel label="Audio" side="source" color="var(--handle-color-audio)" visible={showLabels} />
 

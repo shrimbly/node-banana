@@ -148,7 +148,7 @@ describe("EditableEdge", () => {
 
       const basePath = container.querySelector(".react-flow__edge-path");
       const stroke = basePath?.getAttribute("style") ?? "";
-      expect(stroke).toContain("edge-grad-prompt-");
+      expect(stroke).toContain("edge-grad-text-");
     });
 
     it("should use orange color when edge is paused", () => {

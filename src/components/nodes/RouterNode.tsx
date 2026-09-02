@@ -5,16 +5,13 @@ import { Handle, Position, useUpdateNodeInternals, useReactFlow, NodeProps } fro
 import { BaseNode } from "./BaseNode";
 import { useWorkflowStore } from "@/store/workflowStore";
 import type { WorkflowNode, RouterNodeData } from "@/types";
+import { HANDLE_TYPE_COLORS } from "@/lib/edges/colors";
 
 const ALL_HANDLE_TYPES = ["image", "text", "video", "audio", "3d", "easeCurve"] as const;
 
 const HANDLE_COLORS: Record<(typeof ALL_HANDLE_TYPES)[number], string> = {
-  image: "#10b981",             // emerald — matches globals.css
-  text: "#3b82f6",              // blue — matches globals.css
-  video: "#ec4899",             // pink — video handle style
-  audio: "rgb(167, 139, 250)", // violet — matches GenerateAudioNode/OutputNode
-  "3d": "#f97316",              // orange — matches globals.css
-  easeCurve: "#ffffff",         // white — default handle style
+  ...HANDLE_TYPE_COLORS,
+  easeCurve: "#ffffff", // white — the default handle style ease curve nodes use
 };
 
 export const RouterNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>) => {

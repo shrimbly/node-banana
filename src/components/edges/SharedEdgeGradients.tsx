@@ -4,19 +4,7 @@
 // Rendered once inside the React Flow SVG layer to avoid duplicating
 // <defs>/<linearGradient> in every edge component.
 
-const EDGE_COLORS: Record<string, string> = {
-  image: "#0d9668",
-  prompt: "#2563eb",
-  default: "#64748b",
-  pause: "#ea580c",
-  reference: "#52525b",
-  video: "#ec4899",
-  audio: "#f97316",
-  text: "#2563eb",
-  "3d": "#06b6d4",
-  easeCurve: "#f59e0b",
-  loop: "#d946ef",
-};
+import { EDGE_COLORS } from "@/lib/edges/colors";
 
 const SELECTION_STATES = ["active", "dimmed"] as const;
 

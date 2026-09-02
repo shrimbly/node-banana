@@ -354,9 +354,9 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
         id="audio"
         data-handletype="audio"
         isConnectable={true}
-        style={{ top: "90%", background: "rgb(167, 139, 250)" }}
+        style={{ top: "90%", background: "var(--handle-color-audio)" }}
       />
-      <HandleLabel label="Audio" side="target" color="rgb(167, 139, 250)" top="calc(90% - 18px)" visible={showLabels} />
+      <HandleLabel label="Audio" side="target" color="var(--handle-color-audio)" top="calc(90% - 18px)" visible={showLabels} />
 
       {/* Video output handle (right side) */}
       <Handle

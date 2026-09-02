@@ -5,6 +5,7 @@ import React, { useMemo, useState } from "react";
 import { ComfyWordmark } from "@/components/icons/ComfyWordmark";
 import { ComfyAppParameters } from "@/components/nodes/ComfyAppParameters";
 import type { ComfyAppInput, ComfyAppOutput, ComfyAppParam } from "@/lib/comfy/types";
+import { HANDLE_TYPE_COLORS } from "@/lib/edges/colors";
 
 /**
  * The node this dialog is about to build, drawn as it will appear.
@@ -21,13 +22,7 @@ import type { ComfyAppInput, ComfyAppOutput, ComfyAppParam } from "@/lib/comfy/t
  */
 
 /** Matches `.react-flow__handle[data-handletype]` in globals.css. */
-const HANDLE_FILL: Record<string, string> = {
-  image: "#10b981",
-  text: "#3b82f6",
-  audio: "#a855f7",
-  video: "#ec4899",
-  "3d": "#f97316",
-};
+const HANDLE_FILL: Record<string, string> = HANDLE_TYPE_COLORS;
 
 /** Evenly space n handles down an edge — the node's own rule. */
 const handleTop = (index: number, total: number): string =>

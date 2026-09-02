@@ -7,11 +7,11 @@
 :root {
   --background: #0a0a0a;
   --foreground: #fafafa;
-  /* Handle colors (used by labels) */
+  /* Handle colours. Source of truth: src/lib/edges/colors.ts (a test keeps these in step). */
   --handle-color-image: #10b981;
   --handle-color-text: #3b82f6;
   --handle-color-3d: #f97316;
-  --handle-color-audio: #a855f7;
+  --handle-color-audio: #a78bfa;
   --handle-color-video: #ec4899;
 }
 
@@ -139,27 +139,27 @@ body {
 
 /* Image handles - soft green */
 .react-flow__handle[data-handletype="image"] {
-  background: #10b981;
+  background: var(--handle-color-image);
 }
 
 /* Text handles - soft blue */
 .react-flow__handle[data-handletype="text"] {
-  background: #3b82f6;
+  background: var(--handle-color-text);
 }
 
 /* Audio handles - purple */
 .react-flow__handle[data-handletype="audio"] {
-  background: #a855f7;
+  background: var(--handle-color-audio);
 }
 
 /* Video handles - pink */
 .react-flow__handle[data-handletype="video"] {
-  background: #ec4899;
+  background: var(--handle-color-video);
 }
 
 /* 3D handles - orange */
 .react-flow__handle[data-handletype="3d"] {
-  background: #f97316;
+  background: var(--handle-color-3d);
 }
 
 .react-flow__edge-path {
