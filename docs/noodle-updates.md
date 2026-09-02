@@ -5,7 +5,7 @@ behave, hiding them, labelling them, and bundling them.
 
 **Branch:** `feature/noodle-updates` (off `develop`)
 **Started:** 2026-09-02
-**Status:** in progress — item 1 is next; nothing coded yet
+**Status:** in progress — item 1 done, item 2 next
 
 ## Goal
 
@@ -16,20 +16,22 @@ just to tidy wiring.
 
 ## Work items
 
-### 1. Edge appearance settings — in progress
+### 1. Edge appearance settings — done
 
 One place to customise noodles: line style (curved / angular / straight),
-thickness, colour mode (by data type / single colour / per-edge override),
-dimmed-edge opacity, and gradient and loading-pulse on/off. Persist as a user
-default in localStorage (`node-banana-edge-appearance`) with a per-workflow
-override in the workflow file, mirroring how `edgeStyle` and the generation
-defaults already split.
+thickness, faded-connection opacity, and gradient and loading-pulse on/off.
+Persisted as a user default in localStorage (`node-banana-edge-appearance`)
+with a per-workflow override in the workflow file, mirroring how `edgeStyle`
+and the generation defaults already split.
 
-- [ ] Single source of edge and handle colour tokens (replaces the four copies below)
-- [ ] `EdgeAppearance` settings type in the store, with save/load, dirty-check and undo parity with `edgeStyle`
-- [ ] Settings UI (the curved/angular toggle in the floating action bar stays as a shortcut)
-- [ ] `EditableEdge`, `ReferenceEdge` and `SharedEdgeGradients` render from the settings
-- [ ] Per-edge colour override from the edge toolbar
+Decision (2026-09-03): noodle colours are not user-changeable. Colour always
+follows the data type, so there is no single-colour mode and no per-noodle
+colour override.
+
+- [x] Single source of edge and handle colour tokens in `src/lib/edges/colors.ts` (replaces the four copies below)
+- [x] `EdgeAppearance` settings type in the store, with save/load, dirty-check and undo parity with `edgeStyle`
+- [x] Settings UI in Project Settings → Canvas (`ConnectionSettings`); the action-bar button cycles the three line styles
+- [x] `EditableEdge`, `ReferenceEdge` and `SharedEdgeGradients` render from the settings
 
 ### 2. Noodle behaviour polish
 
@@ -75,9 +77,9 @@ the Router node stays for execution-time fan-out.
 |---|---|---|
 | Edge components | `src/components/edges/EditableEdge.tsx`, `ReferenceEdge.tsx` | Registered as `editable` / `reference` in `WorkflowCanvas.tsx`; `defaultEdgeOptions.type = "editable"` |
 | Edge data | `WorkflowEdgeData` in `src/types/workflow.ts` | `hasPause`, `createdAt`, `isLoop`, `loopCount`. `EditableEdge` also stores untyped `offsetX`/`offsetY` |
-| Style toggle | `EdgeStyle = "angular" \| "curved"` in `workflowStore.ts` | The only customisation today. Toggled in `FloatingActionBar.tsx`; saved in the workflow file; store default `curved`, load fallback `angular` |
-| Colours | `EDGE_COLORS` in `EditableEdge.tsx` and again in `SharedEdgeGradients.tsx`, handle rules in `globals.css`, `HANDLE_COLORS` in `RouterNode.tsx` | Four copies and they disagree (image `#0d9668` on edges vs `#10b981` on handles) |
-| Gradients | `SharedEdgeGradients.tsx` | 11 colours × active/dimmed rendered once; edges touching a selected node get the bright variant |
+| Style and appearance | `EdgeStyle` and `EdgeAppearance` in `src/types/workflow.ts`; `edgeStyle` and `edgeAppearance` in `workflowStore.ts` | Saved in the workflow file; user default in localStorage via `getEdgeDefaults`; load fallback for `edgeStyle` stays `angular` |
+| Colours | `src/lib/edges/colors.ts` | One hue per type; `globals.css` `--handle-color-*` variables are kept in step by a test |
+| Gradients | `SharedEdgeGradients.tsx` | 10 colours × active/dimmed rendered once; dimmed stops follow the faded-opacity setting |
 | Loading pulse | `EditableEdge.tsx` + `flowPulse` in `globals.css` | Three overlay paths while the target generate node is loading |
 | Hit area | transparent 15px path (10px on reference edges) | |
 | Toolbar | `src/components/EdgeToolbar.tsx` | Pause toggle, loop count, delete, "Image N" sequence. Positioned from a global `mousedown` listener |
@@ -91,8 +93,6 @@ the Router node stays for execution-time fan-out.
 
 ## Open questions
 
-- Appearance settings: user default plus workflow override is the recommendation. The alternative is workflow-only, like `edgeStyle` today.
-- Add a `straight` line style in item 1, or keep to curved/angular?
 - Bundling default: opt-in via the appearance settings first, automatic later once the rendering is proven.
 - Labels on hidden edges: show the label as the stub, or hide both?
 
