@@ -2,16 +2,17 @@
 
 import { useState, useEffect } from "react";
 import { generateWorkflowId, useWorkflowStore } from "@/store/workflowStore";
-import { ProviderType, ProviderSettings, NodeDefaultsConfig, LLMProvider, LLMModelType } from "@/types";
+import { ProviderType, ProviderSettings, NodeDefaultsConfig, LLMProvider, LLMModelType, EdgeAppearance, EdgeStyle } from "@/types";
 import { CanvasNavigationSettings, PanMode, ZoomMode, SelectionMode } from "@/types/canvas";
 import { EnvStatusResponse } from "@/app/api/env-status/route";
-import { loadNodeDefaults, saveNodeDefaults, getLastProjectBaseDir, setLastProjectBaseDir } from "@/store/utils/localStorage";
+import { loadNodeDefaults, saveNodeDefaults, getLastProjectBaseDir, setLastProjectBaseDir, saveEdgeDefaults } from "@/store/utils/localStorage";
 import { clearFetchCache } from "@/utils/deduplicatedFetch";
 import { ProviderModel } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { ComfySettingsTab, useComfySettingsDraft } from "@/components/settings/ComfySettingsTab";
 import { saveComfySettings } from "@/lib/comfy/settings";
 import { useInlineParameters } from "@/hooks/useInlineParameters";
+import { ConnectionSettings } from "@/components/settings/ConnectionSettings";
 
 // LLM provider and model options (mirrored from LLMGenerateNode)
 const LLM_PROVIDERS: { value: LLMProvider; label: string }[] = [
@@ -142,6 +143,10 @@ export function ProjectSetupModal({
     setMaxConcurrentCalls,
     canvasNavigationSettings,
     updateCanvasNavigationSettings,
+    edgeStyle,
+    edgeAppearance,
+    setEdgeStyle,
+    setEdgeAppearance,
   } = useWorkflowStore();
 
   // Inline parameters hook
@@ -188,6 +193,11 @@ export function ProjectSetupModal({
   // Canvas tab state
   const [localCanvasSettings, setLocalCanvasSettings] = useState<CanvasNavigationSettings>(canvasNavigationSettings);
 
+  // Connection appearance draft (Canvas tab); applied on Save
+  const [localEdgeStyle, setLocalEdgeStyle] = useState<EdgeStyle>(edgeStyle);
+  const [localEdgeAppearance, setLocalEdgeAppearance] = useState<EdgeAppearance>(edgeAppearance);
+  const [edgeDefaultSaved, setEdgeDefaultSaved] = useState(false);
+
   // ComfyUI tab state
   const [localComfySettings, setLocalComfySettings] = useComfySettingsDraft(isOpen);
 
@@ -231,6 +241,9 @@ export function ProjectSetupModal({
 
       // Sync canvas settings
       setLocalCanvasSettings(canvasNavigationSettings);
+      setLocalEdgeStyle(edgeStyle);
+      setLocalEdgeAppearance(edgeAppearance);
+      setEdgeDefaultSaved(false);
 
       // Fetch env status
       fetch("/api/env-status")
@@ -351,7 +364,14 @@ export function ProjectSetupModal({
 
   const handleSaveCanvas = () => {
     updateCanvasNavigationSettings(localCanvasSettings);
+    if (localEdgeStyle !== edgeStyle) setEdgeStyle(localEdgeStyle);
+    if (localEdgeAppearance !== edgeAppearance) setEdgeAppearance(localEdgeAppearance);
     onClose();
+  };
+
+  const handleSetEdgeDefault = () => {
+    saveEdgeDefaults({ edgeStyle: localEdgeStyle, appearance: localEdgeAppearance });
+    setEdgeDefaultSaved(true);
   };
 
   const handleSaveComfy = () => {
@@ -1243,6 +1263,15 @@ export function ProjectSetupModal({
                 </div>
               </div>
             </div>
+
+            <ConnectionSettings
+              edgeStyle={localEdgeStyle}
+              appearance={localEdgeAppearance}
+              onEdgeStyleChange={setLocalEdgeStyle}
+              onAppearanceChange={setLocalEdgeAppearance}
+              onSetDefault={handleSetEdgeDefault}
+              defaultSaved={edgeDefaultSaved}
+            />
           </div>
         )}
 

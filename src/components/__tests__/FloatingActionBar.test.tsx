@@ -157,7 +157,7 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTitle("Switch to curved connectors")).toBeInTheDocument();
+        expect(screen.getByTitle("Switch to straight connectors")).toBeInTheDocument();
       });
     });
   });
@@ -476,7 +476,30 @@ describe("FloatingActionBar", () => {
   });
 
   describe("Edge Style Toggle", () => {
-    it("should call setEdgeStyle with curved when currently angular", async () => {
+    it("should call setEdgeStyle with straight when currently angular", async () => {
+      render(
+        <TestWrapper>
+          <FloatingActionBar />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTitle("Switch to straight connectors")).toBeInTheDocument();
+      });
+
+      const toggleButton = screen.getByTitle("Switch to straight connectors");
+      fireEvent.click(toggleButton);
+
+      expect(mockSetEdgeStyle).toHaveBeenCalledWith("straight");
+    });
+
+    it("should call setEdgeStyle with curved when currently straight", async () => {
+      mockUseWorkflowStore.mockImplementation((selector) => {
+        return selector(createDefaultState({
+          edgeStyle: "straight",
+        }));
+      });
+
       render(
         <TestWrapper>
           <FloatingActionBar />
@@ -487,8 +510,7 @@ describe("FloatingActionBar", () => {
         expect(screen.getByTitle("Switch to curved connectors")).toBeInTheDocument();
       });
 
-      const toggleButton = screen.getByTitle("Switch to curved connectors");
-      fireEvent.click(toggleButton);
+      fireEvent.click(screen.getByTitle("Switch to curved connectors"));
 
       expect(mockSetEdgeStyle).toHaveBeenCalledWith("curved");
     });

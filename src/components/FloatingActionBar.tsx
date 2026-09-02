@@ -7,6 +7,10 @@ import { NodeType } from "@/types";
 import { useReactFlow } from "@xyflow/react";
 import { ModelSearchDialog } from "./modals/ModelSearchDialog";
 import { useFTUXStore, TutorialStep } from "@/store/ftuxStore";
+import type { EdgeStyle } from "@/types";
+
+/** The action-bar button cycles curved → angular → straight → curved. */
+const NEXT_EDGE_STYLE: Record<EdgeStyle, EdgeStyle> = { curved: "angular", angular: "straight", straight: "curved" };
 
 // All nodes menu categories
 const ALL_NODES_CATEGORIES: { label: string; nodes: { type: NodeType; label: string }[] }[] = [
@@ -441,7 +445,7 @@ export function FloatingActionBar() {
   }, [tutorialActive, currentTutorialStep, tutorialSteps]);
 
   const toggleEdgeStyle = () => {
-    setEdgeStyle(edgeStyle === "angular" ? "curved" : "angular");
+    setEdgeStyle(NEXT_EDGE_STYLE[edgeStyle]);
   };
 
   const handleRunClick = useCallback(() => {
@@ -506,12 +510,16 @@ export function FloatingActionBar() {
 
         <button
           onClick={toggleEdgeStyle}
-          title={`Switch to ${edgeStyle === "angular" ? "curved" : "angular"} connectors`}
+          title={`Switch to ${NEXT_EDGE_STYLE[edgeStyle]} connectors`}
           className="p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors"
         >
           {edgeStyle === "angular" ? (
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 12h4l4-8 4 8h4" />
+            </svg>
+          ) : edgeStyle === "straight" ? (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16L20 8" />
             </svg>
           ) : (
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
