@@ -5,7 +5,7 @@ behave, hiding them, labelling them, and bundling them.
 
 **Branch:** `feature/noodle-updates` (off `develop`)
 **Started:** 2026-09-02
-**Status:** in progress — item 1 done, item 2 next
+**Status:** in progress — items 1 and 2 done, item 3 next
 
 ## Goal
 
@@ -33,13 +33,13 @@ colour override.
 - [x] Settings UI in Project Settings → Canvas (`ConnectionSettings`); the action-bar button cycles the three line styles
 - [x] `EditableEdge`, `ReferenceEdge` and `SharedEdgeGradients` render from the settings
 
-### 2. Noodle behaviour polish
+### 2. Noodle behaviour polish — done
 
-- [ ] Re-plug a connection by dragging its end (`onReconnect`), keeping pause, loop and label data
-- [ ] Anchor the edge toolbar to the edge midpoint instead of the last mousedown position
-- [ ] Selected edges render above nodes (`elevateEdgesOnSelect`); hover highlight agrees with the gradient stroke
-- [ ] Curved mode gets the same offset/curvature handle angular has, or stale offsets are dropped on style change
-- [ ] Multi-select edges and act on the set
+- [x] Re-plug a connection by dragging its end (`reconnectEdge` in the store, `onReconnect` on the canvas), keeping pause and order data and re-checking the loop
+- [x] The edge toolbar is rendered by the edge itself at the path midpoint (`EdgeLabelRenderer`), counter-scaled with the zoom
+- [x] Selected edges render above nodes (`elevateEdgesOnSelect`); hover and selection use the edge's own active stroke via `--edge-stroke-active`
+- [x] Offset handle stays angular-only. Decision: curved and straight lines have nothing to bend; offsets saved in angular mode are simply ignored in the other styles
+- [x] Multi-select edges: the first selected edge carries the toolbar, which pauses or deletes the whole selection (`removeEdges`, `setEdgesPause`)
 
 ### 3. Hide connections
 
@@ -82,13 +82,13 @@ the Router node stays for execution-time fan-out.
 | Gradients | `SharedEdgeGradients.tsx` | 10 colours × active/dimmed rendered once; dimmed stops follow the faded-opacity setting |
 | Loading pulse | `EditableEdge.tsx` + `flowPulse` in `globals.css` | Three overlay paths while the target generate node is loading |
 | Hit area | transparent 15px path (10px on reference edges) | |
-| Toolbar | `src/components/EdgeToolbar.tsx` | Pause toggle, loop count, delete, "Image N" sequence. Positioned from a global `mousedown` listener |
+| Toolbar | `src/components/EdgeToolbar.tsx` | Rendered by the selected edge at its midpoint; pause, loop count, delete, "Image N" order; bulk pause/delete for a multi-selection |
 | Store actions | `workflowStore.ts` | `onConnect`, `addEdgeWithType`, `removeEdge`, `toggleEdgePause`, `setLoopCount`, `onEdgesChange`, `setEdgeStyle` |
 | Persistence | `workflowStore.ts` save/load/dirty-check, `undoHistory.ts` | `edgeStyle` is in all four. Any new persisted edge setting needs the same treatment |
 | Overview mode | `OVERVIEW_EDGES` in `WorkflowCanvas.tsx` | Already renders zero edges as a perf trick |
 | Router node | `RouterNode.tsx`, `src/store/utils/connectedInputs.ts` | The only way to bundle wiring today. Passthrough hub with dynamic typed handles, resolved at execution via `passthroughCache` |
 | Dimming | `src/store/utils/dimmingUtils.ts`, `dimmedNodeIds` | Node-level only (Switch outputs); edges just follow selection |
-| Unused React Flow features | `onReconnect` / `reconnectable`, `elevateEdgesOnSelect`, `EdgeLabelRenderer` | Items 2 and 4 mostly wire these up |
+| React Flow features in use | `onReconnect`, `elevateEdgesOnSelect`, `EdgeLabelRenderer` | Wired up in item 2; item 4 builds labels on the same renderer |
 | Tests | `src/components/__tests__/{EditableEdge,ReferenceEdge,EdgeToolbar,WorkflowCanvas}.test.tsx`, `src/store/utils/__tests__/loopEdge.test.ts`, `src/store/__tests__/loopEdge.integration.test.ts` | |
 
 ## Open questions
