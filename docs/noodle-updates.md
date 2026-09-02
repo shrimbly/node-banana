@@ -5,7 +5,7 @@ behave, hiding them, labelling them, and bundling them.
 
 **Branch:** `feature/noodle-updates` (off `develop`)
 **Started:** 2026-09-02
-**Status:** in progress — items 1 and 2 done, item 3 next
+**Status:** in progress — items 1 to 3 done, item 4 next
 
 ## Goal
 
@@ -41,16 +41,16 @@ colour override.
 - [x] Offset handle stays angular-only. Decision: curved and straight lines have nothing to bend; offsets saved in angular mode are simply ignored in the other styles
 - [x] Multi-select edges: the first selected edge carries the toolbar, which pauses or deletes the whole selection (`removeEdges`, `setEdgesPause`)
 
-### 3. Hide connections
+### 3. Hide connections — done
 
 Hide without losing. Hidden edges still execute, validate, copy/paste and
 save; they just leave selection and hit-testing.
 
-- [ ] `hidden` on edge data, honoured by React Flow
-- [ ] Hide per edge, all edges of a node, or globally, with a keyboard shortcut
-- [ ] Stub or count badge on affected handles; hovering a handle reveals its hidden noodles
-- [ ] Entries in the edge toolbar and the node context menu
-- [ ] Execution, validation, copy/paste and save/load verified unaffected
+- [x] `hidden` on edge data; the edge component draws stubs instead of a line, so React Flow, execution and persistence see an ordinary edge
+- [x] Hide per edge or per selection from the toolbar; hide and show everything from the action-bar eye, which carries the hidden count. Decision: no per-node entry and no shortcut for now; the eye covers the global case and the toolbar the local one
+- [x] Labelled stub at each handle ("Image 2", "Text"), stacking in creation order when a handle has several hidden; hovering a stub ghosts the noodle, clicking it shows the connection
+- [x] Hidden edges are not selectable and lose their selection when hidden
+- [x] Execution, validation, copy/paste and save/load are unaffected: the edge stays in the array with a data flag
 
 ### 4. Noodle labels
 
@@ -85,6 +85,7 @@ the Router node stays for execution-time fan-out.
 | Toolbar | `src/components/EdgeToolbar.tsx` | Rendered by the selected edge at its midpoint; pause, loop count, delete, "Image N" order; bulk pause/delete for a multi-selection |
 | Store actions | `workflowStore.ts` | `onConnect`, `addEdgeWithType`, `removeEdge`, `toggleEdgePause`, `setLoopCount`, `onEdgesChange`, `setEdgeStyle` |
 | Persistence | `workflowStore.ts` save/load/dirty-check, `undoHistory.ts` | `edgeStyle` is in all four. Any new persisted edge setting needs the same treatment |
+| Hidden connections | `HiddenEdgeStub.tsx`, `src/lib/edges/labels.ts` | Stub labels and stacking; `setEdgesHidden` / `setAllEdgesHidden` in the store |
 | Overview mode | `OVERVIEW_EDGES` in `WorkflowCanvas.tsx` | Already renders zero edges as a perf trick |
 | Router node | `RouterNode.tsx`, `src/store/utils/connectedInputs.ts` | The only way to bundle wiring today. Passthrough hub with dynamic typed handles, resolved at execution via `passthroughCache` |
 | Dimming | `src/store/utils/dimmingUtils.ts`, `dimmedNodeIds` | Node-level only (Switch outputs); edges just follow selection |
