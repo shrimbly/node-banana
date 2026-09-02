@@ -1,5 +1,6 @@
 import {
   EdgeAppearance,
+  EdgeLabelMode,
   EdgeStyle,
   EdgeThickness,
   defaultEdgeAppearance,
@@ -13,6 +14,7 @@ export const EDGE_THICKNESS_PX: Record<EdgeThickness, number> = {
 
 export const EDGE_STYLES: readonly EdgeStyle[] = ["curved", "angular", "straight"];
 export const EDGE_THICKNESSES: readonly EdgeThickness[] = ["thin", "regular", "thick"];
+export const EDGE_LABEL_MODES: readonly EdgeLabelMode[] = ["always", "hover", "never"];
 
 export function isEdgeStyle(value: unknown): value is EdgeStyle {
   return typeof value === "string" && (EDGE_STYLES as readonly string[]).includes(value);
@@ -38,5 +40,8 @@ export function normalizeEdgeAppearance(input: unknown): EdgeAppearance {
     gradient: typeof raw.gradient === "boolean" ? raw.gradient : defaultEdgeAppearance.gradient,
     loadingPulse:
       typeof raw.loadingPulse === "boolean" ? raw.loadingPulse : defaultEdgeAppearance.loadingPulse,
+    labels: (EDGE_LABEL_MODES as readonly string[]).includes(raw.labels as string)
+      ? (raw.labels as EdgeLabelMode)
+      : defaultEdgeAppearance.labels,
   };
 }

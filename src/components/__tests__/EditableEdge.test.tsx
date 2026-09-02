@@ -62,7 +62,7 @@ const createDefaultState = (overrides = {}) => ({
   edgeStyle: "angular" as const,
   edges: [],
   setEdgesHidden: mockSetEdgesHidden,
-  edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true },
+  edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const },
   nodes: [],
   ...overrides,
 });
@@ -388,7 +388,7 @@ describe("EditableEdge", () => {
 });
 
 describe("EditableEdge appearance settings", () => {
-  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true };
+  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const };
   const withState = (overrides: Record<string, unknown>) => {
     mockUseWorkflowStore.mockImplementation((selector) =>
       selector(createDefaultState({ edgeAppearance: baseAppearance, ...overrides }))
@@ -453,7 +453,7 @@ describe("EditableEdge appearance settings", () => {
 });
 
 describe("EditableEdge toolbar and highlight", () => {
-  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true };
+  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const };
   const stateWith = (overrides: Record<string, unknown>) =>
     mockUseWorkflowStore.mockImplementation((selector) =>
       selector(createDefaultState({ edgeAppearance: baseAppearance, ...overrides }))
@@ -511,7 +511,7 @@ describe("EditableEdge toolbar and highlight", () => {
 });
 
 describe("EditableEdge when hidden", () => {
-  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true };
+  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const };
   const hiddenEdge = { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { hidden: true } };
   const renderHidden = (edges: unknown[] = [hiddenEdge]) => {
     mockUseWorkflowStore.mockImplementation((selector) =>
@@ -568,5 +568,71 @@ describe("EditableEdge when hidden", () => {
     renderHidden();
     fireEvent.click(screen.getByTestId("hidden-edge-stub-source").querySelector("button")!);
     expect(mockSetEdgesHidden).toHaveBeenCalledWith(["edge-1"], false);
+  });
+});
+
+describe("EditableEdge labels", () => {
+  const appearance = (labels: "always" | "hover" | "never") => ({
+    thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels,
+  });
+  const visibleEdge = (data: Record<string, unknown> = {}) => ({
+    id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data,
+  });
+  const renderWith = (labels: "always" | "hover" | "never", edges: unknown[], props = {}) => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edgeAppearance: appearance(labels), edges }))
+    );
+    return render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps(props)} />
+      </TestWrapper>
+    );
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("shows the automatic label when labels are always on", () => {
+    renderWith("always", [visibleEdge()]);
+    expect(screen.getByTestId("edge-label")).toHaveTextContent("Image");
+  });
+
+  it("shows the automatic label only on hover in hover mode", () => {
+    const { container } = renderWith("hover", [visibleEdge()]);
+    expect(screen.queryByTestId("edge-label")).toBeNull();
+    fireEvent.mouseEnter(container.querySelector('[data-testid="edge-hover-area"]')!);
+    expect(screen.getByTestId("edge-label")).toHaveTextContent("Image");
+    fireEvent.mouseLeave(container.querySelector('[data-testid="edge-hover-area"]')!);
+    expect(screen.queryByTestId("edge-label")).toBeNull();
+  });
+
+  it("shows the automatic label while selected in hover mode", () => {
+    renderWith("hover", [visibleEdge()], { selected: true });
+    expect(screen.getByTestId("edge-label")).toHaveTextContent("Image");
+  });
+
+  it("always shows a typed label, even with labels off", () => {
+    renderWith("never", [visibleEdge({ label: "hero shot" })], { data: { label: "hero shot" } });
+    expect(screen.getByTestId("edge-label")).toHaveTextContent("hero shot");
+  });
+
+  it("hides automatic labels when labels are off", () => {
+    renderWith("never", [visibleEdge()]);
+    expect(screen.queryByTestId("edge-label")).toBeNull();
+  });
+
+  it("puts the loop count in the label on loop edges", () => {
+    renderWith("never", [visibleEdge({ isLoop: true, loopCount: 4 })], { data: { isLoop: true, loopCount: 4 } });
+    expect(screen.getByTestId("edge-label-loop")).toHaveTextContent("4×");
+  });
+
+  it("offsets labels of parallel connections between the same nodes", () => {
+    renderWith("always", [
+      { ...visibleEdge({ createdAt: 1 }), id: "edge-0", targetHandle: "image-0" },
+      visibleEdge({ createdAt: 2 }),
+    ]);
+    // Two parallel edges: index 1 of 2 sits 9px below the midpoint (y=50)
+    expect(screen.getByTestId("edge-label").style.transform).toContain("59px");
   });
 });

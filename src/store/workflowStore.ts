@@ -301,6 +301,8 @@ interface WorkflowStore {
   setEdgesHidden: (edgeIds: string[], hidden: boolean) => void;
   /** Hide or show every edge as one undo step. */
   setAllEdgesHidden: (hidden: boolean) => void;
+  /** Set an edge's own label; blank clears it so the automatic label shows. */
+  setEdgeLabel: (edgeId: string, label: string) => void;
   setLoopCount: (edgeId: string, count: number) => void;
 
   // Copy/Paste operations
@@ -1172,6 +1174,22 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     const { edges } = get();
     if (!edges.some((e) => Boolean(e.data?.hidden) !== hidden)) return;
     get().setEdgesHidden(edges.map((e) => e.id), hidden);
+  },
+
+  setEdgeLabel: (edgeId: string, label: string) => {
+    const trimmed = label.trim();
+    const edge = get().edges.find((e) => e.id === edgeId);
+    if (!edge || (edge.data?.label ?? "") === trimmed) return;
+    pushUndoCheckpoint(get, set);
+    set((state) => ({
+      edges: state.edges.map((e) => {
+        if (e.id !== edgeId) return e;
+        const { label: _old, ...rest } = e.data ?? {};
+        void _old;
+        return { ...e, data: trimmed ? { ...rest, label: trimmed } : rest };
+      }),
+      hasUnsavedChanges: true,
+    }));
   },
 
   setLoopCount: (edgeId: string, count: number) => {

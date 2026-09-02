@@ -43,7 +43,7 @@ const createDefaultProps = (overrides = {}) => ({
 const createDefaultState = (overrides = {}) => ({
   edgeStyle: "angular" as const,
   edges: [],
-  edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true },
+  edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const },
   nodes: [],
   ...overrides,
 });

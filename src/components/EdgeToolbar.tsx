@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EdgeLabelRenderer, useViewport } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { getImageSequenceNumber } from "@/lib/edges/labels";
@@ -37,7 +37,12 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
   const removeEdges = useWorkflowStore((state) => state.removeEdges);
   const setLoopCount = useWorkflowStore((state) => state.setLoopCount);
   const setEdgesHidden = useWorkflowStore((state) => state.setEdgesHidden);
+  const setEdgeLabel = useWorkflowStore((state) => state.setEdgeLabel);
   const { zoom } = useViewport();
+
+  const edgeLabel = useWorkflowStore((state) => state.edges.find((e) => e.id === edgeId)?.data?.label ?? "");
+  const [draftLabel, setDraftLabel] = useState(edgeLabel);
+  useEffect(() => setDraftLabel(edgeLabel), [edgeLabel, edgeId]);
 
   const selectedEdges = useMemo(() => edges.filter((e) => e.selected), [edges]);
   const edge = edges.find((e) => e.id === edgeId);
@@ -103,6 +108,27 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
               </button>
               <div className="w-px h-4 bg-neutral-600" />
             </>
+          )}
+          {!multi && (
+            <input
+              type="text"
+              value={draftLabel}
+              placeholder="Label"
+              aria-label="Connection label"
+              onChange={(e) => setDraftLabel(e.target.value)}
+              onBlur={() => setEdgeLabel(edge.id, draftLabel)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.key === "Enter") {
+                  setEdgeLabel(edge.id, draftLabel);
+                  (e.target as HTMLInputElement).blur();
+                } else if (e.key === "Escape") {
+                  setDraftLabel(edgeLabel);
+                  (e.target as HTMLInputElement).blur();
+                }
+              }}
+              className="nodrag nopan w-24 h-6 px-2 text-[11px] text-neutral-100 bg-neutral-900 border border-neutral-600 rounded placeholder:text-neutral-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
+            />
           )}
           {!isLoop && (
             <button

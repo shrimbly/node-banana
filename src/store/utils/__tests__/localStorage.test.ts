@@ -456,7 +456,7 @@ describe("edge defaults", () => {
     const { getEdgeDefaults, saveEdgeDefaults } = await import("../localStorage");
     const defaults = {
       edgeStyle: "straight" as const,
-      appearance: { thickness: "thick" as const, fadedOpacity: 0.4, gradient: false, loadingPulse: true },
+      appearance: { thickness: "thick" as const, fadedOpacity: 0.4, gradient: false, loadingPulse: true, labels: "hover" as const },
     };
     saveEdgeDefaults(defaults);
     expect(getEdgeDefaults()).toEqual(defaults);

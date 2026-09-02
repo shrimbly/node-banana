@@ -17,7 +17,8 @@ import { EDGE_COLORS, edgeColorKeyForHandles } from "@/lib/edges/colors";
 import { EDGE_THICKNESS_PX } from "@/lib/edges/appearance";
 import { EdgeToolbar, useIsToolbarEdge } from "@/components/EdgeToolbar";
 import { HiddenEdgeStub } from "./HiddenEdgeStub";
-import { edgeAutoLabelById, hiddenSiblingIndex } from "@/lib/edges/labels";
+import { edgeDisplayLabelById, hiddenSiblingIndex, parallelEdgePosition } from "@/lib/edges/labels";
+import { EdgeLabel } from "./EdgeLabel";
 
 interface EdgeData extends WorkflowEdgeData {
   offsetX?: number;
@@ -51,7 +52,14 @@ export function EditableEdge({
   const isHidden = Boolean((data as EdgeData | undefined)?.hidden);
   const [revealed, setRevealed] = useState(false);
   const setEdgesHidden = useWorkflowStore((state) => state.setEdgesHidden);
-  const stubLabel = useWorkflowStore((state) => (isHidden ? edgeAutoLabelById(id, state.edges) : ""));
+  const displayLabel = useWorkflowStore((state) => edgeDisplayLabelById(id, state.edges));
+  const hasOwnLabel = Boolean((data as EdgeData | undefined)?.label?.trim());
+  const stubLabel = displayLabel;
+  const [hovered, setHovered] = useState(false);
+  const parallel = useWorkflowStore((state) => {
+    const { index, count } = parallelEdgePosition(id, state.edges);
+    return count > 1 ? index - (count - 1) / 2 : 0;
+  });
   const sourceStack = useWorkflowStore((state) => (isHidden ? hiddenSiblingIndex(id, state.edges, "source") : 0));
   const targetStack = useWorkflowStore((state) => (isHidden ? hiddenSiblingIndex(id, state.edges, "target") : 0));
 
@@ -214,6 +222,13 @@ export function EditableEdge({
   const activeStroke = appearance.gradient ? `url(#${activeGradientId})` : edgeColor;
   const showPulse = isTargetLoading && appearance.loadingPulse;
 
+  // Labels: the user's own always shows; automatic ones follow the setting
+  const labelMode = appearance.labels ?? "hover";
+  const autoVisible =
+    labelMode === "always" || (labelMode === "hover" && (hovered || Boolean(selected) || isConnectedToSelection));
+  const labelText = hasOwnLabel || autoVisible ? displayLabel : "";
+  const showLabel = Boolean(labelText) || Boolean(edgeData?.isLoop);
+
   if (isHidden) {
     const sourceDir: 1 | -1 = sourcePosition === "left" ? -1 : 1;
     const targetDir: 1 | -1 = targetPosition === "right" ? 1 : -1;
@@ -261,7 +276,7 @@ export function EditableEdge({
   }
 
   return (
-    <>
+    <g data-testid="edge-hover-area" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
       <BaseEdge
         id={id}
         path={edgePath}
@@ -327,6 +342,17 @@ export function EditableEdge({
         className="react-flow__edge-interaction"
       />
 
+      {showLabel && (
+        <EdgeLabel
+          x={labelX}
+          y={labelY + parallel * 18}
+          text={labelText}
+          color={edgeColor}
+          loopCount={edgeData?.isLoop ? edgeData.loopCount || 3 : undefined}
+          active={isConnectedToSelection || Boolean(selected) || hovered}
+        />
+      )}
+
       {/* Pause indicator near target connection point */}
       {hasPause && (
         <g transform={`translate(${targetX - 24}, ${targetY})`}>
@@ -341,22 +367,6 @@ export function EditableEdge({
           <rect x={-4} y={-5} width={2.5} height={10} fill={edgeColor} rx={1} />
           <rect x={1.5} y={-5} width={2.5} height={10} fill={edgeColor} rx={1} />
         </g>
-      )}
-
-      {/* Loop indicator at edge midpoint */}
-      {edgeData?.isLoop && (
-        <foreignObject
-          x={labelX - 28}
-          y={labelY - 12}
-          width={56}
-          height={24}
-          className="pointer-events-none"
-        >
-          <div className="flex items-center justify-center gap-1 px-2 py-0.5 bg-neutral-800/90 border border-fuchsia-500/60 rounded-full text-[10px] font-medium">
-            <span className="text-fuchsia-300">↻</span>
-            <span className="text-fuchsia-100">{edgeData.loopCount || 3}×</span>
-          </div>
-        </foreignObject>
       )}
 
       {/* Draggable handles on segments */}
@@ -377,6 +387,6 @@ export function EditableEdge({
             />
           </g>
         ))}
-    </>
+    </g>
   );
 }

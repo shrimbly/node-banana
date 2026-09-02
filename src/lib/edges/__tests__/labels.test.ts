@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { edgeTypeLabel, edgeAutoLabel, edgeAutoLabelById, hiddenSiblingIndex } from "../labels";
+import { edgeTypeLabel, edgeAutoLabel, edgeDisplayLabelById, hiddenSiblingIndex } from "../labels";
 import type { WorkflowEdge } from "@/types";
 
 const edge = (id: string, overrides: Partial<WorkflowEdge> = {}): WorkflowEdge => ({
@@ -28,13 +28,13 @@ describe("edgeAutoLabel", () => {
   it("uses the image order when several images feed one handle", () => {
     const edges = [edge("first", { data: { createdAt: 1 } }), edge("second", { source: "c", data: { createdAt: 2 } })];
     expect(edgeAutoLabel(edges[1], edges)).toBe("Image 2");
-    expect(edgeAutoLabelById("first", edges)).toBe("Image 1");
+    expect(edgeDisplayLabelById("first", edges)).toBe("Image 1");
   });
 
   it("falls back to the type name", () => {
     const lone = edge("e", { sourceHandle: "text", targetHandle: "text" });
     expect(edgeAutoLabel(lone, [lone])).toBe("Text");
-    expect(edgeAutoLabelById("missing", [lone])).toBe("");
+    expect(edgeDisplayLabelById("missing", [lone])).toBe("");
   });
 });
 
@@ -60,5 +60,36 @@ describe("hiddenSiblingIndex", () => {
 
   it("is zero for unknown edges", () => {
     expect(hiddenSiblingIndex("nope", edges, "target")).toBe(0);
+  });
+});
+
+describe("edgeDisplayLabel", () => {
+  it("prefers the user's own label, trimmed", async () => {
+    const { edgeDisplayLabel, edgeDisplayLabelById } = await import("../labels");
+    const own = edge("own", { data: { label: "  hero shot " } });
+    expect(edgeDisplayLabel(own, [own])).toBe("hero shot");
+    expect(edgeDisplayLabelById("own", [own])).toBe("hero shot");
+  });
+
+  it("falls back to the automatic label when the own label is blank", async () => {
+    const { edgeDisplayLabel } = await import("../labels");
+    const blank = edge("blank", { data: { label: "   " } });
+    expect(edgeDisplayLabel(blank, [blank])).toBe("Image");
+  });
+});
+
+describe("parallelEdgePosition", () => {
+  it("orders visible edges between the same nodes by creation time", async () => {
+    const { parallelEdgePosition } = await import("../labels");
+    const edges = [
+      edge("second", { targetHandle: "image-1", data: { createdAt: 2 } }),
+      edge("first", { data: { createdAt: 1 } }),
+      edge("hidden", { targetHandle: "image-2", data: { createdAt: 0, hidden: true } }),
+      edge("other", { target: "z", data: { createdAt: 3 } }),
+    ];
+    expect(parallelEdgePosition("first", edges)).toEqual({ index: 0, count: 2 });
+    expect(parallelEdgePosition("second", edges)).toEqual({ index: 1, count: 2 });
+    expect(parallelEdgePosition("other", edges)).toEqual({ index: 0, count: 1 });
+    expect(parallelEdgePosition("missing", edges)).toEqual({ index: 0, count: 1 });
   });
 });

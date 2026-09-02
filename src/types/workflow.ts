@@ -15,6 +15,8 @@ export interface WorkflowEdgeData extends Record<string, unknown> {
   loopCount?: number;
   /** Drawn as labelled stubs at its handles instead of a line; still executes. */
   hidden?: boolean;
+  /** The user's own label; empty means show the automatic one. */
+  label?: string;
 }
 
 // Workflow Edge
@@ -27,6 +29,9 @@ export type EdgeStyle = "angular" | "curved" | "straight";
 // `edgeAppearance`, with the user's default kept in localStorage.
 export type EdgeThickness = "thin" | "regular" | "thick";
 
+/** When automatic labels (type, image order) show. Typed labels always show. */
+export type EdgeLabelMode = "always" | "hover" | "never";
+
 export interface EdgeAppearance {
   thickness: EdgeThickness;
   /** Opacity of connections not attached to a selected node, 0 to 1. */
@@ -35,6 +40,7 @@ export interface EdgeAppearance {
   gradient: boolean;
   /** Animate connections into a node while it generates. */
   loadingPulse: boolean;
+  labels: EdgeLabelMode;
 }
 
 export const defaultEdgeAppearance: EdgeAppearance = {
@@ -42,6 +48,7 @@ export const defaultEdgeAppearance: EdgeAppearance = {
   fadedOpacity: 0.25,
   gradient: true,
   loadingPulse: true,
+  labels: "hover",
 };
 
 // Auto-save configuration stored in localStorage

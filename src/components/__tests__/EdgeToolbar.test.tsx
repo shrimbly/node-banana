@@ -10,6 +10,7 @@ const mockSetEdgesPause = vi.fn();
 const mockRemoveEdges = vi.fn();
 const mockSetLoopCount = vi.fn();
 const mockSetEdgesHidden = vi.fn();
+const mockSetEdgeLabel = vi.fn();
 const mockUseWorkflowStore = vi.fn();
 
 vi.mock("@/store/workflowStore", () => ({
@@ -49,6 +50,7 @@ const createDefaultState = (overrides = {}) => ({
   removeEdges: mockRemoveEdges,
   setLoopCount: mockSetLoopCount,
   setEdgesHidden: mockSetEdgesHidden,
+  setEdgeLabel: mockSetEdgeLabel,
   ...overrides,
 });
 
@@ -91,6 +93,26 @@ describe("EdgeToolbar", () => {
     expect(screen.getByTitle("Remove pause")).toBeInTheDocument();
   });
 
+  it("edits the label of a single edge", () => {
+    withEdges([edge("e1", { selected: true, data: { label: "old" } })]);
+    render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
+    const input = screen.getByLabelText("Connection label") as HTMLInputElement;
+    expect(input.value).toBe("old");
+    fireEvent.change(input, { target: { value: "hero shot" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(mockSetEdgeLabel).toHaveBeenCalledWith("e1", "hero shot");
+  });
+
+  it("reverts the label draft on Escape", () => {
+    withEdges([edge("e1", { selected: true, data: { label: "old" } })]);
+    render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
+    const input = screen.getByLabelText("Connection label") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "typo" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(input.value).toBe("old");
+    expect(mockSetEdgeLabel).not.toHaveBeenCalled();
+  });
+
   it("hides a single edge", () => {
     withEdges([edge("e1", { selected: true })]);
     render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
@@ -131,11 +153,12 @@ describe("EdgeToolbar", () => {
       edge("e3", { selected: false, source: "d" }),
     ];
 
-    it("says how many are selected", () => {
+    it("says how many are selected and offers no label field", () => {
       withEdges(three);
       render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
       expect(screen.getByText("2 connections")).toBeInTheDocument();
       expect(screen.queryByText(/^Image \d/)).toBeNull();
+      expect(screen.queryByLabelText("Connection label")).toBeNull();
     });
 
     it("pauses every selected edge when not all are paused", () => {

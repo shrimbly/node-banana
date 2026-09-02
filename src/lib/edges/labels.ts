@@ -52,10 +52,36 @@ export function edgeAutoLabel(edge: WorkflowEdge, edges: WorkflowEdge[]): string
   return edgeTypeLabel(edge.sourceHandle || edge.targetHandle);
 }
 
-/** Label for an edge id, or an empty string when the edge is gone. */
-export function edgeAutoLabelById(edgeId: string, edges: WorkflowEdge[]): string {
+/** The user's label when set, otherwise the automatic one. */
+export function edgeDisplayLabel(edge: WorkflowEdge, edges: WorkflowEdge[]): string {
+  const own = edge.data?.label?.trim();
+  return own || edgeAutoLabel(edge, edges);
+}
+
+/** Display label for an edge id, or an empty string when the edge is gone. */
+export function edgeDisplayLabelById(edgeId: string, edges: WorkflowEdge[]): string {
   const edge = edges.find((e) => e.id === edgeId);
-  return edge ? edgeAutoLabel(edge, edges) : "";
+  return edge ? edgeDisplayLabel(edge, edges) : "";
+}
+
+/**
+ * Position of an edge among the visible edges between the same two nodes,
+ * so their labels can be offset instead of stacking on one point.
+ * Returns the index and how many share the pair.
+ */
+export function parallelEdgePosition(edgeId: string, edges: WorkflowEdge[]): { index: number; count: number } {
+  const edge = edges.find((e) => e.id === edgeId);
+  if (!edge) return { index: 0, count: 1 };
+  const parallel = edges
+    .filter((e) => !e.data?.hidden && e.source === edge.source && e.target === edge.target)
+    .sort((a, b) => {
+      const timeA = a.data?.createdAt || 0;
+      const timeB = b.data?.createdAt || 0;
+      if (timeA !== timeB) return timeA - timeB;
+      return a.id.localeCompare(b.id);
+    });
+  const index = parallel.findIndex((e) => e.id === edgeId);
+  return { index: index < 0 ? 0 : index, count: Math.max(1, parallel.length) };
 }
 
 /**
