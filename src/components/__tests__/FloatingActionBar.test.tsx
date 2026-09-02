@@ -11,6 +11,7 @@ const mockRegenerateNode = vi.fn();
 const mockStopWorkflow = vi.fn();
 const mockValidateWorkflow = vi.fn();
 const mockSetEdgeStyle = vi.fn();
+const mockSetAllEdgesHidden = vi.fn();
 const mockSetModelSearchOpen = vi.fn();
 const mockUseWorkflowStore = vi.fn();
 
@@ -83,6 +84,8 @@ const createDefaultState = (overrides = {}) => ({
   edgeStyle: "angular" as const,
   edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true },
   setEdgeStyle: mockSetEdgeStyle,
+  setAllEdgesHidden: mockSetAllEdgesHidden,
+  edges: [],
   setModelSearchOpen: mockSetModelSearchOpen,
   modelSearchOpen: false,
   modelSearchProvider: null,
@@ -796,5 +799,51 @@ describe("FloatingActionBar", () => {
 
       expect(mockRegenerateNode).toHaveBeenCalledWith("node-1");
     });
+  });
+});
+
+describe("Hidden connections toggle", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockValidateWorkflow.mockReturnValue({ valid: true, errors: [] });
+    mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({ gemini: true }) });
+  });
+
+  it("is disabled when there are no connections", async () => {
+    render(
+      <TestWrapper>
+        <FloatingActionBar />
+      </TestWrapper>
+    );
+    await waitFor(() => expect(screen.getByTitle("Hide all connections")).toBeDisabled());
+  });
+
+  it("hides every connection when none are hidden", async () => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edges: [{ id: "e1", data: {} }, { id: "e2", data: {} }] }))
+    );
+    render(
+      <TestWrapper>
+        <FloatingActionBar />
+      </TestWrapper>
+    );
+    await waitFor(() => expect(screen.getByTitle("Hide all connections")).toBeEnabled());
+    fireEvent.click(screen.getByTitle("Hide all connections"));
+    expect(mockSetAllEdgesHidden).toHaveBeenCalledWith(true);
+  });
+
+  it("counts the hidden connections and shows them all", async () => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edges: [{ id: "e1", data: { hidden: true } }, { id: "e2", data: { hidden: true } }, { id: "e3", data: {} }] }))
+    );
+    render(
+      <TestWrapper>
+        <FloatingActionBar />
+      </TestWrapper>
+    );
+    const button = await screen.findByTitle("Show 2 hidden connections");
+    expect(button).toHaveTextContent("2");
+    fireEvent.click(button);
+    expect(mockSetAllEdgesHidden).toHaveBeenCalledWith(false);
   });
 });

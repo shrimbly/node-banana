@@ -297,6 +297,10 @@ interface WorkflowStore {
   removeEdges: (edgeIds: string[]) => void;
   /** Pause or resume several edges as one undo step. */
   setEdgesPause: (edgeIds: string[], hasPause: boolean) => void;
+  /** Hide or show several edges as one undo step. Hidden edges still execute. */
+  setEdgesHidden: (edgeIds: string[], hidden: boolean) => void;
+  /** Hide or show every edge as one undo step. */
+  setAllEdgesHidden: (hidden: boolean) => void;
   setLoopCount: (edgeId: string, count: number) => void;
 
   // Copy/Paste operations
@@ -1148,6 +1152,26 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       ),
       hasUnsavedChanges: true,
     }));
+  },
+
+  setEdgesHidden: (edgeIds: string[], hidden: boolean) => {
+    const ids = new Set(edgeIds);
+    if (!get().edges.some((e) => ids.has(e.id) && Boolean(e.data?.hidden) !== hidden)) return;
+    pushUndoCheckpoint(get, set);
+    set((state) => ({
+      edges: state.edges.map((edge) =>
+        ids.has(edge.id)
+          ? { ...edge, data: { ...edge.data, hidden }, selected: hidden ? false : edge.selected }
+          : edge
+      ),
+      hasUnsavedChanges: true,
+    }));
+  },
+
+  setAllEdgesHidden: (hidden: boolean) => {
+    const { edges } = get();
+    if (!edges.some((e) => Boolean(e.data?.hidden) !== hidden)) return;
+    get().setEdgesHidden(edges.map((e) => e.id), hidden);
   },
 
   setLoopCount: (edgeId: string, count: number) => {

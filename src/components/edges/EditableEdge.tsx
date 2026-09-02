@@ -3,6 +3,7 @@
 import { useState, useCallback, useMemo } from "react";
 import {
   BaseEdge,
+  EdgeLabelRenderer,
   EdgeProps,
   getSmoothStepPath,
   getBezierPath,
@@ -15,6 +16,8 @@ import { getSharedGradientId } from "./SharedEdgeGradients";
 import { EDGE_COLORS, edgeColorKeyForHandles } from "@/lib/edges/colors";
 import { EDGE_THICKNESS_PX } from "@/lib/edges/appearance";
 import { EdgeToolbar, useIsToolbarEdge } from "@/components/EdgeToolbar";
+import { HiddenEdgeStub } from "./HiddenEdgeStub";
+import { edgeAutoLabelById, hiddenSiblingIndex } from "@/lib/edges/labels";
 
 interface EdgeData extends WorkflowEdgeData {
   offsetX?: number;
@@ -43,6 +46,14 @@ export function EditableEdge({
   const appearance = useWorkflowStore((state) => state.edgeAppearance);
   const [isDragging, setIsDragging] = useState(false);
   const carriesToolbar = useIsToolbarEdge(id);
+
+  // Hidden connections: labelled stubs at the handles; hover ghosts the line back
+  const isHidden = Boolean((data as EdgeData | undefined)?.hidden);
+  const [revealed, setRevealed] = useState(false);
+  const setEdgesHidden = useWorkflowStore((state) => state.setEdgesHidden);
+  const stubLabel = useWorkflowStore((state) => (isHidden ? edgeAutoLabelById(id, state.edges) : ""));
+  const sourceStack = useWorkflowStore((state) => (isHidden ? hiddenSiblingIndex(id, state.edges, "source") : 0));
+  const targetStack = useWorkflowStore((state) => (isHidden ? hiddenSiblingIndex(id, state.edges, "target") : 0));
 
   // Narrow selector: returns boolean, only re-renders when selection relevance changes
   const isConnectedToSelection = useWorkflowStore((state) =>
@@ -202,6 +213,52 @@ export function EditableEdge({
   const strokeOpacity = appearance.gradient || isConnectedToSelection ? 1 : appearance.fadedOpacity;
   const activeStroke = appearance.gradient ? `url(#${activeGradientId})` : edgeColor;
   const showPulse = isTargetLoading && appearance.loadingPulse;
+
+  if (isHidden) {
+    const sourceDir: 1 | -1 = sourcePosition === "left" ? -1 : 1;
+    const targetDir: 1 | -1 = targetPosition === "right" ? 1 : -1;
+    const stubLength = 8;
+    return (
+      <>
+        {revealed && (
+          <path
+            d={edgePath}
+            fill="none"
+            stroke={edgeColor}
+            strokeWidth={strokeWidth}
+            strokeOpacity={0.7}
+            strokeDasharray="6 7"
+            strokeLinecap="round"
+            data-testid="hidden-edge-ghost"
+          />
+        )}
+        <path d={`M${sourceX},${sourceY} L${sourceX + sourceDir * stubLength},${sourceY}`} fill="none" stroke={edgeColor} strokeWidth={strokeWidth} strokeOpacity={0.9} strokeLinecap="round" />
+        <path d={`M${targetX},${targetY} L${targetX + targetDir * stubLength},${targetY}`} fill="none" stroke={edgeColor} strokeWidth={strokeWidth} strokeOpacity={0.9} strokeLinecap="round" />
+        <EdgeLabelRenderer>
+          <HiddenEdgeStub
+            side="source"
+            x={sourceX + sourceDir * (stubLength + 4)}
+            y={sourceY + sourceStack * 22}
+            direction={sourceDir}
+            label={stubLabel}
+            color={edgeColor}
+            onHoverChange={setRevealed}
+            onShow={() => setEdgesHidden([id], false)}
+          />
+          <HiddenEdgeStub
+            side="target"
+            x={targetX + targetDir * (stubLength + 4)}
+            y={targetY + targetStack * 22}
+            direction={targetDir}
+            label={stubLabel}
+            color={edgeColor}
+            onHoverChange={setRevealed}
+            onShow={() => setEdgesHidden([id], false)}
+          />
+        </EdgeLabelRenderer>
+      </>
+    );
+  }
 
   return (
     <>

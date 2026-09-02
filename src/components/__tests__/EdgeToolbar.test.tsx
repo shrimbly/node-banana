@@ -9,6 +9,7 @@ const mockToggleEdgePause = vi.fn();
 const mockSetEdgesPause = vi.fn();
 const mockRemoveEdges = vi.fn();
 const mockSetLoopCount = vi.fn();
+const mockSetEdgesHidden = vi.fn();
 const mockUseWorkflowStore = vi.fn();
 
 vi.mock("@/store/workflowStore", () => ({
@@ -47,6 +48,7 @@ const createDefaultState = (overrides = {}) => ({
   setEdgesPause: mockSetEdgesPause,
   removeEdges: mockRemoveEdges,
   setLoopCount: mockSetLoopCount,
+  setEdgesHidden: mockSetEdgesHidden,
   ...overrides,
 });
 
@@ -87,6 +89,13 @@ describe("EdgeToolbar", () => {
     withEdges([edge("e1", { selected: true, data: { hasPause: true } })]);
     render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
     expect(screen.getByTitle("Remove pause")).toBeInTheDocument();
+  });
+
+  it("hides a single edge", () => {
+    withEdges([edge("e1", { selected: true })]);
+    render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
+    fireEvent.click(screen.getByTitle("Hide connection"));
+    expect(mockSetEdgesHidden).toHaveBeenCalledWith(["e1"], true);
   });
 
   it("deletes a single edge", () => {
@@ -141,6 +150,13 @@ describe("EdgeToolbar", () => {
       render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
       fireEvent.click(screen.getByTitle("Remove pauses"));
       expect(mockSetEdgesPause).toHaveBeenCalledWith(["e1", "e2"], false);
+    });
+
+    it("hides every selected edge", () => {
+      withEdges(three);
+      render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
+      fireEvent.click(screen.getByTitle("Hide 2 connections"));
+      expect(mockSetEdgesHidden).toHaveBeenCalledWith(["e1", "e2"], true);
     });
 
     it("deletes every selected edge", () => {

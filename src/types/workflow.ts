@@ -13,6 +13,8 @@ export interface WorkflowEdgeData extends Record<string, unknown> {
   createdAt?: number;
   isLoop?: boolean;
   loopCount?: number;
+  /** Drawn as labelled stubs at its handles instead of a line; still executes. */
+  hidden?: boolean;
 }
 
 // Workflow Edge

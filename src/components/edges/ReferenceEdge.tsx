@@ -24,9 +24,11 @@ export function ReferenceEdge({
   selected,
   source,
   target,
+  data,
 }: EdgeProps) {
   const appearance = useWorkflowStore((state) => state.edgeAppearance);
   const carriesToolbar = useIsToolbarEdge(id);
+  const isHidden = Boolean((data as { hidden?: boolean } | undefined)?.hidden);
 
   // Narrow selector: returns boolean, only re-renders when selection relevance changes
   const isConnectedToSelection = useWorkflowStore((state) => {
@@ -53,6 +55,8 @@ export function ReferenceEdge({
     const selectionKey = isConnectedToSelection ? "active" : "dimmed";
     return getSharedGradientId("reference", selectionKey);
   }, [isConnectedToSelection]);
+
+  if (isHidden) return null;
 
   return (
     <>

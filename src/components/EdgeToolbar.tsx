@@ -3,7 +3,9 @@
 import { useMemo } from "react";
 import { EdgeLabelRenderer, useViewport } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { WorkflowEdge, WorkflowEdgeData } from "@/types";
+import { getImageSequenceNumber } from "@/lib/edges/labels";
+
+export { getImageSequenceNumber };
 
 /**
  * The toolbar for a selected connection. It is rendered by the edge itself
@@ -25,33 +27,6 @@ export function useIsToolbarEdge(edgeId: string): boolean {
   return useWorkflowStore((state) => state.edges.find((e) => e.selected)?.id === edgeId);
 }
 
-/**
- * For image connections that share a target handle, the 1-based order in
- * which they were made (the order images are sent to the model). Null when
- * the connection is alone or not an image.
- */
-export function getImageSequenceNumber(edge: WorkflowEdge, edges: WorkflowEdge[]): number | null {
-  const sourceHandle = edge.sourceHandle;
-  const targetHandle = edge.targetHandle;
-  const isImageConnection =
-    sourceHandle === "image" || sourceHandle?.startsWith("image-") ||
-    targetHandle === "image" || targetHandle?.startsWith("image-");
-  if (!isImageConnection) return null;
-
-  const siblings = edges.filter((e) => e.target === edge.target && e.targetHandle === edge.targetHandle);
-  if (siblings.length <= 1) return null;
-
-  // Sort by creation time (fallback to edge id for legacy edges without a timestamp)
-  const sorted = [...siblings].sort((a, b) => {
-    const timeA = (a.data as WorkflowEdgeData)?.createdAt || 0;
-    const timeB = (b.data as WorkflowEdgeData)?.createdAt || 0;
-    if (timeA !== timeB) return timeA - timeB;
-    return a.id.localeCompare(b.id);
-  });
-  const index = sorted.findIndex((e) => e.id === edge.id);
-  return index >= 0 ? index + 1 : null;
-}
-
 const iconButton =
   "p-1.5 rounded hover:bg-neutral-700 transition-colors disabled:opacity-30 disabled:cursor-not-allowed";
 
@@ -61,6 +36,7 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
   const setEdgesPause = useWorkflowStore((state) => state.setEdgesPause);
   const removeEdges = useWorkflowStore((state) => state.removeEdges);
   const setLoopCount = useWorkflowStore((state) => state.setLoopCount);
+  const setEdgesHidden = useWorkflowStore((state) => state.setEdgesHidden);
   const { zoom } = useViewport();
 
   const selectedEdges = useMemo(() => edges.filter((e) => e.selected), [edges]);
@@ -145,6 +121,15 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
               )}
             </button>
           )}
+          <button
+            onClick={() => setEdgesHidden(selectedIds, true)}
+            className={`${iconButton} text-neutral-400 hover:text-neutral-100`}
+            title={multi ? `Hide ${selectedEdges.length} connections` : "Hide connection"}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 5.1A9.8 9.8 0 0112 5c4.5 0 8.3 2.9 9.6 7a10 10 0 01-2.2 3.6M6.6 6.6A10 10 0 002.4 12c1.3 4.1 5.1 7 9.6 7 1.4 0 2.8-.3 4-.8" />
+            </svg>
+          </button>
           <button
             onClick={() => removeEdges(selectedIds)}
             className={`${iconButton} text-neutral-400 hover:text-red-400`}

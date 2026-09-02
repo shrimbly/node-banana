@@ -5,6 +5,7 @@ import { ReactFlowProvider, Position } from "@xyflow/react";
 
 // Mock the workflow store
 const mockSetEdges = vi.fn();
+const mockSetEdgesHidden = vi.fn();
 const mockUseWorkflowStore = vi.fn();
 
 vi.mock("@/store/workflowStore", () => ({
@@ -60,6 +61,7 @@ const createDefaultProps = (overrides = {}) => ({
 const createDefaultState = (overrides = {}) => ({
   edgeStyle: "angular" as const,
   edges: [],
+  setEdgesHidden: mockSetEdgesHidden,
   edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true },
   nodes: [],
   ...overrides,
@@ -505,5 +507,66 @@ describe("EditableEdge toolbar and highlight", () => {
     );
     const style = container.querySelector(".react-flow__edge-path")?.getAttribute("style") ?? "";
     expect(style).toContain("--edge-stroke-active: url(#edge-grad-image-active)");
+  });
+});
+
+describe("EditableEdge when hidden", () => {
+  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true };
+  const hiddenEdge = { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { hidden: true } };
+  const renderHidden = (edges: unknown[] = [hiddenEdge]) => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edgeAppearance: baseAppearance, edges }))
+    );
+    return render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps({ data: { hidden: true } })} />
+      </TestWrapper>
+    );
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("draws labelled stubs instead of the line", () => {
+    const { container } = renderHidden();
+    expect(container.querySelector(".react-flow__edge-path")).toBeNull();
+    expect(container.querySelector(".react-flow__edge-interaction")).toBeNull();
+    expect(screen.getByTestId("hidden-edge-stub-source")).toHaveTextContent("Image");
+    expect(screen.getByTestId("hidden-edge-stub-target")).toHaveTextContent("Image");
+  });
+
+  it("labels the stub with the image order among siblings", () => {
+    renderHidden([
+      { id: "edge-0", source: "x", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 1 } },
+      { ...hiddenEdge, data: { hidden: true, createdAt: 2 } },
+    ]);
+    expect(screen.getByTestId("hidden-edge-stub-target")).toHaveTextContent("Image 2");
+  });
+
+  it("stacks stubs below earlier hidden siblings on the same handle", () => {
+    renderHidden([
+      { id: "edge-0", source: "x", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { hidden: true, createdAt: 1 } },
+      { ...hiddenEdge, data: { hidden: true, createdAt: 2 } },
+    ]);
+    // Target handle is at y=50; the second hidden stub sits one row (22px) lower
+    expect(screen.getByTestId("hidden-edge-stub-target").style.transform).toContain("72px");
+    // Nothing else leaves node-1's handle, so the source stub stays on the handle
+    expect(screen.getByTestId("hidden-edge-stub-source").style.transform).toContain("50px");
+  });
+
+  it("ghosts the line while a stub is hovered", () => {
+    const { container } = renderHidden();
+    expect(container.querySelector('[data-testid="hidden-edge-ghost"]')).toBeNull();
+    fireEvent.mouseEnter(screen.getByTestId("hidden-edge-stub-target").querySelector("button")!);
+    expect(container.querySelector('[data-testid="hidden-edge-ghost"]')).not.toBeNull();
+    fireEvent.mouseLeave(screen.getByTestId("hidden-edge-stub-target").querySelector("button")!);
+    expect(container.querySelector('[data-testid="hidden-edge-ghost"]')).toBeNull();
+  });
+
+  it("shows the connection again when a stub is clicked", () => {
+    renderHidden();
+    fireEvent.click(screen.getByTestId("hidden-edge-stub-source").querySelector("button")!);
+    expect(mockSetEdgesHidden).toHaveBeenCalledWith(["edge-1"], false);
   });
 });
