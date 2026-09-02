@@ -81,6 +81,7 @@ const createDefaultState = (overrides = {}) => ({
   stopWorkflow: mockStopWorkflow,
   validateWorkflow: mockValidateWorkflow,
   edgeStyle: "angular" as const,
+  edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true },
   setEdgeStyle: mockSetEdgeStyle,
   setModelSearchOpen: mockSetModelSearchOpen,
   modelSearchOpen: false,

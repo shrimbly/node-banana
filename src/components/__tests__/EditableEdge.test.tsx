@@ -57,6 +57,7 @@ const createDefaultProps = (overrides = {}) => ({
 // Default store state factory
 const createDefaultState = (overrides = {}) => ({
   edgeStyle: "angular" as const,
+  edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true },
   nodes: [],
   ...overrides,
 });
@@ -378,5 +379,70 @@ describe("EditableEdge", () => {
         // The actual drag behavior requires document-level event listeners
       }
     });
+  });
+});
+
+describe("EditableEdge appearance settings", () => {
+  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true };
+  const withState = (overrides: Record<string, unknown>) => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edgeAppearance: baseAppearance, ...overrides }))
+    );
+  };
+  const renderEdge = (props = {}) => {
+    const { container } = render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps(props)} />
+      </TestWrapper>
+    );
+    return container;
+  };
+  const baseStyle = (container: HTMLElement) =>
+    container.querySelector(".react-flow__edge-path")?.getAttribute("style") ?? "";
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("uses the thickness setting for the stroke width", () => {
+    withState({ edgeAppearance: { ...baseAppearance, thickness: "thick" } });
+    expect(baseStyle(renderEdge())).toContain("stroke-width: 5");
+  });
+
+  it("draws a solid stroke faded to the setting when the gradient is off", () => {
+    withState({ edgeAppearance: { ...baseAppearance, gradient: false, fadedOpacity: 0.4 } });
+    const style = baseStyle(renderEdge());
+    expect(style).not.toContain("url(#");
+    expect(style).toContain("stroke-opacity: 0.4");
+  });
+
+  it("keeps a solid stroke at full opacity when attached to a selected node", () => {
+    withState({
+      edgeAppearance: { ...baseAppearance, gradient: false, fadedOpacity: 0.4 },
+      nodes: [{ id: "node-1", selected: true, type: "prompt", data: {}, position: { x: 0, y: 0 } }],
+    });
+    expect(baseStyle(renderEdge())).toContain("stroke-opacity: 1");
+  });
+
+  it("draws a straight line when the style is straight", () => {
+    withState({ edgeStyle: "straight" });
+    const d = renderEdge().querySelector(".react-flow__edge-path")?.getAttribute("d") ?? "";
+    expect(d).toContain("L");
+    expect(d).not.toMatch(/[CQ]/);
+  });
+
+  it("shows the loading pulse while the target generates", () => {
+    withState({
+      nodes: [{ id: "node-2", type: "nanoBanana", data: { status: "loading" }, position: { x: 0, y: 0 } }],
+    });
+    expect(renderEdge().querySelector('path[stroke-dasharray="20 30"]')).not.toBeNull();
+  });
+
+  it("skips the loading pulse when the setting is off", () => {
+    withState({
+      edgeAppearance: { ...baseAppearance, loadingPulse: false },
+      nodes: [{ id: "node-2", type: "nanoBanana", data: { status: "loading" }, position: { x: 0, y: 0 } }],
+    });
+    expect(renderEdge().querySelector('path[stroke-dasharray="20 30"]')).toBeNull();
   });
 });

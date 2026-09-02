@@ -6,12 +6,14 @@ import {
   EdgeProps,
   getSmoothStepPath,
   getBezierPath,
+  getStraightPath,
   useReactFlow,
 } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { NanoBananaNodeData, WorkflowEdgeData } from "@/types";
 import { getSharedGradientId } from "./SharedEdgeGradients";
 import { EDGE_COLORS, edgeColorKeyForHandles } from "@/lib/edges/colors";
+import { EDGE_THICKNESS_PX } from "@/lib/edges/appearance";
 
 interface EdgeData extends WorkflowEdgeData {
   offsetX?: number;
@@ -37,6 +39,7 @@ export function EditableEdge({
 }: EdgeProps) {
   const { setEdges } = useReactFlow();
   const edgeStyle = useWorkflowStore((state) => state.edgeStyle);
+  const appearance = useWorkflowStore((state) => state.edgeAppearance);
   const [isDragging, setIsDragging] = useState(false);
 
   // Narrow selector: returns boolean, only re-renders when selection relevance changes
@@ -106,6 +109,10 @@ export function EditableEdge({
       return [path, lx, ly] as [string, number, number];
     }
 
+    if (edgeStyle === "straight") {
+      return getStraightPath({ sourceX, sourceY, targetX, targetY });
+    }
+
     if (edgeStyle === "curved") {
       return getBezierPath({
         sourceX,
@@ -132,7 +139,7 @@ export function EditableEdge({
 
   // Calculate handle positions on the path segments (only for angular mode)
   const handlePositions = useMemo(() => {
-    if (edgeStyle === "curved") return [];
+    if (edgeStyle !== "angular") return [];
 
     const handles: { x: number; y: number; direction: "horizontal" | "vertical" }[] = [];
 
@@ -195,6 +202,13 @@ export function EditableEdge({
     [id, offsetX, offsetY, setEdges]
   );
 
+  // Stroke from the appearance settings: the shared gradient, or a solid
+  // colour faded when the edge is not attached to a selected node.
+  const strokeWidth = EDGE_THICKNESS_PX[appearance.thickness];
+  const stroke = appearance.gradient ? `url(#${gradientId})` : edgeColor;
+  const strokeOpacity = appearance.gradient || isConnectedToSelection ? 1 : appearance.fadedOpacity;
+  const showPulse = isTargetLoading && appearance.loadingPulse;
+
   return (
     <>
       <BaseEdge
@@ -203,22 +217,23 @@ export function EditableEdge({
         markerEnd={markerEnd}
         style={{
           ...style,
-          stroke: `url(#${gradientId})`,
-          strokeWidth: 3,
+          stroke,
+          strokeOpacity,
+          strokeWidth,
           strokeLinecap: "round",
           strokeLinejoin: "round",
         }}
       />
 
       {/* Animated pulse overlay when target is loading */}
-      {isTargetLoading && (
+      {showPulse && (
         <>
           {/* Outer glow — replaces blur(6px) filter for better perf on Windows */}
           <path
             d={edgePath}
             fill="none"
-            stroke={`url(#${gradientId})`}
-            strokeWidth={20}
+            stroke={stroke}
+            strokeWidth={strokeWidth * 6.5}
             strokeLinecap="round"
             strokeLinejoin="round"
             opacity={0.06}
@@ -227,8 +242,8 @@ export function EditableEdge({
           <path
             d={edgePath}
             fill="none"
-            stroke={`url(#${gradientId})`}
-            strokeWidth={12}
+            stroke={stroke}
+            strokeWidth={strokeWidth * 4}
             strokeLinecap="round"
             strokeLinejoin="round"
             opacity={0.12}
@@ -237,8 +252,8 @@ export function EditableEdge({
           <path
             d={edgePath}
             fill="none"
-            stroke={`url(#${gradientId})`}
-            strokeWidth={5}
+            stroke={stroke}
+            strokeWidth={strokeWidth + 2}
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeDasharray="20 30"

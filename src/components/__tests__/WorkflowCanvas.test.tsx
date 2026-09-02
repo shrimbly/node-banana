@@ -146,6 +146,7 @@ const createDefaultState = (overrides = {}) => ({
   clipboard: null,
   providerSettings: defaultProviderSettings,
   edgeStyle: "angular" as const,
+  edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true },
   currentNodeIds: [],
   navigationTarget: null,
   setNavigationTarget: vi.fn(),

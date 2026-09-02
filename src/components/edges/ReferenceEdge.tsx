@@ -8,6 +8,7 @@ import {
 } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { getSharedGradientId } from "./SharedEdgeGradients";
+import { EDGE_COLORS } from "@/lib/edges/colors";
 
 export function ReferenceEdge({
   id,
@@ -22,6 +23,8 @@ export function ReferenceEdge({
   source,
   target,
 }: EdgeProps) {
+  const appearance = useWorkflowStore((state) => state.edgeAppearance);
+
   // Narrow selector: returns boolean, only re-renders when selection relevance changes
   const isConnectedToSelection = useWorkflowStore((state) => {
     const selectedNodes = state.nodes.filter((n) => n.selected);
@@ -56,7 +59,8 @@ export function ReferenceEdge({
         markerEnd={markerEnd}
         style={{
           ...style,
-          stroke: `url(#${gradientId})`,
+          stroke: appearance.gradient ? `url(#${gradientId})` : EDGE_COLORS.reference,
+          strokeOpacity: appearance.gradient || isConnectedToSelection ? 1 : appearance.fadedOpacity,
           strokeWidth: 2,
           strokeDasharray: "6 4",
           strokeLinecap: "round",
