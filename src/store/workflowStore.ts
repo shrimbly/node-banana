@@ -26,6 +26,8 @@ import {
   CanvasNavigationSettings,
   MatchMode,
   MODEL_DISPLAY_NAMES,
+  EdgeStyle,
+  EdgeAppearance,
 } from "@/types";
 import { UndoManager, UndoSnapshot, clonePreservingStrings } from "./undoHistory";
 import { useToast } from "@/components/Toast";
@@ -47,7 +49,9 @@ import {
   generateWorkflowId,
   getCanvasNavigationSettings,
   saveCanvasNavigationSettings,
+  getEdgeDefaults,
 } from "./utils/localStorage";
+import { normalizeEdgeAppearance } from "@/lib/edges/appearance";
 import {
   createDefaultNodeData,
   defaultNodeDimensions,
@@ -151,7 +155,8 @@ function saveLogSession(): void {
   }
 }
 
-export type EdgeStyle = "angular" | "curved";
+// Re-exported for existing imports; the type lives in src/types/workflow.ts.
+export type { EdgeStyle };
 
 function buildConnectionEdgeData(
   connection: Connection,
@@ -239,6 +244,7 @@ export interface WorkflowFile {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   edgeStyle: EdgeStyle;
+  edgeAppearance?: EdgeAppearance;  // Optional: older files fall back to the user default
   groups?: Record<string, NodeGroup>;  // Optional for backward compatibility
 }
 
@@ -252,6 +258,7 @@ interface WorkflowStore {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   edgeStyle: EdgeStyle;
+  edgeAppearance: EdgeAppearance;
   clipboard: ClipboardData | null;
   groups: Record<string, NodeGroup>;
 
@@ -263,6 +270,7 @@ interface WorkflowStore {
 
   // Settings
   setEdgeStyle: (style: EdgeStyle) => void;
+  setEdgeAppearance: (patch: Partial<EdgeAppearance>) => void;
 
   // Node operations
   addNode: (type: NodeType, position: XYPosition, initialData?: Partial<WorkflowNodeData>) => string;
@@ -423,6 +431,7 @@ interface WorkflowStore {
     edges: WorkflowEdge[];
     groups: Record<string, NodeGroup>;
     edgeStyle: EdgeStyle;
+    edgeAppearance: EdgeAppearance;
   } | null;
   manualChangeCount: number;
 
@@ -569,6 +578,7 @@ function captureUndoSnapshot(state: WorkflowStore): UndoSnapshot {
     edges: state.edges,
     groups: state.groups,
     edgeStyle: state.edgeStyle,
+    edgeAppearance: state.edgeAppearance,
   }) as UndoSnapshot;
   // Strip transient selection state from cloned nodes
   for (const node of cloned.nodes) {
@@ -638,7 +648,8 @@ function revokeNodeBlobUrls(nodes: WorkflowNode[]): void {
 const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   nodes: [],
   edges: [],
-  edgeStyle: "curved" as EdgeStyle,
+  edgeStyle: getEdgeDefaults().edgeStyle,
+  edgeAppearance: getEdgeDefaults().appearance,
   clipboard: null,
   groups: {},
   openModalCount: 0,
@@ -720,6 +731,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         edges: previous.edges,
         groups: previous.groups,
         edgeStyle: previous.edgeStyle,
+        edgeAppearance: previous.edgeAppearance,
         hasUnsavedChanges: true,
       });
       get().recomputeDimmedNodes();
@@ -745,6 +757,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         edges: next.edges,
         groups: next.groups,
         edgeStyle: next.edgeStyle,
+        edgeAppearance: next.edgeAppearance,
         hasUnsavedChanges: true,
       });
       get().recomputeDimmedNodes();
@@ -755,6 +768,11 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   setEdgeStyle: (style: EdgeStyle) => {
     pushUndoCheckpoint(get, set);
     set({ edgeStyle: style });
+  },
+
+  setEdgeAppearance: (patch: Partial<EdgeAppearance>) => {
+    pushUndoCheckpoint(get, set);
+    set((state) => ({ edgeAppearance: { ...state.edgeAppearance, ...patch } }));
   },
 
   incrementModalCount: () => {
@@ -2489,7 +2507,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   saveWorkflow: (name?: string) => {
-    const { nodes, edges, edgeStyle, groups } = get();
+    const { nodes, edges, edgeStyle, edgeAppearance, groups } = get();
 
     const workflow: WorkflowFile = {
       version: 1,
@@ -2498,6 +2516,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       nodes: nodes.map(({ selected, ...rest }) => rest),
       edges,
       edgeStyle,
+      edgeAppearance,
       groups: groups && Object.keys(groups).length > 0 ? groups : undefined,
     };
 
@@ -2637,6 +2656,9 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       })),
       edges: hydratedWorkflow.edges,
       edgeStyle: hydratedWorkflow.edgeStyle || "angular",
+      edgeAppearance: hydratedWorkflow.edgeAppearance
+        ? normalizeEdgeAppearance(hydratedWorkflow.edgeAppearance)
+        : getEdgeDefaults().appearance,
       groups: hydratedWorkflow.groups || {},
       isRunning: false,
       currentNodeIds: [],
@@ -2692,6 +2714,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       nodes: [],
       edges: [],
       groups: {},
+      edgeStyle: getEdgeDefaults().edgeStyle,
+      edgeAppearance: getEdgeDefaults().appearance,
       isRunning: false,
       currentNodeIds: [],
       pausedAtNodeId: null,
@@ -2789,6 +2813,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       nodes,
       edges,
       edgeStyle,
+      edgeAppearance,
       groups,
       workflowId,
       workflowName,
@@ -2850,6 +2875,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       const savedNodesSnapshot = currentNodes;
       const savedEdgesSnapshot = edges;
       const savedEdgeStyleSnapshot = edgeStyle;
+      const savedEdgeAppearanceSnapshot = edgeAppearance;
       const savedGroupsSnapshot = groups;
       const savedWorkflowNameSnapshot = workflowName;
 
@@ -2861,6 +2887,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         nodes: currentNodes,
         edges,
         edgeStyle,
+        edgeAppearance,
         groups: groups && Object.keys(groups).length > 0 ? groups : undefined,
       };
 
@@ -2894,6 +2921,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
           freshNodes !== savedNodesSnapshot ||
           fresh.edges !== savedEdgesSnapshot ||
           fresh.edgeStyle !== savedEdgeStyleSnapshot ||
+          fresh.edgeAppearance !== savedEdgeAppearanceSnapshot ||
           fresh.groups !== savedGroupsSnapshot ||
           fresh.workflowName !== savedWorkflowNameSnapshot;
 
@@ -3190,6 +3218,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       edges: state.edges,
       groups: state.groups,
       edgeStyle: state.edgeStyle,
+      edgeAppearance: state.edgeAppearance,
     });
     set({
       previousWorkflowSnapshot: snapshot,
@@ -3205,6 +3234,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         edges: state.previousWorkflowSnapshot.edges,
         groups: state.previousWorkflowSnapshot.groups,
         edgeStyle: state.previousWorkflowSnapshot.edgeStyle,
+        edgeAppearance: state.previousWorkflowSnapshot.edgeAppearance,
         previousWorkflowSnapshot: null,
         manualChangeCount: 0,
         hasUnsavedChanges: true,

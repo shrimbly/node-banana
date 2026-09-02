@@ -11,6 +11,9 @@ import {
   CanvasNavigationSettings,
   defaultCanvasNavigationSettings,
 } from "@/types";
+import type { EdgeAppearance, EdgeStyle } from "@/types";
+import { defaultEdgeAppearance } from "@/types";
+import { isEdgeStyle, normalizeEdgeAppearance } from "@/lib/edges/appearance";
 
 // Storage keys
 export const STORAGE_KEY = "node-banana-workflow-configs";
@@ -23,6 +26,7 @@ export const CANVAS_NAVIGATION_KEY = "node-banana-canvas-navigation";
 export const LAST_PROJECT_BASE_DIR_KEY = "node-banana-last-project-dir";
 export const WORKFLOWS_DIRECTORY_KEY = "node-banana-workflows-directory";
 export const FTUX_COMPLETED_KEY = "node-banana-ftux-completed";
+export const EDGE_DEFAULTS_KEY = "node-banana-edge-appearance";
 
 // Maximum recent models to store (show 4 in UI, keep 8 for persistence)
 export const MAX_RECENT_MODELS = 8;
@@ -223,6 +227,38 @@ export const getCanvasNavigationSettings = (): CanvasNavigationSettings => {
 export const saveCanvasNavigationSettings = (settings: CanvasNavigationSettings): void => {
   if (typeof window === "undefined") return;
   localStorage.setItem(CANVAS_NAVIGATION_KEY, JSON.stringify(settings));
+};
+
+// Connection appearance defaults: the user's preferred line style and
+// appearance, applied to new workflows and to files that carry none.
+export interface EdgeDefaults {
+  edgeStyle: EdgeStyle;
+  appearance: EdgeAppearance;
+}
+
+export const builtInEdgeDefaults: EdgeDefaults = {
+  edgeStyle: "curved",
+  appearance: defaultEdgeAppearance,
+};
+
+export const getEdgeDefaults = (): EdgeDefaults => {
+  if (typeof window === "undefined") return builtInEdgeDefaults;
+  const stored = localStorage.getItem(EDGE_DEFAULTS_KEY);
+  if (!stored) return builtInEdgeDefaults;
+  try {
+    const parsed = JSON.parse(stored) as Partial<EdgeDefaults>;
+    return {
+      edgeStyle: isEdgeStyle(parsed.edgeStyle) ? parsed.edgeStyle : builtInEdgeDefaults.edgeStyle,
+      appearance: normalizeEdgeAppearance(parsed.appearance),
+    };
+  } catch {
+    return builtInEdgeDefaults;
+  }
+};
+
+export const saveEdgeDefaults = (defaults: EdgeDefaults): void => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(EDGE_DEFAULTS_KEY, JSON.stringify(defaults));
 };
 
 // Last project base directory helpers

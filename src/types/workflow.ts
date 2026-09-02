@@ -18,6 +18,30 @@ export interface WorkflowEdgeData extends Record<string, unknown> {
 // Workflow Edge
 export type WorkflowEdge = Edge<WorkflowEdgeData>;
 
+// How the line of a connection is routed. Saved per workflow as `edgeStyle`.
+export type EdgeStyle = "angular" | "curved" | "straight";
+
+// How connections are drawn, beyond the line style. Saved per workflow as
+// `edgeAppearance`, with the user's default kept in localStorage.
+export type EdgeThickness = "thin" | "regular" | "thick";
+
+export interface EdgeAppearance {
+  thickness: EdgeThickness;
+  /** Opacity of connections not attached to a selected node, 0 to 1. */
+  fadedOpacity: number;
+  /** Fade the middle of each connection so the ends stay readable. */
+  gradient: boolean;
+  /** Animate connections into a node while it generates. */
+  loadingPulse: boolean;
+}
+
+export const defaultEdgeAppearance: EdgeAppearance = {
+  thickness: "regular",
+  fadedOpacity: 0.25,
+  gradient: true,
+  loadingPulse: true,
+};
+
 // Auto-save configuration stored in localStorage
 export interface WorkflowSaveConfig {
   workflowId: string;
