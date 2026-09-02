@@ -62,7 +62,7 @@ const createDefaultState = (overrides = {}) => ({
   edgeStyle: "angular" as const,
   edges: [],
   setEdgesHidden: mockSetEdgesHidden,
-  edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const },
+  edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const, bundling: "off" as const },
   nodes: [],
   ...overrides,
 });
@@ -388,7 +388,7 @@ describe("EditableEdge", () => {
 });
 
 describe("EditableEdge appearance settings", () => {
-  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const };
+  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const, bundling: "off" as const };
   const withState = (overrides: Record<string, unknown>) => {
     mockUseWorkflowStore.mockImplementation((selector) =>
       selector(createDefaultState({ edgeAppearance: baseAppearance, ...overrides }))
@@ -453,7 +453,7 @@ describe("EditableEdge appearance settings", () => {
 });
 
 describe("EditableEdge toolbar and highlight", () => {
-  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const };
+  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const, bundling: "off" as const };
   const stateWith = (overrides: Record<string, unknown>) =>
     mockUseWorkflowStore.mockImplementation((selector) =>
       selector(createDefaultState({ edgeAppearance: baseAppearance, ...overrides }))
@@ -511,7 +511,7 @@ describe("EditableEdge toolbar and highlight", () => {
 });
 
 describe("EditableEdge when hidden", () => {
-  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const };
+  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const, bundling: "off" as const };
   const hiddenEdge = { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { hidden: true } };
   const renderHidden = (edges: unknown[] = [hiddenEdge]) => {
     mockUseWorkflowStore.mockImplementation((selector) =>
@@ -573,7 +573,7 @@ describe("EditableEdge when hidden", () => {
 
 describe("EditableEdge labels", () => {
   const appearance = (labels: "always" | "hover" | "never") => ({
-    thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels,
+    thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels, bundling: "off" as const,
   });
   const visibleEdge = (data: Record<string, unknown> = {}) => ({
     id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data,
@@ -634,5 +634,59 @@ describe("EditableEdge labels", () => {
     ]);
     // Two parallel edges: index 1 of 2 sits 9px below the midpoint (y=50)
     expect(screen.getByTestId("edge-label").style.transform).toContain("59px");
+  });
+});
+
+describe("EditableEdge bundles", () => {
+  const appearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "never" as const, bundling: "on" as const };
+  const pair = (selected = false) => [
+    { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image-0", data: { createdAt: 1 }, selected },
+    { id: "edge-2", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image-1", data: { createdAt: 2 } },
+  ];
+  const renderMember = (edges: unknown[], props = {}) => {
+    mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ edgeAppearance: appearance, edges })));
+    return render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps(props)} />
+      </TestWrapper>
+    );
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("draws the trunk and the count from the first member", () => {
+    const { container } = renderMember(pair());
+    expect(container.querySelector('[data-testid="edge-bundle-trunk"]')).not.toBeNull();
+    expect(screen.getByTestId("edge-bundle-count")).toHaveTextContent("2");
+    // Trunk is thicker than a single noodle
+    const style = container.querySelector(".react-flow__edge-path")?.getAttribute("style") ?? "";
+    expect(style).toContain("stroke-width: 4.5");
+  });
+
+  it("draws only the fan segments from the other members", () => {
+    const { container } = renderMember(pair(), { id: "edge-2", targetHandleId: "image-1" });
+    expect(container.querySelector('[data-testid="edge-bundle-member"]')).not.toBeNull();
+    expect(container.querySelector('[data-testid="edge-bundle-trunk"]')).toBeNull();
+    expect(screen.queryByTestId("edge-bundle-count")).toBeNull();
+  });
+
+  it("expands into ordinary noodles when a member is selected", () => {
+    const { container } = renderMember(pair(true), { selected: true });
+    expect(container.querySelector('[data-testid="edge-bundle-trunk"]')).toBeNull();
+    expect(container.querySelector('[data-testid="edge-hover-area"]')).not.toBeNull();
+  });
+
+  it("does not bundle when the setting is off", () => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edgeAppearance: { ...appearance, bundling: "off" }, edges: pair() }))
+    );
+    const { container } = render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps()} />
+      </TestWrapper>
+    );
+    expect(container.querySelector('[data-testid="edge-bundle-member"]')).toBeNull();
   });
 });

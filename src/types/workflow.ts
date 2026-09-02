@@ -17,6 +17,8 @@ export interface WorkflowEdgeData extends Record<string, unknown> {
   hidden?: boolean;
   /** The user's own label; empty means show the automatic one. */
   label?: string;
+  /** Manual bundle this edge belongs to (with others between the same nodes). */
+  bundleId?: string;
 }
 
 // Workflow Edge
@@ -32,6 +34,9 @@ export type EdgeThickness = "thin" | "regular" | "thick";
 /** When automatic labels (type, image order) show. Typed labels always show. */
 export type EdgeLabelMode = "always" | "hover" | "never";
 
+/** Automatic bundling of parallel connections: off, two or more, three or more. */
+export type EdgeBundlingMode = "off" | "on" | "auto";
+
 export interface EdgeAppearance {
   thickness: EdgeThickness;
   /** Opacity of connections not attached to a selected node, 0 to 1. */
@@ -41,6 +46,7 @@ export interface EdgeAppearance {
   /** Animate connections into a node while it generates. */
   loadingPulse: boolean;
   labels: EdgeLabelMode;
+  bundling: EdgeBundlingMode;
 }
 
 export const defaultEdgeAppearance: EdgeAppearance = {
@@ -49,6 +55,7 @@ export const defaultEdgeAppearance: EdgeAppearance = {
   gradient: true,
   loadingPulse: true,
   labels: "hover",
+  bundling: "off",
 };
 
 // Auto-save configuration stored in localStorage

@@ -53,6 +53,7 @@ import {
   getEdgeDefaults,
 } from "./utils/localStorage";
 import { normalizeEdgeAppearance } from "@/lib/edges/appearance";
+import { shareNodePair } from "@/lib/edges/bundles";
 import {
   createDefaultNodeData,
   defaultNodeDimensions,
@@ -303,6 +304,10 @@ interface WorkflowStore {
   setAllEdgesHidden: (hidden: boolean) => void;
   /** Set an edge's own label; blank clears it so the automatic label shows. */
   setEdgeLabel: (edgeId: string, label: string) => void;
+  /** Bundle edges that run between the same two nodes. Returns false otherwise. */
+  bundleEdges: (edgeIds: string[]) => boolean;
+  /** Dissolve the manual bundles the given edges belong to. */
+  unbundleEdges: (edgeIds: string[]) => void;
   setLoopCount: (edgeId: string, count: number) => void;
 
   // Copy/Paste operations
@@ -1187,6 +1192,37 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         const { label: _old, ...rest } = e.data ?? {};
         void _old;
         return { ...e, data: trimmed ? { ...rest, label: trimmed } : rest };
+      }),
+      hasUnsavedChanges: true,
+    }));
+  },
+
+  bundleEdges: (edgeIds: string[]) => {
+    const ids = new Set(edgeIds);
+    const members = get().edges.filter((e) => ids.has(e.id) && !e.data?.hidden && e.type !== "reference");
+    if (members.length < 2 || !shareNodePair(members)) return false;
+    const bundleId = `bundle-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    pushUndoCheckpoint(get, set);
+    set((state) => ({
+      edges: state.edges.map((e) => (ids.has(e.id) ? { ...e, data: { ...e.data, bundleId } } : e)),
+      hasUnsavedChanges: true,
+    }));
+    return true;
+  },
+
+  unbundleEdges: (edgeIds: string[]) => {
+    const ids = new Set(edgeIds);
+    const bundleIds = new Set(
+      get().edges.flatMap((e) => (ids.has(e.id) && e.data?.bundleId ? [e.data.bundleId] : []))
+    );
+    if (bundleIds.size === 0) return;
+    pushUndoCheckpoint(get, set);
+    set((state) => ({
+      edges: state.edges.map((e) => {
+        if (!e.data?.bundleId || !bundleIds.has(e.data.bundleId)) return e;
+        const { bundleId: _gone, ...rest } = e.data;
+        void _gone;
+        return { ...e, data: rest };
       }),
       hasUnsavedChanges: true,
     }));

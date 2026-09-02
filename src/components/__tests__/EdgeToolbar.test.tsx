@@ -11,6 +11,8 @@ const mockRemoveEdges = vi.fn();
 const mockSetLoopCount = vi.fn();
 const mockSetEdgesHidden = vi.fn();
 const mockSetEdgeLabel = vi.fn();
+const mockBundleEdges = vi.fn();
+const mockUnbundleEdges = vi.fn();
 const mockUseWorkflowStore = vi.fn();
 
 vi.mock("@/store/workflowStore", () => ({
@@ -51,6 +53,9 @@ const createDefaultState = (overrides = {}) => ({
   setLoopCount: mockSetLoopCount,
   setEdgesHidden: mockSetEdgesHidden,
   setEdgeLabel: mockSetEdgeLabel,
+  bundleEdges: mockBundleEdges,
+  unbundleEdges: mockUnbundleEdges,
+  edgeAppearance: { bundling: "off" },
   ...overrides,
 });
 
@@ -188,6 +193,40 @@ describe("EdgeToolbar", () => {
       fireEvent.click(screen.getByTitle("Delete 2 connections"));
       expect(mockRemoveEdges).toHaveBeenCalledWith(["e1", "e2"]);
     });
+  });
+});
+
+describe("EdgeToolbar bundles", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockZoom = 1;
+  });
+
+  it("offers to bundle a multi-selection between the same nodes", () => {
+    withEdges([edge("e1", { selected: true }), edge("e2", { selected: true, targetHandle: "image-1" })]);
+    render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
+    fireEvent.click(screen.getByTitle("Bundle 2 connections"));
+    expect(mockBundleEdges).toHaveBeenCalledWith(["e1", "e2"]);
+  });
+
+  it("does not offer to bundle edges between different nodes", () => {
+    withEdges([edge("e1", { selected: true }), edge("e2", { selected: true, target: "z" })]);
+    render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
+    expect(screen.queryByTitle(/^Bundle/)).toBeNull();
+  });
+
+  it("acts on the whole manual bundle from one selected member and offers to unbundle", () => {
+    withEdges([
+      edge("e1", { selected: true, data: { bundleId: "x", createdAt: 1 } }),
+      edge("e2", { targetHandle: "image-1", data: { bundleId: "x", createdAt: 2 } }),
+    ]);
+    render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
+    expect(screen.getByText("2 connections")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Connection label")).toBeNull();
+    fireEvent.click(screen.getByTitle("Pause all"));
+    expect(mockSetEdgesPause).toHaveBeenCalledWith(["e1", "e2"], true);
+    fireEvent.click(screen.getByTitle("Unbundle"));
+    expect(mockUnbundleEdges).toHaveBeenCalledWith(["e1", "e2"]);
   });
 });
 

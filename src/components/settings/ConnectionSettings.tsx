@@ -1,6 +1,6 @@
 "use client";
 
-import { EdgeAppearance, EdgeLabelMode, EdgeStyle, EdgeThickness } from "@/types";
+import { EdgeAppearance, EdgeBundlingMode, EdgeLabelMode, EdgeStyle, EdgeThickness } from "@/types";
 import { EDGE_THICKNESS_PX } from "@/lib/edges/appearance";
 import { HANDLE_TYPE_COLORS } from "@/lib/edges/colors";
 import { gradientOpacities } from "@/components/edges/SharedEdgeGradients";
@@ -31,6 +31,12 @@ const LABEL_MODES: { value: EdgeLabelMode; label: string }[] = [
   { value: "always", label: "Always" },
   { value: "hover", label: "On hover" },
   { value: "never", label: "Never" },
+];
+
+const BUNDLING_MODES: { value: EdgeBundlingMode; label: string }[] = [
+  { value: "off", label: "Off" },
+  { value: "on", label: "On" },
+  { value: "auto", label: "Auto" },
 ];
 
 const THICKNESSES: { value: EdgeThickness; label: string }[] = [
@@ -222,6 +228,15 @@ export function ConnectionSettings({
               options={LABEL_MODES}
               value={appearance.labels}
               onChange={(labels) => update({ labels })}
+            />
+          </SettingRow>
+
+          <SettingRow label="Bundle parallel connections" hint="On bundles two or more between the same nodes, Auto three or more">
+            <Segmented
+              label="Bundle parallel connections"
+              options={BUNDLING_MODES}
+              value={appearance.bundling}
+              onChange={(bundling) => update({ bundling })}
             />
           </SettingRow>
 
