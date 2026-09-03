@@ -566,6 +566,8 @@ function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, col
           data-testid="edge-bundle-clamp"
           title="Drag to move where the bundle splits"
           onMouseDown={startClampDrag}
+          onMouseUp={(e) => e.stopPropagation()}
+          onClick={(e) => e.stopPropagation()}
           style={{
             position: "absolute",
             transform: `translate(${splitX}px, ${y}px) translate(-50%, -50%)`,

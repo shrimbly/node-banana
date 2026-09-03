@@ -772,6 +772,22 @@ describe("EditableEdge bundles", () => {
     expect(mockSetBundleClamp).toHaveBeenCalledTimes(1);
   });
 
+  it("keeps a click on the clamp from reaching the edge", () => {
+    mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ edgeAppearance: appearance, edges: fanOut() })));
+    const onEdgeClick = vi.fn();
+    render(
+      <ReactFlowProvider>
+        <svg onClick={onEdgeClick}>
+          <EditableEdge {...createDefaultProps()} />
+        </svg>
+      </ReactFlowProvider>
+    );
+    fireEvent.mouseDown(screen.getByTestId("edge-bundle-clamp"), { clientX: 156, clientY: 50 });
+    fireEvent.mouseUp(screen.getByTestId("edge-bundle-clamp"), { clientX: 170, clientY: 50 });
+    fireEvent.click(screen.getByTestId("edge-bundle-clamp"));
+    expect(onEdgeClick).not.toHaveBeenCalled();
+  });
+
   it("does not bundle when the setting is off", () => {
     mockUseWorkflowStore.mockImplementation((selector) =>
       selector(createDefaultState({ edgeAppearance: { ...appearance, bundling: "off" }, edges: fanOut() }))
