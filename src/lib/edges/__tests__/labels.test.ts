@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { edgeTypeLabel, edgeAutoLabel, edgeDisplayLabelById, hiddenSiblingIndex } from "../labels";
+import { edgeTypeLabel, edgeAutoLabel, edgeDisplayLabelById, stackHiddenStubs, hiddenStubOffset } from "../labels";
 import type { WorkflowEdge } from "@/types";
 
 const edge = (id: string, overrides: Partial<WorkflowEdge> = {}): WorkflowEdge => ({
@@ -38,28 +38,65 @@ describe("edgeAutoLabel", () => {
   });
 });
 
-describe("hiddenSiblingIndex", () => {
+describe("stackHiddenStubs", () => {
   const edges = [
-    edge("late", { data: { hidden: true, createdAt: 30 } }),
-    edge("early", { source: "c", data: { hidden: true, createdAt: 10 } }),
-    edge("visible", { source: "d", data: { createdAt: 20 } }),
-    edge("elsewhere", { source: "c", target: "z", data: { hidden: true, createdAt: 5 } }),
+    edge("img1", { data: { hidden: true, createdAt: 10 } }),
+    edge("img2", { source: "c", data: { hidden: true, createdAt: 20 } }),
+    edge("img3", { source: "d", data: { hidden: true, createdAt: 30 } }),
+    edge("txt1", { source: "p", sourceHandle: "text", targetHandle: "text", data: { hidden: true, createdAt: 5 } }),
+    edge("shown", { source: "e", data: { createdAt: 1 } }),
+    edge("elsewhere", { source: "c", target: "z", data: { hidden: true, createdAt: 2 } }),
   ];
+  const handleY = (handleId: string | null) => (handleId === "image" ? 100 : handleId === "text" ? 130 : undefined);
 
-  it("stacks hidden edges sharing a target handle in creation order", () => {
-    expect(hiddenSiblingIndex("early", edges, "target")).toBe(0);
-    expect(hiddenSiblingIndex("late", edges, "target")).toBe(1);
+  it("pushes stubs down when the ones above them are too close", () => {
+    const placed = stackHiddenStubs(edges, "b", "target", handleY);
+    expect(placed.get("img1")).toBe(100);
+    expect(placed.get("img2")).toBe(122);
+    expect(placed.get("img3")).toBe(144);
+    // The text handle sits at 130 but the image stack runs past it
+    expect(placed.get("txt1")).toBe(166);
   });
 
-  it("counts only hidden edges on the same source handle", () => {
-    // "early" and "elsewhere" both leave c's image handle; "elsewhere" was made first
-    expect(hiddenSiblingIndex("elsewhere", edges, "source")).toBe(0);
-    expect(hiddenSiblingIndex("early", edges, "source")).toBe(1);
-    expect(hiddenSiblingIndex("late", edges, "source")).toBe(0);
+  it("leaves a stub at its handle when there is room", () => {
+    const roomy = (handleId: string | null) => (handleId === "image" ? 100 : 300);
+    const placed = stackHiddenStubs(edges, "b", "target", roomy);
+    expect(placed.get("txt1")).toBe(300);
+  });
+
+  it("ignores visible edges and other nodes", () => {
+    const placed = stackHiddenStubs(edges, "b", "target", handleY);
+    expect(placed.has("shown")).toBe(false);
+    expect(placed.has("elsewhere")).toBe(false);
+  });
+
+  it("orders by creation on the source side when handles are level", () => {
+    const placed = stackHiddenStubs(edges, "c", "source", () => 50);
+    expect(placed.get("elsewhere")).toBe(50);
+    expect(placed.get("img2")).toBe(72);
+  });
+});
+
+describe("hiddenStubOffset", () => {
+  const edges = [
+    edge("a1", { data: { hidden: true, createdAt: 1 } }),
+    edge("a2", { source: "c", data: { hidden: true, createdAt: 2 } }),
+    edge("t", { source: "p", sourceHandle: "text", targetHandle: "text", data: { hidden: true, createdAt: 3 } }),
+  ];
+  const handleY = (handleId: string | null) => (handleId === "image" ? 100 : 110);
+
+  it("is the distance a stub was pushed below its own handle", () => {
+    expect(hiddenStubOffset("a1", edges, "target", handleY, 100)).toBe(0);
+    expect(hiddenStubOffset("a2", edges, "target", handleY, 100)).toBe(22);
+    expect(hiddenStubOffset("t", edges, "target", handleY, 110)).toBe(34);
+  });
+
+  it("falls back to the caller's y when handle positions are unknown", () => {
+    expect(hiddenStubOffset("a2", edges, "target", () => undefined, 100)).toBe(22);
   });
 
   it("is zero for unknown edges", () => {
-    expect(hiddenSiblingIndex("nope", edges, "target")).toBe(0);
+    expect(hiddenStubOffset("nope", edges, "target", handleY, 0)).toBe(0);
   });
 });
 

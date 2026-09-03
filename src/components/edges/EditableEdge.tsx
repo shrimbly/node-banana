@@ -10,6 +10,7 @@ import {
   getBezierPath,
   getStraightPath,
   useReactFlow,
+  useInternalNode,
 } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { NanoBananaNodeData, WorkflowEdgeData } from "@/types";
@@ -18,13 +19,27 @@ import { EDGE_COLORS, edgeColorKeyForHandles } from "@/lib/edges/colors";
 import { EDGE_THICKNESS_PX } from "@/lib/edges/appearance";
 import { EdgeToolbar, useIsToolbarEdge } from "@/components/EdgeToolbar";
 import { HiddenEdgeStub } from "./HiddenEdgeStub";
-import { edgeDisplayLabelById, hiddenSiblingIndex, parallelEdgePosition } from "@/lib/edges/labels";
+import { edgeDisplayLabelById, hiddenStubOffset, parallelEdgePosition } from "@/lib/edges/labels";
 import { EdgeLabel } from "./EdgeLabel";
 import { edgeBundles, bundleReach, bundleClampKey, type BundleMembership } from "@/lib/edges/bundles";
 
 interface EdgeData extends WorkflowEdgeData {
   offsetX?: number;
   offsetY?: number;
+}
+
+/** Absolute y of the centre of each handle on one side of a node, by handle id. */
+function useHandleY(nodeId: string, side: "source" | "target") {
+  const node = useInternalNode(nodeId);
+  const bounds = node?.internals.handleBounds?.[side];
+  const top = node?.internals.positionAbsolute.y ?? 0;
+  return useCallback(
+    (handleId: string | null) => {
+      const handle = bounds?.find((h) => (h.id ?? null) === handleId);
+      return handle ? top + handle.y + handle.height / 2 : undefined;
+    },
+    [bounds, top]
+  );
 }
 
 export function EditableEdge({
@@ -114,8 +129,16 @@ export function EditableEdge({
   // Where this noodle starts and ends: the stem's far end when bundled
   const startX = sourceBundle ? sourceX + sDir * sourceReach : sourceX;
   const endX = targetBundle ? targetX + tDir * targetReach : targetX;
-  const sourceStack = useWorkflowStore((state) => (isHidden ? hiddenSiblingIndex(id, state.edges, "source") : 0));
-  const targetStack = useWorkflowStore((state) => (isHidden ? hiddenSiblingIndex(id, state.edges, "target") : 0));
+  // Hidden stubs stack down the side of the node without overlapping, which
+  // needs the y of every handle on that side, not just this edge's own
+  const sourceHandleY = useHandleY(source, "source");
+  const targetHandleY = useHandleY(target, "target");
+  const sourceStack = useWorkflowStore((state) =>
+    isHidden ? hiddenStubOffset(id, state.edges, "source", sourceHandleY, sourceY) : 0
+  );
+  const targetStack = useWorkflowStore((state) =>
+    isHidden ? hiddenStubOffset(id, state.edges, "target", targetHandleY, targetY) : 0
+  );
 
   // Narrow selector: returns boolean, only re-renders when selection relevance changes
   const isConnectedToSelection = useWorkflowStore((state) =>
@@ -289,8 +312,8 @@ export function EditableEdge({
     const stubLength = 8;
     const revealed = stubHovered || handleHovered || Boolean(selected);
     // Stub pills sit just past the handles; the ghost runs between their outer edges
-    const sourceStub = { x: sourceX + sourceDir * (stubLength + 4), y: sourceY + sourceStack * 22 };
-    const targetStub = { x: targetX + targetDir * (stubLength + 4), y: targetY + targetStack * 22 };
+    const sourceStub = { x: sourceX + sourceDir * (stubLength + 4), y: sourceY + sourceStack };
+    const targetStub = { x: targetX + targetDir * (stubLength + 4), y: targetY + targetStack };
     const [ghostPath] = getBezierPath({
       sourceX: sourceStub.x + sourceDir * stubWidths.source,
       sourceY: sourceStub.y,

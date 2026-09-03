@@ -88,19 +88,52 @@ export function parallelEdgePosition(edgeId: string, edges: WorkflowEdge[]): { i
  * Where a hidden edge's stub sits among the hidden edges sharing the same
  * handle, so their labels stack instead of overlapping. Creation order.
  */
-export function hiddenSiblingIndex(edgeId: string, edges: WorkflowEdge[], side: "source" | "target"): number {
+export const HIDDEN_STUB_SPACING = 22;
+
+/**
+ * Where each hidden stub on one side of a node should sit, so the pills never
+ * overlap. Stubs are ordered by their handle's y (then creation), and each one
+ * sits at its own handle unless the stub above it is too close, in which case
+ * it is pushed down. `handleY` gives the y of a handle on the node; return
+ * undefined when it is not known and the stub is assumed level with the caller.
+ */
+export function stackHiddenStubs(
+  edges: WorkflowEdge[],
+  nodeId: string,
+  side: "source" | "target",
+  handleY: (handleId: string | null) => number | undefined,
+  fallbackY = 0,
+  spacing = HIDDEN_STUB_SPACING,
+): Map<string, number> {
+  const handleOf = (e: WorkflowEdge) => (side === "source" ? e.sourceHandle : e.targetHandle) ?? null;
+  const nodeOf = (e: WorkflowEdge) => (side === "source" ? e.source : e.target);
+  const anchors = edges
+    .filter((e) => e.data?.hidden && nodeOf(e) === nodeId)
+    .map((e) => ({ id: e.id, y: handleY(handleOf(e)) ?? fallbackY, createdAt: e.data?.createdAt || 0 }))
+    .sort((a, b) => a.y - b.y || a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+  const placed = new Map<string, number>();
+  let floor = -Infinity;
+  for (const stub of anchors) {
+    const y = Math.max(stub.y, floor);
+    placed.set(stub.id, y);
+    floor = y + spacing;
+  }
+  return placed;
+}
+
+/** How far below its handle a hidden edge's stub sits on the given side. */
+export function hiddenStubOffset(
+  edgeId: string,
+  edges: WorkflowEdge[],
+  side: "source" | "target",
+  handleY: (handleId: string | null) => number | undefined,
+  ownY: number,
+): number {
   const edge = edges.find((e) => e.id === edgeId);
   if (!edge) return 0;
-  const siblings = edges
-    .filter((e) => e.data?.hidden && (side === "source"
-      ? e.source === edge.source && (e.sourceHandle ?? null) === (edge.sourceHandle ?? null)
-      : e.target === edge.target && (e.targetHandle ?? null) === (edge.targetHandle ?? null)))
-    .sort((a, b) => {
-      const timeA = a.data?.createdAt || 0;
-      const timeB = b.data?.createdAt || 0;
-      if (timeA !== timeB) return timeA - timeB;
-      return a.id.localeCompare(b.id);
-    });
-  const index = siblings.findIndex((e) => e.id === edgeId);
-  return index < 0 ? 0 : index;
+  const nodeId = side === "source" ? edge.source : edge.target;
+  const y = stackHiddenStubs(edges, nodeId, side, handleY, ownY).get(edgeId);
+  if (y === undefined) return 0;
+  const own = handleY((side === "source" ? edge.sourceHandle : edge.targetHandle) ?? null) ?? ownY;
+  return y - own;
 }
