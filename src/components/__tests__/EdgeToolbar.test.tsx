@@ -55,7 +55,6 @@ const createDefaultState = (overrides = {}) => ({
   setEdgeLabel: mockSetEdgeLabel,
   bundleEdges: mockBundleEdges,
   unbundleEdges: mockUnbundleEdges,
-  edgeAppearance: { bundling: "off" },
   ...overrides,
 });
 

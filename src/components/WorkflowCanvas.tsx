@@ -57,6 +57,7 @@ import {
 const GLBViewerNode = dynamic(() => import("./nodes/GLBViewerNode").then(mod => ({ default: mod.GLBViewerNode })), { ssr: false });
 import { EditableEdge, ReferenceEdge, SharedEdgeGradients } from "./edges";
 import { ConnectionDropMenu, MenuAction } from "./ConnectionDropMenu";
+import { HandleMenu, type HandleMenuTarget } from "./HandleMenu";
 import { NodeSearchMenu } from "./NodeSearchMenu";
 import { MultiSelectToolbar } from "./MultiSelectToolbar";
 import { GlobalImageHistory } from "./GlobalImageHistory";
@@ -157,6 +158,8 @@ const edgeTypes: EdgeTypes = {
 };
 
 const OVERVIEW_EDGES: Edge[] = [];
+/** Pointer travel (px) under which a handle press counts as a click, not a drag. */
+const HANDLE_CLICK_SLOP = 4;
 const MINIMAP_GEOMETRY = {
   width: 200,
   height: 150,
@@ -408,6 +411,7 @@ export function WorkflowCanvas() {
   >(null);
   const [llmFallbackState, setLlmFallbackState] = useState<{ nodeId: string } | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const handlePointerDownRef = useRef<{ x: number; y: number } | null>(null);
   const tutorialViewportSet = useRef(false);
 
   // FTUX tutorial state (client-side only to avoid SSR hydration issues)
@@ -938,6 +942,12 @@ export function WorkflowCanvas() {
   // Handle connection dropped on empty space or on a node
   const handleConnectEnd: OnConnectEnd = useCallback(
     (event, connectionState) => {
+      // A click on the handle (no drag) opens the handle menu instead
+      const down = handlePointerDownRef.current;
+      if (down && "clientX" in event && Math.hypot(event.clientX - down.x, event.clientY - down.y) <= HANDLE_CLICK_SLOP) {
+        return;
+      }
+
       // If connection was completed normally, nothing to do
       if (connectionState.isValid || !connectionState.fromNode) {
         return;
@@ -1980,6 +1990,40 @@ export function WorkflowCanvas() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
+  // A single click on a handle opens its menu; a drag still starts a
+  // connection. The pointer-down position tells the two apart.
+  const [handleMenu, setHandleMenu] = useState<HandleMenuTarget | null>(null);
+  const closeHandleMenu = useCallback(() => setHandleMenu(null), []);
+  useEffect(() => {
+    const wrapper = reactFlowWrapper.current;
+    if (!wrapper) return;
+    const handleOf = (target: EventTarget | null) =>
+      target instanceof Element ? target.closest<HTMLElement>(".react-flow__handle") : null;
+    const onDown = (event: PointerEvent) => {
+      handlePointerDownRef.current = handleOf(event.target) ? { x: event.clientX, y: event.clientY } : null;
+    };
+    const onClick = (event: MouseEvent) => {
+      const handle = handleOf(event.target);
+      const down = handlePointerDownRef.current;
+      if (!handle || !down) return;
+      if (Math.hypot(event.clientX - down.x, event.clientY - down.y) > HANDLE_CLICK_SLOP) return;
+      const nodeId = handle.dataset.nodeid;
+      if (!nodeId) return;
+      setHandleMenu({
+        nodeId,
+        handleId: handle.dataset.handleid ?? null,
+        type: handle.classList.contains("source") ? "source" : "target",
+        position: { x: event.clientX, y: event.clientY },
+      });
+    };
+    wrapper.addEventListener("pointerdown", onDown, true);
+    wrapper.addEventListener("click", onClick);
+    return () => {
+      wrapper.removeEventListener("pointerdown", onDown, true);
+      wrapper.removeEventListener("click", onClick);
+    };
+  }, []);
+
   // Which handle is under the pointer: hidden connections on it ghost back.
   // One delegated listener on the wrapper instead of a handler per handle.
   const setHoveredHandle = useWorkflowStore((state) => state.setHoveredHandle);
@@ -2354,6 +2398,7 @@ export function WorkflowCanvas() {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         isValidConnection={isValidConnection}
+        connectOnClick={false}
         elevateEdgesOnSelect
         fitView
         deleteKeyCode={isModalOpen ? null : ["Backspace", "Delete"]}
@@ -2596,6 +2641,9 @@ export function WorkflowCanvas() {
           onClose={handleCloseDropMenu}
         />
       )}
+
+      {/* Handle menu (single click on a handle) */}
+      {handleMenu && <HandleMenu target={handleMenu} onClose={closeHandleMenu} />}
 
       {/* Node search menu (double-click empty canvas) */}
       {nodeSearchMenu && (

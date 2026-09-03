@@ -86,7 +86,7 @@ export function EditableEdge({
   // split further out, until one of them is selected. Selected as a string
   // so the selector stays referentially stable.
   const bundleKey = useWorkflowStore((state) => {
-    const { source: sb, target: tb } = edgeBundles(id, state.edges, state.edgeAppearance.bundling);
+    const { source: sb, target: tb } = edgeBundles(id, state.edges);
     const pack = (m: BundleMembership | null) => (m ? `${m.index}|${m.count}|${m.manual ? 1 : 0}|${m.members.join(",")}` : "");
     return `${pack(sb)}\u0002${pack(tb)}`;
   });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { edgeBundles, bundleMembership, shareHandle } from "../bundles";
+import { edgeBundles, bundleMembership, shareHandle, edgesOnHandle } from "../bundles";
 import type { WorkflowEdge } from "@/types";
 
 // Fan-out from a's image handle by default; each edge lands on its own node
@@ -12,68 +12,56 @@ const edge = (id: string, overrides: Partial<WorkflowEdge> = {}): WorkflowEdge =
   data: { createdAt: Number(id.replace(/\D/g, "")) || 0 },
   ...overrides,
 });
+const bundled = (id: string, bundleId: string, overrides: Partial<WorkflowEdge> = {}) =>
+  edge(id, { ...overrides, data: { createdAt: Number(id.replace(/\D/g, "")) || 0, bundleId, ...(overrides.data ?? {}) } });
 
 describe("edgeBundles", () => {
-  const fanOut = [edge("e1"), edge("e2"), edge("e3")];
-
-  it("does not bundle when bundling is off and there is no manual bundle", () => {
-    expect(edgeBundles("e1", fanOut, "off")).toEqual({ source: null, target: null });
+  it("is empty for connections without a bundle id", () => {
+    expect(edgeBundles("e1", [edge("e1"), edge("e2"), edge("e3")])).toEqual({ source: null, target: null });
   });
 
   it("bundles a fan-out at the shared output handle", () => {
-    const { source, target } = edgeBundles("e2", fanOut, "auto");
-    expect(source).toMatchObject({ end: "source", index: 1, count: 3, manual: false, key: "source:a:image" });
+    const fanOut = [bundled("e1", "x"), bundled("e2", "x"), bundled("e3", "x")];
+    const { source, target } = edgeBundles("e2", fanOut);
+    expect(source).toMatchObject({ end: "source", index: 1, count: 3, manual: true, key: "source:x" });
     expect(target).toBeNull();
   });
 
   it("bundles a fan-in at the shared input handle", () => {
-    const fanIn = [edge("e1", { source: "x", target: "gen" }), edge("e2", { source: "y", target: "gen" })];
-    const { source, target } = edgeBundles("e1", fanIn, "on");
+    const fanIn = [bundled("e1", "in", { source: "x", target: "gen" }), bundled("e2", "in", { source: "y", target: "gen" })];
+    const { source, target } = edgeBundles("e1", fanIn);
     expect(source).toBeNull();
-    expect(target).toMatchObject({ end: "target", index: 0, count: 2, key: "target:gen:image" });
-  });
-
-  it("needs two connections when on and three when auto", () => {
-    const two = fanOut.slice(0, 2);
-    expect(edgeBundles("e1", two, "on").source?.count).toBe(2);
-    expect(edgeBundles("e1", two, "auto").source).toBeNull();
+    expect(target).toMatchObject({ end: "target", index: 0, count: 2, key: "target:in" });
   });
 
   it("orders members by creation and reports the index", () => {
-    const m = edgeBundles("e3", fanOut, "on").source;
+    const m = edgeBundles("e3", [bundled("e3", "x"), bundled("e1", "x"), bundled("e2", "x")]).source;
     expect(m?.members).toEqual(["e1", "e2", "e3"]);
     expect(m?.index).toBe(2);
   });
 
-  it("treats different handles on one node as different bundles", () => {
-    const edges = [edge("e1"), edge("e2"), edge("e3", { sourceHandle: "text" })];
-    expect(edgeBundles("e1", edges, "on").source?.count).toBe(2);
-    expect(edgeBundles("e3", edges, "on").source).toBeNull();
+  it("only groups members that actually share the handle", () => {
+    const edges = [bundled("e1", "x"), bundled("e2", "x"), bundled("e3", "x", { sourceHandle: "text" })];
+    expect(edgeBundles("e1", edges).source?.count).toBe(2);
+    expect(edgeBundles("e3", edges).source).toBeNull();
   });
 
   it("keeps hidden and reference edges out", () => {
-    const edges = [edge("e1"), edge("e2", { data: { hidden: true } }), edge("e3", { type: "reference" })];
-    expect(edgeBundles("e1", edges, "on").source).toBeNull();
-    expect(edgeBundles("e2", edges, "on").source).toBeNull();
+    const edges = [bundled("e1", "x"), bundled("e2", "x", { data: { hidden: true } }), bundled("e3", "x", { type: "reference" })];
+    expect(edgeBundles("e1", edges).source).toBeNull();
+    expect(edgeBundles("e2", edges).source).toBeNull();
   });
 
-  it("honours manual bundles regardless of the setting", () => {
-    const edges = [edge("e1", { data: { bundleId: "x", createdAt: 1 } }), edge("e2", { data: { bundleId: "x", createdAt: 2 } }), edge("e3")];
-    expect(edgeBundles("e2", edges, "off").source).toMatchObject({ key: "source:x", index: 1, count: 2, manual: true });
-    expect(edgeBundles("e3", edges, "on").source).toBeNull();
-  });
-
-  it("drops a manual bundle with a single remaining member", () => {
-    const edges = [edge("e1", { data: { bundleId: "x" } }), edge("e2")];
-    expect(edgeBundles("e1", edges, "off").source).toBeNull();
+  it("drops a bundle with a single remaining member", () => {
+    expect(edgeBundles("e1", [bundled("e1", "x"), edge("e2")]).source).toBeNull();
   });
 });
 
 describe("bundleMembership", () => {
   it("prefers the source end for the toolbar", () => {
-    const edges = [edge("e1", { target: "gen" }), edge("e2", { target: "gen" }), edge("e3", { source: "b", target: "gen" })];
-    expect(bundleMembership("e1", edges, "on")?.end).toBe("source");
-    expect(bundleMembership("e3", edges, "on")?.end).toBe("target");
+    const edges = [bundled("e1", "x", { target: "gen" }), bundled("e2", "x", { target: "gen" }), bundled("e3", "y", { source: "b", target: "gen" })];
+    expect(bundleMembership("e1", edges)?.end).toBe("source");
+    expect(bundleMembership("e3", [...edges, bundled("e4", "y", { source: "c", target: "gen" })])?.end).toBe("target");
   });
 });
 
@@ -83,5 +71,19 @@ describe("shareHandle", () => {
     expect(shareHandle([edge("e1", { source: "x", target: "gen" }), edge("e2", { source: "y", target: "gen" })])).toBe(true);
     expect(shareHandle([edge("e1"), edge("e2", { sourceHandle: "text" })])).toBe(false);
     expect(shareHandle([edge("e1")])).toBe(false);
+  });
+});
+
+describe("edgesOnHandle", () => {
+  const edges = [edge("e2"), edge("e1"), edge("e3", { sourceHandle: "text" }), edge("e4", { source: "b" })];
+
+  it("lists the connections on one output handle in creation order", () => {
+    expect(edgesOnHandle(edges, "a", "source", "image").map((e) => e.id)).toEqual(["e1", "e2"]);
+    expect(edgesOnHandle(edges, "a", "source", "text").map((e) => e.id)).toEqual(["e3"]);
+  });
+
+  it("lists the connections on one input handle", () => {
+    expect(edgesOnHandle(edges, "t-e1", "target", "image").map((e) => e.id)).toEqual(["e1"]);
+    expect(edgesOnHandle(edges, "nope", "target", "image")).toEqual([]);
   });
 });

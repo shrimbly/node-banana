@@ -65,7 +65,7 @@ const createDefaultState = (overrides = {}) => ({
   edges: [],
   setEdgesHidden: mockSetEdgesHidden,
   setBundleClamp: mockSetBundleClamp,
-  edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const, bundling: "off" as const },
+  edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const },
   nodes: [],
   ...overrides,
 });
@@ -391,7 +391,7 @@ describe("EditableEdge", () => {
 });
 
 describe("EditableEdge appearance settings", () => {
-  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const, bundling: "off" as const };
+  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const };
   const withState = (overrides: Record<string, unknown>) => {
     mockUseWorkflowStore.mockImplementation((selector) =>
       selector(createDefaultState({ edgeAppearance: baseAppearance, ...overrides }))
@@ -456,7 +456,7 @@ describe("EditableEdge appearance settings", () => {
 });
 
 describe("EditableEdge toolbar and highlight", () => {
-  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const, bundling: "off" as const };
+  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const };
   const stateWith = (overrides: Record<string, unknown>) =>
     mockUseWorkflowStore.mockImplementation((selector) =>
       selector(createDefaultState({ edgeAppearance: baseAppearance, ...overrides }))
@@ -514,7 +514,7 @@ describe("EditableEdge toolbar and highlight", () => {
 });
 
 describe("EditableEdge when hidden", () => {
-  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const, bundling: "off" as const };
+  const baseAppearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const };
   const hiddenEdge = { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { hidden: true } };
   const renderHidden = (edges: unknown[] = [hiddenEdge]) => {
     mockUseWorkflowStore.mockImplementation((selector) =>
@@ -622,7 +622,7 @@ describe("EditableEdge when hidden", () => {
 
 describe("EditableEdge labels", () => {
   const appearance = (labels: "always" | "hover" | "never") => ({
-    thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels, bundling: "off" as const,
+    thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels,
   });
   const visibleEdge = (data: Record<string, unknown> = {}) => ({
     id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data,
@@ -687,11 +687,11 @@ describe("EditableEdge labels", () => {
 });
 
 describe("EditableEdge bundles", () => {
-  const appearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "never" as const, bundling: "on" as const };
-  // A fan-out: node-1's image output feeds node-2 and node-3
+  const appearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "never" as const };
+  // A fan-out bundled by hand: node-1's image output feeds node-2 and node-3
   const fanOut = (selected = false) => [
-    { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 1 }, selected },
-    { id: "edge-2", source: "node-1", sourceHandle: "image", target: "node-3", targetHandle: "image", data: { createdAt: 2 } },
+    { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 1, bundleId: "b" }, selected },
+    { id: "edge-2", source: "node-1", sourceHandle: "image", target: "node-3", targetHandle: "image", data: { createdAt: 2, bundleId: "b" } },
   ];
   const renderMember = (edges: unknown[], props = {}) => {
     mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ edgeAppearance: appearance, edges })));
@@ -726,8 +726,8 @@ describe("EditableEdge bundles", () => {
 
   it("bundles a fan-in at the target handle", () => {
     const fanIn = [
-      { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 1 } },
-      { id: "edge-9", source: "node-9", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 2 } },
+      { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 1, bundleId: "in" } },
+      { id: "edge-9", source: "node-9", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 2, bundleId: "in" } },
     ];
     const { container } = renderMember(fanIn);
     // Target handle at x=300, stem reaching back 56px: the noodle ends at 244
@@ -799,9 +799,9 @@ describe("EditableEdge bundles", () => {
     expect(onEdgeClick).not.toHaveBeenCalled();
   });
 
-  it("does not bundle when the setting is off", () => {
+  it("does not bundle connections that carry no bundle id", () => {
     mockUseWorkflowStore.mockImplementation((selector) =>
-      selector(createDefaultState({ edgeAppearance: { ...appearance, bundling: "off" }, edges: fanOut() }))
+      selector(createDefaultState({ edgeAppearance: appearance, edges: fanOut().map((e) => ({ ...e, data: { createdAt: e.data.createdAt } })) }))
     );
     const { container } = render(
       <TestWrapper>

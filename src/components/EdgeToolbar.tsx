@@ -41,7 +41,6 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
   const setEdgeLabel = useWorkflowStore((state) => state.setEdgeLabel);
   const bundleEdges = useWorkflowStore((state) => state.bundleEdges);
   const unbundleEdges = useWorkflowStore((state) => state.unbundleEdges);
-  const bundlingMode = useWorkflowStore((state) => state.edgeAppearance.bundling);
   const { zoom } = useViewport();
 
   const edgeLabel = useWorkflowStore((state) => state.edges.find((e) => e.id === edgeId)?.data?.label ?? "");
@@ -49,7 +48,7 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
   useEffect(() => setDraftLabel(edgeLabel), [edgeLabel, edgeId]);
 
   const selectedEdges = useMemo(() => edges.filter((e) => e.selected), [edges]);
-  const bundle = useMemo(() => bundleMembership(edgeId, edges, bundlingMode), [edgeId, edges, bundlingMode]);
+  const bundle = useMemo(() => bundleMembership(edgeId, edges), [edgeId, edges]);
   const edge = edges.find((e) => e.id === edgeId);
   if (!edge) return null;
 

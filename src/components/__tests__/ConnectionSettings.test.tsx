@@ -43,12 +43,6 @@ describe("ConnectionSettings", () => {
     expect(props.onAppearanceChange).toHaveBeenCalledWith({ ...defaultEdgeAppearance, labels: "never" });
   });
 
-  it("reports a bundling mode change", () => {
-    const props = renderSettings();
-    fireEvent.click(screen.getByRole("radio", { name: "Auto" }));
-    expect(props.onAppearanceChange).toHaveBeenCalledWith({ ...defaultEdgeAppearance, bundling: "auto" });
-  });
-
   it("reports the faded opacity as a fraction", () => {
     const props = renderSettings();
     fireEvent.change(screen.getByLabelText("Faded connections opacity"), { target: { value: "60" } });
