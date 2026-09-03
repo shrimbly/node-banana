@@ -685,9 +685,10 @@ describe("EditableEdge labels", () => {
 
 describe("EditableEdge bundles", () => {
   const appearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "never" as const, bundling: "on" as const };
-  const pair = (selected = false) => [
-    { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image-0", data: { createdAt: 1 }, selected },
-    { id: "edge-2", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image-1", data: { createdAt: 2 } },
+  // A fan-out: node-1's image output feeds node-2 and node-3
+  const fanOut = (selected = false) => [
+    { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 1 }, selected },
+    { id: "edge-2", source: "node-1", sourceHandle: "image", target: "node-3", targetHandle: "image", data: { createdAt: 2 } },
   ];
   const renderMember = (edges: unknown[], props = {}) => {
     mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ edgeAppearance: appearance, edges })));
@@ -702,37 +703,52 @@ describe("EditableEdge bundles", () => {
     vi.clearAllMocks();
   });
 
-  it("draws the trunk and the count from the first member", () => {
-    const { container } = renderMember(pair());
-    expect(container.querySelector('[data-testid="edge-bundle-trunk"]')).not.toBeNull();
+  it("draws the stem and the count from the first member, and starts its own line past the stem", () => {
+    const { container } = renderMember(fanOut());
+    expect(container.querySelector('[data-testid="edge-bundle-stem"]')).not.toBeNull();
     expect(screen.getByTestId("edge-bundle-count")).toHaveTextContent("2");
-    // Trunk is thicker than a single noodle
-    const style = container.querySelector(".react-flow__edge-path")?.getAttribute("style") ?? "";
-    expect(style).toContain("stroke-width: 4.5");
+    // The source handle is at x=100 and the stem reaches 56px, so the noodle starts at 156
+    const d = container.querySelector("#edge-1")?.getAttribute("d") ?? "";
+    expect(d.startsWith("M156")).toBe(true);
+    // The stem is thicker than a single noodle
+    expect(container.querySelector('[data-testid="edge-bundle-stem"]')).toHaveAttribute("stroke-width", "4.5");
   });
 
-  it("draws only the fan segments from the other members", () => {
-    const { container } = renderMember(pair(), { id: "edge-2", targetHandleId: "image-1" });
-    expect(container.querySelector('[data-testid="edge-bundle-member"]')).not.toBeNull();
-    expect(container.querySelector('[data-testid="edge-bundle-trunk"]')).toBeNull();
+  it("starts the other members past the stem without drawing it again", () => {
+    const { container } = renderMember(fanOut(), { id: "edge-2", target: "node-3" });
+    expect(container.querySelector('[data-testid="edge-bundle-stem"]')).toBeNull();
     expect(screen.queryByTestId("edge-bundle-count")).toBeNull();
+    expect((container.querySelector("#edge-2")?.getAttribute("d") ?? "").startsWith("M156")).toBe(true);
+  });
+
+  it("bundles a fan-in at the target handle", () => {
+    const fanIn = [
+      { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 1 } },
+      { id: "edge-9", source: "node-9", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 2 } },
+    ];
+    const { container } = renderMember(fanIn);
+    // Target handle at x=300, stem reaching back 56px: the noodle ends at 244
+    const d = container.querySelector("#edge-1")?.getAttribute("d") ?? "";
+    expect(d.startsWith("M100")).toBe(true);
+    expect(d.endsWith("244 50") || d.endsWith("244,50")).toBe(true);
+    expect(container.querySelector('[data-testid="edge-bundle-stem"]')).not.toBeNull();
   });
 
   it("expands into ordinary noodles when a member is selected", () => {
-    const { container } = renderMember(pair(true), { selected: true });
-    expect(container.querySelector('[data-testid="edge-bundle-trunk"]')).toBeNull();
-    expect(container.querySelector('[data-testid="edge-hover-area"]')).not.toBeNull();
+    const { container } = renderMember(fanOut(true), { selected: true });
+    expect(container.querySelector('[data-testid="edge-bundle-stem"]')).toBeNull();
+    expect((container.querySelector("#edge-1")?.getAttribute("d") ?? "").startsWith("M100")).toBe(true);
   });
 
   it("does not bundle when the setting is off", () => {
     mockUseWorkflowStore.mockImplementation((selector) =>
-      selector(createDefaultState({ edgeAppearance: { ...appearance, bundling: "off" }, edges: pair() }))
+      selector(createDefaultState({ edgeAppearance: { ...appearance, bundling: "off" }, edges: fanOut() }))
     );
     const { container } = render(
       <TestWrapper>
         <EditableEdge {...createDefaultProps()} />
       </TestWrapper>
     );
-    expect(container.querySelector('[data-testid="edge-bundle-member"]')).toBeNull();
+    expect(container.querySelector('[data-testid="edge-bundle-stem"]')).toBeNull();
   });
 });

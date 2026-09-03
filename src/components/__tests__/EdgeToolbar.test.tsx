@@ -210,15 +210,15 @@ describe("EdgeToolbar bundles", () => {
     mockZoom = 1;
   });
 
-  it("offers to bundle a multi-selection between the same nodes", () => {
-    withEdges([edge("e1", { selected: true }), edge("e2", { selected: true, targetHandle: "image-1" })]);
+  it("offers to bundle a multi-selection leaving one handle", () => {
+    withEdges([edge("e1", { selected: true }), edge("e2", { selected: true, target: "z" })]);
     render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
     fireEvent.click(screen.getByTitle("Bundle 2 connections"));
     expect(mockBundleEdges).toHaveBeenCalledWith(["e1", "e2"]);
   });
 
-  it("does not offer to bundle edges between different nodes", () => {
-    withEdges([edge("e1", { selected: true }), edge("e2", { selected: true, target: "z" })]);
+  it("does not offer to bundle edges on different handles", () => {
+    withEdges([edge("e1", { selected: true }), edge("e2", { selected: true, sourceHandle: "text", target: "z", targetHandle: "text" })]);
     render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
     expect(screen.queryByTitle(/^Bundle/)).toBeNull();
   });
@@ -226,7 +226,7 @@ describe("EdgeToolbar bundles", () => {
   it("acts on the whole manual bundle from one selected member and offers to unbundle", () => {
     withEdges([
       edge("e1", { selected: true, data: { bundleId: "x", createdAt: 1 } }),
-      edge("e2", { targetHandle: "image-1", data: { bundleId: "x", createdAt: 2 } }),
+      edge("e2", { target: "z", data: { bundleId: "x", createdAt: 2 } }),
     ]);
     render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
     expect(screen.getByText("2 connections")).toBeInTheDocument();

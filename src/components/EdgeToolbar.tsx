@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { EdgeLabelRenderer, useViewport } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { getImageSequenceNumber } from "@/lib/edges/labels";
-import { bundleMembership, shareNodePair } from "@/lib/edges/bundles";
+import { bundleMembership, shareHandle } from "@/lib/edges/bundles";
 
 export { getImageSequenceNumber };
 
@@ -64,7 +64,7 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
   const loopCount = edge.data?.loopCount ?? 3;
   const allPaused = groupEdges.every((e) => e.data?.hasPause);
   const hasPause = grouped ? allPaused : Boolean(edge.data?.hasPause);
-  const canBundle = multi && !bundle?.manual && shareNodePair(selectedEdges) && selectedEdges.every((e) => !e.data?.hidden && e.type !== "reference");
+  const canBundle = multi && !bundle?.manual && shareHandle(selectedEdges) && selectedEdges.every((e) => !e.data?.hidden && e.type !== "reference");
   const canUnbundle = Boolean(bundle?.manual) && (bundled || multi);
   const isHiddenEdge = Boolean(edge.data?.hidden);
 

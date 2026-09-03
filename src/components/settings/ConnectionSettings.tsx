@@ -231,9 +231,9 @@ export function ConnectionSettings({
             />
           </SettingRow>
 
-          <SettingRow label="Bundle parallel connections" hint="On bundles two or more between the same nodes, Auto three or more">
+          <SettingRow label="Bundle connections" hint="Noodles sharing a handle leave it as one stem. On: two or more, Auto: three or more">
             <Segmented
-              label="Bundle parallel connections"
+              label="Bundle connections"
               options={BUNDLING_MODES}
               value={appearance.bundling}
               onChange={(bundling) => update({ bundling })}

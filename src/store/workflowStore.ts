@@ -53,7 +53,7 @@ import {
   getEdgeDefaults,
 } from "./utils/localStorage";
 import { normalizeEdgeAppearance } from "@/lib/edges/appearance";
-import { shareNodePair } from "@/lib/edges/bundles";
+import { shareHandle } from "@/lib/edges/bundles";
 import {
   createDefaultNodeData,
   defaultNodeDimensions,
@@ -304,7 +304,7 @@ interface WorkflowStore {
   setAllEdgesHidden: (hidden: boolean) => void;
   /** Set an edge's own label; blank clears it so the automatic label shows. */
   setEdgeLabel: (edgeId: string, label: string) => void;
-  /** Bundle edges that run between the same two nodes. Returns false otherwise. */
+  /** Bundle edges that share an output handle or an input handle. Returns false otherwise. */
   bundleEdges: (edgeIds: string[]) => boolean;
   /** Dissolve the manual bundles the given edges belong to. */
   unbundleEdges: (edgeIds: string[]) => void;
@@ -1212,7 +1212,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   bundleEdges: (edgeIds: string[]) => {
     const ids = new Set(edgeIds);
     const members = get().edges.filter((e) => ids.has(e.id) && !e.data?.hidden && e.type !== "reference");
-    if (members.length < 2 || !shareNodePair(members)) return false;
+    if (!shareHandle(members)) return false;
     const bundleId = `bundle-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     pushUndoCheckpoint(get, set);
     set((state) => ({

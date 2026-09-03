@@ -62,12 +62,18 @@ save; they just leave selection and hit-testing.
 
 ### 5. Noodle grouping and bundling — done
 
-Parallel connections read as one. Visual only: execution is unchanged and
-the Router node stays for execution-time fan-out.
+The noodles sharing one handle read as one. A fan-out is one output feeding
+several nodes; a fan-in is several outputs arriving at one input handle. They
+leave (or reach) the handle as a short shared stem with a count and split
+further out into the individual noodles. Visual only: execution is unchanged
+and the Router node stays for execution-time fan-out.
 
-- [x] Automatic bundling of edges between the same two nodes: off (default), on (two or more), auto (three or more)
-- [x] Manual bundles from a same-pair multi-selection, stored as `bundleId`; Unbundle dissolves them
-- [x] Bundle draws as one trunk fanning out at the handles with a count badge; expands when a member is selected. Decision: no hover expansion, since members cannot share hover state without extra store traffic and selection already expands it
+Correction (2026-09-03): the first cut bundled "parallel connections between
+the same two nodes", which is not a real case; rebuilt around a shared handle.
+
+- [x] Automatic bundling of the edges sharing an output or input handle: off (default), on (two or more), auto (three or more). An edge can be bundled at both ends
+- [x] Manual bundles from a multi-selection that shares a handle, stored as `bundleId`; Unbundle dissolves them
+- [x] The first member draws a short shared stem at the handle with a count badge; every member starts (or ends) past the stem. Expands when a member is selected. Decision: no hover expansion, since members cannot share hover state without extra store traffic and selection already expands it
 - [x] Toolbar acts on the whole bundle: pause, hide, delete. No label or colour on bundles (colours are not user-changeable; a bundle label would hide the members' own)
 - [x] Bundle vs Router: a bundle is drawing only and keeps every connection as it is; a Router node is a real hub that fans one input out to many nodes at execution time. Use a bundle to tidy parallel wires, a Router to share one source
 

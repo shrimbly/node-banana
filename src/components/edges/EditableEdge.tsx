@@ -9,7 +9,6 @@ import {
   getSmoothStepPath,
   getBezierPath,
   getStraightPath,
-  useInternalNode,
   useReactFlow,
 } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -21,7 +20,7 @@ import { EdgeToolbar, useIsToolbarEdge } from "@/components/EdgeToolbar";
 import { HiddenEdgeStub } from "./HiddenEdgeStub";
 import { edgeDisplayLabelById, hiddenSiblingIndex, parallelEdgePosition } from "@/lib/edges/labels";
 import { EdgeLabel } from "./EdgeLabel";
-import { bundleMembership } from "@/lib/edges/bundles";
+import { edgeBundles, type BundleMembership } from "@/lib/edges/bundles";
 
 interface EdgeData extends WorkflowEdgeData {
   offsetX?: number;
@@ -83,55 +82,35 @@ export function EditableEdge({
     return count > 1 ? index - (count - 1) / 2 : 0;
   });
 
-  // Bundles: parallel connections drawn as one trunk until one of them is
-  // selected. Selected as a string so the selector stays referentially stable.
+  // Bundles: the noodles sharing a handle leave it as one short stem and
+  // split further out, until one of them is selected. Selected as a string
+  // so the selector stays referentially stable.
   const bundleKey = useWorkflowStore((state) => {
-    const m = bundleMembership(id, state.edges, state.edgeAppearance.bundling);
-    if (!m) return "";
-    const members = m.members.map((mid) => {
-      const e = state.edges.find((x) => x.id === mid);
-      return `${mid}\u0001${e?.sourceHandle ?? ""}\u0001${e?.targetHandle ?? ""}`;
-    });
-    return `${m.index}|${m.count}|${m.manual ? 1 : 0}|${members.join("\u0002")}`;
+    const { source: sb, target: tb } = edgeBundles(id, state.edges, state.edgeAppearance.bundling);
+    const pack = (m: BundleMembership | null) => (m ? `${m.index}|${m.count}|${m.manual ? 1 : 0}|${m.members.join(",")}` : "");
+    return `${pack(sb)}\u0002${pack(tb)}`;
   });
-  const bundle = useMemo(() => {
-    if (!bundleKey) return null;
-    const [index, count, manual, memberList] = bundleKey.split("|");
-    const members = memberList.split("\u0002").map((entry) => {
-      const [mid, sourceHandle, targetHandle] = entry.split("\u0001");
-      return { id: mid, sourceHandle, targetHandle };
-    });
-    return { index: Number(index), count: Number(count), manual: manual === "1", members };
+  const bundles = useMemo(() => {
+    const unpack = (packed: string, end: "source" | "target"): BundleMembership | null => {
+      if (!packed) return null;
+      const [index, count, manual, members] = packed.split("|");
+      return { end, key: "", index: Number(index), count: Number(count), manual: manual === "1", members: members.split(",") };
+    };
+    const [sb, tb] = bundleKey.split("\u0002");
+    return { source: unpack(sb, "source"), target: unpack(tb, "target") };
   }, [bundleKey]);
-  const bundleExpanded = useWorkflowStore((state) =>
-    bundle ? state.edges.some((e) => e.selected && bundle.members.some((m) => m.id === e.id)) : false
-  );
-  const sourceNode = useInternalNode(source);
-  const targetNode = useInternalNode(target);
-  const bundleGeometry = useMemo(() => {
-    if (!bundle) return null;
-    const handleCenter = (node: typeof sourceNode, type: "source" | "target", handleId: string) => {
-      const bounds = node?.internals?.handleBounds?.[type];
-      const h = bounds?.find((b) => (b.id ?? "") === handleId) ?? bounds?.[0];
-      if (!node || !h) return null;
-      return {
-        x: node.internals.positionAbsolute.x + h.x + (h.width ?? 0) / 2,
-        y: node.internals.positionAbsolute.y + h.y + (h.height ?? 0) / 2,
-      };
-    };
-    const mean = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length;
-    const sourceYs = bundle.members.map((m) => handleCenter(sourceNode, "source", m.sourceHandle)?.y ?? sourceY);
-    const targetYs = bundle.members.map((m) => handleCenter(targetNode, "target", m.targetHandle)?.y ?? targetY);
-    const sDir: 1 | -1 = sourcePosition === "left" ? -1 : 1;
-    const tDir: 1 | -1 = targetPosition === "right" ? 1 : -1;
-    const reach = 48;
-    return {
-      merge: { x: sourceX + sDir * reach, y: mean(sourceYs) },
-      split: { x: targetX + tDir * reach, y: mean(targetYs) },
-      sDir,
-      tDir,
-    };
-  }, [bundle, sourceNode, targetNode, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition]);
+  const bundleExpanded = useWorkflowStore((state) => {
+    const members = [...(bundles.source?.members ?? []), ...(bundles.target?.members ?? [])];
+    return members.length > 0 && state.edges.some((e) => e.selected && members.includes(e.id));
+  });
+  const sourceBundle = bundleExpanded ? null : bundles.source;
+  const targetBundle = bundleExpanded ? null : bundles.target;
+  const stemReach = 56;
+  const sDir: 1 | -1 = sourcePosition === "left" ? -1 : 1;
+  const tDir: 1 | -1 = targetPosition === "right" ? 1 : -1;
+  // Where this noodle starts and ends: the stem's far end when bundled
+  const startX = sourceBundle ? sourceX + sDir * stemReach : sourceX;
+  const endX = targetBundle ? targetX + tDir * stemReach : targetX;
   const sourceStack = useWorkflowStore((state) => (isHidden ? hiddenSiblingIndex(id, state.edges, "source") : 0));
   const targetStack = useWorkflowStore((state) => (isHidden ? hiddenSiblingIndex(id, state.edges, "target") : 0));
 
@@ -194,32 +173,32 @@ export function EditableEdge({
     }
 
     if (edgeStyle === "straight") {
-      return getStraightPath({ sourceX, sourceY, targetX, targetY });
+      return getStraightPath({ sourceX: startX, sourceY, targetX: endX, targetY });
     }
 
     if (edgeStyle === "curved") {
       return getBezierPath({
-        sourceX,
+        sourceX: startX,
         sourceY,
         sourcePosition,
-        targetX,
+        targetX: endX,
         targetY,
         targetPosition,
         curvature: 0.25,
       });
     } else {
       return getSmoothStepPath({
-        sourceX,
+        sourceX: startX,
         sourceY,
         sourcePosition,
-        targetX,
+        targetX: endX,
         targetY,
         targetPosition,
         borderRadius: 8,
         offset: offsetX,
       });
     }
-  }, [edgeStyle, edgeData?.isLoop, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, offsetX]);
+  }, [edgeStyle, edgeData?.isLoop, startX, endX, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, offsetX]);
 
   // Calculate handle positions on the path segments (only for angular mode)
   const handlePositions = useMemo(() => {
@@ -300,74 +279,6 @@ export function EditableEdge({
     labelMode === "always" || (labelMode === "hover" && (hovered || Boolean(selected) || isConnectedToSelection));
   const labelText = hasOwnLabel || autoVisible ? displayLabel : "";
   const showLabel = Boolean(labelText) || Boolean(edgeData?.isLoop);
-
-  if (bundle && bundleGeometry && !bundleExpanded) {
-    const { merge, split, sDir, tDir } = bundleGeometry;
-    const bend = 24;
-    const fanIn = `M${sourceX},${sourceY} C${sourceX + sDir * bend},${sourceY} ${merge.x - sDir * bend},${merge.y} ${merge.x},${merge.y}`;
-    const fanOut = `M${split.x},${split.y} C${split.x - tDir * bend},${split.y} ${targetX + tDir * bend},${targetY} ${targetX},${targetY}`;
-    const fanOpacity = isConnectedToSelection ? 0.9 : Math.min(1, appearance.fadedOpacity * 2);
-    const trunkWidth = strokeWidth * (1 + Math.min(bundle.count - 1, 4) * 0.5);
-    const trunkArgs = {
-      sourceX: merge.x, sourceY: merge.y, sourcePosition,
-      targetX: split.x, targetY: split.y, targetPosition,
-    };
-    const [trunkPath, trunkX, trunkY] =
-      edgeStyle === "straight"
-        ? getStraightPath(trunkArgs)
-        : edgeStyle === "angular"
-          ? getSmoothStepPath({ ...trunkArgs, borderRadius: 8 })
-          : getBezierPath({ ...trunkArgs, curvature: 0.25 });
-    return (
-      <g data-testid="edge-bundle-member">
-        <path d={fanIn} fill="none" stroke={edgeColor} strokeWidth={strokeWidth} strokeOpacity={fanOpacity} strokeLinecap="round" />
-        <path d={fanOut} fill="none" stroke={edgeColor} strokeWidth={strokeWidth} strokeOpacity={fanOpacity} strokeLinecap="round" />
-        {bundle.index === 0 && (
-          <>
-            <BaseEdge
-              id={id}
-              path={trunkPath}
-              markerEnd={markerEnd}
-              style={{
-                ...style,
-                stroke,
-                strokeOpacity,
-                strokeWidth: trunkWidth,
-                strokeLinecap: "round",
-                strokeLinejoin: "round",
-                "--edge-stroke-active": activeStroke,
-              } as React.CSSProperties}
-            />
-            <path
-              d={trunkPath}
-              fill="none"
-              strokeWidth={trunkWidth + 12}
-              stroke="transparent"
-              className="react-flow__edge-interaction"
-              data-testid="edge-bundle-trunk"
-            />
-            <EdgeLabelRenderer>
-              <div
-                data-testid="edge-bundle-count"
-                className="inline-flex items-center gap-1 h-5 pl-1.5 pr-2 rounded-full bg-neutral-800/95 border text-[10px] font-semibold text-neutral-100 whitespace-nowrap"
-                style={{
-                  position: "absolute",
-                  transform: `translate(${trunkX}px, ${trunkY}px) translate(-50%, -50%)`,
-                  pointerEvents: "none",
-                  borderColor: `${edgeColor}b3`,
-                }}
-              >
-                <svg className="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none" stroke={edgeColor} strokeWidth={1.4} strokeLinecap="round">
-                  <path d="M1.5 3.5h3.5c2 0 2 3.5 4 3.5h3.5M1.5 7H5M1.5 10.5h3.5c2 0 2-3.5 4-3.5" />
-                </svg>
-                <span>{bundle.count}</span>
-              </div>
-            </EdgeLabelRenderer>
-          </>
-        )}
-      </g>
-    );
-  }
 
   if (isHidden) {
     const sourceDir: 1 | -1 = sourcePosition === "left" ? -1 : 1;
@@ -456,6 +367,14 @@ export function EditableEdge({
       />
 
       {selected && carriesToolbar && <EdgeToolbar edgeId={id} x={labelX} y={labelY} />}
+
+      {/* Bundle stems: the first member of each bundle draws the shared stem and its count */}
+      {sourceBundle?.index === 0 && (
+        <BundleStem x={sourceX} y={sourceY} dir={sDir} reach={stemReach} count={sourceBundle.count} stroke={stroke} strokeOpacity={strokeOpacity} width={strokeWidth} color={edgeColor} activeStroke={activeStroke} />
+      )}
+      {targetBundle?.index === 0 && (
+        <BundleStem x={targetX} y={targetY} dir={tDir} reach={stemReach} count={targetBundle.count} stroke={stroke} strokeOpacity={strokeOpacity} width={strokeWidth} color={edgeColor} activeStroke={activeStroke} />
+      )}
 
       {/* Animated pulse overlay when target is loading */}
       {showPulse && (
@@ -551,5 +470,59 @@ export function EditableEdge({
           </g>
         ))}
     </g>
+  );
+}
+
+interface BundleStemProps {
+  /** The shared handle, in flow coordinates. */
+  x: number;
+  y: number;
+  /** Which way the stem leaves the handle: +1 right, -1 left. */
+  dir: 1 | -1;
+  reach: number;
+  count: number;
+  stroke: string;
+  strokeOpacity: number;
+  width: number;
+  color: string;
+  activeStroke: string;
+}
+
+/** The short shared stem at a bundled handle, with the connection count on it. */
+function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, color, activeStroke }: BundleStemProps) {
+  const stemWidth = width * (1 + Math.min(count - 1, 4) * 0.5);
+  const path = `M${x},${y} L${x + dir * reach},${y}`;
+  return (
+    <>
+      <path
+        d={path}
+        fill="none"
+        stroke={stroke}
+        strokeOpacity={strokeOpacity}
+        strokeWidth={stemWidth}
+        strokeLinecap="round"
+        className="react-flow__edge-path"
+        style={{ "--edge-stroke-active": activeStroke } as React.CSSProperties}
+        data-testid="edge-bundle-stem"
+      />
+      <path d={path} fill="none" strokeWidth={stemWidth + 12} stroke="transparent" className="react-flow__edge-interaction" />
+      <EdgeLabelRenderer>
+        <div
+          data-testid="edge-bundle-count"
+          className="inline-flex items-center gap-1 h-5 pl-1.5 pr-2 rounded-full bg-neutral-800/95 border text-[10px] font-semibold text-neutral-100 whitespace-nowrap"
+          style={{
+            position: "absolute",
+            transform: `translate(${x + dir * (reach / 2)}px, ${y}px) translate(-50%, -50%)`,
+            pointerEvents: "none",
+            borderColor: `${color}b3`,
+          }}
+        >
+          <svg className="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none" stroke={color} strokeWidth={1.4} strokeLinecap="round">
+            <path d="M1.5 3.5h3.5c2 0 2 3.5 4 3.5h3.5M1.5 7H5M1.5 10.5h3.5c2 0 2-3.5 4-3.5" />
+          </svg>
+          <span>{count}</span>
+        </div>
+      </EdgeLabelRenderer>
+    </>
   );
 }
