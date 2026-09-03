@@ -11,6 +11,7 @@ import {
   getStraightPath,
   useReactFlow,
   useInternalNode,
+  useConnection,
 } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { NanoBananaNodeData, WorkflowEdgeData } from "@/types";
@@ -67,6 +68,8 @@ export function EditableEdge({
 
   // Hidden connections: labelled stubs at the handles; hover ghosts the line back
   const isHidden = Boolean((data as EdgeData | undefined)?.hidden);
+  // While a noodle is being dragged the handle labels take the stubs' place
+  const isConnecting = useConnection((c) => c.inProgress);
   const [stubHovered, setStubHovered] = useState(false);
   const [stubWidths, setStubWidths] = useState({ source: 0, target: 0 });
   const [toolbarSide, setToolbarSide] = useState<"source" | "target">("source");
@@ -307,6 +310,7 @@ export function EditableEdge({
   const showLabel = Boolean(labelText) || Boolean(edgeData?.isLoop);
 
   if (isHidden) {
+    if (isConnecting) return null;
     const sourceDir: 1 | -1 = sourcePosition === "left" ? -1 : 1;
     const targetDir: 1 | -1 = targetPosition === "right" ? 1 : -1;
     const stubLength = 8;

@@ -1,3 +1,6 @@
+import { useConnection, useNodeId } from "@xyflow/react";
+import { useWorkflowStore } from "@/store/workflowStore";
+
 interface HandleLabelProps {
   label: string;
   side: "target" | "source";
@@ -8,6 +11,14 @@ interface HandleLabelProps {
 }
 
 export function HandleLabel({ label, side, color, top = "calc(50% - 18px)", visible, opacity }: HandleLabelProps) {
+  // Hidden noodles leave labelled stubs beside the handles on this side, so the
+  // handle labels stay out of their way until a connection drag replaces them
+  const nodeId = useNodeId();
+  const isConnecting = useConnection((c) => c.inProgress);
+  const hasHiddenStubs = useWorkflowStore(
+    (state) => state.edges?.some((e) => e.data?.hidden && (side === "source" ? e.source : e.target) === nodeId) ?? false
+  );
+  const shown = visible && (isConnecting || !hasHiddenStubs);
   const positionStyle = side === "target"
     ? { right: "calc(100% + 8px)" }
     : { left: "calc(100% + 8px)" };
@@ -20,7 +31,7 @@ export function HandleLabel({ label, side, color, top = "calc(50% - 18px)", visi
         top,
         color,
         zIndex: 10,
-        opacity: visible ? (opacity ?? 1) : 0,
+        opacity: shown ? (opacity ?? 1) : 0,
         transition: "opacity 150ms ease-in-out",
       }}
     >

@@ -8,6 +8,7 @@ const mockSetEdges = vi.fn();
 const mockSetEdgesHidden = vi.fn();
 const mockSetBundleClamp = vi.fn();
 const mockUseWorkflowStore = vi.fn();
+let connectionInProgress = false;
 
 vi.mock("@/store/workflowStore", () => ({
   useWorkflowStore: (selector?: (state: unknown) => unknown) => {
@@ -29,6 +30,10 @@ vi.mock("@xyflow/react", async () => {
     }),
     EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
     useViewport: () => ({ x: 0, y: 0, zoom: 1 }),
+    useConnection: (selector?: (c: { inProgress: boolean }) => unknown) => {
+      const connection = { inProgress: connectionInProgress };
+      return selector ? selector(connection) : connection;
+    },
   };
 });
 
@@ -529,6 +534,17 @@ describe("EditableEdge when hidden", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("draws nothing while a noodle is being dragged, so the handle labels can show", () => {
+    connectionInProgress = true;
+    try {
+      const { container } = renderHidden();
+      expect(container.querySelector('[data-testid="hidden-edge-stub-target"]')).toBeNull();
+      expect(container.querySelector(".react-flow__edge-path")).toBeNull();
+    } finally {
+      connectionInProgress = false;
+    }
   });
 
   it("draws labelled stubs instead of the line", () => {
