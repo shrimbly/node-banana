@@ -345,6 +345,9 @@ interface WorkflowStore {
   /** The handle under the pointer, so hidden connections on it can ghost back. */
   hoveredHandle: { nodeId: string; handleId: string | null; type: "source" | "target" } | null;
   setHoveredHandle: (handle: { nodeId: string; handleId: string | null; type: "source" | "target" } | null) => void;
+  /** The handle whose hidden connections are shown one per row instead of as a single pill. */
+  expandedStubGroup: string | null;
+  setExpandedStubGroup: (key: string | null) => void;
   openModalCount: number;
   isModalOpen: boolean;
   showQuickstart: boolean;
@@ -689,6 +692,10 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       (current && handle && current.nodeId === handle.nodeId && current.handleId === handle.handleId && current.type === handle.type)
     ) return;
     set({ hoveredHandle: handle });
+  },
+  expandedStubGroup: null,
+  setExpandedStubGroup: (key) => {
+    if (get().expandedStubGroup !== key) set({ expandedStubGroup: key });
   },
   openModalCount: 0,
   isModalOpen: false,

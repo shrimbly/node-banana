@@ -8,6 +8,8 @@ const mockSetEdges = vi.fn();
 const mockSetEdgesHidden = vi.fn();
 const mockSetBundleClamp = vi.fn();
 const mockUseWorkflowStore = vi.fn();
+const mockSetExpandedStubGroup = vi.fn();
+const mockSetHoveredHandle = vi.fn();
 let connectionInProgress = false;
 
 vi.mock("@/store/workflowStore", () => ({
@@ -563,14 +565,51 @@ describe("EditableEdge when hidden", () => {
     expect(screen.getByTestId("hidden-edge-stub-target")).toHaveTextContent("Image 2");
   });
 
-  it("stacks stubs below earlier hidden siblings on the same handle", () => {
-    renderHidden([
-      { id: "edge-0", source: "x", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { hidden: true, createdAt: 1 } },
-      { ...hiddenEdge, data: { hidden: true, createdAt: 2 } },
-    ]);
+  const siblings = [
+    { id: "edge-0", source: "x", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { hidden: true, createdAt: 1 } },
+    { ...hiddenEdge, data: { hidden: true, createdAt: 2 } },
+  ];
+
+  it("leaves the collapsed pill to the first hidden sibling on the handle", () => {
+    // edge-1 is the second hidden connection into node-2's image handle, so edge-0 draws the pill
+    renderHidden(siblings);
+    expect(screen.queryByTestId("hidden-edge-stub-target")).toBeNull();
+    // Nothing else leaves node-1's handle, so the source stub is its own
+    expect(screen.getByTestId("hidden-edge-stub-source")).toHaveTextContent("Image 2");
+  });
+
+  it("draws a plural pill for a collapsed group and expands it on click", () => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edges: siblings, setExpandedStubGroup: mockSetExpandedStubGroup, setHoveredHandle: mockSetHoveredHandle }))
+    );
+    render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps({ id: "edge-0", source: "x", data: { hidden: true } })} />
+      </TestWrapper>
+    );
+    const pill = screen.getByTestId("hidden-edge-stub-target");
+    expect(pill).toHaveTextContent("Images");
+    expect(pill.style.transform).toContain("50px");
+    fireEvent.mouseEnter(pill.querySelector("button")!);
+    expect(mockSetHoveredHandle).toHaveBeenCalledWith({ nodeId: "node-2", handleId: "image", type: "target" });
+    fireEvent.click(pill.querySelector("button")!);
+    expect(mockSetExpandedStubGroup).toHaveBeenCalledWith("node-2:target:image");
+    expect(mockSetEdges).not.toHaveBeenCalled();
+  });
+
+  it("stacks stubs below earlier hidden siblings once the group is expanded", () => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edges: siblings, expandedStubGroup: "node-2:target:image" }))
+    );
+    render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps({ data: { hidden: true } })} />
+      </TestWrapper>
+    );
     // Target handle is at y=50; the second hidden stub sits one row (22px) lower
-    expect(screen.getByTestId("hidden-edge-stub-target").style.transform).toContain("72px");
-    // Nothing else leaves node-1's handle, so the source stub stays on the handle
+    const stub = screen.getByTestId("hidden-edge-stub-target");
+    expect(stub).toHaveTextContent("Image 2");
+    expect(stub.style.transform).toContain("72px");
     expect(screen.getByTestId("hidden-edge-stub-source").style.transform).toContain("50px");
   });
 

@@ -90,12 +90,71 @@ export function parallelEdgePosition(edgeId: string, edges: WorkflowEdge[]): { i
  */
 export const HIDDEN_STUB_SPACING = 22;
 
+/** The plural of a handle type's label, for a pill standing in for several hidden connections. */
+export function pluralTypeLabel(handleId: string | null | undefined): string {
+  const label = edgeTypeLabel(handleId);
+  return label === "Audio" || label === "3D" ? label : `${label}s`;
+}
+
+/** Identifies the hidden connections on one handle, which collapse into a single pill. */
+export function stubGroupKey(nodeId: string, side: "source" | "target", handleId: string | null | undefined): string {
+  return `${nodeId}:${side}:${handleId ?? ""}`;
+}
+
+export interface HiddenStubGroup {
+  key: string;
+  /** Member edge ids in stack order. */
+  members: string[];
+}
+
+function hiddenStubGroups(edges: WorkflowEdge[], nodeId: string, side: "source" | "target"): HiddenStubGroup[] {
+  const handleOf = (e: WorkflowEdge) => (side === "source" ? e.sourceHandle : e.targetHandle) ?? null;
+  const nodeOf = (e: WorkflowEdge) => (side === "source" ? e.source : e.target);
+  const byKey = new Map<string, WorkflowEdge[]>();
+  for (const e of edges) {
+    if (!e.data?.hidden || nodeOf(e) !== nodeId) continue;
+    const key = stubGroupKey(nodeId, side, handleOf(e));
+    byKey.set(key, [...(byKey.get(key) ?? []), e]);
+  }
+  const order = (a: WorkflowEdge, b: WorkflowEdge) =>
+    (a.data?.createdAt || 0) - (b.data?.createdAt || 0) || a.id.localeCompare(b.id);
+  return [...byKey.entries()].map(([key, members]) => ({ key, members: members.sort(order).map((e) => e.id) }));
+}
+
+/** The group of hidden connections sharing this edge's handle on the given side. */
+export function hiddenStubGroup(edgeId: string, edges: WorkflowEdge[], side: "source" | "target"): HiddenStubGroup | null {
+  const edge = edges.find((e) => e.id === edgeId);
+  if (!edge || !edge.data?.hidden) return null;
+  const nodeId = side === "source" ? edge.source : edge.target;
+  return hiddenStubGroups(edges, nodeId, side).find((g) => g.members.includes(edgeId)) ?? null;
+}
+
+export type HiddenStubRole = "single" | "expanded" | "collapsed-leader" | "collapsed-member";
+
+/**
+ * How this edge's stub on one side should draw: alone, as one of an expanded
+ * group, as the pill standing in for a collapsed group, or not at all.
+ */
+export function hiddenStubRole(
+  edgeId: string,
+  edges: WorkflowEdge[],
+  side: "source" | "target",
+  expandedGroup: string | null,
+): HiddenStubRole {
+  const group = hiddenStubGroup(edgeId, edges, side);
+  if (!group || group.members.length < 2) return "single";
+  if (group.key === expandedGroup) return "expanded";
+  return group.members[0] === edgeId ? "collapsed-leader" : "collapsed-member";
+}
+
 /**
  * Where each hidden stub on one side of a node should sit, so the pills never
- * overlap. Stubs are ordered by their handle's y (then creation), and each one
- * sits at its own handle unless the stub above it is too close, in which case
- * it is pushed down. `handleY` gives the y of a handle on the node; return
- * undefined when it is not known and the stub is assumed level with the caller.
+ * overlap. A handle with several hidden connections takes one row unless its
+ * group is expanded. Stubs are ordered by their handle's y (then creation),
+ * and each one sits at its own handle unless the stub above it is too close,
+ * in which case it is pushed down. `handleY` gives the y of a handle on the
+ * node; return undefined when it is not known and the stub is assumed level
+ * with the caller.
  */
 export function stackHiddenStubs(
   edges: WorkflowEdge[],
@@ -103,19 +162,28 @@ export function stackHiddenStubs(
   side: "source" | "target",
   handleY: (handleId: string | null) => number | undefined,
   fallbackY = 0,
+  expandedGroup: string | null = null,
   spacing = HIDDEN_STUB_SPACING,
 ): Map<string, number> {
   const handleOf = (e: WorkflowEdge) => (side === "source" ? e.sourceHandle : e.targetHandle) ?? null;
-  const nodeOf = (e: WorkflowEdge) => (side === "source" ? e.source : e.target);
-  const anchors = edges
-    .filter((e) => e.data?.hidden && nodeOf(e) === nodeId)
-    .map((e) => ({ id: e.id, y: handleY(handleOf(e)) ?? fallbackY, createdAt: e.data?.createdAt || 0 }))
-    .sort((a, b) => a.y - b.y || a.createdAt - b.createdAt || a.id.localeCompare(b.id));
+  const byId = new Map(edges.map((e) => [e.id, e]));
+  const rows: { ids: string[]; y: number; createdAt: number }[] = [];
+  for (const group of hiddenStubGroups(edges, nodeId, side)) {
+    const first = byId.get(group.members[0])!;
+    const y = handleY(handleOf(first)) ?? fallbackY;
+    const collapsed = group.members.length > 1 && group.key !== expandedGroup;
+    if (collapsed) {
+      rows.push({ ids: group.members, y, createdAt: first.data?.createdAt || 0 });
+    } else {
+      for (const id of group.members) rows.push({ ids: [id], y, createdAt: byId.get(id)?.data?.createdAt || 0 });
+    }
+  }
+  rows.sort((a, b) => a.y - b.y || a.createdAt - b.createdAt || a.ids[0].localeCompare(b.ids[0]));
   const placed = new Map<string, number>();
   let floor = -Infinity;
-  for (const stub of anchors) {
-    const y = Math.max(stub.y, floor);
-    placed.set(stub.id, y);
+  for (const row of rows) {
+    const y = Math.max(row.y, floor);
+    for (const id of row.ids) placed.set(id, y);
     floor = y + spacing;
   }
   return placed;
@@ -128,11 +196,12 @@ export function hiddenStubOffset(
   side: "source" | "target",
   handleY: (handleId: string | null) => number | undefined,
   ownY: number,
+  expandedGroup: string | null = null,
 ): number {
   const edge = edges.find((e) => e.id === edgeId);
   if (!edge) return 0;
   const nodeId = side === "source" ? edge.source : edge.target;
-  const y = stackHiddenStubs(edges, nodeId, side, handleY, ownY).get(edgeId);
+  const y = stackHiddenStubs(edges, nodeId, side, handleY, ownY, expandedGroup).get(edgeId);
   if (y === undefined) return 0;
   const own = handleY((side === "source" ? edge.sourceHandle : edge.targetHandle) ?? null) ?? ownY;
   return y - own;

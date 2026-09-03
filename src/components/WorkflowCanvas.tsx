@@ -2028,6 +2028,7 @@ export function WorkflowCanvas() {
   // Which handle is under the pointer: hidden connections on it ghost back.
   // One delegated listener on the wrapper instead of a handler per handle.
   const setHoveredHandle = useWorkflowStore((state) => state.setHoveredHandle);
+  const setExpandedStubGroup = useWorkflowStore((state) => state.setExpandedStubGroup);
   useEffect(() => {
     const wrapper = reactFlowWrapper.current;
     if (!wrapper || !setHoveredHandle) return;
@@ -2389,6 +2390,7 @@ export function WorkflowCanvas() {
         onConnect={handleConnect}
         onConnectEnd={handleConnectEnd}
         onReconnect={handleReconnect}
+        onPaneClick={() => setExpandedStubGroup?.(null)}
         onMoveStart={() => { isPanningRef.current = true; setHoveredNodeId(null); document.documentElement.classList.add("canvas-interacting"); if (reactFlowWrapper.current) setCanvasPanningClass(true, reactFlowWrapper.current); }}
         onMoveEnd={() => { isPanningRef.current = false; document.documentElement.classList.remove("canvas-interacting"); if (reactFlowWrapper.current) setCanvasPanningClass(false, reactFlowWrapper.current); }}
         onNodeDragStart={() => { isDraggingNodeRef.current = true; document.documentElement.classList.add("canvas-interacting"); }}

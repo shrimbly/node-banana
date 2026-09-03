@@ -1,5 +1,15 @@
 import { describe, it, expect } from "vitest";
-import { edgeTypeLabel, edgeAutoLabel, edgeDisplayLabelById, stackHiddenStubs, hiddenStubOffset } from "../labels";
+import {
+  edgeTypeLabel,
+  edgeAutoLabel,
+  edgeDisplayLabelById,
+  stackHiddenStubs,
+  hiddenStubOffset,
+  hiddenStubGroup,
+  hiddenStubRole,
+  pluralTypeLabel,
+  stubGroupKey,
+} from "../labels";
 import type { WorkflowEdge } from "@/types";
 
 const edge = (id: string, overrides: Partial<WorkflowEdge> = {}): WorkflowEdge => ({
@@ -49,8 +59,19 @@ describe("stackHiddenStubs", () => {
   ];
   const handleY = (handleId: string | null) => (handleId === "image" ? 100 : handleId === "text" ? 130 : undefined);
 
-  it("pushes stubs down when the ones above them are too close", () => {
+  const imageGroup = stubGroupKey("b", "target", "image");
+
+  it("gives a handle with several hidden connections one row when collapsed", () => {
     const placed = stackHiddenStubs(edges, "b", "target", handleY);
+    expect(placed.get("img1")).toBe(100);
+    expect(placed.get("img2")).toBe(100);
+    expect(placed.get("img3")).toBe(100);
+    // The text handle at 130 is clear of the single image row
+    expect(placed.get("txt1")).toBe(130);
+  });
+
+  it("pushes stubs down when the ones above them are too close", () => {
+    const placed = stackHiddenStubs(edges, "b", "target", handleY, 0, imageGroup);
     expect(placed.get("img1")).toBe(100);
     expect(placed.get("img2")).toBe(122);
     expect(placed.get("img3")).toBe(144);
@@ -60,7 +81,7 @@ describe("stackHiddenStubs", () => {
 
   it("leaves a stub at its handle when there is room", () => {
     const roomy = (handleId: string | null) => (handleId === "image" ? 100 : 300);
-    const placed = stackHiddenStubs(edges, "b", "target", roomy);
+    const placed = stackHiddenStubs(edges, "b", "target", roomy, 0, imageGroup);
     expect(placed.get("txt1")).toBe(300);
   });
 
@@ -71,7 +92,7 @@ describe("stackHiddenStubs", () => {
   });
 
   it("orders by creation on the source side when handles are level", () => {
-    const placed = stackHiddenStubs(edges, "c", "source", () => 50);
+    const placed = stackHiddenStubs(edges, "c", "source", () => 50, 0, stubGroupKey("c", "source", "image"));
     expect(placed.get("elsewhere")).toBe(50);
     expect(placed.get("img2")).toBe(72);
   });
@@ -85,14 +106,21 @@ describe("hiddenStubOffset", () => {
   ];
   const handleY = (handleId: string | null) => (handleId === "image" ? 100 : 110);
 
+  const expanded = stubGroupKey("b", "target", "image");
+
   it("is the distance a stub was pushed below its own handle", () => {
-    expect(hiddenStubOffset("a1", edges, "target", handleY, 100)).toBe(0);
-    expect(hiddenStubOffset("a2", edges, "target", handleY, 100)).toBe(22);
-    expect(hiddenStubOffset("t", edges, "target", handleY, 110)).toBe(34);
+    expect(hiddenStubOffset("a1", edges, "target", handleY, 100, expanded)).toBe(0);
+    expect(hiddenStubOffset("a2", edges, "target", handleY, 100, expanded)).toBe(22);
+    expect(hiddenStubOffset("t", edges, "target", handleY, 110, expanded)).toBe(34);
+  });
+
+  it("keeps collapsed members level with their handle", () => {
+    expect(hiddenStubOffset("a2", edges, "target", handleY, 100)).toBe(0);
+    expect(hiddenStubOffset("t", edges, "target", handleY, 110)).toBe(12);
   });
 
   it("falls back to the caller's y when handle positions are unknown", () => {
-    expect(hiddenStubOffset("a2", edges, "target", () => undefined, 100)).toBe(22);
+    expect(hiddenStubOffset("a2", edges, "target", () => undefined, 100, expanded)).toBe(22);
   });
 
   it("is zero for unknown edges", () => {
@@ -128,5 +156,37 @@ describe("parallelEdgePosition", () => {
     expect(parallelEdgePosition("second", edges)).toEqual({ index: 1, count: 2 });
     expect(parallelEdgePosition("other", edges)).toEqual({ index: 0, count: 1 });
     expect(parallelEdgePosition("missing", edges)).toEqual({ index: 0, count: 1 });
+  });
+});
+
+describe("hidden stub groups", () => {
+  const edges = [
+    edge("a1", { data: { hidden: true, createdAt: 2 } }),
+    edge("a2", { source: "c", data: { hidden: true, createdAt: 1 } }),
+    edge("t", { source: "p", sourceHandle: "text", targetHandle: "text", data: { hidden: true, createdAt: 3 } }),
+    edge("shown", { source: "d", data: {} }),
+  ];
+  const key = stubGroupKey("b", "target", "image");
+
+  it("groups the hidden connections on one handle in creation order", () => {
+    expect(hiddenStubGroup("a1", edges, "target")).toEqual({ key, members: ["a2", "a1"] });
+    expect(hiddenStubGroup("a1", edges, "source")).toEqual({ key: stubGroupKey("a", "source", "image"), members: ["a1"] });
+    expect(hiddenStubGroup("shown", edges, "target")).toBeNull();
+    expect(hiddenStubGroup("nope", edges, "target")).toBeNull();
+  });
+
+  it("makes the first member the leader of a collapsed group", () => {
+    expect(hiddenStubRole("a2", edges, "target", null)).toBe("collapsed-leader");
+    expect(hiddenStubRole("a1", edges, "target", null)).toBe("collapsed-member");
+    expect(hiddenStubRole("a1", edges, "target", key)).toBe("expanded");
+    expect(hiddenStubRole("t", edges, "target", null)).toBe("single");
+    expect(hiddenStubRole("a1", edges, "source", null)).toBe("single");
+  });
+
+  it("pluralises the type label, except where the word has no plural", () => {
+    expect(pluralTypeLabel("image")).toBe("Images");
+    expect(pluralTypeLabel("text")).toBe("Texts");
+    expect(pluralTypeLabel("audio")).toBe("Audio");
+    expect(pluralTypeLabel("3d")).toBe("3D");
   });
 });

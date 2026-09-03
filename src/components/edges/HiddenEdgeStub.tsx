@@ -18,6 +18,8 @@ interface HiddenEdgeStubProps {
   /** Which way the stub extends from the handle: +1 right, -1 left. */
   direction: 1 | -1;
   label: string;
+  /** Tooltip; defaults to "Hidden connection". */
+  title?: string;
   color: string;
   selected: boolean;
   onHoverChange: (hovering: boolean) => void;
@@ -26,7 +28,7 @@ interface HiddenEdgeStubProps {
   onMeasure?: (width: number) => void;
 }
 
-export function HiddenEdgeStub({ side, x, y, direction, label, color, selected, onHoverChange, onSelect, onMeasure }: HiddenEdgeStubProps) {
+export function HiddenEdgeStub({ side, x, y, direction, label, title = "Hidden connection", color, selected, onHoverChange, onSelect, onMeasure }: HiddenEdgeStubProps) {
   const pillRef = useRef<HTMLButtonElement>(null);
   useLayoutEffect(() => {
     onMeasure?.(pillRef.current?.offsetWidth ?? 0);
@@ -37,7 +39,8 @@ export function HiddenEdgeStub({ side, x, y, direction, label, color, selected, 
     <div
       className="nodrag nopan"
       data-testid={`hidden-edge-stub-${side}`}
-      style={{ position: "absolute", transform: `translate(${x}px, ${y}px) ${anchor}`, pointerEvents: "all" }}
+      // Flex, so the wrapper is exactly the pill's height and -50% centres it on the handle
+      style={{ position: "absolute", display: "flex", transform: `translate(${x}px, ${y}px) ${anchor}`, pointerEvents: "all" }}
     >
       <button
         ref={pillRef}
@@ -49,7 +52,7 @@ export function HiddenEdgeStub({ side, x, y, direction, label, color, selected, 
           e.stopPropagation();
           onSelect();
         }}
-        title="Hidden connection"
+        title={title}
         className={`inline-flex items-center gap-1.5 h-5 px-2 rounded-full text-[10px] font-medium leading-none text-neutral-100 whitespace-nowrap border transition-colors ${
           selected ? "bg-neutral-700" : "bg-neutral-800/90 hover:bg-neutral-700"
         }`}

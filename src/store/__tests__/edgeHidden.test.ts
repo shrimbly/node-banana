@@ -66,3 +66,13 @@ describe("setHoveredHandle", () => {
     expect(useWorkflowStore.getState().hoveredHandle).toBeNull();
   });
 });
+
+describe("setExpandedStubGroup", () => {
+  it("remembers which handle's hidden connections are expanded", () => {
+    useWorkflowStore.setState({ ...initial, expandedStubGroup: null });
+    useWorkflowStore.getState().setExpandedStubGroup("b:target:image");
+    expect(useWorkflowStore.getState().expandedStubGroup).toBe("b:target:image");
+    useWorkflowStore.getState().setExpandedStubGroup(null);
+    expect(useWorkflowStore.getState().expandedStubGroup).toBeNull();
+  });
+});

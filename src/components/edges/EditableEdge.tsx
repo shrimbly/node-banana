@@ -20,7 +20,14 @@ import { EDGE_COLORS, edgeColorKeyForHandles } from "@/lib/edges/colors";
 import { EDGE_THICKNESS_PX } from "@/lib/edges/appearance";
 import { EdgeToolbar, useIsToolbarEdge } from "@/components/EdgeToolbar";
 import { HiddenEdgeStub } from "./HiddenEdgeStub";
-import { edgeDisplayLabelById, hiddenStubOffset, parallelEdgePosition } from "@/lib/edges/labels";
+import {
+  edgeDisplayLabelById,
+  hiddenStubOffset,
+  hiddenStubRole,
+  parallelEdgePosition,
+  pluralTypeLabel,
+  stubGroupKey,
+} from "@/lib/edges/labels";
 import { EdgeLabel } from "./EdgeLabel";
 import { edgeBundles, bundleReach, bundleClampKey, type BundleMembership } from "@/lib/edges/bundles";
 
@@ -137,11 +144,17 @@ export function EditableEdge({
   const sourceHandleY = useHandleY(source, "source");
   const targetHandleY = useHandleY(target, "target");
   const sourceStack = useWorkflowStore((state) =>
-    isHidden ? hiddenStubOffset(id, state.edges, "source", sourceHandleY, sourceY) : 0
+    isHidden ? hiddenStubOffset(id, state.edges, "source", sourceHandleY, sourceY, state.expandedStubGroup) : 0
   );
   const targetStack = useWorkflowStore((state) =>
-    isHidden ? hiddenStubOffset(id, state.edges, "target", targetHandleY, targetY) : 0
+    isHidden ? hiddenStubOffset(id, state.edges, "target", targetHandleY, targetY, state.expandedStubGroup) : 0
   );
+  // Several hidden connections on one handle collapse into a single plural
+  // pill, drawn by the first of them; clicking it expands the group
+  const sourceRole = useWorkflowStore((state) => (isHidden ? hiddenStubRole(id, state.edges, "source", state.expandedStubGroup) : "single"));
+  const targetRole = useWorkflowStore((state) => (isHidden ? hiddenStubRole(id, state.edges, "target", state.expandedStubGroup) : "single"));
+  const setExpandedStubGroup = useWorkflowStore((state) => state.setExpandedStubGroup);
+  const setHoveredHandle = useWorkflowStore((state) => state.setHoveredHandle);
 
   // Narrow selector: returns boolean, only re-renders when selection relevance changes
   const isConnectedToSelection = useWorkflowStore((state) =>
@@ -315,21 +328,37 @@ export function EditableEdge({
     const targetDir: 1 | -1 = targetPosition === "right" ? 1 : -1;
     const stubLength = 8;
     const revealed = stubHovered || handleHovered || Boolean(selected);
-    // Stub pills sit just past the handles; the ghost runs between their outer edges
+    const sourceCollapsed = sourceRole.startsWith("collapsed");
+    const targetCollapsed = targetRole.startsWith("collapsed");
+    // Stub pills sit just past the handles; the ghost runs between their outer
+    // edges, or from under a collapsed pill, whose width only its leader knows
     const sourceStub = { x: sourceX + sourceDir * (stubLength + 4), y: sourceY + sourceStack };
     const targetStub = { x: targetX + targetDir * (stubLength + 4), y: targetY + targetStack };
+    const sourceWidth = sourceCollapsed ? 0 : stubWidths.source;
+    const targetWidth = targetCollapsed ? 0 : stubWidths.target;
     const [ghostPath] = getBezierPath({
-      sourceX: sourceStub.x + sourceDir * stubWidths.source,
+      sourceX: sourceStub.x + sourceDir * sourceWidth,
       sourceY: sourceStub.y,
       sourcePosition: sourceDir === 1 ? Position.Right : Position.Left,
-      targetX: targetStub.x + targetDir * stubWidths.target,
+      targetX: targetStub.x + targetDir * targetWidth,
       targetY: targetStub.y,
       targetPosition: targetDir === 1 ? Position.Right : Position.Left,
       curvature: 0.25,
     });
     const toolbarStub = toolbarSide === "target" ? targetStub : sourceStub;
     const toolbarDir = toolbarSide === "target" ? targetDir : sourceDir;
-    const toolbarWidth = toolbarSide === "target" ? stubWidths.target : stubWidths.source;
+    const toolbarWidth = toolbarSide === "target" ? targetWidth : sourceWidth;
+    // A collapsed pill acts like its handle: hovering ghosts every member, clicking expands
+    const groupStub = (side: "source" | "target") => {
+      const nodeId = side === "source" ? source : target;
+      const handleId = (side === "source" ? sourceHandleId : targetHandleId) ?? null;
+      return {
+        label: pluralTypeLabel(handleId),
+        title: "Hidden connections, click to expand",
+        onHoverChange: (hovering: boolean) => setHoveredHandle(hovering ? { nodeId, handleId, type: side } : null),
+        onSelect: () => setExpandedStubGroup(stubGroupKey(nodeId, side, handleId)),
+      };
+    };
     return (
       <>
         {revealed && (
@@ -347,30 +376,32 @@ export function EditableEdge({
         <path d={`M${sourceX},${sourceY} L${sourceX + sourceDir * stubLength},${sourceY}`} fill="none" stroke={edgeColor} strokeWidth={strokeWidth} strokeOpacity={0.9} strokeLinecap="round" />
         <path d={`M${targetX},${targetY} L${targetX + targetDir * stubLength},${targetY}`} fill="none" stroke={edgeColor} strokeWidth={strokeWidth} strokeOpacity={0.9} strokeLinecap="round" />
         <EdgeLabelRenderer>
-          <HiddenEdgeStub
-            side="source"
-            x={sourceStub.x}
-            y={sourceStub.y}
-            direction={sourceDir}
-            label={stubLabel}
-            color={edgeColor}
-            selected={Boolean(selected)}
-            onHoverChange={setStubHovered}
-            onSelect={() => selectThisEdge("source")}
-            onMeasure={measureSource}
-          />
-          <HiddenEdgeStub
-            side="target"
-            x={targetStub.x}
-            y={targetStub.y}
-            direction={targetDir}
-            label={stubLabel}
-            color={edgeColor}
-            selected={Boolean(selected)}
-            onHoverChange={setStubHovered}
-            onSelect={() => selectThisEdge("target")}
-            onMeasure={measureTarget}
-          />
+          {sourceRole !== "collapsed-member" && (
+            <HiddenEdgeStub
+              side="source"
+              x={sourceStub.x}
+              y={sourceStub.y}
+              direction={sourceDir}
+              color={edgeColor}
+              onMeasure={measureSource}
+              {...(sourceCollapsed
+                ? { ...groupStub("source"), selected: false }
+                : { label: stubLabel, selected: Boolean(selected), onHoverChange: setStubHovered, onSelect: () => selectThisEdge("source") })}
+            />
+          )}
+          {targetRole !== "collapsed-member" && (
+            <HiddenEdgeStub
+              side="target"
+              x={targetStub.x}
+              y={targetStub.y}
+              direction={targetDir}
+              color={edgeColor}
+              onMeasure={measureTarget}
+              {...(targetCollapsed
+                ? { ...groupStub("target"), selected: false }
+                : { label: stubLabel, selected: Boolean(selected), onHoverChange: setStubHovered, onSelect: () => selectThisEdge("target") })}
+            />
+          )}
         </EdgeLabelRenderer>
         {selected && carriesToolbar && (
           <EdgeToolbar edgeId={id} x={toolbarStub.x + toolbarDir * (toolbarWidth / 2)} y={toolbarStub.y - 10} />
