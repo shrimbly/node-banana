@@ -2009,11 +2009,12 @@ export function WorkflowCanvas() {
       if (Math.hypot(event.clientX - down.x, event.clientY - down.y) > HANDLE_CLICK_SLOP) return;
       const nodeId = handle.dataset.nodeid;
       if (!nodeId) return;
+      const rect = handle.getBoundingClientRect();
       setHandleMenu({
         nodeId,
         handleId: handle.dataset.handleid ?? null,
         type: handle.classList.contains("source") ? "source" : "target",
-        position: { x: event.clientX, y: event.clientY },
+        position: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
       });
     };
     wrapper.addEventListener("pointerdown", onDown, true);

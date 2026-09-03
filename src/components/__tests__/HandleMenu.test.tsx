@@ -38,7 +38,7 @@ const withEdges = (edges: WorkflowEdge[]) => {
   );
 };
 
-const target = { nodeId: "a", handleId: "image", type: "source" as const, position: { x: 10, y: 20 } };
+const target = { nodeId: "a", handleId: "image", type: "source" as const, position: { x: 300, y: 200 } };
 
 describe("HandleMenu", () => {
   const onClose = vi.fn();
@@ -46,55 +46,75 @@ describe("HandleMenu", () => {
     vi.clearAllMocks();
   });
 
-  it("describes the handle and its connections", () => {
+  it("shows only the count of connections on the handle", () => {
     withEdges([edge("e1"), edge("e2"), edge("e3", { sourceHandle: "text" })]);
     render(<HandleMenu target={target} onClose={onClose} />);
-    expect(screen.getByText(/Image output · 2 connections/)).toBeInTheDocument();
+    expect(screen.getByTestId("handle-menu-count")).toHaveTextContent("2");
+    expect(screen.queryByText(/connections/)).toBeNull();
+  });
+
+  it("offers Bundle, Hide and Remove all as icons", () => {
+    withEdges([edge("e1"), edge("e2")]);
+    render(<HandleMenu target={target} onClose={onClose} />);
+    expect(screen.getAllByRole("menuitem").map((b) => b.getAttribute("aria-label"))).toEqual(["Bundle", "Hide", "Remove all"]);
   });
 
   it("bundles the connections on the handle", () => {
     withEdges([edge("e1"), edge("e2")]);
     render(<HandleMenu target={target} onClose={onClose} />);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Bundle connections" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Bundle" }));
     expect(mockBundleEdges).toHaveBeenCalledWith(["e1", "e2"]);
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("offers unbundle instead once they are bundled", () => {
+  it("swaps to Unbundle once they are bundled", () => {
     withEdges([edge("e1", { data: { bundleId: "x" } }), edge("e2", { data: { bundleId: "x" } })]);
     render(<HandleMenu target={target} onClose={onClose} />);
-    expect(screen.queryByRole("menuitem", { name: "Bundle connections" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Bundle" })).toBeNull();
     fireEvent.click(screen.getByRole("menuitem", { name: "Unbundle" }));
     expect(mockUnbundleEdges).toHaveBeenCalledWith(["e1", "e2"]);
   });
 
-  it("does not offer to bundle a lone connection", () => {
+  it("disables Bundle for a lone connection", () => {
     withEdges([edge("e1")]);
     render(<HandleMenu target={target} onClose={onClose} />);
-    expect(screen.queryByRole("menuitem", { name: "Bundle connections" })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: "Bundle" })).toBeDisabled();
   });
 
-  it("hides and shows the connections", () => {
+  it("hides the connections, and swaps to Show once they are all hidden", () => {
     withEdges([edge("e1"), edge("e2", { data: { createdAt: 2, hidden: true } })]);
-    render(<HandleMenu target={target} onClose={onClose} />);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Hide 1 visible" }));
+    const { unmount } = render(<HandleMenu target={target} onClose={onClose} />);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Hide" }));
     expect(mockSetEdgesHidden).toHaveBeenCalledWith(["e1", "e2"], true);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Show 1 hidden" }));
+    unmount();
+
+    withEdges([edge("e1", { data: { hidden: true } }), edge("e2", { data: { createdAt: 2, hidden: true } })]);
+    render(<HandleMenu target={target} onClose={onClose} />);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Show" }));
     expect(mockSetEdgesHidden).toHaveBeenCalledWith(["e1", "e2"], false);
   });
 
   it("removes every connection on the handle", () => {
     withEdges([edge("e1"), edge("e2")]);
     render(<HandleMenu target={target} onClose={onClose} />);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Remove all connections" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Remove all" }));
     expect(mockRemoveEdges).toHaveBeenCalledWith(["e1", "e2"]);
   });
 
-  it("disables removal when the handle has no connections", () => {
+  it("disables Hide and Remove all when the handle has no connections", () => {
     withEdges([]);
     render(<HandleMenu target={target} onClose={onClose} />);
-    expect(screen.getByText(/No connections/)).toBeInTheDocument();
-    expect(screen.getByRole("menuitem", { name: "Remove all connections" })).toBeDisabled();
+    expect(screen.getByTestId("handle-menu-count")).toHaveTextContent("0");
+    expect(screen.getByRole("menuitem", { name: "Hide" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Remove all" })).toBeDisabled();
+  });
+
+  it("sits above the handle", () => {
+    withEdges([edge("e1")]);
+    render(<HandleMenu target={target} onClose={onClose} />);
+    const menu = screen.getByTestId("handle-menu");
+    // jsdom reports zero size, so the bar's bottom lands 14px above the handle centre
+    expect(menu.style.top).toBe("186px");
   });
 
   it("closes on Escape and on a click outside", () => {
