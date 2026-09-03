@@ -1,6 +1,6 @@
 "use client";
 
-import { useLayoutEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 /**
  * The label a hidden connection leaves at a handle. Hovering it ghosts the
@@ -34,6 +34,19 @@ export function HiddenEdgeStub({ side, x, y, direction, label, title = "Hidden c
     onMeasure?.(pillRef.current?.offsetWidth ?? 0);
   }, [label, onMeasure]);
 
+  // A pill can vanish under the pointer (a collapsed group expands on click),
+  // so a hover it reported must be taken back when it unmounts
+  const hoveredRef = useRef(false);
+  const onHoverChangeRef = useRef(onHoverChange);
+  onHoverChangeRef.current = onHoverChange;
+  const setHovered = (hovering: boolean) => {
+    hoveredRef.current = hovering;
+    onHoverChangeRef.current(hovering);
+  };
+  useEffect(() => () => {
+    if (hoveredRef.current) onHoverChangeRef.current(false);
+  }, []);
+
   const anchor = direction === 1 ? "translate(0, -50%)" : "translate(-100%, -50%)";
   return (
     <div
@@ -45,8 +58,8 @@ export function HiddenEdgeStub({ side, x, y, direction, label, title = "Hidden c
       <button
         ref={pillRef}
         type="button"
-        onMouseEnter={() => onHoverChange(true)}
-        onMouseLeave={() => onHoverChange(false)}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();

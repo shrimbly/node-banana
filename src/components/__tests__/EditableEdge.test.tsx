@@ -597,6 +597,31 @@ describe("EditableEdge when hidden", () => {
     expect(mockSetEdges).not.toHaveBeenCalled();
   });
 
+  it("lets go of the handle hover when the collapsed pill expands under the pointer", () => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edges: siblings, setExpandedStubGroup: mockSetExpandedStubGroup, setHoveredHandle: mockSetHoveredHandle }))
+    );
+    const props = createDefaultProps({ id: "edge-0", source: "x", data: { hidden: true } });
+    const { rerender } = render(
+      <TestWrapper>
+        <EditableEdge {...props} />
+      </TestWrapper>
+    );
+    fireEvent.mouseEnter(screen.getByTestId("hidden-edge-stub-target").querySelector("button")!);
+    mockSetHoveredHandle.mockClear();
+    // The group expands: the plural pill is replaced by this edge's own stub
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edges: siblings, expandedStubGroup: "node-2:target:image", setHoveredHandle: mockSetHoveredHandle }))
+    );
+    rerender(
+      <TestWrapper>
+        <EditableEdge {...props} />
+      </TestWrapper>
+    );
+    expect(screen.getByTestId("hidden-edge-stub-target")).toHaveTextContent("Image 1");
+    expect(mockSetHoveredHandle).toHaveBeenCalledWith(null);
+  });
+
   it("stacks stubs below earlier hidden siblings once the group is expanded", () => {
     mockUseWorkflowStore.mockImplementation((selector) =>
       selector(createDefaultState({ edges: siblings, expandedStubGroup: "node-2:target:image" }))
