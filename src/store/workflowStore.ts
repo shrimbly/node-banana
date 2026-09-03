@@ -53,7 +53,7 @@ import {
   getEdgeDefaults,
 } from "./utils/localStorage";
 import { normalizeEdgeAppearance } from "@/lib/edges/appearance";
-import { shareHandle } from "@/lib/edges/bundles";
+import { shareHandle, MIN_BUNDLE_REACH, MAX_BUNDLE_REACH } from "@/lib/edges/bundles";
 import {
   createDefaultNodeData,
   defaultNodeDimensions,
@@ -308,6 +308,8 @@ interface WorkflowStore {
   bundleEdges: (edgeIds: string[]) => boolean;
   /** Dissolve the manual bundles the given edges belong to. */
   unbundleEdges: (edgeIds: string[]) => void;
+  /** Set where the bundle on a node's handle splits (px from the handle). */
+  setBundleClamp: (nodeId: string, key: string, reach: number) => void;
   setLoopCount: (edgeId: string, count: number) => void;
 
   // Copy/Paste operations
@@ -1238,6 +1240,15 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       }),
       hasUnsavedChanges: true,
     }));
+  },
+
+  setBundleClamp: (nodeId: string, key: string, reach: number) => {
+    const node = get().nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    const clamped = Math.round(Math.min(MAX_BUNDLE_REACH, Math.max(MIN_BUNDLE_REACH, reach)));
+    const existing = ((node.data as { bundleClamps?: Record<string, number> }).bundleClamps) ?? {};
+    if (existing[key] === clamped) return;
+    get().updateNodeData(nodeId, { bundleClamps: { ...existing, [key]: clamped } } as Partial<WorkflowNodeData>);
   },
 
   setLoopCount: (edgeId: string, count: number) => {

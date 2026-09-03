@@ -20,7 +20,7 @@ import { EdgeToolbar, useIsToolbarEdge } from "@/components/EdgeToolbar";
 import { HiddenEdgeStub } from "./HiddenEdgeStub";
 import { edgeDisplayLabelById, hiddenSiblingIndex, parallelEdgePosition } from "@/lib/edges/labels";
 import { EdgeLabel } from "./EdgeLabel";
-import { edgeBundles, type BundleMembership } from "@/lib/edges/bundles";
+import { edgeBundles, bundleReach, bundleClampKey, type BundleMembership } from "@/lib/edges/bundles";
 
 interface EdgeData extends WorkflowEdgeData {
   offsetX?: number;
@@ -44,7 +44,7 @@ export function EditableEdge({
   source,
   target,
 }: EdgeProps) {
-  const { setEdges } = useReactFlow();
+  const { setEdges, screenToFlowPosition } = useReactFlow();
   const edgeStyle = useWorkflowStore((state) => state.edgeStyle);
   const appearance = useWorkflowStore((state) => state.edgeAppearance);
   const [isDragging, setIsDragging] = useState(false);
@@ -105,12 +105,15 @@ export function EditableEdge({
   });
   const sourceBundle = bundleExpanded ? null : bundles.source;
   const targetBundle = bundleExpanded ? null : bundles.target;
-  const stemReach = 56;
+  // The clamp position for each end lives on the node that owns the handle
+  const sourceReach = useWorkflowStore((state) => bundleReach(state.nodes, source, "source", sourceHandleId));
+  const targetReach = useWorkflowStore((state) => bundleReach(state.nodes, target, "target", targetHandleId));
+  const setBundleClamp = useWorkflowStore((state) => state.setBundleClamp);
   const sDir: 1 | -1 = sourcePosition === "left" ? -1 : 1;
   const tDir: 1 | -1 = targetPosition === "right" ? 1 : -1;
   // Where this noodle starts and ends: the stem's far end when bundled
-  const startX = sourceBundle ? sourceX + sDir * stemReach : sourceX;
-  const endX = targetBundle ? targetX + tDir * stemReach : targetX;
+  const startX = sourceBundle ? sourceX + sDir * sourceReach : sourceX;
+  const endX = targetBundle ? targetX + tDir * targetReach : targetX;
   const sourceStack = useWorkflowStore((state) => (isHidden ? hiddenSiblingIndex(id, state.edges, "source") : 0));
   const targetStack = useWorkflowStore((state) => (isHidden ? hiddenSiblingIndex(id, state.edges, "target") : 0));
 
@@ -370,10 +373,36 @@ export function EditableEdge({
 
       {/* Bundle stems: the first member of each bundle draws the shared stem and its count */}
       {sourceBundle?.index === 0 && (
-        <BundleStem x={sourceX} y={sourceY} dir={sDir} reach={stemReach} count={sourceBundle.count} stroke={stroke} strokeOpacity={strokeOpacity} width={strokeWidth} color={edgeColor} activeStroke={activeStroke} />
+        <BundleStem
+          x={sourceX}
+          y={sourceY}
+          dir={sDir}
+          reach={sourceReach}
+          count={sourceBundle.count}
+          stroke={stroke}
+          strokeOpacity={strokeOpacity}
+          width={strokeWidth}
+          color={edgeColor}
+          activeStroke={activeStroke}
+          screenToFlowPosition={screenToFlowPosition}
+          onReachChange={(reach) => setBundleClamp(source, bundleClampKey("source", sourceHandleId), reach)}
+        />
       )}
       {targetBundle?.index === 0 && (
-        <BundleStem x={targetX} y={targetY} dir={tDir} reach={stemReach} count={targetBundle.count} stroke={stroke} strokeOpacity={strokeOpacity} width={strokeWidth} color={edgeColor} activeStroke={activeStroke} />
+        <BundleStem
+          x={targetX}
+          y={targetY}
+          dir={tDir}
+          reach={targetReach}
+          count={targetBundle.count}
+          stroke={stroke}
+          strokeOpacity={strokeOpacity}
+          width={strokeWidth}
+          color={edgeColor}
+          activeStroke={activeStroke}
+          screenToFlowPosition={screenToFlowPosition}
+          onReachChange={(reach) => setBundleClamp(target, bundleClampKey("target", targetHandleId), reach)}
+        />
       )}
 
       {/* Animated pulse overlay when target is loading */}
@@ -486,12 +515,36 @@ interface BundleStemProps {
   width: number;
   color: string;
   activeStroke: string;
+  screenToFlowPosition: (position: { x: number; y: number }) => { x: number; y: number };
+  /** Called while the clamp is dragged, with the new distance from the handle. */
+  onReachChange: (reach: number) => void;
 }
 
-/** The short shared stem at a bundled handle, with the connection count on it. */
-function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, color, activeStroke }: BundleStemProps) {
+/**
+ * The short shared stem at a bundled handle, with the connection count on it
+ * and a clamp, a cable tie, at the split point that drags along the stem to
+ * tie the noodles closer to or further from the handle.
+ */
+function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, color, activeStroke, screenToFlowPosition, onReachChange }: BundleStemProps) {
   const stemWidth = width * (1 + Math.min(count - 1, 4) * 0.5);
-  const path = `M${x},${y} L${x + dir * reach},${y}`;
+  const splitX = x + dir * reach;
+  const path = `M${x},${y} L${splitX},${y}`;
+
+  const startClampDrag = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const onMove = (event: MouseEvent) => {
+      const flow = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      onReachChange(dir * (flow.x - x));
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+  };
+
   return (
     <>
       <path
@@ -507,12 +560,33 @@ function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, col
       />
       <path d={path} fill="none" strokeWidth={stemWidth + 12} stroke="transparent" className="react-flow__edge-interaction" />
       <EdgeLabelRenderer>
+        {/* The clamp: a glassy vertical pill over the split point */}
+        <div
+          className="nodrag nopan"
+          data-testid="edge-bundle-clamp"
+          title="Drag to move where the bundle splits"
+          onMouseDown={startClampDrag}
+          style={{
+            position: "absolute",
+            transform: `translate(${splitX}px, ${y}px) translate(-50%, -50%)`,
+            pointerEvents: "all",
+            width: 10,
+            height: 26,
+            borderRadius: 9999,
+            cursor: "ew-resize",
+            background: "linear-gradient(180deg, rgba(255,255,255,0.28), rgba(255,255,255,0.08))",
+            border: "1px solid rgba(255,255,255,0.45)",
+            boxShadow: `inset 0 0 0 1px ${color}55, 0 1px 4px rgba(0,0,0,0.45)`,
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+          }}
+        />
         <div
           data-testid="edge-bundle-count"
           className="inline-flex items-center gap-1 h-5 pl-1.5 pr-2 rounded-full bg-neutral-800/95 border text-[10px] font-semibold text-neutral-100 whitespace-nowrap"
           style={{
             position: "absolute",
-            transform: `translate(${x + dir * (reach / 2)}px, ${y}px) translate(-50%, -50%)`,
+            transform: `translate(${splitX}px, ${y - 19}px) translate(-50%, -100%)`,
             pointerEvents: "none",
             borderColor: `${color}b3`,
           }}

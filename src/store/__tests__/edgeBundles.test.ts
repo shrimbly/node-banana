@@ -39,3 +39,30 @@ describe("bundleEdges / unbundleEdges", () => {
     expect(useWorkflowStore.getState().edges).toBe(before);
   });
 });
+
+describe("setBundleClamp", () => {
+  beforeEach(() => {
+    useWorkflowStore.setState({
+      ...initial,
+      nodes: [{ id: "a", type: "imageInput", position: { x: 0, y: 0 }, data: {} } as never],
+      edges: [],
+      groups: {},
+    });
+  });
+
+  it("stores the split distance on the node's handle, clamped to the allowed range", () => {
+    useWorkflowStore.getState().setBundleClamp("a", "source:image", 120.4);
+    useWorkflowStore.getState().setBundleClamp("a", "target:image", 2);
+    useWorkflowStore.getState().setBundleClamp("a", "source:text", 5000);
+    const data = useWorkflowStore.getState().nodes[0].data as { bundleClamps?: Record<string, number> };
+    expect(data.bundleClamps).toEqual({ "source:image": 120, "target:image": 16, "source:text": 600 });
+  });
+
+  it("ignores unknown nodes and unchanged values", () => {
+    useWorkflowStore.getState().setBundleClamp("a", "source:image", 100);
+    const before = useWorkflowStore.getState().nodes;
+    useWorkflowStore.getState().setBundleClamp("a", "source:image", 100);
+    useWorkflowStore.getState().setBundleClamp("nope", "source:image", 100);
+    expect(useWorkflowStore.getState().nodes).toBe(before);
+  });
+});

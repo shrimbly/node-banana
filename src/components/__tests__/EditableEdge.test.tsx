@@ -6,6 +6,7 @@ import { ReactFlowProvider, Position } from "@xyflow/react";
 // Mock the workflow store
 const mockSetEdges = vi.fn();
 const mockSetEdgesHidden = vi.fn();
+const mockSetBundleClamp = vi.fn();
 const mockUseWorkflowStore = vi.fn();
 
 vi.mock("@/store/workflowStore", () => ({
@@ -24,6 +25,7 @@ vi.mock("@xyflow/react", async () => {
     ...actual,
     useReactFlow: () => ({
       setEdges: mockSetEdges,
+      screenToFlowPosition: (p: { x: number; y: number }) => p,
     }),
     EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
     useViewport: () => ({ x: 0, y: 0, zoom: 1 }),
@@ -62,6 +64,7 @@ const createDefaultState = (overrides = {}) => ({
   edgeStyle: "angular" as const,
   edges: [],
   setEdgesHidden: mockSetEdgesHidden,
+  setBundleClamp: mockSetBundleClamp,
   edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const, bundling: "off" as const },
   nodes: [],
   ...overrides,
@@ -738,6 +741,35 @@ describe("EditableEdge bundles", () => {
     const { container } = renderMember(fanOut(true), { selected: true });
     expect(container.querySelector('[data-testid="edge-bundle-stem"]')).toBeNull();
     expect((container.querySelector("#edge-1")?.getAttribute("d") ?? "").startsWith("M100")).toBe(true);
+  });
+
+  it("splits where the node's clamp says", () => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({
+        edgeAppearance: appearance,
+        edges: fanOut(),
+        nodes: [{ id: "node-1", type: "imageInput", position: { x: 0, y: 0 }, data: { bundleClamps: { "source:image": 120 } } }],
+      }))
+    );
+    const { container } = render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps()} />
+      </TestWrapper>
+    );
+    expect((container.querySelector("#edge-1")?.getAttribute("d") ?? "").startsWith("M220")).toBe(true);
+    expect(screen.getByTestId("edge-bundle-clamp").style.transform).toContain("translate(220px, 50px)");
+    // The count sits above the clamp
+    expect(screen.getByTestId("edge-bundle-count").style.transform).toContain("translate(220px, 31px)");
+  });
+
+  it("moves the split point when the clamp is dragged", () => {
+    renderMember(fanOut());
+    fireEvent.mouseDown(screen.getByTestId("edge-bundle-clamp"), { clientX: 156, clientY: 50 });
+    fireEvent.mouseMove(window, { clientX: 190, clientY: 50 });
+    expect(mockSetBundleClamp).toHaveBeenLastCalledWith("node-1", "source:image", 90);
+    fireEvent.mouseUp(window);
+    fireEvent.mouseMove(window, { clientX: 300, clientY: 50 });
+    expect(mockSetBundleClamp).toHaveBeenCalledTimes(1);
   });
 
   it("does not bundle when the setting is off", () => {

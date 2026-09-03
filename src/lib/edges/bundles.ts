@@ -91,3 +91,25 @@ export function shareHandle(edges: WorkflowEdge[]): boolean {
   const [first] = edges;
   return edges.every((e) => sameHandle(e, first, "source")) || edges.every((e) => sameHandle(e, first, "target"));
 }
+
+/** Default, smallest and largest distance from the handle to the split point. */
+export const DEFAULT_BUNDLE_REACH = 56;
+export const MIN_BUNDLE_REACH = 16;
+export const MAX_BUNDLE_REACH = 600;
+
+export function bundleClampKey(end: BundleEnd, handleId: string | null | undefined): string {
+  return `${end}:${handleId ?? ""}`;
+}
+
+/** The split distance set on a node's handle, or the default. */
+export function bundleReach(
+  nodes: { id: string; data: { bundleClamps?: Record<string, number> } }[],
+  nodeId: string,
+  end: BundleEnd,
+  handleId: string | null | undefined,
+): number {
+  const stored = nodes.find((n) => n.id === nodeId)?.data?.bundleClamps?.[bundleClampKey(end, handleId)];
+  return typeof stored === "number" && Number.isFinite(stored)
+    ? Math.min(MAX_BUNDLE_REACH, Math.max(MIN_BUNDLE_REACH, stored))
+    : DEFAULT_BUNDLE_REACH;
+}

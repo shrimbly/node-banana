@@ -73,7 +73,7 @@ the same two nodes", which is not a real case; rebuilt around a shared handle.
 
 - [x] Automatic bundling of the edges sharing an output or input handle: off (default), on (two or more), auto (three or more). An edge can be bundled at both ends
 - [x] Manual bundles from a multi-selection that shares a handle, stored as `bundleId`; Unbundle dissolves them
-- [x] The first member draws a short shared stem at the handle with a count badge; every member starts (or ends) past the stem. Expands when a member is selected. Decision: no hover expansion, since members cannot share hover state without extra store traffic and selection already expands it
+- [x] The first member draws a short shared stem at the handle; every member starts (or ends) past the stem. A glassy clamp (cable tie) sits at the split point and drags along the stem to move it, stored per handle on the node as `bundleClamps`; the count badge sits above the clamp. Expands when a member is selected. Decision: no hover expansion, since members cannot share hover state without extra store traffic and selection already expands it
 - [x] Toolbar acts on the whole bundle: pause, hide, delete. No label or colour on bundles (colours are not user-changeable; a bundle label would hide the members' own)
 - [x] Bundle vs Router: a bundle is drawing only and keeps every connection as it is; a Router node is a real hub that fans one input out to many nodes at execution time. Use a bundle to tidy parallel wires, a Router to share one source
 
