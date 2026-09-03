@@ -537,12 +537,16 @@ function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, col
       const flow = screenToFlowPosition({ x: event.clientX, y: event.clientY });
       onReachChange(dir * (flow.x - x));
     };
+    // Capture phase, so the release ends the drag even if something between
+    // the clamp and the window stops the event; blur covers a release outside.
     const onUp = () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
+      window.removeEventListener("mousemove", onMove, true);
+      window.removeEventListener("mouseup", onUp, true);
+      window.removeEventListener("blur", onUp);
     };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+    window.addEventListener("mousemove", onMove, true);
+    window.addEventListener("mouseup", onUp, true);
+    window.addEventListener("blur", onUp);
   };
 
   return (
@@ -566,7 +570,6 @@ function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, col
           data-testid="edge-bundle-clamp"
           title="Drag to move where the bundle splits"
           onMouseDown={startClampDrag}
-          onMouseUp={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
           style={{
             position: "absolute",

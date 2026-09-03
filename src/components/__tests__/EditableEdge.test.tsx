@@ -772,6 +772,17 @@ describe("EditableEdge bundles", () => {
     expect(mockSetBundleClamp).toHaveBeenCalledTimes(1);
   });
 
+  it("ends the drag when released over the clamp itself", () => {
+    renderMember(fanOut());
+    const clamp = screen.getByTestId("edge-bundle-clamp");
+    fireEvent.mouseDown(clamp, { clientX: 156, clientY: 50 });
+    fireEvent.mouseMove(window, { clientX: 170, clientY: 50 });
+    expect(mockSetBundleClamp).toHaveBeenCalledTimes(1);
+    fireEvent.mouseUp(clamp, { clientX: 170, clientY: 50 });
+    fireEvent.mouseMove(window, { clientX: 400, clientY: 50 });
+    expect(mockSetBundleClamp).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps a click on the clamp from reaching the edge", () => {
     mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ edgeAppearance: appearance, edges: fanOut() })));
     const onEdgeClick = vi.fn();
