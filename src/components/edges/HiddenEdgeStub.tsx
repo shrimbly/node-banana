@@ -59,7 +59,7 @@ export function HiddenEdgeStub({ side, x, y, direction, label, title = "Hidden c
         style={{ borderColor: `${color}${selected ? "" : "99"}` }}
       >
         <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: color }} />
-        <span className="pt-px">{label}</span>
+        <span className="leading-none">{label}</span>
       </button>
     </div>
   );
