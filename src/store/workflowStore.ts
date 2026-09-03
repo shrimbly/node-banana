@@ -340,6 +340,9 @@ interface WorkflowStore {
   ) => boolean;
 
   // UI State
+  /** The handle under the pointer, so hidden connections on it can ghost back. */
+  hoveredHandle: { nodeId: string; handleId: string | null; type: "source" | "target" } | null;
+  setHoveredHandle: (handle: { nodeId: string; handleId: string | null; type: "source" | "target" } | null) => void;
   openModalCount: number;
   isModalOpen: boolean;
   showQuickstart: boolean;
@@ -676,6 +679,15 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   edgeAppearance: getEdgeDefaults().appearance,
   clipboard: null,
   groups: {},
+  hoveredHandle: null,
+  setHoveredHandle: (handle) => {
+    const current = get().hoveredHandle;
+    if (
+      (current === null && handle === null) ||
+      (current && handle && current.nodeId === handle.nodeId && current.handleId === handle.handleId && current.type === handle.type)
+    ) return;
+    set({ hoveredHandle: handle });
+  },
   openModalCount: 0,
   isModalOpen: false,
   showQuickstart: true,

@@ -564,10 +564,56 @@ describe("EditableEdge when hidden", () => {
     expect(container.querySelector('[data-testid="hidden-edge-ghost"]')).toBeNull();
   });
 
-  it("shows the connection again when a stub is clicked", () => {
+  it("selects the connection when a stub is clicked, without showing it", () => {
     renderHidden();
     fireEvent.click(screen.getByTestId("hidden-edge-stub-source").querySelector("button")!);
-    expect(mockSetEdgesHidden).toHaveBeenCalledWith(["edge-1"], false);
+    expect(mockSetEdgesHidden).not.toHaveBeenCalled();
+    expect(mockSetEdges).toHaveBeenCalledTimes(1);
+    const mapper = mockSetEdges.mock.calls[0][0] as (edges: unknown[]) => { id: string; selected: boolean }[];
+    expect(mapper([{ id: "edge-1" }, { id: "edge-2", selected: true }])).toEqual([
+      { id: "edge-1", selected: true },
+      { id: "edge-2", selected: false },
+    ]);
+  });
+
+  it("ghosts the line while its handle is hovered", () => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({
+        edgeAppearance: baseAppearance,
+        edges: [hiddenEdge],
+        hoveredHandle: { nodeId: "node-2", handleId: "image", type: "target" },
+      }))
+    );
+    const { container } = render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps({ data: { hidden: true } })} />
+      </TestWrapper>
+    );
+    expect(container.querySelector('[data-testid="hidden-edge-ghost"]')).not.toBeNull();
+  });
+
+  it("runs the ghost between the label pills, not the handles", () => {
+    const { container } = renderHidden();
+    fireEvent.mouseEnter(screen.getByTestId("hidden-edge-stub-source").querySelector("button")!);
+    const d = container.querySelector('[data-testid="hidden-edge-ghost"]')?.getAttribute("d") ?? "";
+    // Source handle is at x=100; the stub pill starts 12px past it
+    expect(d.startsWith("M112")).toBe(true);
+  });
+
+  it("puts the toolbar above the label when selected", () => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edgeAppearance: baseAppearance, edges: [{ ...hiddenEdge, selected: true }] }))
+    );
+    const { container } = render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps({ data: { hidden: true }, selected: true })} />
+      </TestWrapper>
+    );
+    const toolbar = container.querySelector('[data-testid="edge-toolbar"]') as HTMLElement | null;
+    expect(toolbar).not.toBeNull();
+    // Anchored at the source stub (x=112) and 10px above its centre line (y=50)
+    expect(toolbar!.style.transform).toBe("translate(112px, 40px)");
+    expect(container.querySelector('[data-testid="hidden-edge-ghost"]')).not.toBeNull();
   });
 });
 

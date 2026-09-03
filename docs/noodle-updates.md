@@ -30,7 +30,7 @@ colour override.
 
 - [x] Single source of edge and handle colour tokens in `src/lib/edges/colors.ts` (replaces the four copies below)
 - [x] `EdgeAppearance` settings type in the store, with save/load, dirty-check and undo parity with `edgeStyle`
-- [x] Settings UI in Project Settings → Canvas (`ConnectionSettings`); the action-bar button cycles the three line styles
+- [x] Settings UI in its own Project Settings → Noodles tab (`ConnectionSettings`); the action-bar button cycles the three line styles
 - [x] `EditableEdge`, `ReferenceEdge` and `SharedEdgeGradients` render from the settings
 
 ### 2. Noodle behaviour polish — done
@@ -48,8 +48,8 @@ save; they just leave selection and hit-testing.
 
 - [x] `hidden` on edge data; the edge component draws stubs instead of a line, so React Flow, execution and persistence see an ordinary edge
 - [x] Hide per edge or per selection from the toolbar; hide and show everything from the action-bar eye, which carries the hidden count. Decision: no per-node entry and no shortcut for now; the eye covers the global case and the toolbar the local one
-- [x] Labelled stub at each handle ("Image 2", "Text"), stacking in creation order when a handle has several hidden; hovering a stub ghosts the noodle, clicking it shows the connection
-- [x] Hidden edges are not selectable and lose their selection when hidden
+- [x] Labelled stub at each handle ("Image 2", "Text"), stacking in creation order when a handle has several hidden. Hovering a stub, or the handle itself, ghosts the noodle between the two label pills. Clicking a stub selects the connection and puts its toolbar above the label, where Show brings it back
+- [x] Hidden edges lose their selection when hidden and can only be selected again through their stubs
 - [x] Execution, validation, copy/paste and save/load are unaffected: the edge stays in the array with a data flag
 
 ### 4. Noodle labels — done

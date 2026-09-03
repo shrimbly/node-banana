@@ -1094,3 +1094,23 @@ describe("ProjectSetupModal", () => {
     });
   });
 });
+
+describe("Noodles tab", () => {
+  // One stable object: the modal syncs it into local state in an effect,
+  // and a fresh object per render would loop.
+  const navSettings = { panMode: "space", zoomMode: "altScroll", selectionMode: "click" };
+
+  it("shows the connection settings under their own tab", () => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ canvasNavigationSettings: navSettings }))
+    );
+    mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    render(<ProjectSetupModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} mode="settings" />);
+    fireEvent.click(screen.getByText("Noodles"));
+    expect(screen.getByText("Connections")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Curved" })).toHaveAttribute("aria-checked", "true");
+    // The Canvas tab no longer carries them
+    fireEvent.click(screen.getByText("Canvas"));
+    expect(screen.queryByText("Connections")).toBeNull();
+  });
+});

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+import { Position } from "@xyflow/react";
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -52,8 +53,27 @@ export function EditableEdge({
 
   // Hidden connections: labelled stubs at the handles; hover ghosts the line back
   const isHidden = Boolean((data as EdgeData | undefined)?.hidden);
-  const [revealed, setRevealed] = useState(false);
-  const setEdgesHidden = useWorkflowStore((state) => state.setEdgesHidden);
+  const [stubHovered, setStubHovered] = useState(false);
+  const [stubWidths, setStubWidths] = useState({ source: 0, target: 0 });
+  const [toolbarSide, setToolbarSide] = useState<"source" | "target">("source");
+  const measureSource = useCallback((w: number) => setStubWidths((prev) => (prev.source === w ? prev : { ...prev, source: w })), []);
+  const measureTarget = useCallback((w: number) => setStubWidths((prev) => (prev.target === w ? prev : { ...prev, target: w })), []);
+  const handleHovered = useWorkflowStore((state) => {
+    if (!isHidden) return false;
+    const h = state.hoveredHandle;
+    if (!h) return false;
+    return (
+      (h.type === "source" && h.nodeId === source && (h.handleId ?? null) === (sourceHandleId ?? null)) ||
+      (h.type === "target" && h.nodeId === target && (h.handleId ?? null) === (targetHandleId ?? null))
+    );
+  });
+  const selectThisEdge = useCallback(
+    (side: "source" | "target") => {
+      setToolbarSide(side);
+      setEdges((edges) => edges.map((e) => ({ ...e, selected: e.id === id })));
+    },
+    [id, setEdges]
+  );
   const displayLabel = useWorkflowStore((state) => edgeDisplayLabelById(id, state.edges));
   const hasOwnLabel = Boolean((data as EdgeData | undefined)?.label?.trim());
   const stubLabel = displayLabel;
@@ -353,11 +373,27 @@ export function EditableEdge({
     const sourceDir: 1 | -1 = sourcePosition === "left" ? -1 : 1;
     const targetDir: 1 | -1 = targetPosition === "right" ? 1 : -1;
     const stubLength = 8;
+    const revealed = stubHovered || handleHovered || Boolean(selected);
+    // Stub pills sit just past the handles; the ghost runs between their outer edges
+    const sourceStub = { x: sourceX + sourceDir * (stubLength + 4), y: sourceY + sourceStack * 22 };
+    const targetStub = { x: targetX + targetDir * (stubLength + 4), y: targetY + targetStack * 22 };
+    const [ghostPath] = getBezierPath({
+      sourceX: sourceStub.x + sourceDir * stubWidths.source,
+      sourceY: sourceStub.y,
+      sourcePosition: sourceDir === 1 ? Position.Right : Position.Left,
+      targetX: targetStub.x + targetDir * stubWidths.target,
+      targetY: targetStub.y,
+      targetPosition: targetDir === 1 ? Position.Right : Position.Left,
+      curvature: 0.25,
+    });
+    const toolbarStub = toolbarSide === "target" ? targetStub : sourceStub;
+    const toolbarDir = toolbarSide === "target" ? targetDir : sourceDir;
+    const toolbarWidth = toolbarSide === "target" ? stubWidths.target : stubWidths.source;
     return (
       <>
         {revealed && (
           <path
-            d={edgePath}
+            d={ghostPath}
             fill="none"
             stroke={edgeColor}
             strokeWidth={strokeWidth}
@@ -372,25 +408,32 @@ export function EditableEdge({
         <EdgeLabelRenderer>
           <HiddenEdgeStub
             side="source"
-            x={sourceX + sourceDir * (stubLength + 4)}
-            y={sourceY + sourceStack * 22}
+            x={sourceStub.x}
+            y={sourceStub.y}
             direction={sourceDir}
             label={stubLabel}
             color={edgeColor}
-            onHoverChange={setRevealed}
-            onShow={() => setEdgesHidden([id], false)}
+            selected={Boolean(selected)}
+            onHoverChange={setStubHovered}
+            onSelect={() => selectThisEdge("source")}
+            onMeasure={measureSource}
           />
           <HiddenEdgeStub
             side="target"
-            x={targetX + targetDir * (stubLength + 4)}
-            y={targetY + targetStack * 22}
+            x={targetStub.x}
+            y={targetStub.y}
             direction={targetDir}
             label={stubLabel}
             color={edgeColor}
-            onHoverChange={setRevealed}
-            onShow={() => setEdgesHidden([id], false)}
+            selected={Boolean(selected)}
+            onHoverChange={setStubHovered}
+            onSelect={() => selectThisEdge("target")}
+            onMeasure={measureTarget}
           />
         </EdgeLabelRenderer>
+        {selected && carriesToolbar && (
+          <EdgeToolbar edgeId={id} x={toolbarStub.x + toolbarDir * (toolbarWidth / 2)} y={toolbarStub.y - 10} />
+        )}
       </>
     );
   }

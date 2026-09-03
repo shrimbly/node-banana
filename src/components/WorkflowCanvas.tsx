@@ -1696,10 +1696,16 @@ export function WorkflowCanvas() {
 
   // Keyboard shortcuts for copy/paste and stacking selected nodes
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    // Ignore if user is typing in an input field
+    // Ignore if user is typing in an input field (including the edge label
+    // field, which lives in React Flow's label layer)
+    const active = document.activeElement;
     if (
       event.target instanceof HTMLInputElement ||
-      event.target instanceof HTMLTextAreaElement
+      event.target instanceof HTMLTextAreaElement ||
+      (event.target instanceof HTMLElement && event.target.isContentEditable) ||
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLTextAreaElement ||
+      (active instanceof HTMLElement && active.isContentEditable)
     ) {
       return;
     }
@@ -1973,6 +1979,39 @@ export function WorkflowCanvas() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
+
+  // Which handle is under the pointer: hidden connections on it ghost back.
+  // One delegated listener on the wrapper instead of a handler per handle.
+  const setHoveredHandle = useWorkflowStore((state) => state.setHoveredHandle);
+  useEffect(() => {
+    const wrapper = reactFlowWrapper.current;
+    if (!wrapper || !setHoveredHandle) return;
+    const handleOf = (target: EventTarget | null) =>
+      target instanceof Element ? target.closest<HTMLElement>(".react-flow__handle") : null;
+    const onOver = (event: MouseEvent) => {
+      const handle = handleOf(event.target);
+      if (!handle) return;
+      const nodeId = handle.dataset.nodeid;
+      if (!nodeId) return;
+      setHoveredHandle({
+        nodeId,
+        handleId: handle.dataset.handleid ?? null,
+        type: handle.classList.contains("source") ? "source" : "target",
+      });
+    };
+    const onOut = (event: MouseEvent) => {
+      const handle = handleOf(event.target);
+      if (!handle) return;
+      const next = event.relatedTarget instanceof Element ? event.relatedTarget.closest(".react-flow__handle") : null;
+      if (next !== handle) setHoveredHandle(null);
+    };
+    wrapper.addEventListener("mouseover", onOver);
+    wrapper.addEventListener("mouseout", onOut);
+    return () => {
+      wrapper.removeEventListener("mouseover", onOver);
+      wrapper.removeEventListener("mouseout", onOut);
+    };
+  }, [setHoveredHandle]);
 
 
   // Fix for React Flow selection bug where nodes with undefined bounds get incorrectly selected.

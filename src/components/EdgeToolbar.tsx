@@ -66,6 +66,7 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
   const hasPause = grouped ? allPaused : Boolean(edge.data?.hasPause);
   const canBundle = multi && !bundle?.manual && shareNodePair(selectedEdges) && selectedEdges.every((e) => !e.data?.hidden && e.type !== "reference");
   const canUnbundle = Boolean(bundle?.manual) && (bundled || multi);
+  const isHiddenEdge = Boolean(edge.data?.hidden);
 
   const handleTogglePause = () => {
     if (grouped) setEdgesPause(selectedIds, !allPaused);
@@ -75,9 +76,13 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
   return (
     <EdgeLabelRenderer>
       <div
-        className="nodrag nopan"
+        className="nodrag nopan nokey"
         data-testid="edge-toolbar"
         style={{ position: "absolute", transform: `translate(${x}px, ${y}px)`, pointerEvents: "all", zIndex: 1000 }}
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
       >
         <div
           className="relative flex items-center gap-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl p-1"
@@ -138,7 +143,7 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
                   (e.target as HTMLInputElement).blur();
                 }
               }}
-              className="nodrag nopan w-24 h-6 px-2 text-[11px] text-neutral-100 bg-neutral-900 border border-neutral-600 rounded placeholder:text-neutral-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
+              className="nodrag nopan nokey w-24 h-6 px-2 text-[11px] text-neutral-100 bg-neutral-900 border border-neutral-600 rounded placeholder:text-neutral-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
             />
           )}
           {!isLoop && (
@@ -180,15 +185,28 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
               </svg>
             </button>
           )}
-          <button
-            onClick={() => setEdgesHidden(selectedIds, true)}
-            className={`${iconButton} text-neutral-400 hover:text-neutral-100`}
-            title={grouped ? `Hide ${selectedIds.length} connections` : "Hide connection"}
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 5.1A9.8 9.8 0 0112 5c4.5 0 8.3 2.9 9.6 7a10 10 0 01-2.2 3.6M6.6 6.6A10 10 0 002.4 12c1.3 4.1 5.1 7 9.6 7 1.4 0 2.8-.3 4-.8" />
-            </svg>
-          </button>
+          {isHiddenEdge ? (
+            <button
+              onClick={() => setEdgesHidden(selectedIds, false)}
+              className={`${iconButton} text-neutral-400 hover:text-neutral-100`}
+              title={grouped ? `Show ${selectedIds.length} connections` : "Show connection"}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.4 12C3.7 7.9 7.5 5 12 5s8.3 2.9 9.6 7c-1.3 4.1-5.1 7-9.6 7s-8.3-2.9-9.6-7z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              onClick={() => setEdgesHidden(selectedIds, true)}
+              className={`${iconButton} text-neutral-400 hover:text-neutral-100`}
+              title={grouped ? `Hide ${selectedIds.length} connections` : "Hide connection"}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 5.1A9.8 9.8 0 0112 5c4.5 0 8.3 2.9 9.6 7a10 10 0 01-2.2 3.6M6.6 6.6A10 10 0 002.4 12c1.3 4.1 5.1 7 9.6 7 1.4 0 2.8-.3 4-.8" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={() => removeEdges(selectedIds)}
             className={`${iconButton} text-neutral-400 hover:text-red-400`}

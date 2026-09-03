@@ -118,6 +118,14 @@ describe("EdgeToolbar", () => {
     expect(mockSetEdgeLabel).not.toHaveBeenCalled();
   });
 
+  it("offers to show a hidden edge instead of hiding it", () => {
+    withEdges([edge("e1", { selected: true, data: { hidden: true } })]);
+    render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
+    expect(screen.queryByTitle("Hide connection")).toBeNull();
+    fireEvent.click(screen.getByTitle("Show connection"));
+    expect(mockSetEdgesHidden).toHaveBeenCalledWith(["e1"], false);
+  });
+
   it("hides a single edge", () => {
     withEdges([edge("e1", { selected: true })]);
     render(<EdgeToolbar edgeId="e1" x={0} y={0} />);

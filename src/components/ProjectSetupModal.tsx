@@ -153,7 +153,7 @@ export function ProjectSetupModal({
   const { inlineParametersEnabled, setInlineParameters } = useInlineParameters();
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<"project" | "providers" | "comfy" | "nodeDefaults" | "canvas">("project");
+  const [activeTab, setActiveTab] = useState<"project" | "providers" | "comfy" | "nodeDefaults" | "canvas" | "noodles">("project");
 
   // Project tab state
   const [name, setName] = useState("");
@@ -364,6 +364,10 @@ export function ProjectSetupModal({
 
   const handleSaveCanvas = () => {
     updateCanvasNavigationSettings(localCanvasSettings);
+    onClose();
+  };
+
+  const handleSaveNoodles = () => {
     if (localEdgeStyle !== edgeStyle) setEdgeStyle(localEdgeStyle);
     if (localEdgeAppearance !== edgeAppearance) setEdgeAppearance(localEdgeAppearance);
     onClose();
@@ -388,6 +392,8 @@ export function ProjectSetupModal({
       handleSaveComfy();
     } else if (activeTab === "canvas") {
       handleSaveCanvas();
+    } else if (activeTab === "noodles") {
+      handleSaveNoodles();
     } else {
       handleSaveNodeDefaults();
     }
@@ -470,6 +476,12 @@ export function ProjectSetupModal({
             className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "canvas" ? "bg-neutral-700 text-neutral-100 font-medium" : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"}`}
           >
             Canvas
+          </button>
+          <button
+            onClick={() => setActiveTab("noodles")}
+            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "noodles" ? "bg-neutral-700 text-neutral-100 font-medium" : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"}`}
+          >
+            Noodles
           </button>
           </div>
         </div>
@@ -1263,7 +1275,13 @@ export function ProjectSetupModal({
                 </div>
               </div>
             </div>
+          </div>
+        )}
 
+        {/* Noodles Tab Content */}
+        {activeTab === "noodles" && (
+          <div className="space-y-3">
+            <p className="text-xs text-neutral-400">How the connections between nodes are drawn.</p>
             <ConnectionSettings
               edgeStyle={localEdgeStyle}
               appearance={localEdgeAppearance}

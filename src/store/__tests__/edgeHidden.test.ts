@@ -53,3 +53,16 @@ describe("setAllEdgesHidden", () => {
     expect(useWorkflowStore.getState().edges).toBe(before);
   });
 });
+
+describe("setHoveredHandle", () => {
+  it("stores the handle under the pointer and ignores repeats", () => {
+    useWorkflowStore.setState({ ...initial, hoveredHandle: null });
+    useWorkflowStore.getState().setHoveredHandle({ nodeId: "a", handleId: "image", type: "source" });
+    const first = useWorkflowStore.getState().hoveredHandle;
+    expect(first).toEqual({ nodeId: "a", handleId: "image", type: "source" });
+    useWorkflowStore.getState().setHoveredHandle({ nodeId: "a", handleId: "image", type: "source" });
+    expect(useWorkflowStore.getState().hoveredHandle).toBe(first);
+    useWorkflowStore.getState().setHoveredHandle(null);
+    expect(useWorkflowStore.getState().hoveredHandle).toBeNull();
+  });
+});
