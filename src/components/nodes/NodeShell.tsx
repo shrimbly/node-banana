@@ -225,8 +225,8 @@ export function NodeShell({
           {children}
         </div>
         {cardChildren}
-        <SocketColumn side="left" sockets={inputs} showLabels={labels} />
-        <SocketColumn side="right" sockets={outputs} showLabels={labels} />
+        <SocketColumn nodeId={id} side="left" sockets={inputs} showLabels={labels} />
+        <SocketColumn nodeId={id} side="right" sockets={outputs} showLabels={labels} />
       </div>
 
       {(gap !== undefined || controls) && (

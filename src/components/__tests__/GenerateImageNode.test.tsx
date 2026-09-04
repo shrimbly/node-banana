@@ -610,7 +610,8 @@ describe("GenerateImageNode", () => {
         </TestWrapper>
       );
 
-      expect(screen.getByText("FLUX Dev")).toBeInTheDocument();
+      // The primary name is also the summary row title, so it appears twice.
+      expect(screen.getAllByText("FLUX Dev").length).toBeGreaterThanOrEqual(2);
       expect(screen.getByText("FLUX Schnell")).toBeInTheDocument();
     });
 

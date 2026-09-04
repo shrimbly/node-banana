@@ -45,6 +45,8 @@ export function socketColor(type: SocketType): string {
 }
 
 interface SocketProps {
+  /** Owning node. Passed explicitly so sockets work outside a React Flow node context (tests, previews). */
+  nodeId: string;
   side: "left" | "right";
   row: number;
   spec: SocketSpec;
@@ -55,9 +57,9 @@ interface SocketProps {
  * One socket in the media card's border. The React Flow Handle *is* the 18×28
  * box, so edges terminate at the swell and the hit area follows it.
  */
-export function Socket({ side, row, spec, showLabel = false }: SocketProps) {
+export function Socket({ nodeId, side, row, spec, showLabel = false }: SocketProps) {
   const handleType = side === "left" ? "target" : "source";
-  const connections = useNodeConnections({ handleType, handleId: spec.id });
+  const connections = useNodeConnections({ id: nodeId, handleType, handleId: spec.id });
   const connected = connections.length > 0;
   const color = socketColor(spec.type);
   const position = side === "left" ? Position.Left : Position.Right;
@@ -150,17 +152,18 @@ export function socketRowCount(sockets: ReadonlyArray<SocketSpec>): number {
 }
 
 interface SocketColumnProps {
+  nodeId: string;
   side: "left" | "right";
   sockets: ReadonlyArray<SocketSpec>;
   showLabels?: boolean;
 }
 
-export function SocketColumn({ side, sockets, showLabels = false }: SocketColumnProps) {
+export function SocketColumn({ nodeId, side, sockets, showLabels = false }: SocketColumnProps) {
   const rows = assignSocketRows(sockets);
   return (
     <>
       {sockets.map((spec, i) => (
-        <Socket key={`${side}-${spec.id}`} side={side} row={rows[i]} spec={spec} showLabel={showLabels} />
+        <Socket key={`${side}-${spec.id}`} nodeId={nodeId} side={side} row={rows[i]} spec={spec} showLabel={showLabels} />
       ))}
     </>
   );

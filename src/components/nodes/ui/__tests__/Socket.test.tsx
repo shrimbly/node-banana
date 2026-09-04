@@ -24,7 +24,7 @@ describe("Socket", () => {
   });
 
   it("renders a target handle with the id, type and geometry of its row", () => {
-    const { container } = wrap(<Socket side="left" row={1} spec={{ id: "image", type: "image", label: "Image" }} />);
+    const { container } = wrap(<Socket nodeId="n1" side="left" row={1} spec={{ id: "image", type: "image", label: "Image" }} />);
     const handle = container.querySelector('[data-handletype="image"]') as HTMLElement;
     expect(handle).toHaveAttribute("data-handleid", "image");
     expect(handle.className).toContain("target");
@@ -40,19 +40,19 @@ describe("Socket", () => {
 
   it("mirrors on the right and fills the hole when connected", () => {
     mockConnections.mockReturnValue([{}]);
-    const { container } = wrap(<Socket side="right" row={0} spec={{ id: "video", type: "video" }} />);
+    const { container } = wrap(<Socket nodeId="n1" side="right" row={0} spec={{ id: "video", type: "video" }} />);
     const handle = container.querySelector('[data-handletype="video"]') as HTMLElement;
     expect(handle.className).toContain("source");
     expect(handle.style.right).toBe("-15px");
     expect(handle.style.transform).toBe("scaleX(-1)");
     expect(handle).toHaveAttribute("data-connected", "true");
-    expect(mockConnections).toHaveBeenCalledWith({ handleType: "source", handleId: "video" });
+    expect(mockConnections).toHaveBeenCalledWith({ id: "n1", handleType: "source", handleId: "video" });
     const hole = handle.querySelector("[data-socket-hole]") as SVGCircleElement;
     expect(hole.getAttribute("fill")).toBe("currentColor");
   });
 
   it("keeps a hidden socket in the DOM, unconnectable and invisible", () => {
-    const { container } = wrap(<Socket side="left" row={0} spec={{ id: "image-0", type: "image", hidden: true }} />);
+    const { container } = wrap(<Socket nodeId="n1" side="left" row={0} spec={{ id: "image-0", type: "image", hidden: true }} />);
     const handle = container.querySelector('[data-handleid="image-0"]') as HTMLElement;
     expect(handle).toBeInTheDocument();
     expect(handle.className).toContain("socket-hidden");
@@ -63,7 +63,7 @@ describe("Socket", () => {
 
   it("dims placeholders and forwards data-tutorial", () => {
     const { container } = wrap(
-      <Socket side="left" row={0} spec={{ id: "text", type: "text", placeholder: true, dataTutorial: "generate-text-input-handle" }} />
+      <Socket nodeId="n1" side="left" row={0} spec={{ id: "text", type: "text", placeholder: true, dataTutorial: "generate-text-input-handle" }} />
     );
     const handle = container.querySelector('[data-handletype="text"]') as HTMLElement;
     expect(handle.className).toContain("socket-placeholder");
@@ -71,11 +71,11 @@ describe("Socket", () => {
   });
 
   it("shows the label beside the socket only when asked", () => {
-    const { rerender } = wrap(<Socket side="left" row={0} spec={{ id: "text", type: "text", label: "Prompt" }} />);
+    const { rerender } = wrap(<Socket nodeId="n1" side="left" row={0} spec={{ id: "text", type: "text", label: "Prompt" }} />);
     expect(screen.getByText("Prompt")).toHaveStyle({ opacity: "0" });
     rerender(
       <ReactFlowProvider>
-        <Socket side="left" row={0} spec={{ id: "text", type: "text", label: "Prompt" }} showLabel />
+        <Socket nodeId="n1" side="left" row={0} spec={{ id: "text", type: "text", label: "Prompt" }} showLabel />
       </ReactFlowProvider>
     );
     expect(screen.getByText("Prompt")).toHaveStyle({ opacity: "1" });
@@ -92,7 +92,7 @@ describe("SocketColumn", () => {
     ];
     expect(assignSocketRows(sockets)).toEqual([0, 0, 1, 2]);
     expect(socketRowCount(sockets)).toBe(3);
-    const { container } = wrap(<SocketColumn side="left" sockets={sockets} />);
+    const { container } = wrap(<SocketColumn nodeId="n1" side="left" sockets={sockets} />);
     const tops = Array.from(container.querySelectorAll(".socket:not(.socket-hidden)")).map((el) => (el as HTMLElement).style.top);
     expect(tops).toEqual(["10px", "40px", "70px"]);
   });
