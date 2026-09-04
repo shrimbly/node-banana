@@ -75,8 +75,8 @@ describe("stackHiddenStubs", () => {
     expect(placed.get("img1")).toBe(100);
     expect(placed.get("img2")).toBe(122);
     expect(placed.get("img3")).toBe(144);
-    // The text handle sits at 130 but the image stack runs past it
-    expect(placed.get("txt1")).toBe(166);
+    // The text handle sits at 130 but the image stack runs past it; a new type gets extra room
+    expect(placed.get("txt1")).toBe(174);
   });
 
   it("leaves a stub at its handle when there is room", () => {
@@ -111,12 +111,13 @@ describe("hiddenStubOffset", () => {
   it("is the distance a stub was pushed below its own handle", () => {
     expect(hiddenStubOffset("a1", edges, "target", handleY, 100, expanded)).toBe(0);
     expect(hiddenStubOffset("a2", edges, "target", handleY, 100, expanded)).toBe(22);
-    expect(hiddenStubOffset("t", edges, "target", handleY, 110, expanded)).toBe(34);
+    // Rows at 100 and 122, then the group gap before the text stub
+    expect(hiddenStubOffset("t", edges, "target", handleY, 110, expanded)).toBe(42);
   });
 
   it("keeps collapsed members level with their handle", () => {
     expect(hiddenStubOffset("a2", edges, "target", handleY, 100)).toBe(0);
-    expect(hiddenStubOffset("t", edges, "target", handleY, 110)).toBe(12);
+    expect(hiddenStubOffset("t", edges, "target", handleY, 110)).toBe(20);
   });
 
   it("falls back to the caller's y when handle positions are unknown", () => {

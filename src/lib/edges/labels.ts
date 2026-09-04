@@ -89,6 +89,8 @@ export function parallelEdgePosition(edgeId: string, edges: WorkflowEdge[]): { i
  * handle, so their labels stack instead of overlapping. Creation order.
  */
 export const HIDDEN_STUB_SPACING = 22;
+/** Extra room between the stubs of different handles, so the types read as groups. */
+export const HIDDEN_STUB_GROUP_GAP = 8;
 
 /** The plural of a handle type's label, for a pill standing in for several hidden connections. */
 export function pluralTypeLabel(handleId: string | null | undefined): string {
@@ -167,24 +169,27 @@ export function stackHiddenStubs(
 ): Map<string, number> {
   const handleOf = (e: WorkflowEdge) => (side === "source" ? e.sourceHandle : e.targetHandle) ?? null;
   const byId = new Map(edges.map((e) => [e.id, e]));
-  const rows: { ids: string[]; y: number; createdAt: number }[] = [];
+  const rows: { ids: string[]; key: string; y: number; createdAt: number }[] = [];
   for (const group of hiddenStubGroups(edges, nodeId, side)) {
     const first = byId.get(group.members[0])!;
     const y = handleY(handleOf(first)) ?? fallbackY;
     const collapsed = group.members.length > 1 && group.key !== expandedGroup;
     if (collapsed) {
-      rows.push({ ids: group.members, y, createdAt: first.data?.createdAt || 0 });
+      rows.push({ ids: group.members, key: group.key, y, createdAt: first.data?.createdAt || 0 });
     } else {
-      for (const id of group.members) rows.push({ ids: [id], y, createdAt: byId.get(id)?.data?.createdAt || 0 });
+      for (const id of group.members) rows.push({ ids: [id], key: group.key, y, createdAt: byId.get(id)?.data?.createdAt || 0 });
     }
   }
   rows.sort((a, b) => a.y - b.y || a.createdAt - b.createdAt || a.ids[0].localeCompare(b.ids[0]));
   const placed = new Map<string, number>();
   let floor = -Infinity;
+  let previousKey: string | null = null;
   for (const row of rows) {
+    if (previousKey !== null && row.key !== previousKey) floor += HIDDEN_STUB_GROUP_GAP;
     const y = Math.max(row.y, floor);
     for (const id of row.ids) placed.set(id, y);
     floor = y + spacing;
+    previousKey = row.key;
   }
   return placed;
 }
