@@ -786,10 +786,13 @@ describe("EditableEdge bundles", () => {
     vi.clearAllMocks();
   });
 
-  it("draws the stem and the count from the first member, and starts its own line past the stem", () => {
+  it("draws the stem and the clamp from the first member, and starts its own line past the stem", () => {
     const { container } = renderMember(fanOut());
     expect(container.querySelector('[data-testid="edge-bundle-stem"]')).not.toBeNull();
-    expect(screen.getByTestId("edge-bundle-count")).toHaveTextContent("2");
+    const clamp = screen.getByTestId("edge-bundle-clamp");
+    expect(clamp.getAttribute("title")).toContain("2 connections");
+    // Above an elevated edge's SVG (up to 2000), so a selected node can't cost it the press
+    expect(Number(clamp.style.zIndex)).toBeGreaterThan(2000);
     // The source handle is at x=100 and the stem reaches 56px, so the noodle starts at 156
     const d = container.querySelector("#edge-1")?.getAttribute("d") ?? "";
     expect(d.startsWith("M156")).toBe(true);
@@ -800,7 +803,7 @@ describe("EditableEdge bundles", () => {
   it("starts the other members past the stem without drawing it again", () => {
     const { container } = renderMember(fanOut(), { id: "edge-2", target: "node-3" });
     expect(container.querySelector('[data-testid="edge-bundle-stem"]')).toBeNull();
-    expect(screen.queryByTestId("edge-bundle-count")).toBeNull();
+    expect(screen.queryByTestId("edge-bundle-clamp")).toBeNull();
     expect((container.querySelector("#edge-2")?.getAttribute("d") ?? "").startsWith("M156")).toBe(true);
   });
 
@@ -838,8 +841,6 @@ describe("EditableEdge bundles", () => {
     );
     expect((container.querySelector("#edge-1")?.getAttribute("d") ?? "").startsWith("M220")).toBe(true);
     expect(screen.getByTestId("edge-bundle-clamp").style.transform).toContain("translate(220px, 50px)");
-    // The count sits above the clamp
-    expect(screen.getByTestId("edge-bundle-count").style.transform).toContain("translate(220px, 31px)");
   });
 
   it("moves the split point when the clamp is dragged", () => {

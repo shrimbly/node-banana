@@ -624,17 +624,21 @@ function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, col
       />
       <path d={path} fill="none" strokeWidth={stemWidth + 12} stroke="transparent" className="react-flow__edge-interaction" />
       <EdgeLabelRenderer>
-        {/* The clamp: a glassy vertical pill over the split point */}
+        {/* The clamp: a glassy vertical pill over the split point. A selected
+            node or edge lifts the edge's SVG (and so the stem's hit area) above
+            the label layer, so the clamp keeps a z-index above any elevated
+            edge or it would lose the press to the stem. */}
         <div
           className="nodrag nopan"
           data-testid="edge-bundle-clamp"
-          title="Drag to move where the bundle splits"
+          title={`${count} connections · drag to move where the bundle splits`}
           onMouseDown={startClampDrag}
           onClick={(e) => e.stopPropagation()}
           style={{
             position: "absolute",
             transform: `translate(${splitX}px, ${y}px) translate(-50%, -50%)`,
             pointerEvents: "all",
+            zIndex: 2001,
             width: 10,
             height: 26,
             borderRadius: 9999,
@@ -646,21 +650,6 @@ function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, col
             WebkitBackdropFilter: "blur(4px)",
           }}
         />
-        <div
-          data-testid="edge-bundle-count"
-          className="inline-flex items-center gap-1 h-5 pl-1.5 pr-2 rounded-full bg-neutral-800/95 border text-[10px] font-semibold text-neutral-100 whitespace-nowrap"
-          style={{
-            position: "absolute",
-            transform: `translate(${splitX}px, ${y - 19}px) translate(-50%, -100%)`,
-            pointerEvents: "none",
-            borderColor: `${color}b3`,
-          }}
-        >
-          <svg className="w-3.5 h-3.5" viewBox="0 0 14 14" fill="none" stroke={color} strokeWidth={1.4} strokeLinecap="round">
-            <path d="M1.5 3.5h3.5c2 0 2 3.5 4 3.5h3.5M1.5 7H5M1.5 10.5h3.5c2 0 2-3.5 4-3.5" />
-          </svg>
-          <span>{count}</span>
-        </div>
       </EdgeLabelRenderer>
     </>
   );
