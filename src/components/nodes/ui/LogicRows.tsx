@@ -22,15 +22,23 @@ export function LogicRows({ children, className }: { children: ReactNode; classN
 export function LogicRow({
   children,
   className,
+  well = false,
   ...rest
-}: { children: ReactNode; className?: string } & React.HTMLAttributes<HTMLDivElement>) {
+}: { children: ReactNode; className?: string; well?: boolean } & React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       {...rest}
       className={cn("flex items-center gap-1.5 px-2 shrink-0 min-w-0", className)}
       style={{ height: SOCKET_PITCH, ...rest.style }}
     >
-      {children}
+      {well ? (
+        // An inset lane, so each row reads as its own item rather than a line of text.
+        <div className="flex-1 min-w-0 h-[22px] flex items-center gap-1.5 px-[7px] rounded-well squircle bg-well shadow-well">
+          {children}
+        </div>
+      ) : (
+        children
+      )}
     </div>
   );
 }

@@ -114,7 +114,7 @@ export const SwitchNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>)
     >
       <LogicRows>
         {nodeData.switches.map((sw) => (
-            <LogicRow key={sw.id} className="group">
+            <LogicRow key={sw.id} className="group" well>
               <label className="relative inline-flex items-center cursor-pointer nodrag nopan shrink-0">
                 <input
                   type="checkbox"
@@ -131,7 +131,7 @@ export const SwitchNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>)
               {editingId === sw.id ? (
                 <input
                   type="text"
-                  className="nodrag nopan flex-1 min-w-0 h-[22px] bg-well rounded-well squircle shadow-well text-neutral-100 text-node px-[7px] outline-none focus:ring-1 focus:ring-violet-500"
+                  className="nodrag nopan flex-1 min-w-0 h-[18px] bg-transparent text-neutral-100 text-node outline-none"
                   defaultValue={sw.name}
                   autoFocus
                   onBlur={(e) => handleNameEdit(sw.id, e.target.value)}

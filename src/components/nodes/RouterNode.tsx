@@ -5,7 +5,7 @@ import { NodeProps } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
 import { useWorkflowStore } from "@/store/workflowStore";
 import type { WorkflowNode } from "@/types";
-import { LogicRow, LogicRows, socketColor, type SocketSpec } from "./ui";
+import { LogicRow, LogicRows, type SocketSpec } from "./ui";
 
 const ALL_HANDLE_TYPES = ["image", "text", "video", "audio", "3d", "easeCurve"] as const;
 type RoutedType = (typeof ALL_HANDLE_TYPES)[number];
@@ -67,13 +67,12 @@ export const RouterNode = memo(({ id, selected }: NodeProps<WorkflowNode>) => {
     >
       <LogicRows>
         {activeInputTypes.map((type) => (
-          <LogicRow key={type}>
-            <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: socketColor(type) }} aria-hidden />
+          <LogicRow key={type} well>
             <span className="text-node text-neutral-300">{TYPE_LABELS[type]}</span>
           </LogicRow>
         ))}
         {showGeneric && (
-          <LogicRow>
+          <LogicRow well>
             <span className="text-node text-neutral-500">
               {activeInputTypes.length > 0 ? "Drop another type here" : "Drop connections here"}
             </span>
