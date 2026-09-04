@@ -52,6 +52,7 @@ import {
 import {
   createDefaultNodeData,
   defaultNodeDimensions,
+  migrateNodeGeometry,
   GROUP_COLORS,
   GROUP_COLOR_ORDER,
 } from "./utils/nodeDefaults";
@@ -787,7 +788,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   addNode: (type: NodeType, position: XYPosition, initialData?: Partial<WorkflowNodeData>) => {
     const id = `${type}-${++nodeIdCounter}`;
 
-    const { width, height } = defaultNodeDimensions[type];
+    const { width } = defaultNodeDimensions[type];
 
     // Find collision-free position
     const state = get();
@@ -799,12 +800,14 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       ? ({ ...defaultData, ...initialData } as WorkflowNodeData)
       : defaultData;
 
+    // Height is derived from content by the node shell; only width is stored.
     const newNode: WorkflowNode = {
       id,
       type,
       position: finalPosition,
       data: nodeData,
-      style: { width, height },
+      width,
+      style: { width },
     };
 
     pushUndoCheckpoint(get, set);
@@ -1092,7 +1095,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     // Create new nodes with updated IDs and offset positions
     const pastedCellMemberIds = new Set<string>();
     const newNodes: WorkflowNode[] = clipboard.nodes.map((node) => {
-      const defaults = defaultNodeDimensions[node.type as NodeType] || { width: 300, height: 280 };
       let data = clonePreservingStrings(node.data) as WorkflowNodeData;
 
       // A pasted splitGrid must not keep driving the original's cell nodes:
@@ -1147,7 +1149,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         }
       }
 
-      return {
+      return migrateNodeGeometry({
         ...node,
         id: idMapping.get(node.id)!,
         position: {
@@ -1155,14 +1157,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
           y: node.position.y + offset.y,
         },
         selected: true, // Select newly pasted nodes
-        // Reset height to defaults so BaseNode's ResizeObserver
-        // can correctly add settings panel height from the right baseline
-        style: { width: node.style?.width ?? defaults.width, height: defaults.height },
-        width: undefined,
-        height: undefined,
-        measured: undefined,
         data,
-      };
+      });
     });
 
     // Pasted cell nodes must not stay members of the ORIGINAL cell groups
@@ -2622,7 +2618,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     set({
       // Clear selected state - selection should not be persisted across sessions
       // Also validate position to ensure coordinates are finite numbers
-      nodes: hydratedWorkflow.nodes.map(node => ({
+      nodes: hydratedWorkflow.nodes.map(node => migrateNodeGeometry({
         ...node,
         selected: false,
         position: {

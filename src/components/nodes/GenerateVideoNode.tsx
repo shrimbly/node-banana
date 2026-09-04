@@ -9,7 +9,6 @@ import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
 import { GenerateVideoNodeData, ProviderType, SelectedModel, ModelInputDef } from "@/types";
 import { ProviderModel, ModelCapability } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
-import { getVideoDimensions } from "@/utils/nodeDimensions";
 import { ProviderBadge } from "./ProviderBadge";
 import { useVideoBlobUrl } from "@/hooks/useVideoBlobUrl";
 import { useVideoAutoplay } from "@/hooks/useVideoAutoplay";
@@ -23,7 +22,6 @@ import { HandleLabel } from "./HandleLabel";
 import { useLoadGenerationById } from "@/hooks/useLoadGenerationById";
 import { useGenerationCarousel } from "@/hooks/useGenerationCarousel";
 import { useErrorToast } from "@/hooks/useErrorToast";
-import { useAutoResizeOnMedia } from "@/hooks/useAutoResizeOnMedia";
 
 // Video generation capabilities
 const VIDEO_CAPABILITIES: ModelCapability[] = ["text-to-video", "image-to-video", "audio-to-video"];
@@ -297,7 +295,6 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
   useErrorToast(nodeData.status, nodeData.error, "Video generation failed");
 
   // Auto-resize node when output video changes
-  useAutoResizeOnMedia(id, nodeData.outputVideo, getVideoDimensions);
 
   return (
     <>

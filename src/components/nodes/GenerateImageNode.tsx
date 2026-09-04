@@ -9,7 +9,6 @@ import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
 import { NanoBananaNodeData, AspectRatio, Resolution, MODEL_DISPLAY_NAMES, ProviderType, SelectedModel, ModelInputDef, GEMINI_IMAGE_MODELS, ModelType } from "@/types";
 import { ProviderModel, ModelCapability } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
-import { getImageDimensions } from "@/utils/nodeDimensions";
 import { ProviderBadge } from "./ProviderBadge";
 import { useInlineParameters } from "@/hooks/useInlineParameters";
 import { InlineParameterPanel } from "./InlineParameterPanel";
@@ -22,7 +21,6 @@ import { HandleLabel } from "./HandleLabel";
 import { useLoadGenerationById } from "@/hooks/useLoadGenerationById";
 import { useGenerationCarousel } from "@/hooks/useGenerationCarousel";
 import { useErrorToast } from "@/hooks/useErrorToast";
-import { useAutoResizeOnMedia } from "@/hooks/useAutoResizeOnMedia";
 
 /** Reorder items so they read column-first in a row-based CSS grid.
  *  e.g. [1,2,3,4,5,6,7,8] with 2 cols → [1,5,2,6,3,7,4,8] */
@@ -413,7 +411,6 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   useErrorToast(nodeData.status, nodeData.error, "Generation failed");
 
   // Auto-resize node when output image changes
-  useAutoResizeOnMedia(id, nodeData.outputImage, getImageDimensions);
 
   return (
     <>

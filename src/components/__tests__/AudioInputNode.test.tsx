@@ -32,6 +32,9 @@ vi.mock("@xyflow/react", () => {
   return {
     Handle: MockHandle,
     NodeResizer: () => null,
+    NodeResizeControl: () => null,
+    useNodeConnections: () => [],
+    useUpdateNodeInternals: () => () => {},
     Position: { Left: "left", Right: "right", Top: "top", Bottom: "bottom" },
     ReactFlowProvider: ({ children }: { children: React.ReactNode }) => children,
     useReactFlow: () => ({

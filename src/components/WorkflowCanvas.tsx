@@ -176,6 +176,17 @@ const MINIMAP_CLOSE_POSITION = {
     MINIMAP_GEOMETRY.controlSize,
 } as const;
 
+/** Height is content-derived; a stored one must not reach React Flow's wrapper. */
+function stripNodeHeight<T extends Node>(node: T): T {
+  const styleHeight = node.style && "height" in node.style;
+  if (node.height === undefined && !styleHeight) return node;
+  const { height: _height, ...rest } = node;
+  void _height;
+  const { height: _styleHeight, ...style } = (node.style ?? {}) as Record<string, unknown>;
+  void _styleHeight;
+  return { ...rest, style } as unknown as T;
+}
+
 function getMiniMapNodeColor(node: Node): string {
   switch (node.type) {
     case "imageInput": return "#3b82f6";
@@ -509,9 +520,12 @@ export function WorkflowCanvas() {
     }
   }, [tutorialActive, nodes, setCenter]);
 
-  // Apply dimming className to nodes downstream of disabled Switch outputs or skipped by optional inputs
+  // Apply dimming className to nodes downstream of disabled Switch outputs or skipped by optional inputs.
+  // Also drop any stored height: node height is derived from content by the
+  // node shell, and a stale value here would pin the wrapper.
   const allNodes = useMemo(() => {
-    return nodes.map((node) => {
+    return nodes.map((storedNode) => {
+      const node = stripNodeHeight(storedNode);
       // Never dim Switch or ConditionalSwitch nodes themselves
       if (node.type === "switch" || node.type === "conditionalSwitch") return node;
 
