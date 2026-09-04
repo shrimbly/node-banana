@@ -224,8 +224,8 @@ describe("EdgeToolbar bundles", () => {
 
   it("acts on the whole manual bundle from one selected member and offers to unbundle", () => {
     withEdges([
-      edge("e1", { selected: true, data: { bundleId: "x", createdAt: 1 } }),
-      edge("e2", { target: "z", data: { bundleId: "x", createdAt: 2 } }),
+      edge("e1", { selected: true, data: { sourceBundleId: "x", createdAt: 1 } }),
+      edge("e2", { target: "z", data: { sourceBundleId: "x", createdAt: 2 } }),
     ]);
     render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
     expect(screen.getByText("2 connections")).toBeInTheDocument();
@@ -233,7 +233,7 @@ describe("EdgeToolbar bundles", () => {
     fireEvent.click(screen.getByTitle("Pause all"));
     expect(mockSetEdgesPause).toHaveBeenCalledWith(["e1", "e2"], true);
     fireEvent.click(screen.getByTitle("Unbundle"));
-    expect(mockUnbundleEdges).toHaveBeenCalledWith(["e1", "e2"]);
+    expect(mockUnbundleEdges).toHaveBeenCalledWith(["e1", "e2"], "source");
   });
 });
 

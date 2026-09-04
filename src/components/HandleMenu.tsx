@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { edgesOnHandle } from "@/lib/edges/bundles";
+import { bundleIdAt, edgesOnHandle } from "@/lib/edges/bundles";
 import { edgeColorForHandles } from "@/lib/edges/colors";
 
 /**
@@ -47,9 +47,9 @@ export function HandleMenu({ target, onClose }: HandleMenuProps) {
   const onHandle = useMemo(() => edgesOnHandle(edges, target.nodeId, target.type, target.handleId), [edges, target]);
   const ids = onHandle.map((e) => e.id);
   const bundleable = onHandle.filter((e) => !e.data?.hidden && e.type !== "reference");
-  const bundled = bundleable.filter((e) => e.data?.bundleId);
+  const bundled = bundleable.filter((e) => bundleIdAt(e, target.type));
   const allInOneBundle =
-    bundleable.length >= 2 && bundled.length === bundleable.length && new Set(bundled.map((e) => e.data?.bundleId)).size === 1;
+    bundleable.length >= 2 && bundled.length === bundleable.length && new Set(bundled.map((e) => bundleIdAt(e, target.type))).size === 1;
   const hiddenCount = onHandle.filter((e) => e.data?.hidden).length;
   const allHidden = onHandle.length > 0 && hiddenCount === onHandle.length;
   const count = onHandle.length;
@@ -97,13 +97,13 @@ export function HandleMenu({ target, onClose }: HandleMenuProps) {
       </span>
 
       {allInOneBundle ? (
-        <button type="button" role="menuitem" className={iconButton} title="Unbundle" aria-label="Unbundle" onClick={() => run(() => unbundleEdges(bundled.map((e) => e.id)))}>
+        <button type="button" role="menuitem" className={iconButton} title="Unbundle" aria-label="Unbundle" onClick={() => run(() => unbundleEdges(bundled.map((e) => e.id), target.type))}>
           <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
             <path d="M2 8h3.5c2 0 2-4 4-4H14M9.5 8H14M5.5 8c2 0 2 4 4 4H14" />
           </svg>
         </button>
       ) : (
-        <button type="button" role="menuitem" className={iconButton} title="Bundle" aria-label="Bundle" disabled={bundleable.length < 2} onClick={() => run(() => bundleEdges(bundleable.map((e) => e.id)))}>
+        <button type="button" role="menuitem" className={iconButton} title="Bundle" aria-label="Bundle" disabled={bundleable.length < 2} onClick={() => run(() => bundleEdges(bundleable.map((e) => e.id), target.type))}>
           <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
             <path d="M2 4h3.5c2 0 2 4 4 4H14M2 8h3.5M2 12h3.5c2 0 2-4 4-4" />
           </svg>

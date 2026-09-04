@@ -53,7 +53,7 @@ import {
   getEdgeDefaults,
 } from "./utils/localStorage";
 import { normalizeEdgeAppearance } from "@/lib/edges/appearance";
-import { shareHandle, MIN_BUNDLE_REACH, MAX_BUNDLE_REACH } from "@/lib/edges/bundles";
+import { shareHandleAt, sharedEnd, bundleIdAt, type BundleEnd, MIN_BUNDLE_REACH, MAX_BUNDLE_REACH } from "@/lib/edges/bundles";
 import {
   createDefaultNodeData,
   defaultNodeDimensions,
@@ -305,9 +305,9 @@ interface WorkflowStore {
   /** Set an edge's own label; blank clears it so the automatic label shows. */
   setEdgeLabel: (edgeId: string, label: string) => void;
   /** Bundle edges that share an output handle or an input handle. Returns false otherwise. */
-  bundleEdges: (edgeIds: string[]) => boolean;
+  bundleEdges: (edgeIds: string[], end?: BundleEnd) => boolean;
   /** Dissolve the manual bundles the given edges belong to. */
-  unbundleEdges: (edgeIds: string[]) => void;
+  unbundleEdges: (edgeIds: string[], end?: BundleEnd) => void;
   /** Set where the bundle on a node's handle splits (px from the handle). */
   setBundleClamp: (nodeId: string, key: string, reach: number) => void;
   setLoopCount: (edgeId: string, count: number) => void;
@@ -1218,32 +1218,47 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     }));
   },
 
-  bundleEdges: (edgeIds: string[]) => {
+  bundleEdges: (edgeIds: string[], end?: BundleEnd) => {
     const ids = new Set(edgeIds);
     const members = get().edges.filter((e) => ids.has(e.id) && !e.data?.hidden && e.type !== "reference");
-    if (!shareHandle(members)) return false;
+    const bundleEnd = end ?? sharedEnd(members);
+    if (!bundleEnd || !shareHandleAt(members, bundleEnd)) return false;
+    const key = bundleEnd === "source" ? "sourceBundleId" : "targetBundleId";
     const bundleId = `bundle-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
     pushUndoCheckpoint(get, set);
     set((state) => ({
-      edges: state.edges.map((e) => (ids.has(e.id) ? { ...e, data: { ...e.data, bundleId } } : e)),
+      edges: state.edges.map((e) => (ids.has(e.id) ? { ...e, data: { ...e.data, [key]: bundleId } } : e)),
       hasUnsavedChanges: true,
     }));
     return true;
   },
 
-  unbundleEdges: (edgeIds: string[]) => {
+  unbundleEdges: (edgeIds: string[], end?: BundleEnd) => {
     const ids = new Set(edgeIds);
-    const bundleIds = new Set(
-      get().edges.flatMap((e) => (ids.has(e.id) && e.data?.bundleId ? [e.data.bundleId] : []))
-    );
-    if (bundleIds.size === 0) return;
+    const ends: BundleEnd[] = end ? [end] : ["source", "target"];
+    const edges = get().edges;
+    // Every bundle these edges sit in at the chosen end(s) dissolves entirely
+    const gone = ends
+      .map((at) => ({
+        at,
+        key: at === "source" ? "sourceBundleId" : "targetBundleId",
+        bundleIds: new Set(edges.flatMap((e) => (ids.has(e.id) ? [bundleIdAt(e, at)].filter((b): b is string => Boolean(b)) : []))),
+      }))
+      .filter((g) => g.bundleIds.size > 0);
+    if (gone.length === 0) return;
     pushUndoCheckpoint(get, set);
     set((state) => ({
       edges: state.edges.map((e) => {
-        if (!e.data?.bundleId || !bundleIds.has(e.data.bundleId)) return e;
-        const { bundleId: _gone, ...rest } = e.data;
-        void _gone;
-        return { ...e, data: rest };
+        let data = e.data;
+        for (const g of gone) {
+          const id = bundleIdAt(e, g.at);
+          if (id && g.bundleIds.has(id) && data) {
+            const { [g.key]: _dropped, ...rest } = data as Record<string, unknown>;
+            void _dropped;
+            data = rest as typeof e.data;
+          }
+        }
+        return data === e.data ? e : { ...e, data };
       }),
       hasUnsavedChanges: true,
     }));

@@ -770,8 +770,8 @@ describe("EditableEdge bundles", () => {
   const appearance = { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "never" as const };
   // A fan-out bundled by hand: node-1's image output feeds node-2 and node-3
   const fanOut = (selected = false) => [
-    { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 1, bundleId: "b" }, selected },
-    { id: "edge-2", source: "node-1", sourceHandle: "image", target: "node-3", targetHandle: "image", data: { createdAt: 2, bundleId: "b" } },
+    { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 1, sourceBundleId: "b" }, selected },
+    { id: "edge-2", source: "node-1", sourceHandle: "image", target: "node-3", targetHandle: "image", data: { createdAt: 2, sourceBundleId: "b" } },
   ];
   const renderMember = (edges: unknown[], props = {}) => {
     mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ edgeAppearance: appearance, edges })));
@@ -809,8 +809,8 @@ describe("EditableEdge bundles", () => {
 
   it("bundles a fan-in at the target handle", () => {
     const fanIn = [
-      { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 1, bundleId: "in" } },
-      { id: "edge-9", source: "node-9", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 2, bundleId: "in" } },
+      { id: "edge-1", source: "node-1", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 1, targetBundleId: "in" } },
+      { id: "edge-9", source: "node-9", sourceHandle: "image", target: "node-2", targetHandle: "image", data: { createdAt: 2, targetBundleId: "in" } },
     ];
     const { container } = renderMember(fanIn);
     // Target handle at x=300, stem reaching back 56px: the noodle ends at 244

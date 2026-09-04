@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { edgeBundles, bundleMembership, shareHandle, edgesOnHandle } from "../bundles";
+import { edgeBundles, bundleMembership, shareHandle, sharedEnd, edgesOnHandle } from "../bundles";
 import type { WorkflowEdge } from "@/types";
 
 // Fan-out from a's image handle by default; each edge lands on its own node
@@ -12,8 +12,11 @@ const edge = (id: string, overrides: Partial<WorkflowEdge> = {}): WorkflowEdge =
   data: { createdAt: Number(id.replace(/\D/g, "")) || 0 },
   ...overrides,
 });
-const bundled = (id: string, bundleId: string, overrides: Partial<WorkflowEdge> = {}) =>
-  edge(id, { ...overrides, data: { createdAt: Number(id.replace(/\D/g, "")) || 0, bundleId, ...(overrides.data ?? {}) } });
+const bundled = (id: string, bundleId: string, overrides: Partial<WorkflowEdge> = {}, end: "source" | "target" = "source") =>
+  edge(id, {
+    ...overrides,
+    data: { createdAt: Number(id.replace(/\D/g, "")) || 0, [`${end}BundleId`]: bundleId, ...(overrides.data ?? {}) },
+  });
 
 describe("edgeBundles", () => {
   it("is empty for connections without a bundle id", () => {
@@ -28,7 +31,7 @@ describe("edgeBundles", () => {
   });
 
   it("bundles a fan-in at the shared input handle", () => {
-    const fanIn = [bundled("e1", "in", { source: "x", target: "gen" }), bundled("e2", "in", { source: "y", target: "gen" })];
+    const fanIn = [bundled("e1", "in", { source: "x", target: "gen" }, "target"), bundled("e2", "in", { source: "y", target: "gen" }, "target")];
     const { source, target } = edgeBundles("e1", fanIn);
     expect(source).toBeNull();
     expect(target).toMatchObject({ end: "target", index: 0, count: 2, key: "target:in" });
@@ -52,6 +55,18 @@ describe("edgeBundles", () => {
     expect(edgeBundles("e2", edges).source).toBeNull();
   });
 
+  it("keeps a bundle at each end independently", () => {
+    // e1 fans out from a with e2, and fans in to gen with e9
+    const edges = [
+      bundled("e1", "out", { target: "gen", data: { targetBundleId: "in" } }),
+      bundled("e2", "out"),
+      bundled("e9", "in", { source: "z", target: "gen" }, "target"),
+    ];
+    const { source, target } = edgeBundles("e1", edges);
+    expect(source).toMatchObject({ end: "source", key: "source:out", count: 2 });
+    expect(target).toMatchObject({ end: "target", key: "target:in", count: 2 });
+  });
+
   it("drops a bundle with a single remaining member", () => {
     expect(edgeBundles("e1", [bundled("e1", "x"), edge("e2")]).source).toBeNull();
   });
@@ -59,9 +74,9 @@ describe("edgeBundles", () => {
 
 describe("bundleMembership", () => {
   it("prefers the source end for the toolbar", () => {
-    const edges = [bundled("e1", "x", { target: "gen" }), bundled("e2", "x", { target: "gen" }), bundled("e3", "y", { source: "b", target: "gen" })];
+    const edges = [bundled("e1", "x", { target: "gen" }), bundled("e2", "x", { target: "gen" }), bundled("e3", "y", { source: "b", target: "gen" }, "target")];
     expect(bundleMembership("e1", edges)?.end).toBe("source");
-    expect(bundleMembership("e3", [...edges, bundled("e4", "y", { source: "c", target: "gen" })])?.end).toBe("target");
+    expect(bundleMembership("e3", [...edges, bundled("e4", "y", { source: "c", target: "gen" }, "target")])?.end).toBe("target");
   });
 });
 
@@ -71,6 +86,12 @@ describe("shareHandle", () => {
     expect(shareHandle([edge("e1", { source: "x", target: "gen" }), edge("e2", { source: "y", target: "gen" })])).toBe(true);
     expect(shareHandle([edge("e1"), edge("e2", { sourceHandle: "text" })])).toBe(false);
     expect(shareHandle([edge("e1")])).toBe(false);
+  });
+
+  it("names the shared end, output first", () => {
+    expect(sharedEnd([edge("e1"), edge("e2")])).toBe("source");
+    expect(sharedEnd([edge("e1", { source: "x", target: "gen" }), edge("e2", { source: "y", target: "gen" })])).toBe("target");
+    expect(sharedEnd([edge("e1"), edge("e2", { sourceHandle: "text" })])).toBeNull();
   });
 });
 

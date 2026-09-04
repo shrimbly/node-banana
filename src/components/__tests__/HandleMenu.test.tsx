@@ -63,16 +63,16 @@ describe("HandleMenu", () => {
     withEdges([edge("e1"), edge("e2")]);
     render(<HandleMenu target={target} onClose={onClose} />);
     fireEvent.click(screen.getByRole("menuitem", { name: "Bundle" }));
-    expect(mockBundleEdges).toHaveBeenCalledWith(["e1", "e2"]);
+    expect(mockBundleEdges).toHaveBeenCalledWith(["e1", "e2"], "source");
     expect(onClose).toHaveBeenCalled();
   });
 
   it("swaps to Unbundle once they are bundled", () => {
-    withEdges([edge("e1", { data: { bundleId: "x" } }), edge("e2", { data: { bundleId: "x" } })]);
+    withEdges([edge("e1", { data: { sourceBundleId: "x" } }), edge("e2", { data: { sourceBundleId: "x" } })]);
     render(<HandleMenu target={target} onClose={onClose} />);
     expect(screen.queryByRole("menuitem", { name: "Bundle" })).toBeNull();
     fireEvent.click(screen.getByRole("menuitem", { name: "Unbundle" }));
-    expect(mockUnbundleEdges).toHaveBeenCalledWith(["e1", "e2"]);
+    expect(mockUnbundleEdges).toHaveBeenCalledWith(["e1", "e2"], "source");
   });
 
   it("disables Bundle for a lone connection", () => {

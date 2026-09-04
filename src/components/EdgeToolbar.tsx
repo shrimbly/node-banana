@@ -175,7 +175,7 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
           )}
           {canUnbundle && (
             <button
-              onClick={() => unbundleEdges(selectedIds)}
+              onClick={() => unbundleEdges(selectedIds, bundle?.end)}
               className={`${iconButton} text-neutral-400 hover:text-neutral-100`}
               title="Unbundle"
             >

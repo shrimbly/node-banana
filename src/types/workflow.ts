@@ -17,8 +17,10 @@ export interface WorkflowEdgeData extends Record<string, unknown> {
   hidden?: boolean;
   /** The user's own label; empty means show the automatic one. */
   label?: string;
-  /** Manual bundle this edge belongs to (with others between the same nodes). */
-  bundleId?: string;
+  /** Bundle this edge belongs to at its output handle, shared with the other members. */
+  sourceBundleId?: string;
+  /** Bundle this edge belongs to at its input handle. Independent of the source end. */
+  targetBundleId?: string;
 }
 
 // Workflow Edge
