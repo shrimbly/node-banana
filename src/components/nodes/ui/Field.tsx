@@ -208,6 +208,8 @@ export interface NumberFieldProps {
   id?: string;
   /** Sends `undefined` when the well is cleared (default) or keeps the last value. */
   allowEmpty?: boolean;
+  /** Rendered after the well (a randomise button, say). */
+  trailing?: ReactNode;
 }
 
 export function NumberField({
@@ -224,6 +226,7 @@ export function NumberField({
   disabled,
   id: idProp,
   allowEmpty = true,
+  trailing,
 }: NumberFieldProps) {
   const id = useFieldId(idProp);
   const { text, setText, onFocus, onBlur } = useLocalEdit(value);
@@ -255,8 +258,9 @@ export function NumberField({
   };
 
   return (
-    <Field label={label} hint={validation ? `${hint ?? ""}${hint ? " · " : ""}${validation}` : hint} htmlFor={id}>
-      <div className="relative min-w-0">
+    <Field label={label} hint={hint} htmlFor={id}>
+      <div className="flex items-center gap-1 min-w-0">
+      <div className="relative min-w-0 flex-1">
         <input
           id={id}
           type="number"
@@ -279,15 +283,21 @@ export function NumberField({
           className={cn(
             wellClass,
             "tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
-            unit && "pr-6",
+            (unit || validation) && "pr-6",
             validation && "ring-1 ring-red-500"
           )}
         />
-        {unit && (
+        {validation ? (
+          <span className="pointer-events-none absolute right-[7px] top-1/2 -translate-y-1/2 text-[9px] text-red-400 whitespace-nowrap">
+            {validation}
+          </span>
+        ) : unit ? (
           <span className="pointer-events-none absolute right-[7px] top-1/2 -translate-y-1/2 text-node text-neutral-500">
             {unit}
           </span>
-        )}
+        ) : null}
+      </div>
+      {trailing}
       </div>
     </Field>
   );
@@ -303,13 +313,15 @@ export interface TextFieldProps {
   placeholder?: string;
   disabled?: boolean;
   id?: string;
+  trailing?: ReactNode;
 }
 
-export function TextField({ label, hint, value, onChange, placeholder, disabled, id: idProp }: TextFieldProps) {
+export function TextField({ label, hint, value, onChange, placeholder, disabled, id: idProp, trailing }: TextFieldProps) {
   const id = useFieldId(idProp);
   const { text, setText, onFocus, onBlur } = useLocalEdit(value);
   return (
     <Field label={label} hint={hint} htmlFor={id}>
+      <div className="flex items-center gap-1 min-w-0">
       <input
         id={id}
         type="text"
@@ -325,8 +337,10 @@ export function TextField({ label, hint, value, onChange, placeholder, disabled,
         onKeyDown={(e) => {
           if (e.key === "Enter") (e.target as HTMLInputElement).blur();
         }}
-        className={wellClass}
+        className={cn(wellClass, "flex-1")}
       />
+      {trailing}
+      </div>
     </Field>
   );
 }
