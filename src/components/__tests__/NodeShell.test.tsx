@@ -2,7 +2,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { NodeShell } from "@/components/nodes/NodeShell";
-import { BaseNode } from "@/components/nodes/BaseNode";
 import { GAP_ROW_H, socketMinHeight } from "@/components/nodes/ui/tokens";
 
 const mockSetHoveredNodeId = vi.fn();
@@ -226,41 +225,5 @@ describe("NodeShell", () => {
     expect(mockSetHoveredNodeId).toHaveBeenCalledWith("n1");
     fireEvent.mouseLeave(root, { buttons: 0 });
     expect(mockSetHoveredNodeId).toHaveBeenCalledWith(null);
-  });
-});
-
-describe("BaseNode adapter", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    storeState = {
-      currentNodeIds: [] as string[],
-      setHoveredNodeId: mockSetHoveredNodeId,
-      nodes: [{ id: "n1", type: "prompt" }],
-    };
-    mockUseWorkflowStore.mockImplementation((selector) => selector(storeState));
-  });
-
-  it("renders legacy children unclipped at the type's default height", () => {
-    const { container } = render(
-      <Wrap>
-        <BaseNode id="n1" fullBleed>
-          <div data-testid="legacy">legacy</div>
-        </BaseNode>
-      </Wrap>
-    );
-    expect(screen.getByTestId("legacy")).toBeInTheDocument();
-    expect(clip(container).className).toContain("overflow-visible");
-    expect(clip(container).style.height).toBe("210px");
-  });
-
-  it("puts the settings panel in a controls card", () => {
-    render(
-      <Wrap>
-        <BaseNode id="n1" settingsExpanded settingsPanel={<div>settings</div>}>
-          <div />
-        </BaseNode>
-      </Wrap>
-    );
-    expect(screen.getByText("settings")).toBeInTheDocument();
   });
 });

@@ -44,15 +44,6 @@
 :root {
   --background: #0a0a0a;
   --foreground: #fafafa;
-  /* Handle colours. Aliases of the @theme --color-handle-* tokens, kept while
-     the pre-redesign nodes still reference them. */
-  --handle-color-image: var(--color-handle-image);
-  --handle-color-text: var(--color-handle-text);
-  --handle-color-3d: var(--color-handle-3d);
-  --handle-color-audio: var(--color-handle-audio);
-  --handle-color-video: var(--color-handle-video);
-  --handle-color-easeCurve: var(--color-handle-easeCurve);
-  --handle-color-reference: var(--color-handle-reference);
 }
 
 html {
@@ -189,7 +180,8 @@ body {
   stroke-opacity: 1;
 }
 
-/* Pre-redesign circle handles, kept until every node is on the shell. */
+/* Circle handles for the mini-canvases that still draw plain React Flow
+   handles (the split-grid template editor, the Comfy node preview). */
 .react-flow__handle:not(.socket) {
   width: 14px;
   height: 14px;

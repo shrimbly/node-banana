@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- **Node redesign** — Every node is now built from the same anatomy: a media card that shows images, video, audio and text at their native proportions with the sockets set into its border, a gap row for history navigation or a scrubber, and a detached controls card beneath with a summary row (provider, model, key values) that opens into a single column of tight fields. Selection, running and error outlines live on the media card only. Node height is derived from content; nodes are resized by width only, and double-clicking a resize edge restores the type's default width.
+- **Sockets** — Handles are now swells in the media card's border at a fixed pitch, with a hole that fills in the type colour when connected. Handle ids are unchanged, so saved workflows keep their connections.
+- **Settings in the node** — Every generation node carries its own settings, so the side settings rail and the "Show model settings on nodes" preference are gone. The ease-curve editor and presets moved into the Ease Curve node.
+- **Logic nodes** — Router, Switch, Conditional Switch and Array are single cards with their rows laid out at the socket pitch.
+
+### Removed
+
+- The `ControlPanel` rail, the inline-parameters preference, the aspect-fit resize gesture and per-node height writes.
+
 ## [1.9.0] - 2026-08-06
 
 The ComfyUI release. A ComfyUI workflow becomes a node on the canvas, wired to

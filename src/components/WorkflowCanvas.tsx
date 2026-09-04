@@ -356,9 +356,9 @@ interface ConnectionDropState {
 // Detect if running on macOS for platform-specific trackpad behavior
 const isMacOS = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 
-/** Shared ref so child components (BaseNode) can check panning state without re-rendering */
+/** Shared ref so child components (NodeShell) can check panning state without re-rendering */
 export const isPanningRef = { current: false };
-/** Shared ref so child components (BaseNode) can skip hover updates during node drags */
+/** Shared ref so child components (NodeShell) can skip hover updates during node drags */
 export const isDraggingNodeRef = { current: false };
 
 export function WorkflowCanvas() {
