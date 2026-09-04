@@ -197,7 +197,7 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
         {nodeData.rules.map((rule, index) => (
           <LogicRow key={rule.id} className="group gap-1">
             <Match on={rule.isMatched} />
-            <div className="flex flex-col opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+            <div className="flex flex-col w-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
               <button
                 className="nodrag nopan text-neutral-400 hover:text-white disabled:opacity-30 disabled:hover:text-neutral-400"
                 onClick={() => handleMoveUp(index)}
@@ -267,9 +267,11 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
           </LogicRow>
         ))}
 
-        <LogicRow className="border-t border-neutral-700/60">
+        <LogicRow className="border-t border-neutral-700/60 gap-1">
           <Match on={defaultMatched} />
-          <span className="text-node text-neutral-300 ml-1">Fallback</span>
+          {/* Same leading space as a rule row's reorder column, so the labels line up. */}
+          <span className="w-2 shrink-0" aria-hidden />
+          <span className="text-node text-neutral-300">Fallback</span>
         </LogicRow>
 
         <div className="px-2 pt-1">
