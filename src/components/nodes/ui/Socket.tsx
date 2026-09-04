@@ -25,6 +25,10 @@ export interface SocketSpec {
   /** Explicit row (0-based); defaults to the socket's order among visible ones. */
   row?: number;
   dataTutorial?: string;
+  /** Schema input this socket feeds (`data-schema-name`). */
+  schemaName?: string;
+  /** Tooltip. */
+  title?: string;
 }
 
 /**
@@ -70,7 +74,6 @@ export function Socket({ nodeId, side, row, spec, showLabel = false }: SocketPro
         type={handleType}
         position={position}
         id={spec.id}
-        data-handletype={spec.type}
         isConnectable={false}
         className="socket socket-hidden"
         style={{ top: socketCenter(row), [side]: 0, width: 0, height: 0, opacity: 0, pointerEvents: "none" }}
@@ -86,7 +89,9 @@ export function Socket({ nodeId, side, row, spec, showLabel = false }: SocketPro
         id={spec.id}
         data-handletype={spec.type}
         data-tutorial={spec.dataTutorial}
+        data-schema-name={spec.schemaName}
         data-connected={connected ? "true" : undefined}
+        title={spec.title}
         isConnectable={spec.isConnectable ?? true}
         className={cn("socket", spec.placeholder && "socket-placeholder")}
         style={{
@@ -96,6 +101,7 @@ export function Socket({ nodeId, side, row, spec, showLabel = false }: SocketPro
           height: SOCKET_H,
           transform: side === "right" ? "scaleX(-1)" : "none",
           color,
+          ...(spec.placeholder ? { opacity: 0.3 } : {}),
         }}
       >
         <svg width={SOCKET_W} height={SOCKET_H} viewBox={`0 0 ${SOCKET_W} ${SOCKET_H}`} overflow="visible" aria-hidden>

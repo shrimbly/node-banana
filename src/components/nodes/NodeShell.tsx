@@ -86,7 +86,7 @@ export function NodeShell({
 }: NodeShellProps) {
   const currentNodeIds = useWorkflowStore((state) => state.currentNodeIds);
   const setHoveredNodeId = useWorkflowStore((state) => state.setHoveredNodeId);
-  const running = isExecuting || currentNodeIds.includes(id);
+  const running = isExecuting || (currentNodeIds?.includes(id) ?? false);
   const { getNodes, setNodes } = useReactFlow();
   const updateNodeInternals = useUpdateNodeInternals();
   const connectingLabels = useShowHandleLabels(selected);

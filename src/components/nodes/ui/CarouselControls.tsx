@@ -14,6 +14,8 @@ interface CarouselControlsProps {
   noun?: string;
   /** Show the dots between the arrows (default true). */
   dots?: boolean;
+  /** Tighter spacing, no dots: for sharing the gap row with a scrubber. */
+  compact?: boolean;
   className?: string;
 }
 
@@ -40,6 +42,7 @@ export function CarouselControls({
   loading,
   noun = "image",
   dots = true,
+  compact = false,
   className,
 }: CarouselControlsProps) {
   if (count <= 1) return null;
@@ -47,9 +50,9 @@ export function CarouselControls({
   const window = dotWindow(safeIndex, count);
 
   return (
-    <div className={cn("nodrag nopan flex items-center justify-center gap-1.5 h-full select-none", className)}>
+    <div className={cn("nodrag nopan flex items-center justify-center h-full select-none", compact ? "gap-0.5" : "gap-1.5", className)}>
       <NavButton title={`Previous ${noun}`} onClick={onPrev} disabled={loading} dir="prev" />
-      {dots && (
+      {dots && !compact && (
         <div className="flex items-center gap-[3px]" aria-hidden>
           {window.map((i) => (
             <span
@@ -62,7 +65,7 @@ export function CarouselControls({
           ))}
         </div>
       )}
-      <span className="text-node text-neutral-400 tabular-nums min-w-[32px] text-center">
+      <span className={cn("text-node text-neutral-400 tabular-nums text-center", compact ? "min-w-[28px]" : "min-w-[32px]")}>
         {`${safeIndex + 1} / ${count}`}
       </span>
       <NavButton title={`Next ${noun}`} onClick={onNext} disabled={loading} dir="next" />

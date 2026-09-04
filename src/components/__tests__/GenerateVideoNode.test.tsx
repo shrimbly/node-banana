@@ -316,7 +316,7 @@ describe("GenerateVideoNode", () => {
       expect(video).toHaveAttribute("src", "data:video/mp4;base64,abc123");
     });
 
-    it("should render video with controls attribute", () => {
+    it("drives the video from the scrub row instead of native controls", () => {
       const { container } = render(
         <TestWrapper>
           <GenerateVideoNode {...createNodeProps({
@@ -326,7 +326,8 @@ describe("GenerateVideoNode", () => {
       );
 
       const video = container.querySelector("video");
-      expect(video).toHaveAttribute("controls");
+      expect(video).not.toHaveAttribute("controls");
+      expect(screen.getByTitle("Play")).toBeInTheDocument();
     });
 
     it("should render video with loop attribute", () => {
@@ -605,7 +606,7 @@ describe("GenerateVideoNode", () => {
         expect(imageTop).toBeLessThan(textTop);
       });
 
-      it("should maintain gap between image and text handle groups", () => {
+      it("stacks image sockets above the text socket at one pitch", () => {
         const { container } = render(
           <TestWrapper>
             <GenerateVideoNode {...createNodeProps({
@@ -632,12 +633,11 @@ describe("GenerateVideoNode", () => {
         const top1 = parseFloat(image1.style.top);
         const topText = parseFloat(textHandle.style.top);
 
-        // Gap between image-1 and text should be larger than gap between image-0 and image-1
+        // Sockets sit at a fixed pitch down the card: images, then the video
+        // placeholder this model does not use, then text.
         const imageDiff = top1 - top0;
-        const gapDiff = topText - top1;
-
-        // The gap should account for the spacing slot
-        expect(gapDiff).toBeGreaterThan(imageDiff * 0.9);
+        expect(imageDiff).toBe(30);
+        expect(topText).toBe(top1 + 60);
       });
     });
   });

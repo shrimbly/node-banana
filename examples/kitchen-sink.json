@@ -1264,11 +1264,11 @@
       "targetHandle": "text"
     },
     {
-      "id": "edge-imageInput-1-comfyApp-20-image-1:image",
+      "id": "edge-imageInput-1-comfyApp-20-image-image-0",
       "source": "imageInput-1",
       "sourceHandle": "image",
       "target": "comfyApp-20",
-      "targetHandle": "1:image"
+      "targetHandle": "image-0"
     },
     {
       "id": "edge-comfyApp-20-generateVideo-17-9-image",

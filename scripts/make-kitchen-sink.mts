@@ -232,7 +232,7 @@ wire(prompt, "text", sw, "generic-input");
 wire(sw, "sw-a", array, "text");
 wire(llm, "text", cond, "text");
 wire(cond, "rule-night", genExternal, "text");
-wire(imageIn, "image", comfy, "1:image");
+wire(imageIn, "image", comfy, "image-0");
 wire(comfy, "9", genVideoLoading, "image");
 
 const workflow = {

@@ -70,7 +70,6 @@ import { ComfyWordmark } from "./icons/ComfyWordmark";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import { getNodeSize } from "@/utils/nodeDimensions";
 import { FloatingNodeHeader } from "./nodes/FloatingNodeHeader";
-import { ControlPanel } from "./nodes/ControlPanel";
 import { detectAndSplitGrid } from "@/utils/gridSplitter";
 import { logger } from "@/utils/logger";
 import { WelcomeModal } from "./quickstart";
@@ -87,7 +86,6 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { ModelSearchDialog } from "./modals/ModelSearchDialog";
 import { LLMFallbackPopover } from "./nodes/LLMFallbackPopover";
 import { browseRegistry } from "@/utils/browseRegistry";
-import { useInlineParameters } from "@/hooks/useInlineParameters";
 import { useWheelPanZoom } from "@/hooks/useWheelPanZoom";
 import { selectCanvasOverview, setCanvasPanningClass } from "@/utils/canvasPerformance";
 import { SplitGridTemplateModal } from "./splitgrid/SplitGridTemplateModal";
@@ -618,7 +616,6 @@ export function WorkflowCanvas() {
   }, [regenerateNode]);
 
   // Inline parameters mode (for showing Browse in header)
-  const { inlineParametersEnabled } = useInlineParameters();
 
   // Stable callback for expanding a node from its header
   const handleExpandNode = useCallback((nodeId: string, nodeType: string) => {
@@ -2429,11 +2426,10 @@ export function WorkflowCanvas() {
             const defaultWidth = defaultNodeDimensions[node.type as NodeType]?.width ?? 250;
             const headerWidth = node.measured?.width || (node.style?.width as number) || defaultWidth;
 
-            // Browse button for generate nodes in inline-parameters mode
-            const showBrowse = inlineParametersEnabled && (
+            // Browse button for generate nodes
+            const showBrowse =
               node.type === "nanoBanana" || node.type === "generateVideo" ||
-              node.type === "generate3d" || node.type === "generateAudio"
-            );
+              node.type === "generate3d" || node.type === "generateAudio";
             const browseAction = showBrowse ? (
               <button
                 onClick={() => browseRegistry.open(node.id)}
@@ -2586,7 +2582,6 @@ export function WorkflowCanvas() {
       />
 
       {/* Control panel - renders on right side when a configurable node is selected */}
-      <ControlPanel />
 
       {/* Expansion modals - rendered via portal when expand button is clicked */}
       {expandingNode && expandingNode.type === 'prompt' && (() => {
