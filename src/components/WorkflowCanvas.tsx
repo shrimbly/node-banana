@@ -68,6 +68,7 @@ import { getSavedComfyNode, seedFromSavedComfyNode } from "@/lib/comfy/library";
 import { appInputHandles } from "@/lib/comfy/nodeSchema";
 import { ComfyWordmark } from "./icons/ComfyWordmark";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
+import { getNodeSize } from "@/utils/nodeDimensions";
 import { FloatingNodeHeader } from "./nodes/FloatingNodeHeader";
 import { ControlPanel } from "./nodes/ControlPanel";
 import { detectAndSplitGrid } from "@/utils/gridSplitter";
@@ -625,9 +626,7 @@ export function WorkflowCanvas() {
       // Skip if it's a group node
       if (node.id.startsWith("group-")) return;
 
-      const defaults = defaultNodeDimensions[node.type as NodeType] || { width: 300, height: 280 };
-      const nodeWidth = node.measured?.width || (node.style?.width as number) || defaults.width;
-      const nodeHeight = node.measured?.height || (node.style?.height as number) || defaults.height;
+      const { width: nodeWidth, height: nodeHeight } = getNodeSize(node);
       const nodeCenterX = node.position.x + nodeWidth / 2;
       const nodeCenterY = node.position.y + nodeHeight / 2;
 
@@ -1878,7 +1877,7 @@ export function WorkflowCanvas() {
         let currentY = sortedNodes[0].position.y;
 
         const changes = sortedNodes.map((node) => {
-          const nodeHeight = (node.style?.height as number) || (node.measured?.height) || 200;
+          const nodeHeight = getNodeSize(node).height;
 
           const change = {
             type: "position" as const,
@@ -1901,7 +1900,7 @@ export function WorkflowCanvas() {
         let currentX = sortedNodes[0].position.x;
 
         const changes = sortedNodes.map((node) => {
-          const nodeWidth = (node.style?.width as number) || (node.measured?.width) || 220;
+          const nodeWidth = getNodeSize(node).width;
 
           const change = {
             type: "position" as const,
@@ -1932,12 +1931,8 @@ export function WorkflowCanvas() {
         const startY = Math.min(...sortedNodes.map((n) => n.position.y));
 
         // Get max node dimensions for consistent spacing
-        const maxWidth = Math.max(
-          ...sortedNodes.map((n) => (n.style?.width as number) || (n.measured?.width) || 220)
-        );
-        const maxHeight = Math.max(
-          ...sortedNodes.map((n) => (n.style?.height as number) || (n.measured?.height) || 200)
-        );
+        const maxWidth = Math.max(...sortedNodes.map((n) => getNodeSize(n).width));
+        const maxHeight = Math.max(...sortedNodes.map((n) => getNodeSize(n).height));
 
         // Position each node in the grid
         const changes = sortedNodes.map((node, index) => {

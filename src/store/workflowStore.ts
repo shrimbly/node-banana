@@ -33,6 +33,7 @@ import { logger } from "@/utils/logger";
 import { externalizeWorkflowMedia, hydrateWorkflowMedia } from "@/utils/mediaStorage";
 import { EditOperation, applyEditOperations as executeEditOps } from "@/lib/chat/editOperations";
 import { findNearestFreePosition } from "@/utils/spatialLayout";
+import { getNodeSize } from "@/utils/nodeDimensions";
 import {
   loadSaveConfigs,
   saveSaveConfig,
@@ -1224,10 +1225,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     // Calculate bounding box of selected nodes
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     nodesToGroup.forEach((node) => {
-      // Use measured dimensions (actual rendered size) first, then style, then type-specific defaults
-      const defaults = defaultNodeDimensions[node.type as NodeType] || { width: 300, height: 280 };
-      const width = node.measured?.width || (node.style?.width as number) || defaults.width;
-      const height = node.measured?.height || (node.style?.height as number) || defaults.height;
+      const { width, height } = getNodeSize(node);
 
       minX = Math.min(minX, node.position.x);
       minY = Math.min(minY, node.position.y);
@@ -1485,10 +1483,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
               // center it by its actual (possibly grown) height.
               if (existingRouterId && n.id === existingRouterId && built.routerPosition) {
                 if (n.position.x >= built.routerPosition.x) return n;
-                const height =
-                  (n.style?.height as number | undefined) ??
-                  n.measured?.height ??
-                  defaultNodeDimensions.router.height;
+                const height = getNodeSize(n).height;
                 const centerY = built.routerPosition.y + defaultNodeDimensions.router.height / 2;
                 return {
                   ...n,

@@ -4,7 +4,9 @@ import {
   defaultNodeDimensions,
   GROUP_COLORS,
   GROUP_COLOR_ORDER,
+  migrateNodeGeometry,
 } from "../nodeDefaults";
+import type { WorkflowNode } from "@/types";
 
 // Mock localStorage for loadGenerateImageDefaults
 const localStorageMock = (() => {
@@ -329,5 +331,35 @@ describe("nodeDefaults utilities", () => {
       expect((data as any).model).toBe("gemini-3-flash-preview");
       expect((data as any).maxTokens).toBe(8192);
     });
+  });
+});
+
+describe("migrateNodeGeometry", () => {
+  it("keeps width in both places and drops every stored height", () => {
+    const node = {
+      id: "n1",
+      type: "nanoBanana",
+      position: { x: 1, y: 2 },
+      width: 340,
+      height: 500,
+      style: { width: 340, height: 500, opacity: 1 },
+      measured: { width: 340, height: 512 },
+      data: { prompt: "x", _settingsPanelHeight: 120 },
+    } as unknown as WorkflowNode;
+    const out = migrateNodeGeometry(node);
+    expect(out.width).toBe(340);
+    expect(out.style).toEqual({ width: 340, opacity: 1 });
+    expect(out.height).toBeUndefined();
+    expect(out.measured).toBeUndefined();
+    expect(out.data).toEqual({ prompt: "x" });
+    expect(out.position).toEqual({ x: 1, y: 2 });
+  });
+
+  it("falls back to style width, then the type default", () => {
+    const fromStyle = migrateNodeGeometry({ id: "a", type: "prompt", position: { x: 0, y: 0 }, style: { width: 260, height: 9 }, data: {} } as unknown as WorkflowNode);
+    expect(fromStyle.width).toBe(260);
+    const fromDefault = migrateNodeGeometry({ id: "b", type: "prompt", position: { x: 0, y: 0 }, data: {} } as unknown as WorkflowNode);
+    expect(fromDefault.width).toBe(320);
+    expect(fromDefault.style).toEqual({ width: 320 });
   });
 });
