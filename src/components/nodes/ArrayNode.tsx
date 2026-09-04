@@ -1,14 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Handle, Node, NodeProps, Position, useReactFlow } from "@xyflow/react";
-import { BaseNode } from "./BaseNode";
+import { Node, NodeProps, useReactFlow } from "@xyflow/react";
+import { NodeShell } from "./NodeShell";
+import { CheckboxField, Field, LogicRow, LogicRows, SelectWell, TextField, type SocketSpec } from "./ui";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { ArrayNodeData } from "@/types";
 import { getConnectedInputsPure } from "@/store/utils/connectedInputs";
 import { parseTextToArray } from "@/utils/arrayParser";
 
 type ArrayNodeType = Node<ArrayNodeData, "array">;
+
+const INPUT_SOCKETS: SocketSpec[] = [{ id: "text", type: "text", label: "Text" }];
+const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "text", type: "text", label: "Items" }];
+const SPLIT_OPTIONS = [
+  { value: "delimiter", label: "Delimiter" },
+  { value: "newline", label: "Newline" },
+  { value: "regex", label: "Regex (Advanced)" },
+];
 
 function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
@@ -31,7 +40,7 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
     const n = nodes.find((nd) => nd.id === id);
     return (n?.data as ArrayNodeData) ?? data;
   }, [nodes, id, data]);
-  const { setNodes, getNodes } = useReactFlow();
+  const { getNodes } = useReactFlow();
   const lastSyncedInputRef = useRef<string | null>(null);
   const lastDerivedWriteRef = useRef<string | null>(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -135,8 +144,8 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
   );
 
   const handleBasicModeChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      updateSettingsAndReparse({ splitMode: e.target.value as ArrayNodeData["splitMode"] });
+    (value: string) => {
+      updateSettingsAndReparse({ splitMode: value as ArrayNodeData["splitMode"] });
     },
     [updateSettingsAndReparse]
   );
@@ -197,70 +206,41 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
     }
   }, [id, nodeData.selectedOutputIndex, previewItems.length, updateNodeData]);
 
-  // Auto-resize node height to fit all parsed lines so users don't need to scroll.
-  useEffect(() => {
-    const headerHeight = 180;
-    const perItemHeight = 28;
-    const itemsMinHeight = 60;
-    const newHeight = headerHeight + Math.max(itemsMinHeight, previewItems.length * perItemHeight + 8);
-
-    setNodes((nodes) =>
-      nodes.map((node) => {
-        if (node.id !== id) return node;
-        if ((node.style?.height as number) === newHeight) return node;
-        return { ...node, style: { ...node.style, height: newHeight } };
-      })
-    );
-  }, [id, previewItems.length, setNodes]);
-
   return (
-    <BaseNode
+    <NodeShell
       id={id}
       selected={selected}
       hasError={!!nodeData.error}
-      minWidth={300}
-      minHeight={220}
+      media={{ kind: "auto" }}
+      inputs={INPUT_SOCKETS}
+      outputs={OUTPUT_SOCKETS}
+      minWidth={280}
+      cardClassName="rounded-controls"
     >
-      <Handle type="target" position={Position.Left} id="text" data-handletype="text" />
-
-      {/* Single text output point (each outgoing edge receives a separate item) */}
-      <Handle type="source" position={Position.Right} id="text" data-handletype="text" style={{ top: 48 }} />
-
-      <div className="flex flex-col gap-2 pt-3 flex-1 min-h-0">
-        <div className="flex items-center gap-2">
-          <label className="shrink-0 text-[11px] text-neutral-400">Split</label>
-          <select
-            value={nodeData.splitMode}
-            onChange={handleBasicModeChange}
-            className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 bg-[#1a1a1a] rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
-          >
-            <option value="delimiter">Delimiter</option>
-            <option value="newline">Newline</option>
-            <option value="regex">Regex (Advanced)</option>
-          </select>
-          {/* Batch mode toggle */}
+      <LogicRows>
+        {/* Row 0: split mode, where the text sockets land */}
+        <LogicRow>
+          <span className="text-node text-neutral-400 shrink-0">Split</span>
+          <SelectWell className="flex-1" value={nodeData.splitMode} options={SPLIT_OPTIONS} onChange={handleBasicModeChange} />
           <button
             type="button"
             onClick={() => updateNodeData(id, { batchMode: !nodeData.batchMode })}
-            className={`nodrag nopan shrink-0 py-1 px-2 rounded-md text-[11px] font-medium transition-colors ${
-              nodeData.batchMode
-                ? "bg-blue-600/80 text-blue-100"
-                : "bg-[#1a1a1a] text-neutral-500 hover:text-neutral-300"
+            className={`nodrag nopan shrink-0 h-[22px] px-2 rounded-well squircle text-node font-medium transition-colors ${
+              nodeData.batchMode ? "bg-blue-600/80 text-blue-100" : "bg-well shadow-well text-neutral-500 hover:text-neutral-300"
             }`}
             title={nodeData.batchMode ? "Batch mode: all items sent to one downstream node" : "Enable batch mode"}
           >
             Batch
           </button>
-          {/* Auto-route button (hidden in batch mode) */}
           {!nodeData.batchMode && (
             <button
               type="button"
               onClick={handleAutoRouteToPrompts}
               disabled={previewItems.length === 0}
-              className="nodrag nopan shrink-0 py-1 px-1.5 bg-[#1a1a1a] rounded-md text-neutral-400 hover:text-neutral-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="nodrag nopan shrink-0 w-[22px] h-[22px] flex items-center justify-center bg-well shadow-well rounded-well squircle text-neutral-400 hover:text-neutral-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title="Auto-route to Prompts"
             >
-              <svg className="w-3.5 h-3.5 rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <svg className="w-3 h-3 rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
                 <path d="M16 3h5v5" />
                 <path d="M8 3H3v5" />
                 <path d="M12 22v-8.3a4 4 0 0 0-1.172-2.872L3 3" />
@@ -268,111 +248,88 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
               </svg>
             </button>
           )}
-        </div>
+        </LogicRow>
 
-        {nodeData.splitMode === "delimiter" && (
-          <div className="flex items-center gap-2 max-w-[75%]">
-            <label className="shrink-0 text-[11px] text-neutral-400">By</label>
-            <input
+        <div className="px-2 flex flex-col gap-1">
+          {nodeData.splitMode === "delimiter" && (
+            <TextField
+              label="By"
               value={nodeData.delimiter}
-              onChange={(e) => updateSettingsAndReparse({ delimiter: e.target.value })}
               placeholder="*"
-              className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 bg-[#1a1a1a] rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
+              onChange={(v) => updateSettingsAndReparse({ delimiter: v ?? "" })}
             />
-          </div>
-        )}
-
-        {nodeData.splitMode === "regex" && (
-          <div className="flex items-center gap-2 max-w-[75%]">
-            <label className="shrink-0 text-[11px] text-neutral-400">By</label>
-            <input
+          )}
+          {nodeData.splitMode === "regex" && (
+            <TextField
+              label="By"
               value={nodeData.regexPattern}
-              onChange={(e) => updateSettingsAndReparse({ regexPattern: e.target.value })}
               placeholder="/\\n+/"
-              className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 bg-[#1a1a1a] rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
+              onChange={(v) => updateSettingsAndReparse({ regexPattern: v ?? "" })}
             />
-          </div>
-        )}
+          )}
 
-        <div>
-          <button
-            type="button"
-            onClick={() => setShowAdvanced((v) => !v)}
-            className="nodrag nopan flex items-center gap-1 text-[11px] text-neutral-500 hover:text-neutral-300 transition-colors"
-          >
-            <svg className={`w-3 h-3 transition-transform ${showAdvanced ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-            <span>Advanced</span>
-          </button>
-
+          <Field label="Advanced">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="nodrag nopan flex items-center gap-1 h-[22px] text-node text-neutral-500 hover:text-neutral-300 transition-colors"
+              aria-expanded={showAdvanced}
+            >
+              <svg className={`w-3 h-3 transition-transform ${showAdvanced ? "rotate-90" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+              <span>{showAdvanced ? "Hide" : "Show"}</span>
+            </button>
+          </Field>
           {showAdvanced && (
-            <div className="px-2 pt-1.5 pb-0.5 flex items-center gap-3">
-              <label className="flex items-center gap-1.5 text-[11px] text-neutral-300">
-                <input
-                  type="checkbox"
-                  checked={nodeData.trimItems}
-                  onChange={(e) => updateSettingsAndReparse({ trimItems: e.target.checked })}
-                  className="nodrag nopan w-3 h-3 rounded bg-[#1a1a1a] text-neutral-600 focus:ring-1 focus:ring-neutral-600 focus:ring-offset-0"
-                />
-                Trim
-              </label>
-              <label className="flex items-center gap-1.5 text-[11px] text-neutral-300">
-                <input
-                  type="checkbox"
-                  checked={nodeData.removeEmpty}
-                  onChange={(e) => updateSettingsAndReparse({ removeEmpty: e.target.checked })}
-                  className="nodrag nopan w-3 h-3 rounded bg-[#1a1a1a] text-neutral-600 focus:ring-1 focus:ring-neutral-600 focus:ring-offset-0"
-                />
-                Remove empty
-              </label>
-            </div>
+            <>
+              <CheckboxField label="Trim" checked={nodeData.trimItems} onChange={(v) => updateSettingsAndReparse({ trimItems: v })} />
+              <CheckboxField label="Remove empty" checked={nodeData.removeEmpty} onChange={(v) => updateSettingsAndReparse({ removeEmpty: v })} />
+            </>
           )}
-        </div>
 
-        <div className="mt-1 text-[10px] uppercase tracking-wide text-neutral-500">
-          Parsed Items ({previewItems.length})
+          <div className="mt-1 text-node text-neutral-500">Parsed items ({previewItems.length})</div>
+          <div className="relative min-h-[40px] rounded-well squircle bg-well shadow-well">
+            {nodeData.error ? (
+              <div className="p-2 text-node text-red-400">{nodeData.error}</div>
+            ) : previewItems.length === 0 ? (
+              <div className="p-2 text-node text-neutral-500">No items parsed</div>
+            ) : (
+              <div className="py-1 max-h-[240px] overflow-y-auto nowheel">
+                {previewItems.map((item, index) => {
+                  const isSelected = nodeData.selectedOutputIndex === index;
+                  return (
+                    <button
+                      key={`${index}-${item}`}
+                      type="button"
+                      onClick={() =>
+                        updateNodeData(id, {
+                          selectedOutputIndex: isSelected ? null : index,
+                        })
+                      }
+                      className={`nodrag nopan w-[calc(100%-0.5rem)] mx-1 my-0.5 rounded-[6px] squircle px-2 h-[22px] text-node text-left truncate transition-colors ${
+                        isSelected
+                          ? "bg-blue-900/40 text-blue-200 ring-1 ring-blue-500/60"
+                          : "bg-neutral-800/60 text-neutral-300 hover:bg-neutral-700/60"
+                      }`}
+                      title={isSelected ? "Selected for next connection (click to unselect)" : "Click to select for next connection"}
+                    >
+                      {index + 1}. {item}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div className="text-node text-neutral-500 pb-1">
+            {nodeData.batchMode
+              ? "Batch: all items sent to downstream node"
+              : nodeData.selectedOutputIndex !== null
+                ? `Next wire uses item ${nodeData.selectedOutputIndex + 1}`
+                : "No selection: wires advance in order from item 1"}
+          </div>
         </div>
-        <div className="relative min-h-[50px] border border-neutral-700/40 rounded-md bg-[#1a1a1a]">
-          {nodeData.error ? (
-            <div className="p-2 text-[11px] text-red-400">{nodeData.error}</div>
-          ) : previewItems.length === 0 ? (
-            <div className="p-2 text-[11px] text-neutral-500">No items parsed</div>
-          ) : (
-            <div className="py-1">
-              {previewItems.map((item, index) => {
-                const isSelected = nodeData.selectedOutputIndex === index;
-                return (
-                  <button
-                    key={`${index}-${item}`}
-                    type="button"
-                    onClick={() =>
-                      updateNodeData(id, {
-                        selectedOutputIndex: isSelected ? null : index,
-                      })
-                    }
-                    className={`nodrag nopan w-[calc(100%-1rem)] mx-2 my-0.5 rounded-md px-2 py-1 text-[11px] text-left truncate transition-colors ${
-                      isSelected
-                        ? "bg-blue-900/40 text-blue-200 ring-1 ring-blue-500/60"
-                        : "bg-neutral-800/60 text-neutral-300 hover:bg-neutral-700/60"
-                    }`}
-                    title={isSelected ? "Selected for next connection (click to unselect)" : "Click to select for next connection"}
-                  >
-                    {index + 1}. {item}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-        <div className="text-[10px] text-neutral-500">
-          {nodeData.batchMode
-            ? "Batch: all items sent to downstream node"
-            : nodeData.selectedOutputIndex !== null
-              ? `Next wire uses item ${nodeData.selectedOutputIndex + 1}`
-              : "No selection: wires advance in order from item 1"}
-        </div>
-      </div>
-    </BaseNode>
+      </LogicRows>
+    </NodeShell>
   );
 }

@@ -156,7 +156,9 @@ export function NodeShell({
   const mediaStyle: React.CSSProperties =
     media.kind === "aspect"
       ? { aspectRatio: String(media.aspect > 0 && Number.isFinite(media.aspect) ? media.aspect : 1) }
-      : { height: media.height };
+      : media.kind === "fixed"
+        ? { height: media.height }
+        : {};
 
   return (
     <div

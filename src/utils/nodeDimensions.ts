@@ -402,7 +402,9 @@ export function getNodeSize(node: Node): { width: number; height: number } {
 
 export type ShellMedia =
   | { kind: "aspect"; aspect: number }
-  | { kind: "fixed"; height: number };
+  | { kind: "fixed"; height: number }
+  /** Content-sized (logic nodes laid out in rows at the socket pitch). */
+  | { kind: "auto" };
 
 export interface ShellLayoutInput {
   /** Node width. */
@@ -443,7 +445,9 @@ export function computeShellLayout({
   const mediaH =
     media.kind === "aspect"
       ? Math.round(clipW / (media.aspect > 0 && Number.isFinite(media.aspect) ? media.aspect : 1))
-      : Math.round(media.height);
+      : media.kind === "fixed"
+        ? Math.round(media.height)
+        : 0;
   const cardH = Math.max(mediaH + 2 * CARD_EDGE, socketMinHeight(Math.max(inputs, outputs)));
   const gapH = gap || controlsH > 0 ? GAP_ROW_H : 0;
   return { mediaH, cardH, gapH, controlsH, height: cardH + gapH + controlsH };
