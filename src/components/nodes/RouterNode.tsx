@@ -67,12 +67,12 @@ export const RouterNode = memo(({ id, selected }: NodeProps<WorkflowNode>) => {
     >
       <LogicRows>
         {activeInputTypes.map((type) => (
-          <LogicRow key={type} well>
+          <LogicRow key={type} lane>
             <span className="text-node text-neutral-300">{TYPE_LABELS[type]}</span>
           </LogicRow>
         ))}
         {showGeneric && (
-          <LogicRow well>
+          <LogicRow lane>
             <span className="text-node text-neutral-500">
               {activeInputTypes.length > 0 ? "Drop another type here" : "Drop connections here"}
             </span>

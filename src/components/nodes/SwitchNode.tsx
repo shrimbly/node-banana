@@ -114,7 +114,7 @@ export const SwitchNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>)
     >
       <LogicRows>
         {nodeData.switches.map((sw) => (
-            <LogicRow key={sw.id} className="group" well>
+            <LogicRow key={sw.id} className="group" lane>
               <label className="relative inline-flex items-center cursor-pointer nodrag nopan shrink-0">
                 <input
                   type="checkbox"

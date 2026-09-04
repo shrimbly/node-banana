@@ -22,18 +22,19 @@ export function LogicRows({ children, className }: { children: ReactNode; classN
 export function LogicRow({
   children,
   className,
-  well = false,
+  lane = false,
   ...rest
-}: { children: ReactNode; className?: string; well?: boolean } & React.HTMLAttributes<HTMLDivElement>) {
+}: { children: ReactNode; className?: string; lane?: boolean } & React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       {...rest}
       className={cn("flex items-center gap-1.5 px-2 shrink-0 min-w-0", className)}
       style={{ height: SOCKET_PITCH, ...rest.style }}
     >
-      {well ? (
-        // An inset lane, so each row reads as its own item rather than a line of text.
-        <div className="flex-1 min-w-0 h-[22px] flex items-center gap-1.5 px-[7px] rounded-well squircle bg-well shadow-well">
+      {lane ? (
+        // A faint raised band, so each row reads as its own item without
+        // looking like an input.
+        <div className="flex-1 min-w-0 h-[24px] flex items-center gap-1.5 px-2 rounded-[7px] squircle bg-white/[0.045]">
           {children}
         </div>
       ) : (
