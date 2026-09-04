@@ -197,22 +197,24 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
         {nodeData.rules.map((rule, index) => (
           <LogicRow key={rule.id} className="group gap-1">
             <Match on={rule.isMatched} />
-            <div className="flex flex-col w-2 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+            <div className="flex flex-col w-3 h-[26px] opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
               <button
-                className="nodrag nopan text-neutral-400 hover:text-white disabled:opacity-30 disabled:hover:text-neutral-400"
+                className="nodrag nopan flex-1 flex items-center justify-center rounded-[3px] text-neutral-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:text-neutral-400 disabled:hover:bg-transparent"
                 onClick={() => handleMoveUp(index)}
                 disabled={index === 0}
                 title="Move up"
+                aria-label="Move rule up"
               >
-                <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24" aria-hidden><path d="M7 14l5-5 5 5z" /></svg>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden><path d="M6 15l6-6 6 6" /></svg>
               </button>
               <button
-                className="nodrag nopan text-neutral-400 hover:text-white disabled:opacity-30 disabled:hover:text-neutral-400"
+                className="nodrag nopan flex-1 flex items-center justify-center rounded-[3px] text-neutral-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:text-neutral-400 disabled:hover:bg-transparent"
                 onClick={() => handleMoveDown(index)}
                 disabled={index === nodeData.rules.length - 1}
                 title="Move down"
+                aria-label="Move rule down"
               >
-                <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24" aria-hidden><path d="M7 10l5 5 5-5z" /></svg>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden><path d="M6 9l6 6 6-6" /></svg>
               </button>
             </div>
 
@@ -270,7 +272,7 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
         <LogicRow className="border-t border-neutral-700/60 gap-1">
           <Match on={defaultMatched} />
           {/* Same leading space as a rule row's reorder column, so the labels line up. */}
-          <span className="w-2 shrink-0" aria-hidden />
+          <span className="w-3 shrink-0" aria-hidden />
           <span className="text-node text-neutral-300">Fallback</span>
         </LogicRow>
 
