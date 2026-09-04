@@ -1,24 +1,26 @@
 "use client";
 
-import { useCallback, useRef } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
-import { BaseNode } from "./BaseNode";
+import { useCallback, useRef, useState } from "react";
+import { NodeProps, Node } from "@xyflow/react";
+import { NodeShell } from "./NodeShell";
 import { useAnnotationStore } from "@/store/annotationStore";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { AnnotationNodeData } from "@/types";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
 import { downloadMedia } from "@/utils/downloadMedia";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
-import { HandleLabel } from "./HandleLabel";
+import { ControlsCard, SummaryValues, type SocketSpec } from "./ui";
 
 type AnnotationNodeType = Node<AnnotationNodeData, "annotation">;
+
+const INPUT_SOCKETS: SocketSpec[] = [{ id: "image", type: "image", label: "Image" }];
+const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "image", type: "image", label: "Image" }];
 
 export function AnnotationNode({ id, data, selected }: NodeProps<AnnotationNodeType>) {
   const nodeData = data;
   const openModal = useAnnotationStore((state) => state.openModal);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const showLabels = useShowHandleLabels(selected);
+  const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -95,13 +97,28 @@ export function AnnotationNode({ id, data, selected }: NodeProps<AnnotationNodeT
 
   const displayImage = nodeData.outputImage || nodeData.sourceImage;
   const adaptiveDisplayImage = useAdaptiveImageSrc(displayImage, id);
+  const aspect = displayImage && loadedAspect?.src === displayImage ? loadedAspect.aspect : 1;
+  const count = nodeData.annotations.length;
 
   return (
-    <BaseNode
+    <NodeShell
       id={id}
       selected={selected}
-      contentClassName="flex-1 min-h-0"
-      aspectFitMedia={nodeData.outputImage}
+      media={{ kind: "aspect", aspect }}
+      inputs={INPUT_SOCKETS}
+      outputs={OUTPUT_SOCKETS}
+      mediaClassName="group"
+      controls={
+        displayImage ? (
+          <ControlsCard
+            id={id}
+            summary={{
+              title: count > 0 ? `${count} annotation${count === 1 ? "" : "s"}` : "No annotations",
+              values: <SummaryValues items={[nodeData.outputImage ? "rendered" : null]} />,
+            }}
+          />
+        ) : undefined
+      }
     >
       <input
         ref={fileInputRef}
@@ -111,30 +128,18 @@ export function AnnotationNode({ id, data, selected }: NodeProps<AnnotationNodeT
         className="hidden"
       />
 
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="image"
-        data-handletype="image"
-      />
-      <HandleLabel label="Image" side="target" color="var(--handle-color-image)" visible={showLabels} />
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="image"
-        data-handletype="image"
-      />
-      <HandleLabel label="Image" side="source" color="var(--handle-color-image)" visible={showLabels} />
-
       {displayImage ? (
-        <div
-          className="relative group cursor-pointer w-full h-full overflow-clip rounded-lg"
-          onClick={handleEdit}
-        >
+        <div className="absolute inset-0 cursor-pointer" onClick={handleEdit}>
           <img
             src={adaptiveDisplayImage ?? undefined}
             alt="Annotated"
-            className="w-full h-full object-contain"
+            className="absolute inset-0 w-full h-full object-cover"
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              if (img.naturalWidth > 0 && img.naturalHeight > 0 && displayImage) {
+                setLoadedAspect({ src: displayImage, aspect: img.naturalWidth / img.naturalHeight });
+              }
+            }}
           />
           <button
             onClick={(e) => {
@@ -153,6 +158,7 @@ export function AnnotationNode({ id, data, selected }: NodeProps<AnnotationNodeT
               e.stopPropagation();
               handleRemove();
             }}
+            aria-label="Remove image"
             className="absolute top-2 right-2 w-6 h-6 bg-black/60 hover:bg-black/80 text-white rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -161,7 +167,7 @@ export function AnnotationNode({ id, data, selected }: NodeProps<AnnotationNodeT
           </button>
           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center pointer-events-none">
             <span className="text-xs font-medium text-white opacity-0 group-hover:opacity-100 transition-opacity bg-black/60 px-3 py-1.5 rounded">
-              {nodeData.annotations.length > 0 ? `Edit (${nodeData.annotations.length})` : "Add annotations"}
+              {count > 0 ? `Edit (${count})` : "Add annotations"}
             </span>
           </div>
         </div>
@@ -170,8 +176,9 @@ export function AnnotationNode({ id, data, selected }: NodeProps<AnnotationNodeT
           onClick={() => fileInputRef.current?.click()}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
-          className="w-full h-full bg-neutral-900/40 flex flex-col items-center justify-center cursor-pointer hover:bg-neutral-800/60 transition-colors"
+          className="absolute inset-0 bg-neutral-900/40 flex flex-col items-center justify-center cursor-pointer hover:bg-neutral-800/60 transition-colors"
         >
+          <div className="absolute inset-2 rounded-[6px] squircle border border-dashed border-neutral-700/70 pointer-events-none" />
           <svg className="w-8 h-8 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
@@ -180,6 +187,6 @@ export function AnnotationNode({ id, data, selected }: NodeProps<AnnotationNodeT
           </span>
         </div>
       )}
-    </BaseNode>
+    </NodeShell>
   );
 }

@@ -30,3 +30,4 @@ export { Socket, SocketColumn, assignSocketRows, socketRowCount, socketColor, SO
 export type { SocketSpec, SocketType } from "./Socket";
 export { schemaSockets } from "./schemaSockets";
 export type { SchemaSocketOptions } from "./schemaSockets";
+export { HeightGrip } from "./HeightGrip";

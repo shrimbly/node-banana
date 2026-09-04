@@ -103,6 +103,7 @@ export interface PromptNodeData extends BaseNodeData {
   prompt: string;
   variableName?: string; // Optional variable name for use in PromptConstructor templates
   isOptional?: boolean;
+  mediaHeight?: number; // Height of the text surface, set by dragging its grip
 }
 
 export type ArraySplitMode = "delimiter" | "newline" | "regex";
@@ -131,6 +132,7 @@ export interface PromptConstructorNodeData extends BaseNodeData {
   template: string;
   outputText: string | null;
   unresolvedVars: string[];
+  mediaHeight?: number; // Height of the text surface, set by dragging its grip
 }
 
 /**
