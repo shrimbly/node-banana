@@ -14,7 +14,7 @@ import { cn } from "./cn";
 
 /** The dark well every input sits in. */
 export const wellClass =
-  "nodrag nopan h-[22px] w-full min-w-0 px-[7px] rounded-well squircle bg-well shadow-well " +
+  "nodrag nopan block h-[22px] w-full min-w-0 px-[7px] rounded-well squircle bg-well shadow-well " +
   "text-node text-neutral-200 placeholder:text-neutral-500 " +
   "focus:outline-none focus:ring-1 focus:ring-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed";
 
