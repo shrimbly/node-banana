@@ -117,7 +117,7 @@ describe("Socket outline", () => {
     expect(outline.getAttribute("stroke")).toBe("var(--color-selection)");
     const ring = container.querySelector("[data-socket-ring]") as SVGPathElement;
     expect(ring.getAttribute("stroke-width")).toBe("5");
-    expect(ring.getAttribute("stroke-opacity")).toBe("0.4");
+    expect(ring.getAttribute("stroke")).toBe("color-mix(in srgb, var(--color-selection) 40%, var(--color-canvas-bg))");
   });
 
   it("uses the error colour with no ring", () => {

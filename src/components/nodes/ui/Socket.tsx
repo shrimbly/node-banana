@@ -119,15 +119,16 @@ export function Socket({ nodeId, side, row, spec, showLabel = false, outline = "
         }}
       >
         <svg width={SOCKET_W} height={SOCKET_H} viewBox={`0 0 ${SOCKET_W} ${SOCKET_H}`} overflow="visible" aria-hidden>
-          {/* The card's ring, continued around the swell: a wide translucent
-              stroke behind the fill, so only its outer half shows. */}
+          {/* The card's ring, continued around the swell: a wide stroke behind
+              the fill, so only its outer half shows. It is painted opaque, in
+              the colour the card's translucent ring resolves to over the
+              canvas, so where the two meet nothing blends twice. */}
           {edge && edge.ring > 0 && (
             <path
               data-socket-ring
               d={SOCKET_ARCS}
               fill="none"
-              stroke={edge.color}
-              strokeOpacity={edge.ringOpacity}
+              stroke={`color-mix(in srgb, ${edge.color} ${Math.round(edge.ringOpacity * 100)}%, var(--color-canvas-bg))`}
               strokeWidth={1 + edge.ring * 2}
             />
           )}
