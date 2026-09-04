@@ -107,20 +107,31 @@ export interface HiddenStubGroup {
   key: string;
   /** Member edge ids in stack order. */
   members: string[];
+  /** True for a connection the user has named, which stands outside its handle's group. */
+  named?: boolean;
 }
 
+const hasOwnLabel = (e: WorkflowEdge) => Boolean(e.data?.label?.trim());
+
+/**
+ * The hidden connections on each handle of a node's side. Unnamed ones share
+ * a group per handle (collapsed into one plural pill); a connection the user
+ * has named keeps its own pill, listed after its handle's group.
+ */
 function hiddenStubGroups(edges: WorkflowEdge[], nodeId: string, side: "source" | "target"): HiddenStubGroup[] {
   const handleOf = (e: WorkflowEdge) => (side === "source" ? e.sourceHandle : e.targetHandle) ?? null;
   const nodeOf = (e: WorkflowEdge) => (side === "source" ? e.source : e.target);
-  const byKey = new Map<string, WorkflowEdge[]>();
-  for (const e of edges) {
-    if (!e.data?.hidden || nodeOf(e) !== nodeId) continue;
-    const key = stubGroupKey(nodeId, side, handleOf(e));
-    byKey.set(key, [...(byKey.get(key) ?? []), e]);
-  }
   const order = (a: WorkflowEdge, b: WorkflowEdge) =>
     (a.data?.createdAt || 0) - (b.data?.createdAt || 0) || a.id.localeCompare(b.id);
-  return [...byKey.entries()].map(([key, members]) => ({ key, members: members.sort(order).map((e) => e.id) }));
+  const onSide = edges.filter((e) => e.data?.hidden && nodeOf(e) === nodeId).sort(order);
+  const shared = new Map<string, string[]>();
+  const named: HiddenStubGroup[] = [];
+  for (const e of onSide) {
+    const key = stubGroupKey(nodeId, side, handleOf(e));
+    if (hasOwnLabel(e)) named.push({ key: `${key}#${e.id}`, members: [e.id], named: true });
+    else shared.set(key, [...(shared.get(key) ?? []), e.id]);
+  }
+  return [...[...shared.entries()].map(([key, members]) => ({ key, members })), ...named];
 }
 
 /** The group of hidden connections sharing this edge's handle on the given side. */
@@ -169,18 +180,33 @@ export function stackHiddenStubs(
 ): Map<string, number> {
   const handleOf = (e: WorkflowEdge) => (side === "source" ? e.sourceHandle : e.targetHandle) ?? null;
   const byId = new Map(edges.map((e) => [e.id, e]));
-  const rows: { ids: string[]; key: string; y: number; createdAt: number }[] = [];
+  // Rows are keyed by handle so stubs of one handle stay together; a named
+  // connection ranks after its handle's shared group
+  const rows: { ids: string[]; key: string; y: number; rank: number; createdAt: number }[] = [];
   for (const group of hiddenStubGroups(edges, nodeId, side)) {
     const first = byId.get(group.members[0])!;
     const y = handleY(handleOf(first)) ?? fallbackY;
+    const key = group.key.split("#")[0];
+    const rank = group.named ? 1 : 0;
     const collapsed = group.members.length > 1 && group.key !== expandedGroup;
     if (collapsed) {
-      rows.push({ ids: group.members, key: group.key, y, createdAt: first.data?.createdAt || 0 });
+      rows.push({ ids: group.members, key, y, rank, createdAt: first.data?.createdAt || 0 });
     } else {
-      for (const id of group.members) rows.push({ ids: [id], key: group.key, y, createdAt: byId.get(id)?.data?.createdAt || 0 });
+      for (const id of group.members) rows.push({ ids: [id], key, y, rank, createdAt: byId.get(id)?.data?.createdAt || 0 });
     }
   }
-  rows.sort((a, b) => a.y - b.y || a.createdAt - b.createdAt || a.ids[0].localeCompare(b.ids[0]));
+  // Handles at one height keep the order their first connection was made in
+  const handleOrder = new Map<string, number>();
+  for (const row of rows) handleOrder.set(row.key, Math.min(handleOrder.get(row.key) ?? Infinity, row.createdAt));
+  rows.sort(
+    (a, b) =>
+      a.y - b.y ||
+      handleOrder.get(a.key)! - handleOrder.get(b.key)! ||
+      a.key.localeCompare(b.key) ||
+      a.rank - b.rank ||
+      a.createdAt - b.createdAt ||
+      a.ids[0].localeCompare(b.ids[0])
+  );
   const placed = new Map<string, number>();
   let floor = -Infinity;
   let previousKey: string | null = null;

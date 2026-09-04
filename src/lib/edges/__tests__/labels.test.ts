@@ -184,6 +184,23 @@ describe("hidden stub groups", () => {
     expect(hiddenStubRole("a1", edges, "source", null)).toBe("single");
   });
 
+  it("keeps a named connection outside its handle's group", () => {
+    const named = [
+      ...edges,
+      edge("hero", { source: "h", data: { hidden: true, createdAt: 0, label: "Important" } }),
+    ];
+    expect(hiddenStubGroup("hero", named, "target")).toEqual({ key: `${key}#hero`, members: ["hero"], named: true });
+    expect(hiddenStubGroup("a1", named, "target")?.members).toEqual(["a2", "a1"]);
+    expect(hiddenStubRole("hero", named, "target", null)).toBe("single");
+    expect(hiddenStubRole("a2", named, "target", null)).toBe("collapsed-leader");
+    // The shared pill comes first, then the named one, even though it was made earlier
+    const placed = stackHiddenStubs(named, "b", "target", () => 100);
+    expect(placed.get("a2")).toBe(100);
+    expect(placed.get("hero")).toBe(122);
+    // The text handle's stub follows, after the group gap
+    expect(placed.get("t")).toBe(152);
+  });
+
   it("pluralises the type label, except where the word has no plural", () => {
     expect(pluralTypeLabel("image")).toBe("Images");
     expect(pluralTypeLabel("text")).toBe("Texts");
