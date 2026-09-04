@@ -102,3 +102,27 @@ describe("SocketColumn", () => {
     expect(socketRowCount([])).toBe(0);
   });
 });
+
+describe("Socket outline", () => {
+  it("draws the card border colour when the node is idle", () => {
+    const { container } = wrap(<Socket nodeId="n1" side="left" row={0} spec={{ id: "image", type: "image" }} />);
+    const outline = container.querySelector("[data-socket-outline]") as SVGPathElement;
+    expect(outline.getAttribute("class")).toContain("stroke-card-border");
+    expect(container.querySelector("[data-socket-ring]")).toBeNull();
+  });
+
+  it("continues the selection outline and ring around the swell", () => {
+    const { container } = wrap(<Socket nodeId="n1" side="left" row={0} spec={{ id: "image", type: "image" }} outline="selected" />);
+    const outline = container.querySelector("[data-socket-outline]") as SVGPathElement;
+    expect(outline.getAttribute("stroke")).toBe("var(--color-selection)");
+    const ring = container.querySelector("[data-socket-ring]") as SVGPathElement;
+    expect(ring.getAttribute("stroke-width")).toBe("5");
+    expect(ring.getAttribute("stroke-opacity")).toBe("0.4");
+  });
+
+  it("uses the error colour with no ring", () => {
+    const { container } = wrap(<Socket nodeId="n1" side="right" row={0} spec={{ id: "image", type: "image" }} outline="error" />);
+    expect((container.querySelector("[data-socket-outline]") as SVGPathElement).getAttribute("stroke")).toBe("var(--color-error)");
+    expect(container.querySelector("[data-socket-ring]")).toBeNull();
+  });
+});

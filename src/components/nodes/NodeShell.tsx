@@ -16,7 +16,7 @@ import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import type { NodeType } from "@/types";
 import type { ShellMedia } from "@/utils/nodeDimensions";
 import { cn } from "./ui/cn";
-import { SocketColumn, socketRowCount, type SocketSpec } from "./ui/Socket";
+import { SocketColumn, socketRowCount, type SocketOutline, type SocketSpec } from "./ui/Socket";
 import { CONTROLS_GAP, GAP_ROW_H, NODE_MIN_W, socketMinHeight } from "./ui/tokens";
 
 export type { ShellMedia };
@@ -93,6 +93,8 @@ export function NodeShell({
   const labels = showLabels ?? connectingLabels;
 
   const rows = Math.max(socketRowCount(inputs), socketRowCount(outputs));
+  // Same precedence as the card's classes below: error beats selection beats running.
+  const outline: SocketOutline = hasError ? "error" : selected ? "selected" : running ? "running" : "none";
 
   // Sockets sit at fixed offsets from the card top, so React Flow only needs
   // to re-measure handles when the set of sockets changes, not on every
@@ -227,8 +229,8 @@ export function NodeShell({
           {children}
         </div>
         {cardChildren}
-        <SocketColumn nodeId={id} side="left" sockets={inputs} showLabels={labels} />
-        <SocketColumn nodeId={id} side="right" sockets={outputs} showLabels={labels} />
+        <SocketColumn nodeId={id} side="left" sockets={inputs} showLabels={labels} outline={outline} />
+        <SocketColumn nodeId={id} side="right" sockets={outputs} showLabels={labels} outline={outline} />
       </div>
 
       {(gap !== undefined && gap !== null) || controls ? (

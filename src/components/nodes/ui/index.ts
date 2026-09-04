@@ -27,7 +27,7 @@ export { Spinner, LoadingOverlay } from "./Spinner";
 export { EmptyState } from "./EmptyState";
 export { ErrorOverlay, ErrorMessage } from "./ErrorOverlay";
 export { Socket, SocketColumn, assignSocketRows, socketRowCount, socketColor, SOCKET_SWELL } from "./Socket";
-export type { SocketSpec, SocketType } from "./Socket";
+export type { SocketSpec, SocketType, SocketOutline } from "./Socket";
 export { schemaSockets } from "./schemaSockets";
 export type { SchemaSocketOptions } from "./schemaSockets";
 export { HeightGrip } from "./HeightGrip";

@@ -237,3 +237,26 @@ describe("NodeShell", () => {
     expect(mockSetHoveredNodeId).toHaveBeenCalledWith(null);
   });
 });
+
+describe("NodeShell socket outline", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    storeState = { currentNodeIds: [] as string[], setHoveredNodeId: mockSetHoveredNodeId, nodes: [] };
+    mockUseWorkflowStore.mockImplementation((selector) => selector(storeState));
+  });
+
+  it("passes the card's outline state to the sockets", () => {
+    const { container, rerender } = render(
+      <Wrap>
+        <NodeShell id="n1" selected media={{ kind: "fixed", height: 100 }} inputs={[{ id: "image", type: "image" }]} />
+      </Wrap>
+    );
+    expect((container.querySelector("[data-socket-outline]") as SVGPathElement).getAttribute("stroke")).toBe("var(--color-selection)");
+    rerender(
+      <Wrap>
+        <NodeShell id="n1" selected hasError media={{ kind: "fixed", height: 100 }} inputs={[{ id: "image", type: "image" }]} />
+      </Wrap>
+    );
+    expect((container.querySelector("[data-socket-outline]") as SVGPathElement).getAttribute("stroke")).toBe("var(--color-error)");
+  });
+});
