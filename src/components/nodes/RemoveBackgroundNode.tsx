@@ -1,15 +1,18 @@
 "use client";
 
-import { useMemo } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
-import { BaseNode } from "./BaseNode";
+import { useMemo, useState } from "react";
+import { NodeProps, Node } from "@xyflow/react";
+import { NodeShell } from "./NodeShell";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { BackgroundRemovalModel, RemoveBackgroundNodeData } from "@/types";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
-import { HandleLabel } from "./HandleLabel";
+import { ChipGroup, ControlsCard, EmptyState, Field, Spinner, type SocketSpec } from "./ui";
 
 type RemoveBackgroundNodeType = Node<RemoveBackgroundNodeData, "removeBackground">;
+
+const INPUT_SOCKETS: SocketSpec[] = [{ id: "image", type: "image", label: "Image In" }];
+const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "image", type: "image", label: "Image Out" }];
+const EMPTY_HEIGHT = 140;
 
 const CHECKERBOARD_STYLE: React.CSSProperties = {
   backgroundColor: "#262626",
@@ -33,7 +36,8 @@ export function RemoveBackgroundNode({ id, data, selected }: NodeProps<RemoveBac
   const getConnectedInputs = useWorkflowStore((state) => state.getConnectedInputs);
   const edges = useWorkflowStore((state) => state.edges);
   const nodes = useWorkflowStore((state) => state.nodes);
-  const showLabels = useShowHandleLabels(selected);
+  const [expanded, setExpanded] = useState(true);
+  const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
   const hasIncomingImageConnection = useMemo(() => {
     return edges.some((edge) => edge.target === id && edge.targetHandle === "image");
@@ -46,100 +50,80 @@ export function RemoveBackgroundNode({ id, data, selected }: NodeProps<RemoveBac
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasIncomingImageConnection, id, getConnectedInputs, nodes, edges]);
 
+  const media = nodeData.outputImage
+    ? { kind: "aspect" as const, aspect: loadedAspect?.src === nodeData.outputImage ? loadedAspect.aspect : 1 }
+    : { kind: "fixed" as const, height: EMPTY_HEIGHT };
+  const modelLabel = MODEL_OPTIONS.find((o) => o.value === nodeData.model)?.label ?? "Balanced";
+
   return (
-    <BaseNode
+    <NodeShell
       id={id}
       selected={selected}
       isExecuting={isRunning}
       hasError={nodeData.status === "error"}
-      minWidth={320}
-      minHeight={320}
-      aspectFitMedia={nodeData.outputImage}
+      media={media}
+      inputs={INPUT_SOCKETS}
+      outputs={OUTPUT_SOCKETS}
+      mediaClassName="group"
+      controls={
+        <ControlsCard
+          id={id}
+          summary={{ title: `Remove background · ${modelLabel}` }}
+          expanded={expanded}
+          onToggle={() => setExpanded((v) => !v)}
+        >
+          <Field label="Model">
+            <ChipGroup
+              value={nodeData.model}
+              options={MODEL_OPTIONS}
+              onChange={(model) => updateNodeData(id, { model, outputImage: null, status: "idle", progress: 0 })}
+            />
+          </Field>
+        </ControlsCard>
+      }
     >
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="image"
-        data-handletype="image"
-        isConnectable={true}
-        style={{ top: "50%" }}
-      />
-      <HandleLabel label="Image In" side="target" color="var(--handle-color-image)" top="calc(50% - 7px)" visible={showLabels} />
-
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="image"
-        data-handletype="image"
-        isConnectable={true}
-        style={{ top: "50%" }}
-      />
-      <HandleLabel label="Image Out" side="source" color="rgb(59, 130, 246)" top="calc(50% - 7px)" visible={showLabels} />
-
-      <div className="flex-1 flex flex-col min-h-0 gap-2">
-        <div className="flex-1 min-h-0 relative rounded" style={CHECKERBOARD_STYLE}>
-          {nodeData.outputImage ? (
-            <>
-              <img
-                src={adaptiveOutputImage ?? undefined}
-                className="absolute inset-0 w-full h-full object-contain rounded"
-                alt="Background removed"
-              />
-              <button
-                onClick={() => updateNodeData(id, { outputImage: null, status: "idle", progress: 0 })}
-                className="absolute top-1 right-1 w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-                title="Clear result"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </>
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center border border-dashed border-neutral-600 rounded">
-              <span className="text-[10px] text-neutral-500 text-center px-4">
-                {hasSourceImage
-                  ? "Run to remove background"
-                  : "Connect an image input"}
-              </span>
-            </div>
-          )}
-        </div>
-
-        <div className="nodrag nowheel shrink-0 flex gap-1 px-1">
-          {MODEL_OPTIONS.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => updateNodeData(id, { model: option.value, outputImage: null, status: "idle", progress: 0 })}
-              className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-                nodeData.model === option.value
-                  ? "bg-blue-600 text-white"
-                  : "bg-neutral-800 text-neutral-400 hover:text-neutral-200"
-              }`}
-            >
-              {option.label}
-            </button>
-          ))}
-        </div>
-
-        {nodeData.status === "loading" && (
-          <div className="absolute inset-0 bg-neutral-900/70 rounded flex flex-col items-center justify-center gap-2">
-            <svg className="w-6 h-6 animate-spin text-white" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+      <div className="absolute inset-0" style={CHECKERBOARD_STYLE} />
+      {nodeData.outputImage ? (
+        <>
+          <img
+            src={adaptiveOutputImage ?? undefined}
+            className="absolute inset-0 w-full h-full object-cover"
+            alt="Background removed"
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              if (img.naturalWidth > 0 && img.naturalHeight > 0 && nodeData.outputImage) {
+                setLoadedAspect({ src: nodeData.outputImage, aspect: img.naturalWidth / img.naturalHeight });
+              }
+            }}
+          />
+          <button
+            onClick={() => updateNodeData(id, { outputImage: null, status: "idle", progress: 0 })}
+            className="absolute top-1 right-1 w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+            title="Clear result"
+          >
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
-            <span className="text-white text-xs">
-              {nodeData.progress > 0 ? `Processing... ${nodeData.progress}%` : "Loading model..."}
-            </span>
-          </div>
-        )}
+          </button>
+        </>
+      ) : (
+        <EmptyState className="bg-transparent" message={hasSourceImage ? "Run to remove background" : "Connect an image input"} />
+      )}
 
-        {nodeData.status === "error" && nodeData.error && (
-          <div className="shrink-0 px-2 py-1.5 bg-red-900/30 border border-red-700/50 rounded">
-            <p className="text-[10px] text-red-400 break-words">{nodeData.error}</p>
-          </div>
-        )}
-      </div>
-    </BaseNode>
+      {nodeData.status === "loading" && (
+        <div className="absolute inset-0 bg-neutral-900/70 flex flex-col items-center justify-center gap-2">
+          <Spinner size={24} className="text-white" />
+          <span className="text-white text-xs">
+            {nodeData.progress > 0 ? `Processing... ${nodeData.progress}%` : "Loading model..."}
+          </span>
+        </div>
+      )}
+
+      {nodeData.status === "error" && nodeData.error && (
+        <div className="absolute bottom-2 left-2 right-2 px-2 py-1.5 bg-red-900/30 border border-red-700/50 rounded">
+          <p className="text-[10px] text-red-400 break-words">{nodeData.error}</p>
+        </div>
+      )}
+    </NodeShell>
   );
 }

@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useState, useMemo, useEffect, useRef } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
-import { BaseNode } from "./BaseNode";
+import { NodeProps, Node } from "@xyflow/react";
+import { NodeShell } from "./NodeShell";
 import { useCommentNavigation } from "@/hooks/useCommentNavigation";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { OutputNodeData } from "@/types";
@@ -10,24 +10,30 @@ import { useVideoBlobUrl } from "@/hooks/useVideoBlobUrl";
 import { useVideoAutoplay } from "@/hooks/useVideoAutoplay";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
 import { downloadMedia, MediaType } from "@/utils/downloadMedia";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
-import { HandleLabel } from "./HandleLabel";
+import { EmptyState, ScrubRow, type SocketSpec } from "./ui";
 
 type OutputNodeType = Node<OutputNodeData, "output">;
 
+const INPUT_SOCKETS: SocketSpec[] = [
+  { id: "image", type: "image", label: "Image" },
+  { id: "video", type: "video", label: "Video" },
+  { id: "audio", type: "audio", label: "Audio" },
+];
+const EMPTY_HEIGHT = 160;
+const AUDIO_HEIGHT = 64;
+
 export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
   const nodeData = data;
-  const commentNavigation = useCommentNavigation(id);
-  const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
+  useCommentNavigation(id);
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const connectedEdgeCount = useWorkflowStore(
     (state) => state.edges.filter((edge) => edge.target === id).length
   );
   const isRunning = useWorkflowStore((state) => state.isRunning);
-  const showLabels = useShowHandleLabels(selected);
   const [showLightbox, setShowLightbox] = useState(false);
   const previousEdgeCountRef = useRef<number | null>(null);
   const videoAutoplayRef = useVideoAutoplay(id, selected);
+  const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
   // Determine if content is audio
   const isAudio = useMemo(() => {
@@ -71,11 +77,6 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
     previousEdgeCountRef.current = connectedEdgeCount;
   }, [connectedEdgeCount, id, regenerateNode]);
 
-  // Handle Run button click
-  const handleRun = useCallback(() => {
-    regenerateNode(id);
-  }, [id, regenerateNode]);
-
   const handleDownload = useCallback(async () => {
     if (!contentSrc) return;
     const type: MediaType = isAudio ? "audio" : isVideo ? "video" : "image";
@@ -86,73 +87,62 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
     }
   }, [contentSrc, isAudio, isVideo, nodeData.outputFilename]);
 
+  const media = !contentSrc
+    ? { kind: "fixed" as const, height: EMPTY_HEIGHT }
+    : isAudio
+      ? { kind: "fixed" as const, height: AUDIO_HEIGHT }
+      : { kind: "aspect" as const, aspect: loadedAspect?.src === contentSrc ? loadedAspect.aspect : isVideo ? 16 / 9 : 1 };
+
   return (
     <>
-      <BaseNode
+      <NodeShell
         id={id}
         selected={selected}
         isExecuting={isRunning}
-        contentClassName="flex-1 min-h-0 relative"
-        className="min-w-[200px]"
-        aspectFitMedia={isAudio ? null : contentSrc}
+        media={media}
+        inputs={INPUT_SOCKETS}
+        mediaClassName="group"
+        gap={
+          contentSrc && isVideo ? (
+            <ScrubRow videoRef={videoAutoplayRef} src={videoBlobUrl} className="w-full" />
+          ) : undefined
+        }
       >
-        <Handle
-          type="target"
-          position={Position.Left}
-          id="image"
-          data-handletype="image"
-          style={{ top: "35%", zIndex: 10 }}
-        />
-        <HandleLabel label="Image" side="target" color="var(--handle-color-image)" top="calc(35% - 18px)" visible={showLabels} />
-        <Handle
-          type="target"
-          position={Position.Left}
-          id="video"
-          data-handletype="video"
-          style={{ top: "50%", zIndex: 10 }}
-        />
-        <HandleLabel label="Video" side="target" color="var(--handle-color-video)" visible={showLabels} />
-        <Handle
-          type="target"
-          position={Position.Left}
-          id="audio"
-          data-handletype="audio"
-          style={{ top: "65%", background: "rgb(167, 139, 250)", zIndex: 10 }}
-        />
-        <HandleLabel label="Audio" side="target" color="var(--handle-color-audio)" top="calc(65% - 18px)" visible={showLabels} />
-
-        <div className="relative w-full h-full overflow-hidden rounded-lg">
         {contentSrc ? (
           <>
             {isAudio ? (
-              <div className="w-full h-full flex items-center justify-center p-4">
-                <audio
-                  src={contentSrc}
-                  controls
-                  className="w-full rounded"
-                />
+              <div className="absolute inset-0 flex items-center justify-center px-3 bg-neutral-900/40">
+                <audio src={contentSrc} controls className="w-full nodrag nopan" />
               </div>
             ) : (
-              <div
-                className="relative cursor-pointer group w-full h-full"
-                onClick={() => setShowLightbox(true)}
-              >
+              <div className="absolute inset-0 cursor-pointer" onClick={() => setShowLightbox(true)}>
                 {isVideo ? (
                   <video
                     ref={videoAutoplayRef}
                     src={videoBlobUrl ?? undefined}
-                    controls
                     loop
                     muted
                     playsInline
-                    className="w-full h-full object-cover"
+                    className="absolute inset-0 w-full h-full object-cover"
                     onClick={(e) => e.stopPropagation()}
+                    onLoadedMetadata={(e) => {
+                      const v = e.currentTarget;
+                      if (v.videoWidth > 0 && v.videoHeight > 0) {
+                        setLoadedAspect({ src: contentSrc, aspect: v.videoWidth / v.videoHeight });
+                      }
+                    }}
                   />
                 ) : (
                   <img
                     src={adaptiveImage ?? contentSrc}
                     alt="Output"
-                    className="w-full h-full object-cover"
+                    className="absolute inset-0 w-full h-full object-cover"
+                    onLoad={(e) => {
+                      const img = e.currentTarget;
+                      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                        setLoadedAspect({ src: contentSrc, aspect: img.naturalWidth / img.naturalHeight });
+                      }
+                    }}
                   />
                 )}
                 <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center pointer-events-none">
@@ -164,7 +154,7 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
             )}
             <button
               onClick={handleDownload}
-              className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white text-xs rounded transition-colors flex items-center gap-1"
+              className="absolute top-2 right-2 p-1.5 bg-black/60 hover:bg-black/80 text-white text-xs rounded transition-colors flex items-center gap-1 opacity-0 group-hover:opacity-100 focus:opacity-100"
               title="Download"
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -173,15 +163,16 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
             </button>
           </>
         ) : (
-          <div className="w-full h-full bg-neutral-900/40 flex flex-col items-center justify-center">
-            <svg className="w-8 h-8 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-            </svg>
-            <span className="text-xs text-neutral-500 mt-2">Connect input</span>
-          </div>
+          <EmptyState
+            message="Connect input"
+            icon={
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+            }
+          />
         )}
-        </div>
-      </BaseNode>
+      </NodeShell>
 
       {/* Lightbox Modal (skip for audio) */}
       {showLightbox && contentSrc && !isAudio && (
