@@ -2,17 +2,57 @@
 
 @theme {
   --color-canvas-bg: #171717;
+
+  /* Node anatomy (see docs/node-redesign.md) */
+  --color-card: #262626;
+  --color-card-border: rgb(64 64 64 / 0.6);
+  --color-panel: #2a2a2a;
+  --color-well: #1a1a1a;
+  --color-selection: #3b82f6;
+  --color-running: #3b82f6;
+  --color-error: #ef4444;
+
+  /* Handle / socket colours, keyed by handle type */
+  --color-handle-image: #10b981;
+  --color-handle-text: #3b82f6;
+  --color-handle-3d: #f97316;
+  --color-handle-audio: #a855f7;
+  --color-handle-video: #ec4899;
+  --color-handle-easeCurve: #bef264;
+  --color-handle-reference: #6b7280;
+
+  --radius-card: 12px;
+  --radius-media: 8px;
+  --radius-controls: 10px;
+  --radius-well: 8px;
+
+  /* Faint recess for input wells on the settings panel */
+  --shadow-well: inset 0 1px 1.5px rgb(0 0 0 / 0.3), inset 0 0 0 1px rgb(0 0 0 / 0.12), 0 1px 0 rgb(255 255 255 / 0.025);
+
+  --text-node: 10px;
+  --text-node--line-height: 14px;
+}
+
+/* Squircle corners where the engine supports them (Chrome 139+); plain
+   border-radius elsewhere. */
+@utility squircle {
+  @supports (corner-shape: squircle) {
+    corner-shape: squircle;
+  }
 }
 
 :root {
   --background: #0a0a0a;
   --foreground: #fafafa;
-  /* Handle colors (used by labels) */
-  --handle-color-image: #10b981;
-  --handle-color-text: #3b82f6;
-  --handle-color-3d: #f97316;
-  --handle-color-audio: #a855f7;
-  --handle-color-video: #ec4899;
+  /* Handle colours. Aliases of the @theme --color-handle-* tokens, kept while
+     the pre-redesign nodes still reference them. */
+  --handle-color-image: var(--color-handle-image);
+  --handle-color-text: var(--color-handle-text);
+  --handle-color-3d: var(--color-handle-3d);
+  --handle-color-audio: var(--color-handle-audio);
+  --handle-color-video: var(--color-handle-video);
+  --handle-color-easeCurve: var(--color-handle-easeCurve);
+  --handle-color-reference: var(--color-handle-reference);
 }
 
 html {
