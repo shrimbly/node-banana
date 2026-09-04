@@ -35,6 +35,7 @@ vi.mock("@/store/workflowStore", () => ({
 }));
 
 // Mock useReactFlow
+const mockUpdateNodeInternals = vi.fn();
 const mockScreenToFlowPosition = vi.fn((pos) => pos);
 const mockGetViewport = vi.fn(() => ({ x: 0, y: 0, zoom: 1 }));
 const mockZoomIn = vi.fn();
@@ -52,6 +53,7 @@ vi.mock("@xyflow/react", async () => {
     },
     useStore: (selector: (state: { transform: [number, number, number]; nodeLookup: Map<string, unknown> }) => unknown) =>
       selector({ transform: [0, 0, mockViewport.zoom], nodeLookup: new Map() }),
+    useUpdateNodeInternals: () => mockUpdateNodeInternals,
     useReactFlow: () => ({
       screenToFlowPosition: mockScreenToFlowPosition,
       getViewport: mockGetViewport,
@@ -183,6 +185,28 @@ describe("WorkflowCanvas", () => {
 
       // ReactFlow container should be present
       expect(document.querySelector(".react-flow")).toBeInTheDocument();
+    });
+
+    it("re-measures every node's handles after a workflow loads", async () => {
+      mockUseWorkflowStore.mockImplementation((selector) =>
+        selector(createDefaultState({ nodes: [createMockNode("a", "prompt"), createMockNode("b", "nanoBanana")], workflowLoadCount: 1 }))
+      );
+      render(
+        <TestWrapper>
+          <WorkflowCanvas />
+        </TestWrapper>
+      );
+      await waitFor(() => expect(mockUpdateNodeInternals).toHaveBeenCalledWith(["a", "b"]));
+    });
+
+    it("leaves handle measurement alone until a workflow has loaded", async () => {
+      render(
+        <TestWrapper>
+          <WorkflowCanvas />
+        </TestWrapper>
+      );
+      await new Promise((r) => setTimeout(r, 50));
+      expect(mockUpdateNodeInternals).not.toHaveBeenCalled();
     });
 
     it("marks the canvas as overview mode below the edge visibility threshold", () => {

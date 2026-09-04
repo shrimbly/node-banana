@@ -389,6 +389,8 @@ interface WorkflowStore {
   // Auto-save state
   workflowId: string | null;
   workflowName: string | null;
+  /** Bumped on every loadWorkflow, so the canvas can re-measure handles once the new nodes are in the DOM. */
+  workflowLoadCount: number;
   saveDirectoryPath: string | null;
   generationsPath: string | null;
   lastSavedAt: number | null;
@@ -711,6 +713,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   // Auto-save initial state
   workflowId: null,
   workflowName: null,
+  workflowLoadCount: 0,
   saveDirectoryPath: null,
   generationsPath: null,
   lastSavedAt: null,
@@ -2881,6 +2884,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       // Restore workflow ID and paths from localStorage if available
       workflowId: workflow.id || null,
       workflowName: workflow.name,
+      workflowLoadCount: get().workflowLoadCount + 1,
       saveDirectoryPath: directoryPath || null,
       generationsPath: savedConfig?.generationsPath || null,
       lastSavedAt: savedConfig?.lastSavedAt || null,

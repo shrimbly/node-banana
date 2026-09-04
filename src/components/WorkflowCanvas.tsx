@@ -16,6 +16,7 @@ import {
   OnSelectionChangeParams,
   ViewportPortal,
   useStore,
+  useUpdateNodeInternals,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -534,6 +535,22 @@ export function WorkflowCanvas() {
       return { ...node, className: newClass };
     });
   }, [nodes, dimmedNodeIds, skippedNodeIds]);
+
+  // Switching workflows can leave React Flow holding handle positions measured
+  // on the previous workflow's nodes (same ids, different layout), so edges
+  // land in the wrong place until something resizes a node. Re-measure every
+  // node once the new DOM and viewport are up.
+  const updateNodeInternals = useUpdateNodeInternals();
+  const workflowLoadCount = useWorkflowStore((state) => state.workflowLoadCount);
+  const nodeIdsRef = useRef<string[]>([]);
+  nodeIdsRef.current = allNodes.map((n) => n.id);
+  useEffect(() => {
+    if (!workflowLoadCount) return;
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => updateNodeInternals(nodeIdsRef.current));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [workflowLoadCount, updateNodeInternals]);
 
   // Node title mapping for FloatingNodeHeaders
   const NODE_TITLES: Record<string, string> = {
