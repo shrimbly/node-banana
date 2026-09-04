@@ -18,6 +18,7 @@ import { generateWithReplicate } from "./providers/replicate";
 import { generateWithFalQueue } from "./providers/fal";
 import { submitKieTask } from "./providers/kie";
 import { generateWithWaveSpeed } from "./providers/wavespeed";
+import { generateWithAtlas } from "./providers/atlas";
 import { generateWithOpenAI } from "./providers/openai";
 import { buildMediaResponse } from "./shared";
 
@@ -412,6 +413,80 @@ export async function POST(request: NextRequest) {
       }
 
       return buildMediaResponse(output);
+    }
+
+    if (provider === "atlas") {
+      if (!selectedModel?.modelId || !selectedModel?.displayName) {
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: "selectedModel with modelId and displayName is required for Atlas" },
+          { status: 400 }
+        );
+      }
+
+      // User-provided key takes precedence over env variable
+      const atlasApiKey = request.headers.get("X-Atlas-Key") || process.env.ATLASCLOUD_API_KEY;
+      if (!atlasApiKey) {
+        return NextResponse.json<GenerateResponse>(
+          {
+            success: false,
+            error: "Atlas Cloud API key not configured. Add ATLASCLOUD_API_KEY to .env.local or configure in Settings.",
+          },
+          { status: 401 }
+        );
+      }
+
+      // Atlas accepts Data URIs directly, so keep them as-is like WaveSpeed
+      const processedImages: string[] = images ? [...images] : [];
+
+      // Process dynamicInputs: filter empty values
+      let processedDynamicInputs: Record<string, string | string[]> | undefined = undefined;
+
+      if (dynamicInputs) {
+        processedDynamicInputs = {};
+        for (const key of Object.keys(dynamicInputs)) {
+          const value = dynamicInputs[key];
+          if (value === null || value === undefined || value === '') {
+            continue;
+          }
+          processedDynamicInputs[key] = value;
+        }
+      }
+
+      const genInput: GenerationInput = {
+        model: {
+          id: selectedModel.modelId,
+          name: selectedModel.displayName,
+          provider: "atlas",
+          capabilities: capabilitiesForMediaType(mediaType),
+          description: null,
+        },
+        prompt: prompt || "",
+        images: processedImages,
+        parameters,
+        dynamicInputs: processedDynamicInputs,
+      };
+
+      const result = await generateWithAtlas(requestId, atlasApiKey, genInput);
+
+      if (!result.success) {
+        return NextResponse.json<GenerateResponse>(
+          {
+            success: false,
+            error: result.error || "Generation failed",
+          },
+          { status: 500 }
+        );
+      }
+
+      const atlasOutput = result.outputs?.[0];
+      if (!atlasOutput?.data && !atlasOutput?.url) {
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: "No output in generation result" },
+          { status: 500 }
+        );
+      }
+
+      return buildMediaResponse(atlasOutput);
     }
 
     if (provider === "openai") {
