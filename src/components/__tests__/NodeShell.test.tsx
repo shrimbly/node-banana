@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { NodeShell } from "@/components/nodes/NodeShell";
-import { GAP_ROW_H, socketMinHeight } from "@/components/nodes/ui/tokens";
+import { CONTROLS_GAP, GAP_ROW_H, socketMinHeight } from "@/components/nodes/ui/tokens";
 
 const mockSetHoveredNodeId = vi.fn();
 const mockUseWorkflowStore = vi.fn();
@@ -165,15 +165,25 @@ describe("NodeShell", () => {
     expect(mockUpdateNodeInternals).toHaveBeenCalledWith("n1");
   });
 
-  it("adds the gap row whenever there are controls", () => {
+  it("keeps only a small spacer above controls when the gap row is empty", () => {
     const { container } = render(
       <Wrap>
         <NodeShell id="n1" media={{ kind: "fixed", height: 100 }} controls={<div>controls</div>} />
       </Wrap>
     );
     const gap = container.querySelector("[data-gap-row]") as HTMLElement;
-    expect(gap.style.height).toBe(`${GAP_ROW_H}px`);
+    expect(gap.style.height).toBe(`${CONTROLS_GAP}px`);
     expect(screen.getByText("controls")).toBeInTheDocument();
+  });
+
+  it("uses the full gap row when it holds something", () => {
+    const { container } = render(
+      <Wrap>
+        <NodeShell id="n1" media={{ kind: "fixed", height: 100 }} gap={<span>nav</span>} controls={<div>controls</div>} />
+      </Wrap>
+    );
+    const gap = container.querySelector("[data-gap-row]") as HTMLElement;
+    expect(gap.style.height).toBe(`${GAP_ROW_H}px`);
   });
 
   it("shows width-only resize edges when selected", () => {

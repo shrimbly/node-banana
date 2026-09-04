@@ -143,6 +143,7 @@ import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import type { NodeType } from "@/types";
 import {
   CARD_PAD,
+  CONTROLS_GAP,
   GAP_ROW_H,
   NODE_MAX_W,
   NODE_MIN_W,
@@ -241,7 +242,9 @@ export function computeShellLayout({
         ? Math.round(media.height)
         : 0;
   const cardH = Math.max(mediaH + 2 * CARD_EDGE, socketMinHeight(Math.max(inputs, outputs)));
-  const gapH = gap || controlsH > 0 ? GAP_ROW_H : 0;
+  // A full gap row only when it holds a carousel or scrubber; otherwise a
+  // small spacer keeps the controls card close to the media.
+  const gapH = gap ? GAP_ROW_H : controlsH > 0 ? CONTROLS_GAP : 0;
   return { mediaH, cardH, gapH, controlsH, height: cardH + gapH + controlsH };
 }
 

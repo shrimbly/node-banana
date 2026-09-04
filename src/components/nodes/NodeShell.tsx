@@ -17,7 +17,7 @@ import type { NodeType } from "@/types";
 import type { ShellMedia } from "@/utils/nodeDimensions";
 import { cn } from "./ui/cn";
 import { SocketColumn, socketRowCount, type SocketSpec } from "./ui/Socket";
-import { GAP_ROW_H, NODE_MIN_W, socketMinHeight } from "./ui/tokens";
+import { CONTROLS_GAP, GAP_ROW_H, NODE_MIN_W, socketMinHeight } from "./ui/tokens";
 
 export type { ShellMedia };
 
@@ -231,11 +231,15 @@ export function NodeShell({
         <SocketColumn nodeId={id} side="right" sockets={outputs} showLabels={labels} />
       </div>
 
-      {(gap !== undefined || controls) && (
-        <div data-gap-row className="w-full shrink-0 flex items-center justify-center" style={{ height: GAP_ROW_H }}>
+      {(gap !== undefined && gap !== null) || controls ? (
+        <div
+          data-gap-row
+          className="w-full shrink-0 flex items-center justify-center"
+          style={{ height: gap !== undefined && gap !== null ? GAP_ROW_H : CONTROLS_GAP }}
+        >
           {gap}
         </div>
-      )}
+      ) : null}
 
       {controls}
     </div>

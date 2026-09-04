@@ -9,7 +9,7 @@ Every node on the canvas is built from the same parts, top to bottom:
    Sockets sit in its border: inputs on the left, outputs on the right, the
    first centred 24px from the card's top, then every 30px.
 2. **Gap row** (28px) — history prev/next with dots and a `3 / 5` counter, or
-   a video scrub row. Empty on nodes with neither.
+   a video scrub row. Nodes with neither keep an 8px spacer instead.
 3. **Controls card** — `node width − 24px`, at most 360px, centred, 10px
    squircle. Collapsed it is a 28px summary row (provider icon · model name,
    truncated · summary values · chevron). Expanded it shows the settings panel

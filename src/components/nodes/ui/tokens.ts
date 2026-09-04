@@ -21,6 +21,8 @@ export const SOCKET_RING_W = 1.5;
 
 /** Row between the media card and the controls card (history nav / scrubber). */
 export const GAP_ROW_H = 28;
+/** Spacing between the cards when the gap row has nothing to show. */
+export const CONTROLS_GAP = 8;
 /** Collapsed controls card: the summary row. */
 export const SUMMARY_ROW_H = 28;
 /** Controls card is `node width − CONTROLS_INSET`, capped at CONTROLS_MAX_W. */

@@ -8,7 +8,7 @@ import {
   computeShellHeight,
   CARD_EDGE,
 } from "../nodeDimensions";
-import { GAP_ROW_H, socketMinHeight } from "@/components/nodes/ui/tokens";
+import { CONTROLS_GAP, GAP_ROW_H, socketMinHeight } from "@/components/nodes/ui/tokens";
 
 describe("parseAspectRatio", () => {
   it("parses ratio strings and numbers", () => {
@@ -74,12 +74,12 @@ describe("computeShellLayout", () => {
     expect(l.cardH).toBe(socketMinHeight(5));
     expect(socketMinHeight(5)).toBe(168);
   });
-  it("adds the gap row when there is a carousel or a controls card", () => {
+  it("adds the gap row for a carousel and a small spacer for controls alone", () => {
     const withGap = computeShellLayout({ width: 300, media: { kind: "fixed", height: 100 }, gap: true });
     expect(withGap.gapH).toBe(GAP_ROW_H);
     const withControls = computeShellLayout({ width: 300, media: { kind: "fixed", height: 100 }, controlsH: 28 });
-    expect(withControls.gapH).toBe(GAP_ROW_H);
-    expect(withControls.height).toBe(100 + 2 * CARD_EDGE + GAP_ROW_H + 28);
+    expect(withControls.gapH).toBe(CONTROLS_GAP);
+    expect(withControls.height).toBe(100 + 2 * CARD_EDGE + CONTROLS_GAP + 28);
     expect(computeShellHeight({ width: 300, media: { kind: "fixed", height: 100 }, controlsH: 28 })).toBe(withControls.height);
   });
   it("treats a bad aspect as square", () => {
