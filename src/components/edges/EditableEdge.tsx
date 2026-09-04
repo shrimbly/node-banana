@@ -378,7 +378,7 @@ export function EditableEdge({
         <EdgeLabelRenderer>
           {sourceRole !== "collapsed-member" && (
             <HiddenEdgeStub
-              key={sourceCollapsed ? "group" : "own"}
+              key={sourceCollapsed ? "source-group" : "source-own"}
               side="source"
               x={sourceStub.x}
               y={sourceStub.y}
@@ -392,7 +392,7 @@ export function EditableEdge({
           )}
           {targetRole !== "collapsed-member" && (
             <HiddenEdgeStub
-              key={targetCollapsed ? "group" : "own"}
+              key={targetCollapsed ? "target-group" : "target-own"}
               side="target"
               x={targetStub.x}
               y={targetStub.y}
