@@ -58,7 +58,7 @@ const nodes: N[] = [];
 const edges: Array<{ id: string; source: string; sourceHandle: string; target: string; targetHandle: string }> = [];
 
 const COL = 440;
-const ROW = 560;
+const ROW = 520;
 let counter = 0;
 
 function add(type: NodeType, col: number, row: number, data: Record<string, unknown> = {}, width?: number): string {
@@ -79,27 +79,36 @@ function wire(source: string, sourceHandle: string, target: string, targetHandle
   edges.push({ id: `edge-${source}-${target}-${sourceHandle}-${targetHandle}`, source, sourceHandle, target, targetHandle });
 }
 
-// ---- column 0: inputs
-const imageIn = add("imageInput", 0, 0, { image: IMG.photo, filename: "house-lake.jpg" });
-const imageInEmpty = add("imageInput", 0, 1);
-const prompt = add("prompt", 0, 2, { prompt: "A lakeside house at golden hour, {{style}}, shot on medium format film" });
-const videoIn = add("videoInput", 0, 3);
-const audioIn = add("audioInput", 0, 4);
+// Each column groups a family; "with" and "without" media variants sit on
+// adjacent rows so they can be compared at a glance.
 
-// ---- column 1: annotation, prompt constructor, LLM, array
-const annotation = add("annotation", 1, 0, { inputImage: IMG.photo, outputImage: IMG.photo });
-const constructor_ = add("promptConstructor", 1, 1, { template: "Portrait of {{subject}} in {{style}}", variables: { subject: "a donkey", style: "oil paint" } });
-const llm = add("llmGenerate", 1, 2, { outputText: "A weathered lakeside cabin, warm windows, mist over still water.", status: "idle" });
-const array = add("array", 1, 3, { inputText: "red, green, blue", outputItems: ["red", "green", "blue"] });
+// ---- column 0: inputs
+const imageIn = add("imageInput", 0, 0, { image: IMG.photo, filename: "house-lake.jpg", dimensions: { width: 600, height: 450 } });
+const imageInEmpty = add("imageInput", 0, 1, { isOptional: true });
+const videoIn = add("videoInput", 0, 2);
+const audioIn = add("audioInput", 0, 3);
+const prompt = add("prompt", 0, 4, { prompt: "A lakeside house at golden hour, {{style}}, shot on medium format film", variableName: "scene" });
+add("prompt", 0, 5, { prompt: "", isOptional: true });
+const constructor_ = add("promptConstructor", 0, 6, { template: "Portrait of @scene in @style", outputText: "Portrait of @scene in @style" });
+
+// ---- column 1: annotation, LLM, array
+const annotation = add("annotation", 1, 0, { sourceImage: IMG.photo, outputImage: IMG.photo, annotations: [{ id: "a1" }, { id: "a2" }] });
+add("annotation", 1, 1);
+const llm = add("llmGenerate", 1, 2, { outputText: "A weathered lakeside cabin, warm windows, mist over still water.", status: "idle", parametersExpanded: true });
+add("llmGenerate", 1, 3, { status: "idle", parametersExpanded: false });
+add("llmGenerate", 1, 4, { status: "error", error: "Rate limit exceeded", parametersExpanded: false });
+const array = add("array", 1, 5, { inputText: "red, green, blue", outputItems: ["red", "green", "blue"], outputText: JSON.stringify(["red", "green", "blue"]) });
+add("array", 1, 6);
 
 // ---- column 2: generate image in each state
 const genEmpty = add("nanoBanana", 2, 0, { aspectRatio: "16:9", resolution: "2K", parametersExpanded: false });
 const genLoading = add("nanoBanana", 2, 1, { status: "loading", aspectRatio: "1:1", parametersExpanded: false });
 const genError = add("nanoBanana", 2, 2, { status: "error", error: "Rate limit exceeded. Try again in a minute.", aspectRatio: "3:2", parametersExpanded: false });
+add("nanoBanana", 2, 3, { outputImage: IMG.photo, aspectRatio: "4:3", imageHistory: history(1, "4:3"), selectedHistoryIndex: 0, parametersExpanded: false });
 const genHistory = add(
   "nanoBanana",
   2,
-  3,
+  4,
   {
     outputImage: IMG.wide,
     aspectRatio: "16:9",
@@ -114,7 +123,7 @@ const genHistory = add(
 const genExternal = add(
   "nanoBanana",
   2,
-  4,
+  5,
   {
     outputImage: IMG.tall,
     selectedModel: { provider: "fal", modelId: "fal-ai/flux-pro/v1.1-ultra", displayName: "FLUX 1.1 Pro Ultra" },
@@ -125,9 +134,9 @@ const genExternal = add(
   },
   240
 );
-const genLarge = add("nanoBanana", 2, 6, { outputImage: IMG.square, aspectRatio: "1:1", imageHistory: history(1, "1:1"), selectedHistoryIndex: 0, parametersExpanded: false }, 520);
+const genLarge = add("nanoBanana", 2, 7, { outputImage: IMG.square, aspectRatio: "1:1", imageHistory: history(1, "1:1"), selectedHistoryIndex: 0, parametersExpanded: false, __usedFallback: true, __fallbackModelUsed: "Nano Banana", __primaryError: "quota" }, 520);
 
-// ---- column 3: video / audio / 3d generation
+// ---- column 3: video / audio / 3d / comfy generation
 const genVideo = add("generateVideo", 3, 0, {
   selectedModel: { provider: "kie", modelId: "wan/2-2-i2v-14b", displayName: "Wan 2.2 Image-to-Video 14B" },
   parameters: { duration: 5, resolution: "720p" },
@@ -138,50 +147,68 @@ const genVideoLoading = add("generateVideo", 3, 1, {
   status: "loading",
   parametersExpanded: false,
 });
-const genAudio = add("generateAudio", 3, 2, { status: "error", error: "Voice not found", parametersExpanded: false });
-const gen3d = add("generate3d", 3, 3, { parametersExpanded: false });
-const comfy = add("comfyApp", 3, 4, {
-  app: {
-    id: "app-kitchen",
-    name: "Upscale Pass",
-    description: "A two-node upscale",
-    source: "upload",
-    graph: { "1": { class_type: "LoadImage", inputs: { image: "example.png" } } },
-    inputs: [{ id: "1:image", name: "image", label: "Image", type: "image", nodeId: "1", inputKey: "image", required: true }],
-    params: [
-      { id: "2:steps", label: "KSampler · steps", type: "integer", default: 20, minimum: 1, maximum: 100, nodeId: "2", inputKey: "steps" },
-      { id: "2:sampler", label: "KSampler · sampler_name", type: "string", enum: ["euler", "dpmpp_2m"], default: "euler", nodeId: "2", inputKey: "sampler_name" },
-      { id: "2:seed", label: "KSampler · seed", type: "integer", default: 42, isSeed: true, nodeId: "2", inputKey: "seed" },
-    ],
-    outputs: [{ id: "9", label: "Result", type: "image", nodeId: "9", classType: "SaveImage" }],
-    classTypes: ["LoadImage", "KSampler", "SaveImage"],
-    nodeCount: 3,
-    createdAt: 1_756_000_000_000,
-  },
-  paramValues: { "2:steps": 28 },
-  parametersExpanded: true,
+add("generateVideo", 3, 2, { status: "error", error: "Model unavailable", parametersExpanded: false });
+const genAudio = add("generateAudio", 3, 3, { status: "error", error: "Voice not found", parametersExpanded: false });
+add("generateAudio", 3, 4, { selectedModel: { provider: "fal", modelId: "fal-ai/elevenlabs/tts", displayName: "ElevenLabs TTS Multilingual v2" }, parametersExpanded: false });
+const gen3d = add("generate3d", 3, 5, { parametersExpanded: false });
+add("generate3d", 3, 6, {
+  selectedModel: { provider: "fal", modelId: "fal-ai/hunyuan3d/v2", displayName: "Hunyuan3D 2.0" },
+  output3dUrl: "blob:kitchen-sink/model.glb",
+  savedFilename: "bench.glb",
+  savedFilePath: "/tmp/bench.glb",
+  parametersExpanded: false,
 });
+const comfyApp = {
+  id: "app-kitchen",
+  name: "Upscale Pass",
+  description: "A two-node upscale",
+  source: "upload",
+  graph: { "1": { class_type: "LoadImage", inputs: { image: "example.png" } } },
+  inputs: [{ id: "1:image", name: "image", label: "Image", type: "image", nodeId: "1", inputKey: "image", required: true }],
+  params: [
+    { id: "2:steps", label: "KSampler · steps", type: "integer", default: 20, minimum: 1, maximum: 100, nodeId: "2", inputKey: "steps" },
+    { id: "2:sampler", label: "KSampler · sampler_name", type: "string", enum: ["euler", "dpmpp_2m"], default: "euler", nodeId: "2", inputKey: "sampler_name" },
+    { id: "2:seed", label: "KSampler · seed", type: "integer", default: 42, isSeed: true, nodeId: "2", inputKey: "seed" },
+  ],
+  outputs: [{ id: "9", label: "Result", type: "image", nodeId: "9", classType: "SaveImage" }],
+  classTypes: ["LoadImage", "KSampler", "SaveImage"],
+  nodeCount: 3,
+  createdAt: 1_756_000_000_000,
+};
+const comfy = add("comfyApp", 3, 7, { app: comfyApp, paramValues: { "2:steps": 28 }, parametersExpanded: true });
+add("comfyApp", 3, 8, { app: comfyApp, paramValues: {}, outputs: { "9": IMG.square }, outputImage: IMG.square, parametersExpanded: false });
+add("comfyApp", 3, 9);
 
-// ---- column 4: processing
-const resize = add("imageResize", 4, 0, { inputImage: IMG.photo, outputImage: IMG.photo, targetWidth: 1024, targetHeight: 768 });
-const removeBg = add("removeBackground", 4, 1, { inputImage: IMG.cut, outputImage: IMG.cut });
-const frameGrab = add("videoFrameGrab", 4, 2);
-const trim = add("videoTrim", 4, 3);
-const stitch = add("videoStitch", 4, 4);
-const gif = add("gifEncoder", 4, 5);
-const ease = add("easeCurve", 4, 6);
+// ---- column 4: processing, with and without media
+const resize = add("imageResize", 4, 0, { sourceImage: IMG.photo, outputImage: IMG.photo, outputDimensions: { width: 1024, height: 768 }, outputBytes: 184_320 });
+add("imageResize", 4, 1);
+const removeBg = add("removeBackground", 4, 2, { outputImage: IMG.cut });
+add("removeBackground", 4, 3);
+const frameGrab = add("videoFrameGrab", 4, 4, { outputImage: IMG.wide });
+add("videoFrameGrab", 4, 5);
+const trim = add("videoTrim", 4, 6);
+const stitch = add("videoStitch", 4, 7);
+const gif = add("gifEncoder", 4, 8, { outputGif: IMG.square, outputDimensions: { width: 512, height: 512 }, outputBytes: 96_000 });
+add("gifEncoder", 4, 9);
+const ease = add("easeCurve", 4, 10, { easingPreset: "easeInOutQuad" });
 
-// ---- column 5: comparison / display
+// ---- column 5: comparison / display, with and without media
 const compare = add("imageCompare", 5, 0, { imageA: IMG.wide, imageB: IMG.wide });
-const splitGrid = add("splitGrid", 5, 1, { inputImage: IMG.square, gridRows: 2, gridCols: 2 });
-const glb = add("glbViewer", 5, 2);
-const output = add("output", 5, 3, { inputImage: IMG.wide });
-const outputEmpty = add("output", 5, 4);
-const gallery = add("outputGallery", 5, 5, { images: [IMG.wide, IMG.square, IMG.tall] });
+add("imageCompare", 5, 1);
+const splitGrid = add("splitGrid", 5, 2, { sourceImage: IMG.square, gridRows: 2, gridCols: 2 });
+add("splitGrid", 5, 3);
+const glb = add("glbViewer", 5, 4);
+add("glbViewer", 5, 5, { glbUrl: "blob:kitchen-sink/model.glb", filename: "bench.glb", capturedImage: IMG.cut });
+const output = add("output", 5, 6, { image: IMG.wide });
+const outputEmpty = add("output", 5, 7);
+add("output", 5, 8, { image: IMG.tall });
+const gallery = add("outputGallery", 5, 9, { images: [IMG.wide, IMG.square, IMG.tall, IMG.photo] });
+add("outputGallery", 5, 10);
 
 // ---- column 6: logic
 const router = add("router", 6, 0);
-const sw = add("switch", 6, 1, {
+add("router", 6, 1);
+const sw = add("switch", 6, 2, {
   inputType: "text",
   switches: [
     { id: "sw-a", name: "Warm", enabled: true },
@@ -189,13 +216,15 @@ const sw = add("switch", 6, 1, {
     { id: "sw-c", name: "Mono", enabled: true },
   ],
 });
-const cond = add("conditionalSwitch", 6, 2, {
+add("switch", 6, 3);
+const cond = add("conditionalSwitch", 6, 4, {
   incomingText: "night scene, neon",
   rules: [
     { id: "rule-night", value: "night", mode: "contains", label: "Night", isMatched: true },
     { id: "rule-day", value: "day", mode: "contains", label: "Day", isMatched: false },
   ],
 });
+add("conditionalSwitch", 6, 5, { evaluationPaused: true });
 
 // ---- edges: every handle type at least once
 wire(imageIn, "image", annotation, "image");
@@ -213,7 +242,8 @@ wire(genVideo, "video", trim, "video");
 wire(trim, "video", frameGrab, "video");
 wire(frameGrab, "image", removeBg, "image");
 wire(removeBg, "image", resize, "image");
-wire(resize, "image", gif, "image");
+wire(resize, "image", gif, "image-0");
+wire(imageIn, "image", gif, "image-1");
 wire(videoIn, "video", stitch, "video-0");
 wire(audioIn, "audio", stitch, "audio");
 wire(videoIn, "video", ease, "video");
@@ -234,6 +264,7 @@ wire(llm, "text", cond, "text");
 wire(cond, "rule-night", genExternal, "text");
 wire(imageIn, "image", comfy, "image-0");
 wire(comfy, "9", genVideoLoading, "image");
+void genEmpty;
 
 const workflow = {
   version: 1,
