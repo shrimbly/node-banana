@@ -8,6 +8,7 @@ export interface EnvStatusResponse {
   fal: boolean;
   kie: boolean;
   wavespeed: boolean;
+  atlas: boolean;
 }
 
 export async function GET() {
@@ -20,6 +21,7 @@ export async function GET() {
     fal: !!process.env.FAL_API_KEY,
     kie: !!process.env.KIE_API_KEY,
     wavespeed: !!process.env.WAVESPEED_API_KEY,
+    atlas: !!process.env.ATLASCLOUD_API_KEY,
   };
 
   return NextResponse.json(status);
