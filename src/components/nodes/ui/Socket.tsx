@@ -41,8 +41,9 @@ export const SOCKET_SWELL =
   "M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30";
 /** The three arcs alone, border to border: the ring follows these so it never runs along the stems. */
 const SOCKET_ARCS = "M14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28";
-/** Same outline closed a little past the border, so the fill hides the border beneath the swell. */
-const SOCKET_FILL = `${SOCKET_SWELL} L16,30 L16,-2 Z`;
+/** Closed across the whole box: the padding behind is card-coloured, and this
+ *  also hides the flat end caps of the wide ring stroke drawn underneath. */
+const SOCKET_FILL = `${SOCKET_SWELL} L${SOCKET_W},30 L${SOCKET_W},-2 Z`;
 const HOLE_CX = 9.5;
 const HOLE_CY = 14;
 
