@@ -93,7 +93,6 @@ const NodeHeader = memo(function NodeHeader({
   onToggleOptional,
   onOpenFallback,
 }: NodeHeaderProps) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const data = node.data as any;
 
   // Browse button for generate nodes

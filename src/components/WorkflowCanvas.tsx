@@ -687,7 +687,6 @@ export function WorkflowCanvas() {
     }
   }, []);
 
-
   // Check if a node was dropped into a group and add it to that group
   const handleNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: Node) => {
@@ -2123,9 +2122,6 @@ export function WorkflowCanvas() {
   }, [setHoveredHandle]);
 
 
-  // Fix for React Flow selection bug where nodes with undefined bounds get incorrectly selected.
-  // Uses statistical outlier detection to identify and deselect nodes that are clearly
-  // outside the actual selection area.
   // React Flow reports every viewport change as its own start/end pair, and a
   // wheel pan sets the viewport once per frame, so the classes that switch
   // off hover and pointer events would flip on and off each frame and restyle
@@ -2160,6 +2156,9 @@ export function WorkflowCanvas() {
     handleNodeDragStop(event, node);
   }, [handleNodeDragStop]);
 
+  // Fix for React Flow selection bug where nodes with undefined bounds get incorrectly selected.
+  // Uses statistical outlier detection to identify and deselect nodes that are clearly
+  // outside the actual selection area.
   const handleSelectionChange = useCallback(({ nodes: selectedNodes }: OnSelectionChangeParams) => {
     if (selectedNodes.length <= 1) return;
 
