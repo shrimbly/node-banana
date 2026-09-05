@@ -83,6 +83,12 @@ describe("EdgeToolbar", () => {
     expect((anchor.firstElementChild as HTMLElement).style.transform).toContain("scale(0.5)");
   });
 
+  it("sits above selected nodes and the hidden-connection pills", () => {
+    withEdges([edge("e1", { selected: true })]);
+    render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
+    expect(Number(screen.getByTestId("edge-toolbar").style.zIndex)).toBeGreaterThan(2001);
+  });
+
   it("toggles the pause of a single edge", () => {
     withEdges([edge("e1", { selected: true })]);
     render(<EdgeToolbar edgeId="e1" x={0} y={0} />);

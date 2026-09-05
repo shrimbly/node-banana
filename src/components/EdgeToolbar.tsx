@@ -77,7 +77,8 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
       <div
         className="nodrag nopan nokey"
         data-testid="edge-toolbar"
-        style={{ position: "absolute", transform: `translate(${x}px, ${y}px)`, pointerEvents: "all", zIndex: 1000 }}
+        // Above selected nodes (1000) and the hidden-connection pills and bundle clamps (2001)
+        style={{ position: "absolute", transform: `translate(${x}px, ${y}px)`, pointerEvents: "all", zIndex: 2100 }}
         onPointerDown={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
