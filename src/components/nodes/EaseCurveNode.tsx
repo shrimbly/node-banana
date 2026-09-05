@@ -62,7 +62,7 @@ export function EaseCurveNode({ id, data, selected }: NodeProps<EaseCurveNodeTyp
   const edges = useWorkflowStore((state) => state.edges);
   const removeEdge = useWorkflowStore((state) => state.removeEdge);
   const videoBlobUrl = useVideoBlobUrl(nodeData.outputVideo ?? null);
-  const videoAutoplayRef = useVideoAutoplay(id, selected);
+  const videoAutoplayRef = useVideoAutoplay(id);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
   const [expanded, setExpanded] = useState(true);
   const [showPresets, setShowPresets] = useState(false);
