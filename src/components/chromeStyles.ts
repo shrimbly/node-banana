@@ -9,9 +9,9 @@ export const CHROME_SURFACE =
   "squircle border border-white/8 bg-neutral-800/92 backdrop-blur-md " +
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_1px_2px_rgba(0,0,0,0.4),0_12px_32px_-8px_rgba(0,0,0,0.5)]";
 
-/** 28px icon button: rest → hover lift → pressed dip. */
+/** 32px icon button: rest → hover lift → pressed dip. */
 export const CHROME_ICON_BUTTON =
-  "flex h-7 w-7 shrink-0 items-center justify-center rounded-[7px] squircle text-neutral-400 " +
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg squircle text-neutral-400 " +
   "transition-[background-color,color,transform] duration-[120ms] ease-out " +
   "hover:bg-white/7 hover:text-neutral-100 active:scale-[0.96] active:bg-white/12 active:text-white " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 " +
@@ -20,7 +20,7 @@ export const CHROME_ICON_BUTTON =
 /** A button whose popover is up, or a stateful toggle that is on. */
 export const CHROME_ICON_BUTTON_OPEN = "bg-white/10 text-white";
 
-export const CHROME_DIVIDER = "mx-1 h-4 w-px shrink-0 bg-white/10";
+export const CHROME_DIVIDER = "mx-1 h-5 w-px shrink-0 bg-white/10";
 
 /** Popover anchored above a bar button. */
 export const CHROME_MENU =

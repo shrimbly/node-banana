@@ -95,7 +95,7 @@ function getPaneCenter() {
 
 // ---- Icons: 16px, 1.5 stroke, one style throughout ------------------------------
 
-const ICON = "h-4 w-4";
+const ICON = "h-[18px] w-[18px]";
 const iconProps = { fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", viewBox: "0 0 24 24", "aria-hidden": true } as const;
 
 const ImageIcon = () => (
@@ -146,17 +146,17 @@ const LlmIcon = () => (
   </svg>
 );
 const CaretUpIcon = ({ open = false }: { open?: boolean }) => (
-  <svg className={`h-2.5 w-2.5 transition-transform duration-[120ms] ${open ? "rotate-180" : ""}`} {...iconProps} strokeWidth={2.25}>
+  <svg className={`h-3 w-3 transition-transform duration-[120ms] ${open ? "rotate-180" : ""}`} {...iconProps} strokeWidth={2.25}>
     <path d="M5 15l7-7 7 7" />
   </svg>
 );
 const PlayIcon = () => (
-  <svg className="h-[11px] w-[11px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+  <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <path d="M8 5v14l11-7z" />
   </svg>
 );
 const SpinnerIcon = () => (
-  <svg className="h-[11px] w-[11px] animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+  <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.25" />
     <path d="M12 3a9 9 0 019 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
   </svg>
@@ -232,8 +232,8 @@ const GENERATORS: { type: NodeType; label: string; shortcut?: string; icon: Reac
   { type: "llmGenerate", label: "Text (LLM)", shortcut: "⇧L", icon: <LlmIcon /> },
 ];
 
-/** Split control: the sparkle adds an image generator, the caret lists the others. */
-function GenerateSplitButton() {
+/** One trigger; the menu lists the generators. Clicking the trigger never adds a node. */
+function GenerateMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const { add, dragStart } = useAddNode(true);
@@ -246,25 +246,16 @@ function GenerateSplitButton() {
   };
 
   return (
-    <div className="relative flex items-center" ref={menuRef}>
+    <div className="relative flex" ref={menuRef}>
       <IconButton
-        label="Generate image"
-        shortcut="⇧G"
-        onClick={() => handleAddNode("nanoBanana")}
-        draggable
-        onDragStart={(e) => dragStart(e, "nanoBanana")}
-        className="cursor-grab rounded-r-none active:cursor-grabbing"
-      >
-        <SparkleIcon />
-      </IconButton>
-      <IconButton
-        label="More generators"
+        label="Generate"
         open={isOpen}
         silent={isOpen}
         aria-expanded={isOpen}
         onClick={() => setIsOpen(!isOpen)}
-        className={`w-3.5 rounded-l-none ${isOpen ? "" : "text-neutral-500"}`}
+        className="w-auto gap-0.5 pl-1.5 pr-1"
       >
+        <SparkleIcon />
         <CaretUpIcon open={isOpen} />
       </IconButton>
 
@@ -550,11 +541,11 @@ export function FloatingActionBar() {
   return (
     <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
       {/* w-max: a fixed element anchored at left-1/2 otherwise shrinks to half the viewport and wraps. */}
-      <div className={`${CHROME_SURFACE} flex h-10 w-max items-center gap-0.5 rounded-xl px-1.5`}>
+      <div className={`${CHROME_SURFACE} flex h-11 w-max items-center gap-0.5 rounded-xl px-1.5`}>
         <NodeButton type="imageInput" label="Image" shortcut="⇧I" dataTutorial="image-button"><ImageIcon /></NodeButton>
         <NodeButton type="videoInput" label="Video" shortcut="⇧Y"><VideoIcon /></NodeButton>
         <NodeButton type="prompt" label="Prompt" shortcut="⇧P" dataTutorial="prompt-button"><PromptIcon /></NodeButton>
-        <GenerateSplitButton />
+        <GenerateMenu />
         <NodeButton type="output" label="Output" dataTutorial="output-button"><OutputIcon /></NodeButton>
 
         <Divider />
@@ -587,7 +578,7 @@ export function FloatingActionBar() {
 
         <div className="relative ml-0.5 flex items-center" ref={runMenuRef}>
           <div
-            className={`flex h-7 items-stretch overflow-hidden rounded-[7px] squircle transition-[background-color,box-shadow,transform] duration-[120ms] ease-out ${
+            className={`flex h-8 items-stretch overflow-hidden rounded-lg squircle transition-[background-color,box-shadow,transform] duration-[120ms] ease-out ${
               !valid && !isRunning
                 ? "bg-white/8 text-neutral-500"
                 : "bg-neutral-50 text-neutral-900 hover:bg-white hover:shadow-[0_0_0_1px_rgba(255,255,255,0.35),0_1px_2px_rgba(0,0,0,0.3)] active:scale-[0.97] active:bg-neutral-200"
@@ -599,7 +590,7 @@ export function FloatingActionBar() {
               disabled={!valid && !isRunning}
               title={runTitle}
               data-tutorial="floating-run-button"
-              className="flex items-center gap-1.5 whitespace-nowrap pl-[11px] pr-2.5 text-[11px] font-semibold focus-visible:outline-none disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 whitespace-nowrap pl-3 pr-2.5 text-[11px] font-semibold focus-visible:outline-none disabled:cursor-not-allowed"
             >
               {isRunning ? (
                 <>
@@ -624,7 +615,7 @@ export function FloatingActionBar() {
                 data-tutorial="floating-run-dropdown"
                 aria-expanded={runMenuOpen}
                 title="Run options"
-                className={`flex w-5 items-center justify-center border-l border-black/10 transition-colors duration-[120ms] focus-visible:outline-none ${runMenuOpen ? "bg-neutral-200" : ""}`}
+                className={`flex w-6 items-center justify-center border-l border-black/10 transition-colors duration-[120ms] focus-visible:outline-none ${runMenuOpen ? "bg-neutral-200" : ""}`}
               >
                 <svg className={`h-2.5 w-2.5 transition-transform duration-[120ms] ${runMenuOpen ? "rotate-180" : ""}`} {...iconProps} strokeWidth={2.5}>
                   <path d="M19 9l-7 7-7-7" />

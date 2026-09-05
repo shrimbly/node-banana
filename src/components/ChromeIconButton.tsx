@@ -35,7 +35,7 @@ export interface ChromeIconButtonProps extends React.ButtonHTMLAttributes<HTMLBu
   children: ReactNode;
 }
 
-/** 28px icon-only button on the chrome surface, with its hover label. */
+/** 32px icon-only button on the chrome surface, with its hover label. */
 export function ChromeIconButton({ label, shortcut, open = false, silent = false, badge, className = "", children, ...rest }: ChromeIconButtonProps) {
   return (
     <div className="group relative flex">

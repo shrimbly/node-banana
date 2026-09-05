@@ -128,7 +128,7 @@ describe("FloatingActionBar", () => {
       });
     });
 
-    it("should render the Generate split control", async () => {
+    it("should render the Generate menu button", async () => {
       render(
         <TestWrapper>
           <FloatingActionBar />
@@ -136,8 +136,7 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByRole("button", { name: "Generate image" })).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: "More generators" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Generate" })).toBeInTheDocument();
       });
     });
 
@@ -292,10 +291,10 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByRole("button", { name: "More generators" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Generate" })).toBeInTheDocument();
       });
 
-      const generateButton = screen.getByRole("button", { name: "More generators" });
+      const generateButton = screen.getByRole("button", { name: "Generate" });
       fireEvent.click(generateButton);
 
       // Dropdown menu items should appear
@@ -304,17 +303,17 @@ describe("FloatingActionBar", () => {
       expect(screen.getByRole("menuitem", { name: /Text \(LLM\)/ })).toBeInTheDocument();
     });
 
-    it("adds an image generator straight from the sparkle", async () => {
+    it("opens the menu without adding a node", async () => {
       render(
         <TestWrapper>
           <FloatingActionBar />
         </TestWrapper>
       );
 
-      fireEvent.click(await screen.findByRole("button", { name: "Generate image" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Generate" }));
 
-      expect(mockAddNode).toHaveBeenCalledWith("nanoBanana", expect.any(Object));
-      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+      expect(screen.getByRole("menu")).toBeInTheDocument();
+      expect(mockAddNode).not.toHaveBeenCalled();
     });
 
     it("should add nanoBanana node when Image option is clicked", async () => {
@@ -325,11 +324,11 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByRole("button", { name: "More generators" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Generate" })).toBeInTheDocument();
       });
 
       // Open dropdown
-      fireEvent.click(screen.getByRole("button", { name: "More generators" }));
+      fireEvent.click(screen.getByRole("button", { name: "Generate" }));
 
       // Click Image option in dropdown
       const imageOption = screen.getByRole("menuitem", { name: /^Image/ });
@@ -346,10 +345,10 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByRole("button", { name: "More generators" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Generate" })).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByRole("button", { name: "More generators" }));
+      fireEvent.click(screen.getByRole("button", { name: "Generate" }));
       fireEvent.click(screen.getByRole("menuitem", { name: /^Video/ }));
 
       expect(mockAddNode).toHaveBeenCalledWith("generateVideo", expect.any(Object));
@@ -363,10 +362,10 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByRole("button", { name: "More generators" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Generate" })).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByRole("button", { name: "More generators" }));
+      fireEvent.click(screen.getByRole("button", { name: "Generate" }));
       fireEvent.click(screen.getByRole("menuitem", { name: /Text \(LLM\)/ }));
 
       expect(mockAddNode).toHaveBeenCalledWith("llmGenerate", expect.any(Object));
@@ -380,10 +379,10 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByRole("button", { name: "More generators" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Generate" })).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByRole("button", { name: "More generators" }));
+      fireEvent.click(screen.getByRole("button", { name: "Generate" }));
 
       // Verify dropdown is open
       expect(screen.getByRole("menuitem", { name: /^Video/ })).toBeInTheDocument();
