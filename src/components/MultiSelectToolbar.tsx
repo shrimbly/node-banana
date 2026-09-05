@@ -3,7 +3,7 @@
 import { useReactFlow } from "@xyflow/react";
 import { useShallow } from "zustand/shallow";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { useMemo, useCallback } from "react";
+import { memo, useMemo, useCallback } from "react";
 import JSZip from "jszip";
 import type {
   ImageInputNodeData,
@@ -15,7 +15,8 @@ import { getNodeSize } from "@/utils/nodeDimensions";
 
 const STACK_GAP = 20;
 
-export function MultiSelectToolbar() {
+// Memoised: rendered by the canvas, which re-renders on every drag frame
+export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
   // Only the selection: a drag of anything else must not re-render the toolbar
   const selectedNodes = useWorkflowStore(useShallow((state) => state.nodes.filter((node) => node.selected)));
   const onNodesChange = useWorkflowStore((state) => state.onNodesChange);
@@ -294,4 +295,4 @@ export function MultiSelectToolbar() {
       </button>
     </div>
   );
-}
+});

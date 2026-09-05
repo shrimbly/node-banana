@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { memo, useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { ImageHistoryItem } from "@/types";
@@ -216,7 +216,8 @@ function HistorySidebar({
   );
 }
 
-export function GlobalImageHistory() {
+// Memoised: rendered by the canvas, which re-renders on every drag frame
+export const GlobalImageHistory = memo(function GlobalImageHistory() {
   const [isOpen, setIsOpen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -388,4 +389,4 @@ export function GlobalImageHistory() {
       )}
     </div>
   );
-}
+});
