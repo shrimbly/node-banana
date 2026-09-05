@@ -453,7 +453,7 @@ export function ProjectSetupModal({
         {/* Rail: one entry per page, the dialog's title at its head */}
         <nav
           aria-label="Settings pages"
-          className="w-40 shrink-0 flex flex-col gap-0.5 p-2 pt-3.5 bg-neutral-900/50 border-r border-chrome-border/50"
+          className="w-44 shrink-0 flex flex-col gap-0.5 p-2 pt-3.5 bg-neutral-900/50 border-r border-chrome-border/50"
         >
           <div className="flex items-center gap-2 px-2.5 pb-3">
             <img src="/banana_icon.png" alt="" className="w-5 h-5" />
