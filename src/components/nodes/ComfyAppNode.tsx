@@ -5,7 +5,7 @@ import { NodeProps, Node, useUpdateNodeInternals } from "@xyflow/react";
 
 import { NodeShell } from "./NodeShell";
 import { ComfyAppParameters } from "./ComfyAppParameters";
-import { ControlsCard, SummaryValues, type SocketSpec, type SocketType } from "./ui";
+import { ControlsCard, HeightGrip, SummaryValues, type SocketSpec, type SocketType } from "./ui";
 import {
   ComfyWorkflowImportModal,
   type ComfyReconfigureTarget,
@@ -263,7 +263,7 @@ export function ComfyAppNode({ id, data, selected }: NodeProps<ComfyAppNodeType>
         ? { kind: "aspect", aspect: 16 / 9 }
         : isRunning
           ? { kind: "aspect", aspect: 1 }
-          : { kind: "fixed", height: TEXTUAL_HEIGHT };
+          : { kind: "fixed", height: nodeData.mediaHeight ?? TEXTUAL_HEIGHT };
 
   const runStatus = isRunning ? nodeData.runStatus ?? "running" : null;
   const hasParams = Boolean(app && app.params.length > 0);
@@ -340,6 +340,12 @@ export function ComfyAppNode({ id, data, selected }: NodeProps<ComfyAppNodeType>
               error={nodeData.status === "error" ? nodeData.error : null}
               onPictureLoad={(src, aspect) => setLoadedAspect({ src, aspect })}
             />
+            {media.kind === "fixed" && (
+              <HeightGrip
+                height={media.height}
+                onChange={(h) => updateNodeData(id, { mediaHeight: h })}
+              />
+            )}
           </div>
         )}
       </NodeShell>

@@ -58,11 +58,11 @@ export function HeightGrip({ height, min = 60, max = 800, onChange, className }:
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       className={cn(
-        "nodrag nopan absolute bottom-0 left-0 right-0 h-3 flex items-end justify-center cursor-ns-resize group/grip",
+        "nodrag nopan absolute bottom-0 left-0 right-0 h-4 flex items-end justify-center cursor-ns-resize group/grip",
         className
       )}
     >
-      <span className="mb-[3px] w-6 h-[3px] rounded-full bg-neutral-600 group-hover/grip:bg-neutral-400 transition-colors" />
+      <span className="mb-[3px] w-8 h-[3px] rounded-full bg-neutral-500/70 group-hover/grip:bg-neutral-300 transition-colors" />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import {
   ControlsCard,
   EmptyState,
   Field,
+  HeightGrip,
   RangeField,
   SelectField,
   Spinner,
@@ -48,7 +49,7 @@ const INPUT_SOCKETS: SocketSpec[] = [
   { id: "text", type: "text", label: "Prompt" },
 ];
 const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "text", type: "text", label: "Text" }];
-const MEDIA_HEIGHT = 160;
+const DEFAULT_HEIGHT = 160;
 
 /** A provider's glyph for the summary row. */
 function ProviderMark({ provider }: { provider: LLMProvider }) {
@@ -134,6 +135,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
   const temperature = nodeData.temperature ?? 0.7;
   const maxTokens = nodeData.maxTokens || 2048;
 
+  const mediaHeight = nodeData.mediaHeight ?? DEFAULT_HEIGHT;
   const fbParams = nodeData.fallbackParameters || {};
   const fbTemp = (fbParams.temperature as number | undefined) ?? 0.7;
   const fbMaxTokens = (fbParams.maxTokens as number | undefined) ?? 2048;
@@ -209,7 +211,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
       selected={selected}
       hasError={nodeData.status === "error"}
       isExecuting={isRunning}
-      media={{ kind: "fixed", height: MEDIA_HEIGHT }}
+      media={{ kind: "fixed", height: mediaHeight }}
       inputs={INPUT_SOCKETS}
       outputs={OUTPUT_SOCKETS}
       mediaClassName="group/text"
@@ -295,6 +297,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
       ) : (
         <EmptyState message="Run to generate" hint="Connect a prompt and run" />
       )}
+      <HeightGrip height={mediaHeight} onChange={(h) => updateNodeData(id, { mediaHeight: h })} />
     </NodeShell>
   );
 }

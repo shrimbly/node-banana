@@ -313,6 +313,7 @@ export interface LLMGenerateNodeData extends BaseNodeData {
   maxTokens: number;
   fallbackParameters?: Record<string, unknown>; // Parameters for fallback model (temperature, maxTokens)
   parametersExpanded?: boolean; // Collapse state for inline parameter display
+  mediaHeight?: number; // Height of the text surface, set by dragging its grip
   status: NodeStatus;
   error: string | null;
   fallbackModel?: SelectedModel; // JSON-compatible with Node Banana Pro
@@ -702,6 +703,7 @@ export interface ComfyAppNodeData extends BaseNodeData {
   /** Engine-reported status while running (e.g. "queued", "in_progress"). */
   runStatus?: string | null;
   parametersExpanded?: boolean;
+  mediaHeight?: number; // Height of the text preview, set by dragging its grip
   /** Set when the node is created from the connection menu, so it opens the
    *  import dialog immediately — it has no handles until a workflow is chosen. */
   _autoOpenImport?: boolean;
