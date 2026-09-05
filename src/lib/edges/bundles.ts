@@ -1,4 +1,13 @@
 import type { WorkflowEdge } from "@/types";
+import {
+  bundleIdAt,
+  byCreation,
+  edgeGraphIndex,
+  nodeGraphIndex,
+  type BundleEnd,
+  type BundleMembership,
+  type EdgeBundles,
+} from "./graphIndex";
 
 /**
  * Bundles: the connections that share one handle, drawn as a short stem at
@@ -13,59 +22,18 @@ import type { WorkflowEdge } from "@/types";
  * never bundle.
  */
 
-export type BundleEnd = "source" | "target";
-
-export interface BundleMembership {
-  end: BundleEnd;
-  /** Identifies the bundle. */
-  key: string;
-  /** Member edge ids in creation order. */
-  members: string[];
-  /** This edge's position among the members; 0 draws the stem. */
-  index: number;
-  count: number;
-}
-
-export interface EdgeBundles {
-  source: BundleMembership | null;
-  target: BundleMembership | null;
-}
-
-const bundleable = (e: WorkflowEdge) => !e.data?.hidden && e.type !== "reference";
-
-/** The bundle id an edge carries at one end, if any. */
-export function bundleIdAt(edge: WorkflowEdge, end: BundleEnd): string | undefined {
-  return end === "source" ? edge.data?.sourceBundleId : edge.data?.targetBundleId;
-}
-
-const byCreation = (a: WorkflowEdge, b: WorkflowEdge) => {
-  const timeA = a.data?.createdAt || 0;
-  const timeB = b.data?.createdAt || 0;
-  if (timeA !== timeB) return timeA - timeB;
-  return a.id.localeCompare(b.id);
-};
+export { bundleIdAt, type BundleEnd, type BundleMembership, type EdgeBundles };
 
 const sameHandle = (a: WorkflowEdge, b: WorkflowEdge, end: BundleEnd) =>
   end === "source"
     ? a.source === b.source && (a.sourceHandle ?? null) === (b.sourceHandle ?? null)
     : a.target === b.target && (a.targetHandle ?? null) === (b.targetHandle ?? null);
 
-function membership(edge: WorkflowEdge, edges: WorkflowEdge[], end: BundleEnd): BundleMembership | null {
-  const bundleId = bundleIdAt(edge, end);
-  if (!bundleId) return null;
-  const members = edges
-    .filter((e) => bundleable(e) && bundleIdAt(e, end) === bundleId && sameHandle(e, edge, end))
-    .sort(byCreation);
-  if (members.length < 2) return null;
-  const index = members.findIndex((e) => e.id === edge.id);
-  return { end, key: `${end}:${bundleId}`, members: members.map((e) => e.id), index: index < 0 ? 0 : index, count: members.length };
-}
+const NO_BUNDLES: EdgeBundles = { source: null, target: null };
 
 /** The bundles an edge belongs to at each end, or null where it is alone. */
 export function edgeBundles(edgeId: string, edges: WorkflowEdge[]): EdgeBundles {
-  const edge = edges.find((e) => e.id === edgeId);
-  if (!edge || !bundleable(edge)) return { source: null, target: null };
-  return { source: membership(edge, edges, "source"), target: membership(edge, edges, "target") };
+  return edgeGraphIndex(edges).bundles.get(edgeId) ?? NO_BUNDLES;
 }
 
 /** The bundle the toolbar acts on: the source end first, else the target end. */
@@ -118,7 +86,7 @@ export function bundleReach(
   end: BundleEnd,
   handleId: string | null | undefined,
 ): number {
-  const stored = nodes.find((n) => n.id === nodeId)?.data?.bundleClamps?.[bundleClampKey(end, handleId)];
+  const stored = nodeGraphIndex(nodes).byId.get(nodeId)?.data?.bundleClamps?.[bundleClampKey(end, handleId)];
   return typeof stored === "number" && Number.isFinite(stored)
     ? Math.min(MAX_BUNDLE_REACH, Math.max(MIN_BUNDLE_REACH, stored))
     : DEFAULT_BUNDLE_REACH;
