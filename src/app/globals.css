@@ -180,8 +180,8 @@ body {
   stroke-opacity: 1;
 }
 
-/* Circle handles for the mini-canvases that still draw plain React Flow
-   handles (the split-grid template editor, the Comfy node preview). */
+/* Circle handles for the one mini-canvas that still draws plain React Flow
+   handles (the Comfy node preview in the import dialog). */
 .react-flow__handle:not(.socket) {
   width: 14px;
   height: 14px;
