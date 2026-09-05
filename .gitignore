@@ -50,3 +50,5 @@ logs/*.json
 .agents/
 
 .superset/
+.scratch/
+

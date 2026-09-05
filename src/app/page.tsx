@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { Header } from "@/components/Header";
+import { FloatingMenu } from "@/components/FloatingMenu";
 import { WorkflowCanvas } from "@/components/WorkflowCanvas";
 import { FloatingActionBar } from "@/components/FloatingActionBar";
 import { AnnotationModal } from "@/components/AnnotationModal";
@@ -57,7 +57,6 @@ export default function Home() {
   return (
     <ReactFlowProvider>
       <div className="h-screen flex flex-col">
-        <Header />
         <ErrorBoundary
           label="Canvas"
           onError={(error, info) =>
@@ -96,6 +95,7 @@ export default function Home() {
         >
           <WorkflowCanvas />
         </ErrorBoundary>
+        <FloatingMenu />
         <FloatingActionBar />
         <AnnotationModal />
         {showFTUX && (
