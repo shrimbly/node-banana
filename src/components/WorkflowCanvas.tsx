@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useEffect, DragEvent, useMemo, type ComponentType } from "react";
+import { memo, useCallback, useRef, useState, useEffect, DragEvent, useMemo, type ComponentType } from "react";
 import {
   ReactFlow,
   Background,
@@ -127,15 +127,17 @@ const rawNodeTypes: NodeTypes = {
 // Wrap every node component in a per-node error boundary so a single
 // throwing node (e.g. malformed data from a loaded workflow) renders a small
 // fallback card instead of unmounting the entire canvas/app.
+// Memoised on the node's props, which React Flow keeps stable for a node
+// that did not change, so a drag frame renders the dragged node only.
 const withNodeErrorBoundary = (
   type: string,
   NodeComponent: ComponentType<Record<string, unknown>>
 ): ComponentType<Record<string, unknown>> => {
-  const Wrapped = (props: Record<string, unknown>) => (
+  const Wrapped = memo((props: Record<string, unknown>) => (
     <ErrorBoundary label={type}>
       <NodeComponent {...props} />
     </ErrorBoundary>
-  );
+  ));
   Wrapped.displayName = `NodeErrorBoundary(${type})`;
   return Wrapped;
 };
@@ -589,8 +591,11 @@ export function WorkflowCanvas() {
       const baseClass = (node.className || "").replace(/\bswitch-dimmed\b/g, "").replace(/\bnode-skipped\b/g, "").trim();
       const newClass = extraClasses ? `${baseClass} ${extraClasses}`.trim() : baseClass;
 
-      // Only create new node object if className changed
-      if (node.className === newClass) return node;
+      // Only create a new node object if the classes changed. React Flow
+      // rebuilds a node, and everything under it re-renders, whenever the
+      // object handed to it is new, so a node without a className must keep
+      // its identity rather than gain an empty one on every drag frame.
+      if ((node.className || "") === newClass) return node;
       return { ...node, className: newClass };
     });
   }, [nodes, dimmedNodeIds, skippedNodeIds]);
@@ -686,6 +691,7 @@ export function WorkflowCanvas() {
   // Check if a node was dropped into a group and add it to that group
   const handleNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: Node) => {
+      const { groups, nodes } = useWorkflowStore.getState();
       // Skip if it's a group node
       if (node.id.startsWith("group-")) return;
 
@@ -715,13 +721,14 @@ export function WorkflowCanvas() {
         setNodeGroupId(node.id, targetGroupId);
       }
     },
-    [groups, nodes, setNodeGroupId]
+    [setNodeGroupId]
   );
 
   // Connection validation - checks if a connection is valid based on handle types and node types
   // Defined inside component to have access to nodes array for video validation
   const isValidConnection = useCallback(
     (connection: Connection | Edge): boolean => {
+      const { nodes } = useWorkflowStore.getState();
       // Switch input: accept any type (generic-input handle)
       const targetNode = nodes.find((n) => n.id === connection.target);
       const sourceNode = nodes.find((n) => n.id === connection.source);
@@ -817,7 +824,7 @@ export function WorkflowCanvas() {
       // Image handles connect to image handles, text handles connect to text handles
       return sourceType === targetType;
     },
-    [nodes]
+    []
   );
 
   // Drag an edge end onto another handle. Generic router/switch handles are
@@ -833,6 +840,7 @@ export function WorkflowCanvas() {
 
   const handleConnect = useCallback(
     (connection: Connection) => {
+      const { nodes, edges } = useWorkflowStore.getState();
       if (!isValidConnection(connection)) return;
 
       // For imageCompare nodes, redirect to the second handle if the first is occupied
@@ -994,7 +1002,7 @@ export function WorkflowCanvas() {
         }
       }
     },
-    [onConnect, nodes, edges]
+    [isValidConnection, onConnect]
   );
 
   // Handle connection dropped on empty space or on a node

@@ -11,6 +11,7 @@ import {
   type ReactFlowState,
   type ResizeControlVariant,
 } from "@xyflow/react";
+import { shallow } from "zustand/shallow";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { isPanningRef, isDraggingNodeRef } from "@/components/WorkflowCanvas";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
@@ -39,8 +40,12 @@ const TRAIL_MAX = 18;
  * fights React Flow's own per-move re-render.
  */
 function useTrailingOffset(id: string): React.RefObject<HTMLDivElement | null> {
+  // Compared by value: React Flow hands every node a new position object
+  // whenever it re-measures one, and a new object here would re-render
+  // every node on the canvas
   const position = useStore(
-    useCallback((s: ReactFlowState) => s.nodeLookup.get(id)?.internals.positionAbsolute, [id])
+    useCallback((s: ReactFlowState) => s.nodeLookup.get(id)?.internals.positionAbsolute, [id]),
+    shallow
   );
   const el = useRef<HTMLDivElement | null>(null);
   const target = useRef<{ x: number; y: number } | null>(null);
