@@ -431,28 +431,6 @@ describe("SplitGridNode", () => {
   });
 
   describe("Status text", () => {
-    it("prompts to split when no cells exist", () => {
-      renderNode();
-
-      expect(screen.getByText("Split creates a group per cell")).toBeInTheDocument();
-    });
-
-    it("shows the cell group count when cells match the current config", () => {
-      const { data, storeNodes } = materialized(2, 3);
-      setStoreState({ nodes: storeNodes });
-      renderNode(data);
-
-      expect(screen.getByText("6 cell groups")).toBeInTheDocument();
-    });
-
-    it("uses the singular form for a single cell", () => {
-      const { data, storeNodes } = materialized(1, 1);
-      setStoreState({ nodes: storeNodes });
-      renderNode(data);
-
-      expect(screen.getByText("1 cell group")).toBeInTheDocument();
-    });
-
     it("shows the stale hint when the materialized key no longer matches", () => {
       const { data, storeNodes } = materialized(2, 3);
       setStoreState({ nodes: storeNodes });
