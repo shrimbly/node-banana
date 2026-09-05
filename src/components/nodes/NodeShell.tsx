@@ -1,6 +1,6 @@
 "use client";
 
-import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import {
   NodeResizeControl,
   OnResize,
@@ -26,23 +26,27 @@ export type { ShellMedia };
 /** Widest a node can be dragged. Auto-sizing uses the tighter NODE_MAX_W. */
 const RESIZE_MAX_W = 1200;
 
-/** How much of the remaining distance the controls close per frame while trailing. */
-const TRAIL_EASE = 0.28;
+/** Fraction of the remaining distance the controls close per 16.7ms while trailing. */
+const TRAIL_EASE = 0.45;
+/** The controls never fall further behind than this, however fast the drag. */
+const TRAIL_MAX = 14;
 
 /**
  * The controls card trails the media card while the node moves, as if the
  * media were towing it. The node's position is read from React Flow; a
- * smoothed copy eases toward it each frame, and the difference is applied
- * as a transform to the parts beneath the media card.
+ * smoothed copy eases toward it each frame, and the difference is written
+ * straight to the trailing element's transform — no React state, so it never
+ * fights React Flow's own per-move re-render.
  */
-function useTrailingOffset(id: string): { x: number; y: number } {
+function useTrailingOffset(id: string): React.RefObject<HTMLDivElement | null> {
   const position = useStore(
     useCallback((s: ReactFlowState) => s.nodeLookup.get(id)?.internals.positionAbsolute, [id])
   );
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const el = useRef<HTMLDivElement | null>(null);
   const target = useRef<{ x: number; y: number } | null>(null);
   const smoothed = useRef<{ x: number; y: number } | null>(null);
   const frame = useRef<number | null>(null);
+  const lastTime = useRef(0);
 
   useEffect(() => {
     if (!position) return;
@@ -54,22 +58,43 @@ function useTrailingOffset(id: string): { x: number; y: number } {
     }
     if (frame.current !== null) return;
 
-    const step = () => {
+    lastTime.current = performance.now();
+    const step = (now: number) => {
       frame.current = null;
       const t = target.current;
-      const s = smoothed.current;
-      if (!t || !s) return;
-      s.x += (t.x - s.x) * TRAIL_EASE;
-      s.y += (t.y - s.y) * TRAIL_EASE;
-      const dx = s.x - t.x;
-      const dy = s.y - t.y;
-      if (Math.abs(dx) < 0.3 && Math.abs(dy) < 0.3) {
-        s.x = t.x;
-        s.y = t.y;
-        setOffset({ x: 0, y: 0 });
+      const sm = smoothed.current;
+      const node = el.current;
+      if (!t || !sm) return;
+
+      const dt = Math.min(64, now - lastTime.current);
+      lastTime.current = now;
+      const k = 1 - Math.pow(1 - TRAIL_EASE, dt / 16.7);
+      sm.x += (t.x - sm.x) * k;
+      sm.y += (t.y - sm.y) * k;
+
+      let dx = sm.x - t.x;
+      let dy = sm.y - t.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > TRAIL_MAX) {
+        dx *= TRAIL_MAX / dist;
+        dy *= TRAIL_MAX / dist;
+        sm.x = t.x + dx;
+        sm.y = t.y + dy;
+      }
+
+      if (Math.abs(dx) < 0.2 && Math.abs(dy) < 0.2) {
+        sm.x = t.x;
+        sm.y = t.y;
+        if (node) {
+          node.style.transform = "";
+          node.style.willChange = "";
+        }
         return;
       }
-      setOffset({ x: dx, y: dy });
+      if (node) {
+        node.style.transform = `translate3d(${dx.toFixed(2)}px, ${dy.toFixed(2)}px, 0)`;
+        node.style.willChange = "transform";
+      }
       frame.current = requestAnimationFrame(step);
     };
     frame.current = requestAnimationFrame(step);
@@ -79,38 +104,7 @@ function useTrailingOffset(id: string): { x: number; y: number } {
     if (frame.current !== null) cancelAnimationFrame(frame.current);
   }, []);
 
-  return offset;
-}
-
-export interface NodeShellProps {
-  id: string;
-  selected?: boolean;
-  isExecuting?: boolean;
-  hasError?: boolean;
-  /** Tutorial hook, placed on the media card. */
-  dataTutorial?: string;
-  /** How tall the media clip is: from the width and an aspect, or fixed. */
-  media: ShellMedia;
-  inputs?: ReadonlyArray<SocketSpec>;
-  outputs?: ReadonlyArray<SocketSpec>;
-  /** Overrides the default (selected or connecting). */
-  showLabels?: boolean;
-  /** Content of the gap row between media and controls. */
-  gap?: ReactNode;
-  /** Usually a <ControlsCard>. Its presence also adds the gap row. */
-  controls?: ReactNode;
-  /** Media content, rendered inside the clip. */
-  children?: ReactNode;
-  /** Clip the media to the rounded rect (default). Off for legacy content that positions its own handles. */
-  clip?: boolean;
-  /** Rendered inside the media card but outside the clip: never clipped. */
-  cardChildren?: ReactNode;
-  mediaClassName?: string;
-  cardClassName?: string;
-  className?: string;
-  minWidth?: number;
-  maxWidth?: number;
-  onMediaDoubleClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
+  return el;
 }
 
 const EMPTY: ReadonlyArray<SocketSpec> = [];
@@ -151,8 +145,7 @@ export function NodeShell({
   const labels = showLabels ?? connectingLabels;
 
   const rows = Math.max(socketRowCount(inputs), socketRowCount(outputs));
-  const trail = useTrailingOffset(id);
-  const trailing = trail.x !== 0 || trail.y !== 0;
+  const trailingRef = useTrailingOffset(id);
   // Same precedence as the card's classes below: error beats selection beats running.
   const outline: SocketOutline = hasError ? "error" : selected ? "selected" : running ? "running" : "none";
 
@@ -294,15 +287,7 @@ export function NodeShell({
       </div>
 
       {((gap !== undefined && gap !== null) || controls) && (
-        <div
-          data-trailing
-          className="w-full flex flex-col items-center"
-          style={
-            trailing
-              ? { transform: `translate3d(${trail.x}px, ${trail.y}px, 0)`, willChange: "transform" }
-              : undefined
-          }
-        >
+        <div ref={trailingRef} data-trailing className="w-full flex flex-col items-center">
           <div
             data-gap-row
             className="w-full shrink-0 flex items-center justify-center"
