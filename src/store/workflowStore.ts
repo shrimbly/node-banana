@@ -3031,6 +3031,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     if (tabs.length === 1) {
       // The last tab never goes away; it just becomes a fresh one
+      revokeNodeBlobUrls(get().nodes);
       const id = createTabId();
       set({ tabs: [{ id, snapshot: null }], activeTabId: id });
       applyTabSnapshot(set, get, empty());
@@ -3047,6 +3048,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     const nextId = tabToActivateAfterClose(tabs, tabId);
     const next = tabs.find((tab) => tab.id === nextId);
     if (!nextId || !next) return false;
+    // The live graph is being discarded, so its media object URLs go with it
+    revokeNodeBlobUrls(get().nodes);
     const remaining = tabs.filter((tab) => tab.id !== tabId).map((tab) => (tab.id === nextId ? { ...tab, snapshot: null } : tab));
     set({ tabs: remaining, activeTabId: nextId });
     applyTabSnapshot(set, get, next.snapshot ?? empty());
