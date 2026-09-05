@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useDeferredValue, useSyncExternalStore } from "react";
+import { useCallback, useDeferredValue, useLayoutEffect, useSyncExternalStore } from "react";
 import { useStore, useStoreApi, type ReactFlowState } from "@xyflow/react";
 
 /**
@@ -93,6 +93,34 @@ export function useNodeHasFocus(id: string): boolean {
   );
 }
 
+// The exact border box of each node wrapper, in CSS pixels. React Flow
+// measures nodes in whole pixels, but its resize observer compares exact
+// sizes, so a placeholder built from the whole-pixel size would register as
+// a resize, and React Flow re-reads the handles and re-renders the edges on
+// every resize. One observer keeps the exact size for the placeholder.
+const exactSizes = new Map<string, { width: number; height: number }>();
+let sizeObserver: ResizeObserver | null = null;
+const observedIds = new WeakMap<Element, string>();
+
+function observeExactSize(element: Element, id: string) {
+  if (typeof ResizeObserver === "undefined") return () => {};
+  sizeObserver ??= new ResizeObserver((entries) => {
+    for (const entry of entries) {
+      const id = observedIds.get(entry.target);
+      const box = entry.borderBoxSize?.[0];
+      if (id && box) exactSizes.set(id, { width: box.inlineSize, height: box.blockSize });
+    }
+  });
+  observedIds.set(element, id);
+  sizeObserver.observe(element);
+  return () => sizeObserver?.unobserve(element);
+}
+
+/** The exact size recorded for a node, when its wrapper has been observed. */
+export function exactNodeSize(id: string): { width: number; height: number } | undefined {
+  return exactSizes.get(id);
+}
+
 /** True while the node's component is rendered rather than its placeholder. */
 export function useNodeMounted(id: string, type: string, selected: boolean, dragging: boolean): boolean {
   const inArea = useStore(
@@ -116,7 +144,14 @@ export function useNodeMounted(id: string, type: string, selected: boolean, drag
   // them off screen while they wait. Unmounting is immediate.
   const inAreaDeferred = useDeferredValue(inArea);
   const focused = useNodeHasFocus(id);
-  return (inArea && inAreaDeferred) || focused || selected || dragging || ALWAYS_MOUNTED.has(type);
+  const mounted = (inArea && inAreaDeferred) || focused || selected || dragging || ALWAYS_MOUNTED.has(type);
+  // Watch the wrapper's exact size while the component is rendered, for the placeholder
+  useLayoutEffect(() => {
+    if (!mounted) return;
+    const element = document.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`);
+    return element ? observeExactSize(element, id) : undefined;
+  }, [id, mounted]);
+  return mounted;
 }
 
 interface NodePlaceholderProps {
@@ -136,8 +171,9 @@ interface NodePlaceholderProps {
 export function NodePlaceholder({ id, width, height }: NodePlaceholderProps) {
   const handleBounds = useStoreApi().getState().nodeLookup.get(id)?.internals.handleBounds;
   const handles = [...(handleBounds?.source ?? []), ...(handleBounds?.target ?? [])];
+  const exact = exactNodeSize(id);
   return (
-    <div style={{ position: "relative", width, height }} aria-hidden>
+    <div style={{ position: "relative", width: exact?.width ?? width, height: exact?.height ?? height }} aria-hidden>
       {handles.map((h) => (
         <div
           key={`${h.type}-${h.id ?? ""}`}
