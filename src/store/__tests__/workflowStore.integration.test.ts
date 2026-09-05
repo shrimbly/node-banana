@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { act } from "@testing-library/react";
-import { useWorkflowStore } from "../workflowStore";
+import { useWorkflowStore, type WorkflowFile } from "../workflowStore";
 import type { WorkflowNode, WorkflowEdge } from "@/types";
 
 // Mock the Toast hook
@@ -2304,6 +2304,14 @@ describe("workflowStore integration tests", () => {
         });
 
         expect(useWorkflowStore.getState().viewedCommentNodeIds.size).toBe(0);
+      });
+
+      it("counts each load, so the canvas can re-measure handles", async () => {
+        const before = useWorkflowStore.getState().workflowLoadCount;
+        const file = (id: string) => ({ id, name: id, nodes: [], edges: [] }) as unknown as WorkflowFile;
+        await useWorkflowStore.getState().loadWorkflow(file("w1"));
+        await useWorkflowStore.getState().loadWorkflow(file("w2"));
+        expect(useWorkflowStore.getState().workflowLoadCount).toBe(before + 2);
       });
     });
   });

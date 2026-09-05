@@ -332,6 +332,7 @@ All routes in `src/app/api/`:
 - `node-banana-workflow-costs` - Cost tracking per workflow
 - `node-banana-nanoBanana-defaults` - Sticky generation settings
 - `node-banana-comfy-settings` - ComfyUI backend (cloud/local/remote), keys, job timeout
+- `node-banana-edge-appearance` - User default for connection line style and appearance (thickness, faded opacity, gradient, loading pulse)
 - `node-banana-comfy-apps` - Saved Comfy nodes (workflow + contract + settings)
 
 ## Git Workflow

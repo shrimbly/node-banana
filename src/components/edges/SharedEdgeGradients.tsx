@@ -4,28 +4,24 @@
 // Rendered once inside the React Flow SVG layer to avoid duplicating
 // <defs>/<linearGradient> in every edge component.
 
-const EDGE_COLORS: Record<string, string> = {
-  image: "#0d9668",
-  prompt: "#2563eb",
-  default: "#64748b",
-  pause: "#ea580c",
-  reference: "#52525b",
-  video: "#ec4899",
-  audio: "#f97316",
-  text: "#2563eb",
-  "3d": "#06b6d4",
-  easeCurve: "#f59e0b",
-  loop: "#d946ef",
-};
+import { EDGE_COLORS } from "@/lib/edges/colors";
+import { useWorkflowStore } from "@/store/workflowStore";
 
 const SELECTION_STATES = ["active", "dimmed"] as const;
 
-function gradientStops(color: string, active: boolean) {
+/** Stop opacities along a noodle: bright at both ends, softer in the middle. */
+export function gradientOpacities(active: boolean, fadedOpacity: number): [number, number, number] {
+  if (active) return [1, 0.55, 1];
+  return [fadedOpacity, fadedOpacity * 0.4, fadedOpacity];
+}
+
+function gradientStops(color: string, active: boolean, fadedOpacity: number) {
+  const [start, middle, end] = gradientOpacities(active, fadedOpacity);
   return (
     <>
-      <stop offset="0%" stopColor={color} stopOpacity={active ? 1 : 0.25} />
-      <stop offset="50%" stopColor={color} stopOpacity={active ? 0.55 : 0.1} />
-      <stop offset="100%" stopColor={color} stopOpacity={active ? 1 : 0.25} />
+      <stop offset="0%" stopColor={color} stopOpacity={start} />
+      <stop offset="50%" stopColor={color} stopOpacity={middle} />
+      <stop offset="100%" stopColor={color} stopOpacity={end} />
     </>
   );
 }
@@ -35,6 +31,7 @@ export function getSharedGradientId(colorKey: string, selectionKey: "active" | "
 }
 
 export function SharedEdgeGradients() {
+  const fadedOpacity = useWorkflowStore((state) => state.edgeAppearance.fadedOpacity);
   return (
     <svg style={{ position: "absolute", width: 0, height: 0 }}>
       <defs>
@@ -48,7 +45,7 @@ export function SharedEdgeGradients() {
               x2="100%"
               y2="0%"
             >
-              {gradientStops(color, sel === "active")}
+              {gradientStops(color, sel === "active", fadedOpacity)}
             </linearGradient>
           ))
         )}

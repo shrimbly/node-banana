@@ -2,15 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { generateWorkflowId, useWorkflowStore } from "@/store/workflowStore";
-import { ProviderType, ProviderSettings, NodeDefaultsConfig, LLMProvider, LLMModelType } from "@/types";
+import { ProviderType, ProviderSettings, NodeDefaultsConfig, LLMProvider, LLMModelType, EdgeAppearance, EdgeStyle } from "@/types";
 import { CanvasNavigationSettings, PanMode, ZoomMode, SelectionMode } from "@/types/canvas";
 import { EnvStatusResponse } from "@/app/api/env-status/route";
-import { loadNodeDefaults, saveNodeDefaults, getLastProjectBaseDir, setLastProjectBaseDir } from "@/store/utils/localStorage";
+import { loadNodeDefaults, saveNodeDefaults, getLastProjectBaseDir, setLastProjectBaseDir, saveEdgeDefaults } from "@/store/utils/localStorage";
 import { clearFetchCache } from "@/utils/deduplicatedFetch";
 import { ProviderModel } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { ComfySettingsTab, useComfySettingsDraft } from "@/components/settings/ComfySettingsTab";
 import { saveComfySettings } from "@/lib/comfy/settings";
+import { ConnectionSettings } from "@/components/settings/ConnectionSettings";
 
 // LLM provider and model options (mirrored from LLMGenerateNode)
 const LLM_PROVIDERS: { value: LLMProvider; label: string }[] = [
@@ -141,11 +142,15 @@ export function ProjectSetupModal({
     setMaxConcurrentCalls,
     canvasNavigationSettings,
     updateCanvasNavigationSettings,
+    edgeStyle,
+    edgeAppearance,
+    setEdgeStyle,
+    setEdgeAppearance,
   } = useWorkflowStore();
 
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<"project" | "providers" | "comfy" | "nodeDefaults" | "canvas">("project");
+  const [activeTab, setActiveTab] = useState<"project" | "providers" | "comfy" | "nodeDefaults" | "canvas" | "noodles">("project");
 
   // Project tab state
   const [name, setName] = useState("");
@@ -184,6 +189,11 @@ export function ProjectSetupModal({
 
   // Canvas tab state
   const [localCanvasSettings, setLocalCanvasSettings] = useState<CanvasNavigationSettings>(canvasNavigationSettings);
+
+  // Connection appearance draft (Canvas tab); applied on Save
+  const [localEdgeStyle, setLocalEdgeStyle] = useState<EdgeStyle>(edgeStyle);
+  const [localEdgeAppearance, setLocalEdgeAppearance] = useState<EdgeAppearance>(edgeAppearance);
+  const [edgeDefaultSaved, setEdgeDefaultSaved] = useState(false);
 
   // ComfyUI tab state
   const [localComfySettings, setLocalComfySettings] = useComfySettingsDraft(isOpen);
@@ -228,6 +238,9 @@ export function ProjectSetupModal({
 
       // Sync canvas settings
       setLocalCanvasSettings(canvasNavigationSettings);
+      setLocalEdgeStyle(edgeStyle);
+      setLocalEdgeAppearance(edgeAppearance);
+      setEdgeDefaultSaved(false);
 
       // Fetch env status
       fetch("/api/env-status")
@@ -351,6 +364,17 @@ export function ProjectSetupModal({
     onClose();
   };
 
+  const handleSaveNoodles = () => {
+    if (localEdgeStyle !== edgeStyle) setEdgeStyle(localEdgeStyle);
+    if (localEdgeAppearance !== edgeAppearance) setEdgeAppearance(localEdgeAppearance);
+    onClose();
+  };
+
+  const handleSetEdgeDefault = () => {
+    saveEdgeDefaults({ edgeStyle: localEdgeStyle, appearance: localEdgeAppearance });
+    setEdgeDefaultSaved(true);
+  };
+
   const handleSaveComfy = () => {
     saveComfySettings(localComfySettings);
     onClose();
@@ -365,6 +389,8 @@ export function ProjectSetupModal({
       handleSaveComfy();
     } else if (activeTab === "canvas") {
       handleSaveCanvas();
+    } else if (activeTab === "noodles") {
+      handleSaveNoodles();
     } else {
       handleSaveNodeDefaults();
     }
@@ -447,6 +473,12 @@ export function ProjectSetupModal({
             className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "canvas" ? "bg-neutral-700 text-neutral-100 font-medium" : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"}`}
           >
             Canvas
+          </button>
+          <button
+            onClick={() => setActiveTab("noodles")}
+            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "noodles" ? "bg-neutral-700 text-neutral-100 font-medium" : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"}`}
+          >
+            Noodles
           </button>
           </div>
         </div>
@@ -1220,6 +1252,21 @@ export function ProjectSetupModal({
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Noodles Tab Content */}
+        {activeTab === "noodles" && (
+          <div className="space-y-3">
+            <p className="text-xs text-neutral-400">How the connections between nodes are drawn.</p>
+            <ConnectionSettings
+              edgeStyle={localEdgeStyle}
+              appearance={localEdgeAppearance}
+              onEdgeStyleChange={setLocalEdgeStyle}
+              onAppearanceChange={setLocalEdgeAppearance}
+              onSetDefault={handleSetEdgeDefault}
+              defaultSaved={edgeDefaultSaved}
+            />
           </div>
         )}
 

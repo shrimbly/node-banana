@@ -26,6 +26,9 @@ import {
   CanvasNavigationSettings,
   MatchMode,
   MODEL_DISPLAY_NAMES,
+  EdgeStyle,
+  EdgeAppearance,
+  WorkflowEdgeData,
 } from "@/types";
 import { UndoManager, UndoSnapshot, clonePreservingStrings } from "./undoHistory";
 import { useToast } from "@/components/Toast";
@@ -48,7 +51,10 @@ import {
   generateWorkflowId,
   getCanvasNavigationSettings,
   saveCanvasNavigationSettings,
+  getEdgeDefaults,
 } from "./utils/localStorage";
+import { normalizeEdgeAppearance } from "@/lib/edges/appearance";
+import { shareHandleAt, sharedEnd, bundleIdAt, type BundleEnd, MIN_BUNDLE_REACH, MAX_BUNDLE_REACH } from "@/lib/edges/bundles";
 import {
   createDefaultNodeData,
   defaultNodeDimensions,
@@ -66,6 +72,7 @@ import {
   findLoopSubgraph,
   copyLoopOutput,
   revokeBlobUrl,
+  wouldCreateCycle,
 } from "./utils/executionUtils";
 import { getConnectedInputsPure, validateWorkflowPure, type ConnectedInputs } from "./utils/connectedInputs";
 import {
@@ -153,7 +160,8 @@ function saveLogSession(): void {
   }
 }
 
-export type EdgeStyle = "angular" | "curved";
+// Re-exported for existing imports; the type lives in src/types/workflow.ts.
+export type { EdgeStyle };
 
 function buildConnectionEdgeData(
   connection: Connection,
@@ -241,6 +249,7 @@ export interface WorkflowFile {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   edgeStyle: EdgeStyle;
+  edgeAppearance?: EdgeAppearance;  // Optional: older files fall back to the user default
   groups?: Record<string, NodeGroup>;  // Optional for backward compatibility
 }
 
@@ -254,6 +263,7 @@ interface WorkflowStore {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   edgeStyle: EdgeStyle;
+  edgeAppearance: EdgeAppearance;
   clipboard: ClipboardData | null;
   groups: Record<string, NodeGroup>;
 
@@ -265,6 +275,7 @@ interface WorkflowStore {
 
   // Settings
   setEdgeStyle: (style: EdgeStyle) => void;
+  setEdgeAppearance: (patch: Partial<EdgeAppearance>) => void;
 
   // Node operations
   addNode: (type: NodeType, position: XYPosition, initialData?: Partial<WorkflowNodeData>) => string;
@@ -277,7 +288,30 @@ interface WorkflowStore {
   onConnect: (connection: Connection, edgeDataOverrides?: Record<string, unknown>) => void;
   addEdgeWithType: (connection: Connection, edgeType: string, edgeDataOverrides?: Record<string, unknown>) => void;
   removeEdge: (edgeId: string) => void;
+  /**
+   * Move one end of an existing edge to a new source/target (drag-to-replug).
+   * Keeps the edge's data (pause, creation order, offsets) and re-evaluates
+   * whether it forms a loop. Returns false when nothing changed: unknown edge,
+   * incomplete connection, or an identical edge already present.
+   */
+  reconnectEdge: (edgeId: string, connection: Connection) => boolean;
   toggleEdgePause: (edgeId: string) => void;
+  /** Remove several edges as one undo step. */
+  removeEdges: (edgeIds: string[]) => void;
+  /** Pause or resume several edges as one undo step. */
+  setEdgesPause: (edgeIds: string[], hasPause: boolean) => void;
+  /** Hide or show several edges as one undo step. Hidden edges still execute. */
+  setEdgesHidden: (edgeIds: string[], hidden: boolean) => void;
+  /** Hide or show every edge as one undo step. */
+  setAllEdgesHidden: (hidden: boolean) => void;
+  /** Set an edge's own label; blank clears it so the automatic label shows. */
+  setEdgeLabel: (edgeId: string, label: string) => void;
+  /** Bundle edges that share an output handle or an input handle. Returns false otherwise. */
+  bundleEdges: (edgeIds: string[], end?: BundleEnd) => boolean;
+  /** Dissolve the manual bundles the given edges belong to. */
+  unbundleEdges: (edgeIds: string[], end?: BundleEnd) => void;
+  /** Set where the bundle on a node's handle splits (px from the handle). */
+  setBundleClamp: (nodeId: string, key: string, reach: number) => void;
   setLoopCount: (edgeId: string, count: number) => void;
 
   // Copy/Paste operations
@@ -310,6 +344,15 @@ interface WorkflowStore {
   ) => boolean;
 
   // UI State
+  /** The handle under the pointer, so hidden connections on it can ghost back. */
+  hoveredHandle: { nodeId: string; handleId: string | null; type: "source" | "target" } | null;
+  setHoveredHandle: (handle: { nodeId: string; handleId: string | null; type: "source" | "target" } | null) => void;
+  /** The handle whose hidden connections are shown one per row instead of as a single pill. */
+  expandedStubGroup: string | null;
+  setExpandedStubGroup: (key: string | null) => void;
+  /** Measured width of each collapsed stub pill, by group key, so every member's ghost can start at its outer edge. */
+  stubGroupWidths: Record<string, number>;
+  setStubGroupWidth: (key: string, width: number) => void;
   openModalCount: number;
   isModalOpen: boolean;
   showQuickstart: boolean;
@@ -351,6 +394,8 @@ interface WorkflowStore {
   // Auto-save state
   workflowId: string | null;
   workflowName: string | null;
+  /** Bumped on every loadWorkflow, so the canvas can re-measure handles once the new nodes are in the DOM. */
+  workflowLoadCount: number;
   saveDirectoryPath: string | null;
   generationsPath: string | null;
   lastSavedAt: number | null;
@@ -425,6 +470,7 @@ interface WorkflowStore {
     edges: WorkflowEdge[];
     groups: Record<string, NodeGroup>;
     edgeStyle: EdgeStyle;
+    edgeAppearance: EdgeAppearance;
   } | null;
   manualChangeCount: number;
 
@@ -571,6 +617,7 @@ function captureUndoSnapshot(state: WorkflowStore): UndoSnapshot {
     edges: state.edges,
     groups: state.groups,
     edgeStyle: state.edgeStyle,
+    edgeAppearance: state.edgeAppearance,
   }) as UndoSnapshot;
   // Strip transient selection state from cloned nodes
   for (const node of cloned.nodes) {
@@ -640,9 +687,28 @@ function revokeNodeBlobUrls(nodes: WorkflowNode[]): void {
 const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   nodes: [],
   edges: [],
-  edgeStyle: "curved" as EdgeStyle,
+  edgeStyle: getEdgeDefaults().edgeStyle,
+  edgeAppearance: getEdgeDefaults().appearance,
   clipboard: null,
   groups: {},
+  hoveredHandle: null,
+  setHoveredHandle: (handle) => {
+    const current = get().hoveredHandle;
+    if (
+      (current === null && handle === null) ||
+      (current && handle && current.nodeId === handle.nodeId && current.handleId === handle.handleId && current.type === handle.type)
+    ) return;
+    set({ hoveredHandle: handle });
+  },
+  expandedStubGroup: null,
+  setExpandedStubGroup: (key) => {
+    if (get().expandedStubGroup !== key) set({ expandedStubGroup: key });
+  },
+  stubGroupWidths: {},
+  setStubGroupWidth: (key, width) => {
+    if (get().stubGroupWidths[key] === width) return;
+    set({ stubGroupWidths: { ...get().stubGroupWidths, [key]: width } });
+  },
   openModalCount: 0,
   isModalOpen: false,
   showQuickstart: true,
@@ -657,6 +723,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   // Auto-save initial state
   workflowId: null,
   workflowName: null,
+  workflowLoadCount: 0,
   saveDirectoryPath: null,
   generationsPath: null,
   lastSavedAt: null,
@@ -722,6 +789,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         edges: previous.edges,
         groups: previous.groups,
         edgeStyle: previous.edgeStyle,
+        edgeAppearance: previous.edgeAppearance,
         hasUnsavedChanges: true,
       });
       get().recomputeDimmedNodes();
@@ -747,6 +815,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         edges: next.edges,
         groups: next.groups,
         edgeStyle: next.edgeStyle,
+        edgeAppearance: next.edgeAppearance,
         hasUnsavedChanges: true,
       });
       get().recomputeDimmedNodes();
@@ -755,8 +824,14 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   setEdgeStyle: (style: EdgeStyle) => {
+    if (get().edgeStyle === style) return;
     pushUndoCheckpoint(get, set);
-    set({ edgeStyle: style });
+    set({ edgeStyle: style, hasUnsavedChanges: true });
+  },
+
+  setEdgeAppearance: (patch: Partial<EdgeAppearance>) => {
+    pushUndoCheckpoint(get, set);
+    set((state) => ({ edgeAppearance: { ...state.edgeAppearance, ...patch }, hasUnsavedChanges: true }));
   },
 
   incrementModalCount: () => {
@@ -1031,6 +1106,61 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     get().incrementManualChangeCount();
   },
 
+  reconnectEdge: (edgeId: string, connection: Connection) => {
+    const { edges } = get();
+    const oldEdge = edges.find((e) => e.id === edgeId);
+    if (!oldEdge || !connection.source || !connection.target) return false;
+
+    const others = edges.filter((e) => e.id !== edgeId);
+    const newId = `edge-${connection.source}-${connection.target}-${connection.sourceHandle || "default"}-${connection.targetHandle || "default"}`;
+    if (others.some((e) => e.id === newId)) return false;
+
+    const unchanged =
+      oldEdge.source === connection.source &&
+      oldEdge.target === connection.target &&
+      (oldEdge.sourceHandle ?? null) === (connection.sourceHandle ?? null) &&
+      (oldEdge.targetHandle ?? null) === (connection.targetHandle ?? null);
+    if (unchanged) return false;
+
+    pushUndoCheckpoint(get, set);
+
+    // Loop status depends on the new geometry, and a bundle belongs to the
+    // handle it was made on, so the moved end leaves its bundle; everything
+    // else carries over.
+    const { isLoop: _wasLoop, loopCount, ...kept } = (oldEdge.data ?? {}) as WorkflowEdgeData;
+    void _wasLoop;
+    const sourceMoved = oldEdge.source !== connection.source || (oldEdge.sourceHandle ?? null) !== (connection.sourceHandle ?? null);
+    const targetMoved = oldEdge.target !== connection.target || (oldEdge.targetHandle ?? null) !== (connection.targetHandle ?? null);
+    if (sourceMoved) delete kept.sourceBundleId;
+    if (targetMoved) delete kept.targetBundleId;
+    const loops = wouldCreateCycle(connection.source, connection.target, others);
+    const data: WorkflowEdgeData = loops ? { ...kept, isLoop: true, loopCount: loopCount ?? 3 } : kept;
+
+    const newEdge: WorkflowEdge = {
+      ...oldEdge,
+      id: newId,
+      source: connection.source,
+      sourceHandle: connection.sourceHandle ?? undefined,
+      target: connection.target,
+      targetHandle: connection.targetHandle ?? undefined,
+      data,
+      selected: false,
+    };
+
+    set({ edges: [...others, newEdge], hasUnsavedChanges: true });
+
+    // The old target may have lost its only image source.
+    deleteCheckpointActive = true;
+    try {
+      clearStaleInputImages([oldEdge], get);
+    } finally {
+      deleteCheckpointActive = false;
+    }
+    get().recomputeDimmedNodes();
+    get().incrementManualChangeCount();
+    return true;
+  },
+
   toggleEdgePause: (edgeId: string) => {
     pushUndoCheckpoint(get, set);
     set((state) => ({
@@ -1041,6 +1171,128 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       ),
       hasUnsavedChanges: true,
     }));
+  },
+
+  removeEdges: (edgeIds: string[]) => {
+    const ids = new Set(edgeIds);
+    const removed = get().edges.filter((e) => ids.has(e.id));
+    if (removed.length === 0) return;
+    pushUndoCheckpoint(get, set);
+    set((state) => ({
+      edges: state.edges.filter((edge) => !ids.has(edge.id)),
+      hasUnsavedChanges: true,
+    }));
+    deleteCheckpointActive = true;
+    try {
+      clearStaleInputImages(removed, get);
+    } finally {
+      deleteCheckpointActive = false;
+    }
+    get().recomputeDimmedNodes();
+    get().incrementManualChangeCount();
+  },
+
+  setEdgesPause: (edgeIds: string[], hasPause: boolean) => {
+    const ids = new Set(edgeIds);
+    if (!get().edges.some((e) => ids.has(e.id) && Boolean(e.data?.hasPause) !== hasPause)) return;
+    pushUndoCheckpoint(get, set);
+    set((state) => ({
+      edges: state.edges.map((edge) =>
+        ids.has(edge.id) ? { ...edge, data: { ...edge.data, hasPause } } : edge
+      ),
+      hasUnsavedChanges: true,
+    }));
+  },
+
+  setEdgesHidden: (edgeIds: string[], hidden: boolean) => {
+    const ids = new Set(edgeIds);
+    if (!get().edges.some((e) => ids.has(e.id) && Boolean(e.data?.hidden) !== hidden)) return;
+    pushUndoCheckpoint(get, set);
+    set((state) => ({
+      edges: state.edges.map((edge) =>
+        ids.has(edge.id)
+          ? { ...edge, data: { ...edge.data, hidden }, selected: hidden ? false : edge.selected }
+          : edge
+      ),
+      hasUnsavedChanges: true,
+    }));
+  },
+
+  setAllEdgesHidden: (hidden: boolean) => {
+    const { edges } = get();
+    if (!edges.some((e) => Boolean(e.data?.hidden) !== hidden)) return;
+    get().setEdgesHidden(edges.map((e) => e.id), hidden);
+  },
+
+  setEdgeLabel: (edgeId: string, label: string) => {
+    const trimmed = label.trim();
+    const edge = get().edges.find((e) => e.id === edgeId);
+    if (!edge || (edge.data?.label ?? "") === trimmed) return;
+    pushUndoCheckpoint(get, set);
+    set((state) => ({
+      edges: state.edges.map((e) => {
+        if (e.id !== edgeId) return e;
+        const { label: _old, ...rest } = e.data ?? {};
+        void _old;
+        return { ...e, data: trimmed ? { ...rest, label: trimmed } : rest };
+      }),
+      hasUnsavedChanges: true,
+    }));
+  },
+
+  bundleEdges: (edgeIds: string[], end?: BundleEnd) => {
+    const ids = new Set(edgeIds);
+    const members = get().edges.filter((e) => ids.has(e.id) && !e.data?.hidden && e.type !== "reference");
+    const bundleEnd = end ?? sharedEnd(members);
+    if (!bundleEnd || !shareHandleAt(members, bundleEnd)) return false;
+    const key = bundleEnd === "source" ? "sourceBundleId" : "targetBundleId";
+    const bundleId = `bundle-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
+    pushUndoCheckpoint(get, set);
+    set((state) => ({
+      edges: state.edges.map((e) => (ids.has(e.id) ? { ...e, data: { ...e.data, [key]: bundleId } } : e)),
+      hasUnsavedChanges: true,
+    }));
+    return true;
+  },
+
+  unbundleEdges: (edgeIds: string[], end?: BundleEnd) => {
+    const ids = new Set(edgeIds);
+    const ends: BundleEnd[] = end ? [end] : ["source", "target"];
+    const edges = get().edges;
+    // Every bundle these edges sit in at the chosen end(s) dissolves entirely
+    const gone = ends
+      .map((at) => ({
+        at,
+        key: at === "source" ? "sourceBundleId" : "targetBundleId",
+        bundleIds: new Set(edges.flatMap((e) => (ids.has(e.id) ? [bundleIdAt(e, at)].filter((b): b is string => Boolean(b)) : []))),
+      }))
+      .filter((g) => g.bundleIds.size > 0);
+    if (gone.length === 0) return;
+    pushUndoCheckpoint(get, set);
+    set((state) => ({
+      edges: state.edges.map((e) => {
+        let data = e.data;
+        for (const g of gone) {
+          const id = bundleIdAt(e, g.at);
+          if (id && g.bundleIds.has(id) && data) {
+            const { [g.key]: _dropped, ...rest } = data as Record<string, unknown>;
+            void _dropped;
+            data = rest as typeof e.data;
+          }
+        }
+        return data === e.data ? e : { ...e, data };
+      }),
+      hasUnsavedChanges: true,
+    }));
+  },
+
+  setBundleClamp: (nodeId: string, key: string, reach: number) => {
+    const node = get().nodes.find((n) => n.id === nodeId);
+    if (!node) return;
+    const clamped = Math.round(Math.min(MAX_BUNDLE_REACH, Math.max(MIN_BUNDLE_REACH, reach)));
+    const existing = ((node.data as { bundleClamps?: Record<string, number> }).bundleClamps) ?? {};
+    if (existing[key] === clamped) return;
+    get().updateNodeData(nodeId, { bundleClamps: { ...existing, [key]: clamped } } as Partial<WorkflowNodeData>);
   },
 
   setLoopCount: (edgeId: string, count: number) => {
@@ -2480,7 +2732,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   saveWorkflow: (name?: string) => {
-    const { nodes, edges, edgeStyle, groups } = get();
+    const { nodes, edges, edgeStyle, edgeAppearance, groups } = get();
 
     const workflow: WorkflowFile = {
       version: 1,
@@ -2489,6 +2741,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       nodes: nodes.map(({ selected, ...rest }) => rest),
       edges,
       edgeStyle,
+      edgeAppearance,
       groups: groups && Object.keys(groups).length > 0 ? groups : undefined,
     };
 
@@ -2627,13 +2880,21 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         },
       })),
       edges: hydratedWorkflow.edges,
+      // Stub UI state belongs to the outgoing graph
+      hoveredHandle: null,
+      expandedStubGroup: null,
+      stubGroupWidths: {},
       edgeStyle: hydratedWorkflow.edgeStyle || "angular",
+      edgeAppearance: hydratedWorkflow.edgeAppearance
+        ? normalizeEdgeAppearance(hydratedWorkflow.edgeAppearance)
+        : getEdgeDefaults().appearance,
       groups: hydratedWorkflow.groups || {},
       isRunning: false,
       currentNodeIds: [],
       // Restore workflow ID and paths from localStorage if available
       workflowId: workflow.id || null,
       workflowName: workflow.name,
+      workflowLoadCount: get().workflowLoadCount + 1,
       saveDirectoryPath: directoryPath || null,
       generationsPath: savedConfig?.generationsPath || null,
       lastSavedAt: savedConfig?.lastSavedAt || null,
@@ -2683,6 +2944,11 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       nodes: [],
       edges: [],
       groups: {},
+      hoveredHandle: null,
+      expandedStubGroup: null,
+      stubGroupWidths: {},
+      edgeStyle: getEdgeDefaults().edgeStyle,
+      edgeAppearance: getEdgeDefaults().appearance,
       isRunning: false,
       currentNodeIds: [],
       pausedAtNodeId: null,
@@ -2780,6 +3046,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       nodes,
       edges,
       edgeStyle,
+      edgeAppearance,
       groups,
       workflowId,
       workflowName,
@@ -2841,6 +3108,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       const savedNodesSnapshot = currentNodes;
       const savedEdgesSnapshot = edges;
       const savedEdgeStyleSnapshot = edgeStyle;
+      const savedEdgeAppearanceSnapshot = edgeAppearance;
       const savedGroupsSnapshot = groups;
       const savedWorkflowNameSnapshot = workflowName;
 
@@ -2852,6 +3120,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         nodes: currentNodes,
         edges,
         edgeStyle,
+        edgeAppearance,
         groups: groups && Object.keys(groups).length > 0 ? groups : undefined,
       };
 
@@ -2885,6 +3154,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
           freshNodes !== savedNodesSnapshot ||
           fresh.edges !== savedEdgesSnapshot ||
           fresh.edgeStyle !== savedEdgeStyleSnapshot ||
+          fresh.edgeAppearance !== savedEdgeAppearanceSnapshot ||
           fresh.groups !== savedGroupsSnapshot ||
           fresh.workflowName !== savedWorkflowNameSnapshot;
 
@@ -3181,6 +3451,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       edges: state.edges,
       groups: state.groups,
       edgeStyle: state.edgeStyle,
+      edgeAppearance: state.edgeAppearance,
     });
     set({
       previousWorkflowSnapshot: snapshot,
@@ -3196,6 +3467,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         edges: state.previousWorkflowSnapshot.edges,
         groups: state.previousWorkflowSnapshot.groups,
         edgeStyle: state.previousWorkflowSnapshot.edgeStyle,
+        edgeAppearance: state.previousWorkflowSnapshot.edgeAppearance,
         previousWorkflowSnapshot: null,
         manualChangeCount: 0,
         hasUnsavedChanges: true,

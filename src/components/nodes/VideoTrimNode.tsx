@@ -48,7 +48,7 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
   const [showOutput, setShowOutput] = useState(false);
   const [expanded, setExpanded] = useState(true);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
-  const videoAutoplayRef = useVideoAutoplay(id, selected);
+  const videoAutoplayRef = useVideoAutoplay(id);
 
   // Keep a ref to endTime so the metadata callback reads fresh state
   const endTimeRef = useRef(nodeData.endTime);

@@ -1,74 +1,42 @@
 import { useRef, useEffect } from "react";
 import { useWorkflowStore } from "@/store/workflowStore";
 
+/** How long the pointer rests on a node before its video starts. */
+export const VIDEO_HOVER_DELAY_MS = 300;
+
 /**
- * Hook for managing video play/pause based on hover and selection state.
+ * Plays a node's video while the node is hovered.
  *
- * Videos are paused by default. They start playing when:
- * - The node is selected (immediately)
- * - The node is hovered for 300ms (delayed)
- *
- * Videos pause when:
- * - The node is deselected (if not hovered)
- * - The mouse leaves the node (if not selected)
+ * Videos are paused by default. Hovering the node for a moment starts the
+ * video; leaving pauses it where it is, so it resumes from the same frame.
+ * Selecting a node does not play its video, so a selected video node stays
+ * still while the user works around it.
  *
  * @param nodeId - The node's unique ID
- * @param selected - Whether the node is currently selected
  * @returns A ref to attach to the video element
  */
-export function useVideoAutoplay(
-  nodeId: string,
-  selected: boolean | undefined
-): React.RefObject<HTMLVideoElement | null> {
+export function useVideoAutoplay(nodeId: string): React.RefObject<HTMLVideoElement | null> {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isHovered = useWorkflowStore((s) => s.hoveredNodeId === nodeId);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    // Clear any pending hover timeout
-    const clearHoverTimeout = () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-        hoverTimeoutRef.current = null;
-      }
-    };
-
-    if (selected || isHovered) {
-      // Play the video
-      if (selected) {
-        // Selected: play immediately
-        clearHoverTimeout();
-        video.play().catch((e) => {
-          if (e.name !== "AbortError") {
-            console.warn("Video play failed:", e);
-          }
-        });
-      } else if (isHovered) {
-        // Hovered but not selected: play after 300ms delay
-        clearHoverTimeout();
-        hoverTimeoutRef.current = setTimeout(() => {
-          video.play().catch((e) => {
-            if (e.name !== "AbortError") {
-              console.warn("Video play failed:", e);
-            }
-          });
-        }, 300);
-      }
-    } else {
-      // Not selected and not hovered: pause
-      clearHoverTimeout();
+    if (!isHovered) {
       video.pause();
-      // Note: Do NOT reset currentTime - resume from current position
+      return;
     }
 
-    // Cleanup on unmount or dependency change
-    return () => {
-      clearHoverTimeout();
-    };
-  }, [isHovered, selected, nodeId]);
+    const timeout = setTimeout(() => {
+      video.play().catch((e) => {
+        if (e.name !== "AbortError") {
+          console.warn("Video play failed:", e);
+        }
+      });
+    }, VIDEO_HOVER_DELAY_MS);
+    return () => clearTimeout(timeout);
+  }, [isHovered, nodeId]);
 
   return videoRef;
 }

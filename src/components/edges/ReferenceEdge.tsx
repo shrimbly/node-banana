@@ -8,8 +8,22 @@ import {
 } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { getSharedGradientId } from "./SharedEdgeGradients";
+import { EDGE_COLORS } from "@/lib/edges/colors";
+import { EdgeToolbar, useIsToolbarEdge } from "@/components/EdgeToolbar";
+import { EditableEdge } from "./EditableEdge";
 
-export function ReferenceEdge({
+/**
+ * The dashed grey link from a split grid to the image inputs it feeds.
+ * Hidden, it draws the same labelled stubs as any other connection, so it
+ * defers to EditableEdge rather than disappearing without a trace.
+ */
+export function ReferenceEdge(props: EdgeProps) {
+  const isHidden = Boolean((props.data as { hidden?: boolean } | undefined)?.hidden);
+  if (isHidden) return <EditableEdge {...props} />;
+  return <VisibleReferenceEdge {...props} />;
+}
+
+function VisibleReferenceEdge({
   id,
   sourceX,
   sourceY,
@@ -19,9 +33,13 @@ export function ReferenceEdge({
   targetPosition,
   style,
   markerEnd,
+  selected,
   source,
   target,
 }: EdgeProps) {
+  const appearance = useWorkflowStore((state) => state.edgeAppearance);
+  const carriesToolbar = useIsToolbarEdge(id);
+
   // Narrow selector: returns boolean, only re-renders when selection relevance changes
   const isConnectedToSelection = useWorkflowStore((state) => {
     const selectedNodes = state.nodes.filter((n) => n.selected);
@@ -30,7 +48,7 @@ export function ReferenceEdge({
   });
 
   // Calculate the path - always use curved for reference edges for softer look
-  const [edgePath] = useMemo(() => {
+  const [edgePath, labelX, labelY] = useMemo(() => {
     return getBezierPath({
       sourceX,
       sourceY,
@@ -56,13 +74,17 @@ export function ReferenceEdge({
         markerEnd={markerEnd}
         style={{
           ...style,
-          stroke: `url(#${gradientId})`,
+          stroke: appearance.gradient ? `url(#${gradientId})` : EDGE_COLORS.reference,
+          strokeOpacity: appearance.gradient || isConnectedToSelection ? 1 : appearance.fadedOpacity,
           strokeWidth: 2,
           strokeDasharray: "6 4",
           strokeLinecap: "round",
           strokeLinejoin: "round",
-        }}
+          "--edge-stroke-active": appearance.gradient ? `url(#${getSharedGradientId("reference", "active")})` : EDGE_COLORS.reference,
+        } as React.CSSProperties}
       />
+
+      {selected && carriesToolbar && <EdgeToolbar edgeId={id} x={labelX} y={labelY} />}
 
       {/* Invisible wider path for easier selection */}
       <path

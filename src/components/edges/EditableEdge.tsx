@@ -1,36 +1,54 @@
 "use client";
 
 import { useState, useCallback, useMemo } from "react";
+import { Position } from "@xyflow/react";
 import {
   BaseEdge,
+  EdgeLabelRenderer,
   EdgeProps,
   getSmoothStepPath,
   getBezierPath,
+  getStraightPath,
   useReactFlow,
+  useInternalNode,
+  useConnection,
 } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { NanoBananaNodeData, WorkflowEdgeData } from "@/types";
 import { getSharedGradientId } from "./SharedEdgeGradients";
+import { EDGE_COLORS, edgeColorKeyForHandles } from "@/lib/edges/colors";
+import { EDGE_THICKNESS_PX } from "@/lib/edges/appearance";
+import { EdgeToolbar, useIsToolbarEdge } from "@/components/EdgeToolbar";
+import { HiddenEdgeStub } from "./HiddenEdgeStub";
+import {
+  edgeDisplayLabelById,
+  hiddenStubOffset,
+  hiddenStubRole,
+  parallelEdgePosition,
+  pluralTypeLabel,
+  stubGroupKey,
+} from "@/lib/edges/labels";
+import { EdgeLabel } from "./EdgeLabel";
+import { edgeBundles, bundleReach, bundleClampKey, type BundleMembership } from "@/lib/edges/bundles";
 
 interface EdgeData extends WorkflowEdgeData {
   offsetX?: number;
   offsetY?: number;
 }
 
-// Colors for different connection types (dimmed for softer appearance)
-const EDGE_COLORS: Record<string, string> = {
-  image: "#0d9668", // Green for image connections
-  prompt: "#2563eb", // Blue for prompt connections
-  default: "#64748b", // Gray for unknown
-  pause: "#ea580c", // Orange for paused edges
-  reference: "#52525b", // Gray for reference connections
-  video: "#ec4899", // Pink for video connections
-  audio: "#f97316", // Orange for audio connections
-  text: "#2563eb", // Blue for text connections
-  "3d": "#06b6d4", // Cyan for 3D connections
-  easeCurve: "#f59e0b", // Amber for ease curve connections
-  loop: "#d946ef", // Magenta for loop edges
-};
+/** Absolute y of the centre of each handle on one side of a node, by handle id. */
+function useHandleY(nodeId: string, side: "source" | "target") {
+  const node = useInternalNode(nodeId);
+  const bounds = node?.internals.handleBounds?.[side];
+  const top = node?.internals.positionAbsolute.y ?? 0;
+  return useCallback(
+    (handleId: string | null) => {
+      const handle = bounds?.find((h) => (h.id ?? null) === handleId);
+      return handle ? top + handle.y + handle.height / 2 : undefined;
+    },
+    [bounds, top]
+  );
+}
 
 export function EditableEdge({
   id,
@@ -49,9 +67,103 @@ export function EditableEdge({
   source,
   target,
 }: EdgeProps) {
-  const { setEdges } = useReactFlow();
+  const { setEdges, screenToFlowPosition } = useReactFlow();
   const edgeStyle = useWorkflowStore((state) => state.edgeStyle);
+  const appearance = useWorkflowStore((state) => state.edgeAppearance);
   const [isDragging, setIsDragging] = useState(false);
+  const carriesToolbar = useIsToolbarEdge(id);
+
+  // Hidden connections: labelled stubs at the handles; hover ghosts the line back
+  const isHidden = Boolean((data as EdgeData | undefined)?.hidden);
+  // While a noodle is being dragged the handle labels take the stubs' place
+  const isConnecting = useConnection((c) => c.inProgress);
+  const [stubHovered, setStubHovered] = useState(false);
+  const [stubWidths, setStubWidths] = useState({ source: 0, target: 0 });
+  const [toolbarSide, setToolbarSide] = useState<"source" | "target">("source");
+  const measureSource = useCallback((w: number) => setStubWidths((prev) => (prev.source === w ? prev : { ...prev, source: w })), []);
+  const measureTarget = useCallback((w: number) => setStubWidths((prev) => (prev.target === w ? prev : { ...prev, target: w })), []);
+  const handleHovered = useWorkflowStore((state) => {
+    if (!isHidden) return false;
+    const h = state.hoveredHandle;
+    if (!h) return false;
+    return (
+      (h.type === "source" && h.nodeId === source && (h.handleId ?? null) === (sourceHandleId ?? null)) ||
+      (h.type === "target" && h.nodeId === target && (h.handleId ?? null) === (targetHandleId ?? null))
+    );
+  });
+  const selectThisEdge = useCallback(
+    (side: "source" | "target") => {
+      setToolbarSide(side);
+      setEdges((edges) => edges.map((e) => ({ ...e, selected: e.id === id })));
+    },
+    [id, setEdges]
+  );
+  const displayLabel = useWorkflowStore((state) => edgeDisplayLabelById(id, state.edges));
+  const hasOwnLabel = Boolean((data as EdgeData | undefined)?.label?.trim());
+  const stubLabel = displayLabel;
+  const [hovered, setHovered] = useState(false);
+  const parallel = useWorkflowStore((state) => {
+    const { index, count } = parallelEdgePosition(id, state.edges);
+    return count > 1 ? index - (count - 1) / 2 : 0;
+  });
+
+  // Bundles: the noodles sharing a handle leave it as one short stem and
+  // split further out, until one of them is selected. Selected as a string
+  // so the selector stays referentially stable.
+  const bundleKey = useWorkflowStore((state) => {
+    const { source: sb, target: tb } = edgeBundles(id, state.edges);
+    const pack = (m: BundleMembership | null) => (m ? `${m.index}|${m.count}|${m.members.join(",")}` : "");
+    return `${pack(sb)}\u0002${pack(tb)}`;
+  });
+  const bundles = useMemo(() => {
+    const unpack = (packed: string, end: "source" | "target"): BundleMembership | null => {
+      if (!packed) return null;
+      const [index, count, members] = packed.split("|");
+      return { end, key: "", index: Number(index), count: Number(count), members: members.split(",") };
+    };
+    const [sb, tb] = bundleKey.split("\u0002");
+    return { source: unpack(sb, "source"), target: unpack(tb, "target") };
+  }, [bundleKey]);
+  const bundleExpanded = useWorkflowStore((state) => {
+    const members = [...(bundles.source?.members ?? []), ...(bundles.target?.members ?? [])];
+    return members.length > 0 && state.edges.some((e) => e.selected && members.includes(e.id));
+  });
+  const sourceBundle = bundleExpanded ? null : bundles.source;
+  const targetBundle = bundleExpanded ? null : bundles.target;
+  // The clamp position for each end lives on the node that owns the handle
+  const sourceReach = useWorkflowStore((state) => bundleReach(state.nodes, source, "source", sourceHandleId));
+  const targetReach = useWorkflowStore((state) => bundleReach(state.nodes, target, "target", targetHandleId));
+  const setBundleClamp = useWorkflowStore((state) => state.setBundleClamp);
+  const sDir: 1 | -1 = sourcePosition === "left" ? -1 : 1;
+  const tDir: 1 | -1 = targetPosition === "right" ? 1 : -1;
+  // Where this noodle starts and ends: the stem's far end when bundled
+  const startX = sourceBundle ? sourceX + sDir * sourceReach : sourceX;
+  const endX = targetBundle ? targetX + tDir * targetReach : targetX;
+  // Hidden stubs stack down the side of the node without overlapping, which
+  // needs the y of every handle on that side, not just this edge's own
+  const sourceHandleY = useHandleY(source, "source");
+  const targetHandleY = useHandleY(target, "target");
+  const sourceStack = useWorkflowStore((state) =>
+    isHidden ? hiddenStubOffset(id, state.edges, "source", sourceHandleY, sourceY, state.expandedStubGroup) : 0
+  );
+  const targetStack = useWorkflowStore((state) =>
+    isHidden ? hiddenStubOffset(id, state.edges, "target", targetHandleY, targetY, state.expandedStubGroup) : 0
+  );
+  // Several hidden connections on one handle collapse into a single plural
+  // pill, drawn by the first of them; clicking it expands the group
+  const sourceRole = useWorkflowStore((state) => (isHidden ? hiddenStubRole(id, state.edges, "source", state.expandedStubGroup) : "single"));
+  const targetRole = useWorkflowStore((state) => (isHidden ? hiddenStubRole(id, state.edges, "target", state.expandedStubGroup) : "single"));
+  const setExpandedStubGroup = useWorkflowStore((state) => state.setExpandedStubGroup);
+  const setHoveredHandle = useWorkflowStore((state) => state.setHoveredHandle);
+  // A collapsed pill is drawn by one member but every member's ghost must
+  // leave from its outer edge, so its measured width goes through the store
+  const sourceGroupKey = stubGroupKey(source, "source", sourceHandleId ?? null);
+  const targetGroupKey = stubGroupKey(target, "target", targetHandleId ?? null);
+  const setStubGroupWidth = useWorkflowStore((state) => state.setStubGroupWidth);
+  const sourceGroupWidth = useWorkflowStore((state) => (isHidden ? state.stubGroupWidths?.[sourceGroupKey] ?? 0 : 0));
+  const targetGroupWidth = useWorkflowStore((state) => (isHidden ? state.stubGroupWidths?.[targetGroupKey] ?? 0 : 0));
+  const measureSourceGroup = useCallback((w: number) => setStubGroupWidth?.(sourceGroupKey, w), [setStubGroupWidth, sourceGroupKey]);
+  const measureTargetGroup = useCallback((w: number) => setStubGroupWidth?.(targetGroupKey, w), [setStubGroupWidth, targetGroupKey]);
 
   // Narrow selector: returns boolean, only re-renders when selection relevance changes
   const isConnectedToSelection = useWorkflowStore((state) =>
@@ -70,34 +182,18 @@ export function EditableEdge({
     return (targetNode.data as NanoBananaNodeData).status === "loading";
   });
 
-  // Determine edge color based on handle type (magenta for loop edges, orange if paused)
-  const edgeColor = useMemo(() => {
-    if (edgeData?.isLoop) return EDGE_COLORS.loop;
-    if (hasPause) return EDGE_COLORS.pause;
-    // Use source handle to determine color (or target if source is not available)
-    // Strip numeric suffixes (e.g., "image-0" -> "image") for lookup
-    const handleType = sourceHandleId || targetHandleId || "";
-    const normalizedType = handleType.replace(/-\d+$/, "");
-    return EDGE_COLORS[normalizedType] || EDGE_COLORS.default;
+  // Colour key: magenta for loop edges, orange if paused, else the data type
+  const colorKey = useMemo(() => {
+    if (edgeData?.isLoop) return "loop" as const;
+    if (hasPause) return "pause" as const;
+    return edgeColorKeyForHandles(sourceHandleId, targetHandleId);
   }, [edgeData?.isLoop, hasPause, sourceHandleId, targetHandleId]);
+  const edgeColor = EDGE_COLORS[colorKey];
 
-  // Reference shared gradient by color key + selection state
-  const gradientId = useMemo(() => {
-    if (edgeData?.isLoop) {
-      const selectionKey = isConnectedToSelection ? "active" : "dimmed";
-      return getSharedGradientId("loop", selectionKey);
-    }
-    if (hasPause) {
-      const selectionKey = isConnectedToSelection ? "active" : "dimmed";
-      return getSharedGradientId("pause", selectionKey);
-    }
-    const handleType = sourceHandleId || targetHandleId || "default";
-    const normalizedType = handleType.replace(/-\d+$/, "");
-    // Use the normalized type if it exists in EDGE_COLORS, otherwise fall back to "default"
-    const colorKey = normalizedType in EDGE_COLORS ? normalizedType : "default";
-    const selectionKey = isConnectedToSelection ? "active" : "dimmed";
-    return getSharedGradientId(colorKey, selectionKey);
-  }, [edgeData?.isLoop, hasPause, sourceHandleId, targetHandleId, isConnectedToSelection]);
+  // Shared gradient for the colour key + selection state; the "active" one
+  // also serves as the hover/selected stroke (see globals.css)
+  const gradientId = getSharedGradientId(colorKey, isConnectedToSelection ? "active" : "dimmed");
+  const activeGradientId = getSharedGradientId(colorKey, "active");
 
   // Calculate the path based on edge style
   const [edgePath, labelX, labelY] = useMemo(() => {
@@ -127,33 +223,37 @@ export function EditableEdge({
       return [path, lx, ly] as [string, number, number];
     }
 
+    if (edgeStyle === "straight") {
+      return getStraightPath({ sourceX: startX, sourceY, targetX: endX, targetY });
+    }
+
     if (edgeStyle === "curved") {
       return getBezierPath({
-        sourceX,
+        sourceX: startX,
         sourceY,
         sourcePosition,
-        targetX,
+        targetX: endX,
         targetY,
         targetPosition,
         curvature: 0.25,
       });
     } else {
       return getSmoothStepPath({
-        sourceX,
+        sourceX: startX,
         sourceY,
         sourcePosition,
-        targetX,
+        targetX: endX,
         targetY,
         targetPosition,
         borderRadius: 8,
         offset: offsetX,
       });
     }
-  }, [edgeStyle, edgeData?.isLoop, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, offsetX]);
+  }, [edgeStyle, edgeData?.isLoop, startX, endX, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, offsetX]);
 
   // Calculate handle positions on the path segments (only for angular mode)
   const handlePositions = useMemo(() => {
-    if (edgeStyle === "curved") return [];
+    if (edgeStyle !== "angular") return [];
 
     const handles: { x: number; y: number; direction: "horizontal" | "vertical" }[] = [];
 
@@ -216,30 +316,170 @@ export function EditableEdge({
     [id, offsetX, offsetY, setEdges]
   );
 
+  // Stroke from the appearance settings: the shared gradient, or a solid
+  // colour faded when the edge is not attached to a selected node.
+  const strokeWidth = EDGE_THICKNESS_PX[appearance.thickness];
+  const stroke = appearance.gradient ? `url(#${gradientId})` : edgeColor;
+  const strokeOpacity = appearance.gradient || isConnectedToSelection ? 1 : appearance.fadedOpacity;
+  const activeStroke = appearance.gradient ? `url(#${activeGradientId})` : edgeColor;
+  const showPulse = isTargetLoading && appearance.loadingPulse;
+
+  // Labels: only one the user typed sits on the noodle; the automatic type
+  // and image-order names stay on the toolbar and the hidden-connection stubs
+  const labelText = hasOwnLabel ? displayLabel : "";
+  const showLabel = Boolean(labelText) || Boolean(edgeData?.isLoop);
+
+  if (isHidden) {
+    if (isConnecting) return null;
+    const sourceDir: 1 | -1 = sourcePosition === "left" ? -1 : 1;
+    const targetDir: 1 | -1 = targetPosition === "right" ? 1 : -1;
+    const stubLength = 8;
+    const revealed = stubHovered || handleHovered || Boolean(selected);
+    const sourceCollapsed = sourceRole.startsWith("collapsed");
+    const targetCollapsed = targetRole.startsWith("collapsed");
+    // Stub pills sit just past the handles; the ghost runs between their outer edges
+    const sourceStub = { x: sourceX + sourceDir * (stubLength + 4), y: sourceY + sourceStack };
+    const targetStub = { x: targetX + targetDir * (stubLength + 4), y: targetY + targetStack };
+    const sourceWidth = sourceCollapsed ? sourceGroupWidth : stubWidths.source;
+    const targetWidth = targetCollapsed ? targetGroupWidth : stubWidths.target;
+    const [ghostPath] = getBezierPath({
+      sourceX: sourceStub.x + sourceDir * sourceWidth,
+      sourceY: sourceStub.y,
+      sourcePosition: sourceDir === 1 ? Position.Right : Position.Left,
+      targetX: targetStub.x + targetDir * targetWidth,
+      targetY: targetStub.y,
+      targetPosition: targetDir === 1 ? Position.Right : Position.Left,
+      curvature: 0.25,
+    });
+    const toolbarStub = toolbarSide === "target" ? targetStub : sourceStub;
+    const toolbarDir = toolbarSide === "target" ? targetDir : sourceDir;
+    const toolbarWidth = toolbarSide === "target" ? targetWidth : sourceWidth;
+    // A collapsed pill acts like its handle: hovering ghosts every member, clicking expands
+    const groupStub = (side: "source" | "target") => {
+      const nodeId = side === "source" ? source : target;
+      const handleId = (side === "source" ? sourceHandleId : targetHandleId) ?? null;
+      return {
+        label: pluralTypeLabel(handleId),
+        title: "Hidden connections, click to expand",
+        onHoverChange: (hovering: boolean) => setHoveredHandle(hovering ? { nodeId, handleId, type: side } : null),
+        onSelect: () => setExpandedStubGroup(stubGroupKey(nodeId, side, handleId)),
+      };
+    };
+    return (
+      <>
+        {revealed && (
+          <path
+            d={ghostPath}
+            fill="none"
+            stroke={edgeColor}
+            strokeWidth={strokeWidth}
+            strokeOpacity={0.7}
+            strokeDasharray="6 7"
+            strokeLinecap="round"
+            data-testid="hidden-edge-ghost"
+          />
+        )}
+        <path d={`M${sourceX},${sourceY} L${sourceX + sourceDir * stubLength},${sourceY}`} fill="none" stroke={edgeColor} strokeWidth={strokeWidth} strokeOpacity={0.9} strokeLinecap="round" />
+        <path d={`M${targetX},${targetY} L${targetX + targetDir * stubLength},${targetY}`} fill="none" stroke={edgeColor} strokeWidth={strokeWidth} strokeOpacity={0.9} strokeLinecap="round" />
+        <EdgeLabelRenderer>
+          {sourceRole !== "collapsed-member" && (
+            <HiddenEdgeStub
+              key={sourceCollapsed ? "source-group" : "source-own"}
+              side="source"
+              x={sourceStub.x}
+              y={sourceStub.y}
+              direction={sourceDir}
+              color={edgeColor}
+              onMeasure={sourceCollapsed ? measureSourceGroup : measureSource}
+              {...(sourceCollapsed
+                ? { ...groupStub("source"), selected: false }
+                : { label: stubLabel, selected: Boolean(selected), onHoverChange: setStubHovered, onSelect: () => selectThisEdge("source") })}
+            />
+          )}
+          {targetRole !== "collapsed-member" && (
+            <HiddenEdgeStub
+              key={targetCollapsed ? "target-group" : "target-own"}
+              side="target"
+              x={targetStub.x}
+              y={targetStub.y}
+              direction={targetDir}
+              color={edgeColor}
+              onMeasure={targetCollapsed ? measureTargetGroup : measureTarget}
+              {...(targetCollapsed
+                ? { ...groupStub("target"), selected: false }
+                : { label: stubLabel, selected: Boolean(selected), onHoverChange: setStubHovered, onSelect: () => selectThisEdge("target") })}
+            />
+          )}
+        </EdgeLabelRenderer>
+        {selected && carriesToolbar && (
+          <EdgeToolbar edgeId={id} x={toolbarStub.x + toolbarDir * (toolbarWidth / 2)} y={toolbarStub.y - 10} />
+        )}
+      </>
+    );
+  }
+
   return (
-    <>
+    <g data-testid="edge-hover-area" onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}>
       <BaseEdge
         id={id}
         path={edgePath}
         markerEnd={markerEnd}
         style={{
           ...style,
-          stroke: `url(#${gradientId})`,
-          strokeWidth: 3,
+          stroke,
+          strokeOpacity,
+          strokeWidth,
           strokeLinecap: "round",
           strokeLinejoin: "round",
-        }}
+          "--edge-stroke-active": activeStroke,
+        } as React.CSSProperties}
       />
 
+      {selected && carriesToolbar && <EdgeToolbar edgeId={id} x={labelX} y={labelY} />}
+
+      {/* Bundle stems: the first member of each bundle draws the shared stem and its count */}
+      {sourceBundle?.index === 0 && (
+        <BundleStem
+          x={sourceX}
+          y={sourceY}
+          dir={sDir}
+          reach={sourceReach}
+          count={sourceBundle.count}
+          stroke={stroke}
+          strokeOpacity={strokeOpacity}
+          width={strokeWidth}
+          color={edgeColor}
+          activeStroke={activeStroke}
+          screenToFlowPosition={screenToFlowPosition}
+          onReachChange={(reach) => setBundleClamp(source, bundleClampKey("source", sourceHandleId), reach)}
+        />
+      )}
+      {targetBundle?.index === 0 && (
+        <BundleStem
+          x={targetX}
+          y={targetY}
+          dir={tDir}
+          reach={targetReach}
+          count={targetBundle.count}
+          stroke={stroke}
+          strokeOpacity={strokeOpacity}
+          width={strokeWidth}
+          color={edgeColor}
+          activeStroke={activeStroke}
+          screenToFlowPosition={screenToFlowPosition}
+          onReachChange={(reach) => setBundleClamp(target, bundleClampKey("target", targetHandleId), reach)}
+        />
+      )}
+
       {/* Animated pulse overlay when target is loading */}
-      {isTargetLoading && (
+      {showPulse && (
         <>
           {/* Outer glow — replaces blur(6px) filter for better perf on Windows */}
           <path
             d={edgePath}
             fill="none"
-            stroke={`url(#${gradientId})`}
-            strokeWidth={20}
+            stroke={stroke}
+            strokeWidth={strokeWidth * 6.5}
             strokeLinecap="round"
             strokeLinejoin="round"
             opacity={0.06}
@@ -248,8 +488,8 @@ export function EditableEdge({
           <path
             d={edgePath}
             fill="none"
-            stroke={`url(#${gradientId})`}
-            strokeWidth={12}
+            stroke={stroke}
+            strokeWidth={strokeWidth * 4}
             strokeLinecap="round"
             strokeLinejoin="round"
             opacity={0.12}
@@ -258,8 +498,8 @@ export function EditableEdge({
           <path
             d={edgePath}
             fill="none"
-            stroke={`url(#${gradientId})`}
-            strokeWidth={5}
+            stroke={stroke}
+            strokeWidth={strokeWidth + 2}
             strokeLinecap="round"
             strokeLinejoin="round"
             strokeDasharray="20 30"
@@ -279,6 +519,17 @@ export function EditableEdge({
         className="react-flow__edge-interaction"
       />
 
+      {showLabel && (
+        <EdgeLabel
+          x={labelX}
+          y={labelY + parallel * 18}
+          text={labelText}
+          color={edgeColor}
+          loopCount={edgeData?.isLoop ? edgeData.loopCount || 3 : undefined}
+          active={isConnectedToSelection || Boolean(selected) || hovered}
+        />
+      )}
+
       {/* Pause indicator near target connection point */}
       {hasPause && (
         <g transform={`translate(${targetX - 24}, ${targetY})`}>
@@ -293,22 +544,6 @@ export function EditableEdge({
           <rect x={-4} y={-5} width={2.5} height={10} fill={edgeColor} rx={1} />
           <rect x={1.5} y={-5} width={2.5} height={10} fill={edgeColor} rx={1} />
         </g>
-      )}
-
-      {/* Loop indicator at edge midpoint */}
-      {edgeData?.isLoop && (
-        <foreignObject
-          x={labelX - 28}
-          y={labelY - 12}
-          width={56}
-          height={24}
-          className="pointer-events-none"
-        >
-          <div className="flex items-center justify-center gap-1 px-2 py-0.5 bg-neutral-800/90 border border-fuchsia-500/60 rounded-full text-[10px] font-medium">
-            <span className="text-fuchsia-300">↻</span>
-            <span className="text-fuchsia-100">{edgeData.loopCount || 3}×</span>
-          </div>
-        </foreignObject>
       )}
 
       {/* Draggable handles on segments */}
@@ -329,6 +564,99 @@ export function EditableEdge({
             />
           </g>
         ))}
+    </g>
+  );
+}
+
+interface BundleStemProps {
+  /** The shared handle, in flow coordinates. */
+  x: number;
+  y: number;
+  /** Which way the stem leaves the handle: +1 right, -1 left. */
+  dir: 1 | -1;
+  reach: number;
+  count: number;
+  stroke: string;
+  strokeOpacity: number;
+  width: number;
+  color: string;
+  activeStroke: string;
+  screenToFlowPosition: (position: { x: number; y: number }) => { x: number; y: number };
+  /** Called while the clamp is dragged, with the new distance from the handle. */
+  onReachChange: (reach: number) => void;
+}
+
+/**
+ * The short shared stem at a bundled handle, with the connection count on it
+ * and a clamp, a cable tie, at the split point that drags along the stem to
+ * tie the noodles closer to or further from the handle.
+ */
+function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, color, activeStroke, screenToFlowPosition, onReachChange }: BundleStemProps) {
+  const stemWidth = width * (1 + Math.min(count - 1, 4) * 0.5);
+  const splitX = x + dir * reach;
+  const path = `M${x},${y} L${splitX},${y}`;
+
+  const startClampDrag = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const onMove = (event: MouseEvent) => {
+      const flow = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      onReachChange(dir * (flow.x - x));
+    };
+    // Capture phase, so the release ends the drag even if something between
+    // the clamp and the window stops the event; blur covers a release outside.
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove, true);
+      window.removeEventListener("mouseup", onUp, true);
+      window.removeEventListener("blur", onUp);
+    };
+    window.addEventListener("mousemove", onMove, true);
+    window.addEventListener("mouseup", onUp, true);
+    window.addEventListener("blur", onUp);
+  };
+
+  return (
+    <>
+      <path
+        d={path}
+        fill="none"
+        stroke={stroke}
+        strokeOpacity={strokeOpacity}
+        strokeWidth={stemWidth}
+        strokeLinecap="round"
+        className="react-flow__edge-path"
+        style={{ "--edge-stroke-active": activeStroke } as React.CSSProperties}
+        data-testid="edge-bundle-stem"
+      />
+      <path d={path} fill="none" strokeWidth={stemWidth + 12} stroke="transparent" className="react-flow__edge-interaction" />
+      <EdgeLabelRenderer>
+        {/* The clamp: a glassy vertical pill over the split point. A selected
+            node or edge lifts the edge's SVG (and so the stem's hit area) above
+            the label layer, so the clamp keeps a z-index above any elevated
+            edge or it would lose the press to the stem. */}
+        <div
+          className="nodrag nopan"
+          data-testid="edge-bundle-clamp"
+          title={`${count} connections · drag to move where the bundle splits`}
+          onMouseDown={startClampDrag}
+          onClick={(e) => e.stopPropagation()}
+          style={{
+            position: "absolute",
+            transform: `translate(${splitX}px, ${y}px) translate(-50%, -50%)`,
+            pointerEvents: "all",
+            zIndex: 2001,
+            width: 10,
+            height: 26,
+            borderRadius: 9999,
+            cursor: "ew-resize",
+            background: "linear-gradient(180deg, rgba(255,255,255,0.28), rgba(255,255,255,0.08))",
+            border: "1px solid rgba(255,255,255,0.45)",
+            boxShadow: `inset 0 0 0 1px ${color}55, 0 1px 4px rgba(0,0,0,0.45)`,
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+          }}
+        />
+      </EdgeLabelRenderer>
     </>
   );
 }

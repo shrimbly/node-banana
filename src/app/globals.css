@@ -238,9 +238,13 @@ body {
   stroke-linejoin: round;
 }
 
+/* Hovered or selected noodles switch to their own "active" stroke (set by the
+   edge component as --edge-stroke-active), so the highlight keeps the type
+   colour and gradient instead of turning a flat blue. */
 .react-flow__edge.selected .react-flow__edge-path,
 .react-flow__edge:hover .react-flow__edge-path {
-  stroke: #3b82f6;
+  stroke: var(--edge-stroke-active, #3b82f6) !important;
+  stroke-opacity: 1 !important;
 }
 
 /* Hide resize handles but show resize cursor on edges */

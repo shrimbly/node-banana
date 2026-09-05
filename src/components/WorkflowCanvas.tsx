@@ -16,6 +16,7 @@ import {
   OnSelectionChangeParams,
   ViewportPortal,
   useStore,
+  useUpdateNodeInternals,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 
@@ -57,9 +58,9 @@ import {
 const GLBViewerNode = dynamic(() => import("./nodes/GLBViewerNode").then(mod => ({ default: mod.GLBViewerNode })), { ssr: false });
 import { EditableEdge, ReferenceEdge, SharedEdgeGradients } from "./edges";
 import { ConnectionDropMenu, MenuAction } from "./ConnectionDropMenu";
+import { HandleMenu, type HandleMenuTarget } from "./HandleMenu";
 import { NodeSearchMenu } from "./NodeSearchMenu";
 import { MultiSelectToolbar } from "./MultiSelectToolbar";
-import { EdgeToolbar } from "./EdgeToolbar";
 import { GlobalImageHistory } from "./GlobalImageHistory";
 import { GroupBackgroundsPortal, GroupControlsOverlay } from "./GroupsOverlay";
 import { NodeType, NanoBananaNodeData, HandleType, PromptNodeData, LLMGenerateNodeData, PromptConstructorNodeData, AvailableVariable, WorkflowNodeData } from "@/types";
@@ -157,6 +158,8 @@ const edgeTypes: EdgeTypes = {
 };
 
 const OVERVIEW_EDGES: Edge[] = [];
+/** Pointer travel (px) under which a handle press counts as a click, not a drag. */
+const HANDLE_CLICK_SLOP = 4;
 const MINIMAP_GEOMETRY = {
   width: 200,
   height: 150,
@@ -376,6 +379,7 @@ export function WorkflowCanvas() {
     })));
   const onNodesChange = useWorkflowStore((state) => state.onNodesChange);
   const onEdgesChange = useWorkflowStore((state) => state.onEdgesChange);
+  const reconnectEdge = useWorkflowStore((state) => state.reconnectEdge);
   const onConnect = useWorkflowStore((state) => state.onConnect);
   const addNode = useWorkflowStore((state) => state.addNode);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
@@ -418,6 +422,7 @@ export function WorkflowCanvas() {
   >(null);
   const [llmFallbackState, setLlmFallbackState] = useState<{ nodeId: string } | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const handlePointerDownRef = useRef<{ x: number; y: number } | null>(null);
   const tutorialViewportSet = useRef(false);
 
   // FTUX tutorial state (client-side only to avoid SSR hydration issues)
@@ -543,6 +548,22 @@ export function WorkflowCanvas() {
       return { ...node, className: newClass };
     });
   }, [nodes, dimmedNodeIds, skippedNodeIds]);
+
+  // Switching workflows can leave React Flow holding handle positions measured
+  // on the previous workflow's nodes (same ids, different layout), so edges
+  // land in the wrong place until something resizes a node. Re-measure every
+  // node once the new DOM and viewport are up.
+  const updateNodeInternals = useUpdateNodeInternals();
+  const workflowLoadCount = useWorkflowStore((state) => state.workflowLoadCount);
+  const nodeIdsRef = useRef<string[]>([]);
+  nodeIdsRef.current = allNodes.map((n) => n.id);
+  useEffect(() => {
+    if (!workflowLoadCount) return;
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => updateNodeInternals(nodeIdsRef.current));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [workflowLoadCount, updateNodeInternals]);
 
   // Node title mapping for FloatingNodeHeaders
   const NODE_TITLES: Record<string, string> = {
@@ -768,6 +789,17 @@ export function WorkflowCanvas() {
     [nodes]
   );
 
+  // Drag an edge end onto another handle. Generic router/switch handles are
+  // resolved only on first connection, so a re-plug onto one is left alone.
+  const handleReconnect = useCallback(
+    (oldEdge: Edge, connection: Connection) => {
+      if (!isValidConnection(connection)) return;
+      if (connection.targetHandle === "generic-input" || connection.sourceHandle === "generic-output") return;
+      reconnectEdge(oldEdge.id, connection);
+    },
+    [isValidConnection, reconnectEdge]
+  );
+
   const handleConnect = useCallback(
     (connection: Connection) => {
       if (!isValidConnection(connection)) return;
@@ -937,6 +969,12 @@ export function WorkflowCanvas() {
   // Handle connection dropped on empty space or on a node
   const handleConnectEnd: OnConnectEnd = useCallback(
     (event, connectionState) => {
+      // A click on the handle (no drag) opens the handle menu instead
+      const down = handlePointerDownRef.current;
+      if (down && "clientX" in event && Math.hypot(event.clientX - down.x, event.clientY - down.y) <= HANDLE_CLICK_SLOP) {
+        return;
+      }
+
       // If connection was completed normally, nothing to do
       if (connectionState.isValid || !connectionState.fromNode) {
         return;
@@ -1695,10 +1733,16 @@ export function WorkflowCanvas() {
 
   // Keyboard shortcuts for copy/paste and stacking selected nodes
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
-    // Ignore if user is typing in an input field
+    // Ignore if user is typing in an input field (including the edge label
+    // field, which lives in React Flow's label layer)
+    const active = document.activeElement;
     if (
       event.target instanceof HTMLInputElement ||
-      event.target instanceof HTMLTextAreaElement
+      event.target instanceof HTMLTextAreaElement ||
+      (event.target instanceof HTMLElement && event.target.isContentEditable) ||
+      active instanceof HTMLInputElement ||
+      active instanceof HTMLTextAreaElement ||
+      (active instanceof HTMLElement && active.isContentEditable)
     ) {
       return;
     }
@@ -1968,6 +2012,75 @@ export function WorkflowCanvas() {
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
+
+  // A single click on a handle opens its menu; a drag still starts a
+  // connection. The pointer-down position tells the two apart.
+  const [handleMenu, setHandleMenu] = useState<HandleMenuTarget | null>(null);
+  const closeHandleMenu = useCallback(() => setHandleMenu(null), []);
+  useEffect(() => {
+    const wrapper = reactFlowWrapper.current;
+    if (!wrapper) return;
+    const handleOf = (target: EventTarget | null) =>
+      target instanceof Element ? target.closest<HTMLElement>(".react-flow__handle") : null;
+    const onDown = (event: PointerEvent) => {
+      handlePointerDownRef.current = handleOf(event.target) ? { x: event.clientX, y: event.clientY } : null;
+    };
+    const onClick = (event: MouseEvent) => {
+      const handle = handleOf(event.target);
+      const down = handlePointerDownRef.current;
+      if (!handle || !down) return;
+      if (Math.hypot(event.clientX - down.x, event.clientY - down.y) > HANDLE_CLICK_SLOP) return;
+      const nodeId = handle.dataset.nodeid;
+      if (!nodeId) return;
+      const rect = handle.getBoundingClientRect();
+      setHandleMenu({
+        nodeId,
+        handleId: handle.dataset.handleid ?? null,
+        type: handle.classList.contains("source") ? "source" : "target",
+        position: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+      });
+    };
+    wrapper.addEventListener("pointerdown", onDown, true);
+    wrapper.addEventListener("click", onClick);
+    return () => {
+      wrapper.removeEventListener("pointerdown", onDown, true);
+      wrapper.removeEventListener("click", onClick);
+    };
+  }, []);
+
+  // Which handle is under the pointer: hidden connections on it ghost back.
+  // One delegated listener on the wrapper instead of a handler per handle.
+  const setHoveredHandle = useWorkflowStore((state) => state.setHoveredHandle);
+  const setExpandedStubGroup = useWorkflowStore((state) => state.setExpandedStubGroup);
+  useEffect(() => {
+    const wrapper = reactFlowWrapper.current;
+    if (!wrapper || !setHoveredHandle) return;
+    const handleOf = (target: EventTarget | null) =>
+      target instanceof Element ? target.closest<HTMLElement>(".react-flow__handle") : null;
+    const onOver = (event: MouseEvent) => {
+      const handle = handleOf(event.target);
+      if (!handle) return;
+      const nodeId = handle.dataset.nodeid;
+      if (!nodeId) return;
+      setHoveredHandle({
+        nodeId,
+        handleId: handle.dataset.handleid ?? null,
+        type: handle.classList.contains("source") ? "source" : "target",
+      });
+    };
+    const onOut = (event: MouseEvent) => {
+      const handle = handleOf(event.target);
+      if (!handle) return;
+      const next = event.relatedTarget instanceof Element ? event.relatedTarget.closest(".react-flow__handle") : null;
+      if (next !== handle) setHoveredHandle(null);
+    };
+    wrapper.addEventListener("mouseover", onOver);
+    wrapper.addEventListener("mouseout", onOut);
+    return () => {
+      wrapper.removeEventListener("mouseover", onOver);
+      wrapper.removeEventListener("mouseout", onOut);
+    };
+  }, [setHoveredHandle]);
 
 
   // Fix for React Flow selection bug where nodes with undefined bounds get incorrectly selected.
@@ -2299,6 +2412,8 @@ export function WorkflowCanvas() {
         onEdgesChange={onEdgesChange}
         onConnect={handleConnect}
         onConnectEnd={handleConnectEnd}
+        onReconnect={handleReconnect}
+        onPaneClick={() => setExpandedStubGroup?.(null)}
         onMoveStart={() => { isPanningRef.current = true; setHoveredNodeId(null); document.documentElement.classList.add("canvas-interacting"); if (reactFlowWrapper.current) setCanvasPanningClass(true, reactFlowWrapper.current); }}
         onMoveEnd={() => { isPanningRef.current = false; document.documentElement.classList.remove("canvas-interacting"); if (reactFlowWrapper.current) setCanvasPanningClass(false, reactFlowWrapper.current); }}
         onNodeDragStart={() => { isDraggingNodeRef.current = true; document.documentElement.classList.add("canvas-interacting"); }}
@@ -2309,6 +2424,7 @@ export function WorkflowCanvas() {
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         isValidConnection={isValidConnection}
+        connectOnClick={false}
         fitView
         deleteKeyCode={isModalOpen ? null : ["Backspace", "Delete"]}
         multiSelectionKeyCode="Shift"
@@ -2550,6 +2666,9 @@ export function WorkflowCanvas() {
         />
       )}
 
+      {/* Handle menu (single click on a handle) */}
+      {handleMenu && <HandleMenu target={handleMenu} onClose={closeHandleMenu} />}
+
       {/* Node search menu (double-click empty canvas) */}
       {nodeSearchMenu && (
         <NodeSearchMenu
@@ -2563,7 +2682,6 @@ export function WorkflowCanvas() {
       <MultiSelectToolbar />
 
       {/* Edge toolbar */}
-      <EdgeToolbar />
 
       {/* Global image history */}
       <GlobalImageHistory />

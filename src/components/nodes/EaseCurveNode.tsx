@@ -39,6 +39,11 @@ const EMPTY_HEIGHT = 120;
 const ALL_EASING_NAMES = getAllEasingNames();
 const PRESET_NAMES = new Set<string>(EASING_PRESETS);
 
+/** Preset thumbnail: the curve's drawn size, and the margin that keeps its
+ * stroke and any overshoot (the back/elastic families) inside the box. */
+const THUMB = 64;
+const THUMB_PAD = 10;
+
 /** SVG polyline points for an easing function's preview. */
 function generateEasingPolyline(easingName: string, width: number, height: number, samples = 20): string {
   const fn = getEasingFunction(easingName);
@@ -57,7 +62,7 @@ export function EaseCurveNode({ id, data, selected }: NodeProps<EaseCurveNodeTyp
   const edges = useWorkflowStore((state) => state.edges);
   const removeEdge = useWorkflowStore((state) => state.removeEdge);
   const videoBlobUrl = useVideoBlobUrl(nodeData.outputVideo ?? null);
-  const videoAutoplayRef = useVideoAutoplay(id, selected);
+  const videoAutoplayRef = useVideoAutoplay(id);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
   const [expanded, setExpanded] = useState(true);
   const [showPresets, setShowPresets] = useState(false);
@@ -129,7 +134,7 @@ export function EaseCurveNode({ id, data, selected }: NodeProps<EaseCurveNodeTyp
     () =>
       ALL_EASING_NAMES.map((name) => ({
         name,
-        polyline: generateEasingPolyline(name, 36, 36),
+        polyline: generateEasingPolyline(name, THUMB, THUMB),
         isPreset: PRESET_NAMES.has(name),
       })),
     []
@@ -297,21 +302,26 @@ export function EaseCurveNode({ id, data, selected }: NodeProps<EaseCurveNodeTyp
             style={{
               top: presetsButtonRef.current?.getBoundingClientRect().bottom || 0,
               right: window.innerWidth - (presetsButtonRef.current?.getBoundingClientRect().right || 0),
-              width: 280,
+              width: 480,
             }}
           >
-            <div className="grid grid-cols-4 gap-1">
+            <div className="grid grid-cols-4 gap-1.5">
               {presetThumbnails.map(({ name, polyline }) => (
                 <button
                   key={name}
                   onClick={() => handleSelectEasing(name)}
-                  className="nodrag nopan p-1 bg-neutral-900 hover:bg-neutral-700 rounded flex flex-col items-center gap-1 transition-colors"
+                  className="nodrag nopan aspect-square p-2 bg-neutral-900 hover:bg-neutral-700 rounded flex flex-col items-center justify-between transition-colors"
                   title={name}
                 >
-                  <svg width="36" height="36" viewBox="0 0 36 36" className="flex-shrink-0">
-                    <polyline points={polyline} fill="none" stroke="#a3a3a3" strokeWidth="1.5" />
+                  <svg
+                    className="flex-1 min-h-0 w-full"
+                    viewBox={`${-THUMB_PAD} ${-THUMB_PAD} ${THUMB + THUMB_PAD * 2} ${THUMB + THUMB_PAD * 2}`}
+                    preserveAspectRatio="xMidYMid meet"
+                    overflow="visible"
+                  >
+                    <polyline points={polyline} fill="none" stroke="#a3a3a3" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                  <span className="text-[8px] text-neutral-400 text-center break-words w-full">{name}</span>
+                  <span className="text-[11px] text-neutral-300 text-center whitespace-nowrap overflow-hidden text-ellipsis w-full shrink-0">{name}</span>
                 </button>
               ))}
             </div>

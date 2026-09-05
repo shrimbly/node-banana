@@ -7,6 +7,10 @@ import { NodeType } from "@/types";
 import { useReactFlow } from "@xyflow/react";
 import { ModelSearchDialog } from "./modals/ModelSearchDialog";
 import { useFTUXStore, TutorialStep } from "@/store/ftuxStore";
+import type { EdgeStyle } from "@/types";
+
+/** The action-bar button cycles curved → angular → straight → curved. */
+const NEXT_EDGE_STYLE: Record<EdgeStyle, EdgeStyle> = { curved: "angular", angular: "straight", straight: "curved" };
 
 // All nodes menu categories
 const ALL_NODES_CATEGORIES: { label: string; nodes: { type: NodeType; label: string }[] }[] = [
@@ -325,6 +329,7 @@ export function FloatingActionBar() {
     validateWorkflow,
     edgeStyle,
     setEdgeStyle,
+    setAllEdgesHidden,
     setModelSearchOpen,
     modelSearchOpen,
     modelSearchProvider,
@@ -340,6 +345,7 @@ export function FloatingActionBar() {
     validateWorkflow: state.validateWorkflow,
     edgeStyle: state.edgeStyle,
     setEdgeStyle: state.setEdgeStyle,
+    setAllEdgesHidden: state.setAllEdgesHidden,
     setModelSearchOpen: state.setModelSearchOpen,
     modelSearchOpen: state.modelSearchOpen,
     modelSearchProvider: state.modelSearchProvider,
@@ -441,7 +447,14 @@ export function FloatingActionBar() {
   }, [tutorialActive, currentTutorialStep, tutorialSteps]);
 
   const toggleEdgeStyle = () => {
-    setEdgeStyle(edgeStyle === "angular" ? "curved" : "angular");
+    setEdgeStyle(NEXT_EDGE_STYLE[edgeStyle]);
+  };
+
+  // Hidden connections: the eye shows how many are hidden and toggles them all
+  const hiddenEdgeCount = useWorkflowStore((state) => state.edges.filter((e) => e.data?.hidden).length);
+  const totalEdgeCount = useWorkflowStore((state) => state.edges.length);
+  const toggleHiddenEdges = () => {
+    setAllEdgesHidden(hiddenEdgeCount === 0);
   };
 
   const handleRunClick = useCallback(() => {
@@ -506,17 +519,44 @@ export function FloatingActionBar() {
 
         <button
           onClick={toggleEdgeStyle}
-          title={`Switch to ${edgeStyle === "angular" ? "curved" : "angular"} connectors`}
+          title={`Switch to ${NEXT_EDGE_STYLE[edgeStyle]} connectors`}
           className="p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors"
         >
           {edgeStyle === "angular" ? (
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 12h4l4-8 4 8h4" />
             </svg>
+          ) : edgeStyle === "straight" ? (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16L20 8" />
+            </svg>
           ) : (
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M4 12c0 0 4-8 8-8s8 8 8 8" />
             </svg>
+          )}
+        </button>
+
+        <button
+          onClick={toggleHiddenEdges}
+          disabled={totalEdgeCount === 0}
+          title={hiddenEdgeCount > 0 ? `Show ${hiddenEdgeCount} hidden connection${hiddenEdgeCount === 1 ? "" : "s"}` : "Hide all connections"}
+          className="relative p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          {hiddenEdgeCount > 0 ? (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 5.1A9.8 9.8 0 0112 5c4.5 0 8.3 2.9 9.6 7a10 10 0 01-2.2 3.6M6.6 6.6A10 10 0 002.4 12c1.3 4.1 5.1 7 9.6 7 1.4 0 2.8-.3 4-.8" />
+            </svg>
+          ) : (
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.4 12C3.7 7.9 7.5 5 12 5s8.3 2.9 9.6 7c-1.3 4.1-5.1 7-9.6 7s-8.3-2.9-9.6-7z" />
+              <circle cx="12" cy="12" r="3" />
+            </svg>
+          )}
+          {hiddenEdgeCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-1 rounded-full bg-neutral-600 text-[9px] leading-[14px] font-semibold text-neutral-100 text-center">
+              {hiddenEdgeCount}
+            </span>
           )}
         </button>
 

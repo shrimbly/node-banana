@@ -41,7 +41,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const removeEdge = useWorkflowStore((state) => state.removeEdge);
   const videoBlobUrl = useVideoBlobUrl(nodeData.outputVideo ?? null);
-  const videoAutoplayRef = useVideoAutoplay(id, selected);
+  const videoAutoplayRef = useVideoAutoplay(id);
   const [expanded, setExpanded] = useState(true);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
