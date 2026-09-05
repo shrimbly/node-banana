@@ -1,5 +1,6 @@
 "use client";
 
+import { MenuEmpty, MenuFooter, MenuHeader, MenuHint, MenuItem, MenuList, MenuSectionLabel, MenuSurface } from "@/components/ui/Menu";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { NodeType } from "@/types";
 import { useSavedComfyNodes } from "@/hooks/useSavedComfyNodes";
@@ -119,12 +120,12 @@ export function NodeSearchMenu({ position, onSelect, onClose }: NodeSearchMenuPr
   const top = Math.max(8, Math.min(position.y, viewportH - MENU_MAX_HEIGHT - 8));
 
   return (
-    <div
+    <MenuSurface
       ref={menuRef}
-      className="fixed z-100 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl overflow-hidden w-56 outline-none"
+      className="w-56"
       style={{ left, top }}
     >
-      <div className="px-2 py-1.5 border-b border-neutral-700">
+      <MenuHeader>
         <input
           ref={inputRef}
           value={search}
@@ -134,24 +135,21 @@ export function NodeSearchMenu({ position, onSelect, onClose }: NodeSearchMenuPr
           className="w-full bg-transparent text-[11px] text-neutral-100 placeholder-neutral-500 outline-none"
           aria-label="Search nodes"
         />
-      </div>
-      <div ref={listRef} className="py-1 max-h-64 overflow-y-auto overscroll-contain nowheel">
+      </MenuHeader>
+      <MenuList ref={listRef} className="max-h-64 overflow-y-auto overscroll-contain nowheel">
         {filtered.length === 0 ? (
-          <div className="px-3 py-2 text-[11px] text-neutral-500">
-            No matching nodes
-          </div>
+          <MenuEmpty>No matching nodes</MenuEmpty>
         ) : (
           filtered.map((option, index) => (
             <Fragment key={optionKey(option)}>
               {/* Once, above the first of them — the built-ins above are a
                   fixed set, these are the user's own. */}
               {option.savedNodeId && !filtered[index - 1]?.savedNodeId && (
-                <div className="px-3 pt-2 pb-1 text-[9px] uppercase tracking-wide text-neutral-500">
-                  Saved nodes
-                </div>
+                <MenuSectionLabel className="px-3 pt-2 pb-1">Saved nodes</MenuSectionLabel>
               )}
-            <button
+            <MenuItem
               data-index={index}
+              selected={index === selectedIndex}
               onClick={() => onSelect(option.type as NodeType, option.savedNodeId)}
               onMouseMove={(e) => {
                 // Only re-select on genuine cursor movement. When keyboard nav
@@ -163,31 +161,20 @@ export function NodeSearchMenu({ position, onSelect, onClose }: NodeSearchMenuPr
                 lastPointerRef.current = { x: e.clientX, y: e.clientY };
                 setSelectedIndex(index);
               }}
-              className={`w-full px-3 py-2 text-left text-[11px] font-medium flex items-center gap-2 transition-colors ${
-                index === selectedIndex
-                  ? "bg-neutral-700 text-neutral-100"
-                  : "text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100"
-              }`}
             >
               {option.icon}
               {/* min-w-0, or a long saved-node name pushes the menu wider
                   instead of ellipsing. */}
               <span className="min-w-0 truncate">{option.label}</span>
-            </button>
+            </MenuItem>
             </Fragment>
           ))
         )}
-      </div>
-      <div className="px-2 py-1.5 border-t border-neutral-700 flex items-center justify-between">
-        <span className="text-[9px] text-neutral-500">
-          <kbd className="px-1 py-0.5 bg-neutral-700 rounded text-[8px]">↑↓</kbd>{" "}
-          navigate
-        </span>
-        <span className="text-[9px] text-neutral-500">
-          <kbd className="px-1 py-0.5 bg-neutral-700 rounded text-[8px]">↵</kbd>{" "}
-          add
-        </span>
-      </div>
-    </div>
+      </MenuList>
+      <MenuFooter>
+        <MenuHint keys="↑↓">navigate</MenuHint>
+        <MenuHint keys="↵">add</MenuHint>
+      </MenuFooter>
+    </MenuSurface>
   );
 }

@@ -1,5 +1,6 @@
 "use client";
 
+import { MenuSurface } from "@/components/ui/Menu";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EdgeLabelRenderer, useViewport } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -92,8 +93,10 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
         onClick={(e) => e.stopPropagation()}
         onKeyDown={(e) => e.stopPropagation()}
       >
-        <div
-          className="relative flex items-center gap-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl p-1"
+        <MenuSurface
+          variant="bar"
+          floating={false}
+          className="relative"
           style={{ transform: `translate(-50%, calc(-100% - 12px)) scale(${1 / zoom})`, transformOrigin: "bottom center" }}
         >
           {grouped && (
@@ -238,7 +241,7 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
             aria-hidden="true"
             className="absolute left-1/2 -bottom-[5px] w-2 h-2 -ml-1 bg-neutral-800 border-r border-b border-neutral-600 rotate-45"
           />
-        </div>
+        </MenuSurface>
       </div>
     </EdgeLabelRenderer>
   );

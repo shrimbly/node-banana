@@ -83,20 +83,20 @@ export interface MenuItemProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   selected?: boolean;
 }
 
+/** Item classes alone, for a row that must be an `<a>` or keep its own element. */
+export const menuItemClass = cn(
+  "w-full px-3 py-2 text-left text-[11px] font-medium flex items-center gap-2 transition-colors",
+  "focus-visible:outline-none focus-visible:bg-neutral-700 focus-visible:text-neutral-100",
+  "disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent",
+  "text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100"
+);
+
 export function MenuItem({ selected = false, className, type = "button", children, ...rest }: MenuItemProps) {
   return (
     <button
       {...rest}
       type={type}
-      className={cn(
-        "w-full px-3 py-2 text-left text-[11px] font-medium flex items-center gap-2 transition-colors",
-        "focus-visible:outline-none focus-visible:bg-neutral-700 focus-visible:text-neutral-100",
-        "disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent",
-        selected
-          ? "bg-neutral-700 text-neutral-100"
-          : "text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100",
-        className
-      )}
+      className={cn(menuItemClass, selected && "bg-neutral-700 text-neutral-100", className)}
     >
       {children}
     </button>
@@ -134,11 +134,15 @@ export function MenuHint({ keys, children }: { keys: string; children: ReactNode
 }
 
 /** Rule between groups: a line across a list, a short vertical tick in a bar. */
-export function MenuDivider({ variant = "list", className }: { variant?: "list" | "bar"; className?: string }) {
+export function MenuDivider({
+  variant = "list",
+  className,
+  ...rest
+}: HTMLAttributes<HTMLDivElement> & { variant?: "list" | "bar" }) {
   return variant === "bar" ? (
-    <div className={cn("w-px h-4 bg-neutral-600", className)} />
+    <div {...rest} className={cn("w-px h-4 bg-neutral-600", className)} />
   ) : (
-    <div className={cn("border-t border-chrome-border", className)} />
+    <div {...rest} className={cn("border-t border-chrome-border", className)} />
   );
 }
 

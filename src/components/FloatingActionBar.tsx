@@ -1,5 +1,6 @@
 "use client";
 
+import { MenuItem, MenuSectionLabel, MenuSurface } from "@/components/ui/Menu";
 import { useRef, useState, useEffect, useMemo, useCallback, type ReactNode } from "react";
 import { ChromeIconButton, type ChromeIconButtonProps } from "./ChromeIconButton";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -11,10 +12,7 @@ import { useFTUXStore, TutorialStep } from "@/store/ftuxStore";
 import type { EdgeStyle } from "@/types";
 import {
   CHROME_DIVIDER,
-  CHROME_MENU,
-  CHROME_MENU_HEADING,
   CHROME_MENU_HINT,
-  CHROME_MENU_ITEM,
   CHROME_SURFACE,
 } from "./chromeStyles";
 
@@ -265,23 +263,22 @@ function GenerateMenu() {
       </IconButton>
 
       {isOpen && (
-        <div className={`${CHROME_MENU} left-0 min-w-[168px]`} role="menu">
+        <MenuSurface floating={false} role="menu" className="absolute bottom-full left-0 z-20 mb-2 min-w-[168px] py-1">
           {GENERATORS.map((g) => (
-            <button
+            <MenuItem
               key={g.type}
-              type="button"
               role="menuitem"
               onClick={() => handleAddNode(g.type)}
               draggable
               onDragStart={(e) => { dragStart(e, g.type); setIsOpen(false); }}
-              className={`${CHROME_MENU_ITEM} cursor-grab active:cursor-grabbing`}
+              className="cursor-grab active:cursor-grabbing"
             >
               <span className="text-neutral-300">{g.icon}</span>
               {g.label}
               {g.shortcut && <span className={CHROME_MENU_HINT}>{g.shortcut}</span>}
-            </button>
+            </MenuItem>
           ))}
-        </div>
+        </MenuSurface>
       )}
     </div>
   );
@@ -312,26 +309,32 @@ function AllNodesMenu() {
       </IconButton>
 
       {isOpen && (
-        <div className={`${CHROME_MENU} left-0 max-h-[400px] min-w-[188px] overflow-y-auto`} role="menu">
-          {ALL_NODES_CATEGORIES.map((category) => (
+        <MenuSurface
+          floating={false}
+          role="menu"
+          className="absolute bottom-full left-0 z-20 mb-2 max-h-[400px] min-w-[188px] overflow-y-auto"
+        >
+          {ALL_NODES_CATEGORIES.map((category, catIndex) => (
             <div key={category.label}>
-              <div className={CHROME_MENU_HEADING}>{category.label}</div>
+              <MenuSectionLabel className={`px-3 py-1${catIndex > 0 ? " border-t border-chrome-border" : ""}`}>
+                {category.label}
+              </MenuSectionLabel>
               {category.nodes.map((node) => (
-                <button
+                <MenuItem
                   key={node.type}
                   type="button"
                   role="menuitem"
                   onClick={() => handleAddNode(node.type)}
                   draggable
                   onDragStart={(e) => { dragStart(e, node.type); setIsOpen(false); }}
-                  className={`${CHROME_MENU_ITEM} cursor-grab active:cursor-grabbing`}
+                  className="cursor-grab active:cursor-grabbing"
                 >
                   {node.label}
-                </button>
+                </MenuItem>
               ))}
             </div>
           ))}
-        </div>
+        </MenuSurface>
       )}
     </div>
   );
@@ -631,52 +634,44 @@ export function FloatingActionBar() {
 
           {/* Dropdown menu */}
           {runMenuOpen && !isRunning && (
-            <div data-tutorial="floating-run-menu" className={`${CHROME_MENU} right-0 min-w-[196px]`} role="menu">
-              <button
-                type="button"
+            <MenuSurface floating={false} role="menu" data-tutorial="floating-run-menu" className="absolute bottom-full right-0 z-20 mb-2 min-w-[196px] py-1">
+              <MenuItem
                 role="menuitem"
                 onClick={() => {
                   executeWorkflow();
                   setRunMenuOpen(false);
                 }}
-                className={CHROME_MENU_ITEM}
               >
                 <PlayIcon />
                 Run entire workflow
                 <span className={CHROME_MENU_HINT}>{modKey}↵</span>
-              </button>
-              <button
-                type="button"
+              </MenuItem>
+              <MenuItem
                 role="menuitem"
                 onClick={handleRunFromSelected}
                 disabled={!selectedNode}
-                className={CHROME_MENU_ITEM}
                 title={!selectedNode ? "Select a single node first" : undefined}
               >
                 <svg className="h-3.5 w-3.5" {...iconProps} strokeWidth={2}>
                   <path d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                 </svg>
                 Run from selected node
-              </button>
-              <button
-                type="button"
+              </MenuItem>
+              <MenuItem
                 role="menuitem"
                 onClick={handleRunSelectedOnly}
                 disabled={!selectedNode}
-                className={CHROME_MENU_ITEM}
                 title={!selectedNode ? "Select a single node first" : undefined}
               >
                 <svg className="h-3.5 w-3.5" {...iconProps} strokeWidth={2}>
                   <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
                 </svg>
                 Run selected node only
-              </button>
-              <button
-                type="button"
+              </MenuItem>
+              <MenuItem
                 role="menuitem"
                 onClick={handleRunSelectedNodes}
                 disabled={selectedNodes.length === 0}
-                className={CHROME_MENU_ITEM}
                 title={selectedNodes.length === 0 ? "Select one or more nodes first" : `Run ${selectedNodes.length} selected node${selectedNodes.length > 1 ? 's' : ''}`}
               >
                 <svg className="h-3.5 w-3.5" {...iconProps} strokeWidth={2}>
@@ -686,8 +681,8 @@ export function FloatingActionBar() {
                 {selectedNodes.length > 0
                   ? `Run ${selectedNodes.length} selected node${selectedNodes.length !== 1 ? 's' : ''}`
                   : 'Run selected nodes'}
-              </button>
-            </div>
+              </MenuItem>
+            </MenuSurface>
           )}
         </div>
       </div>
