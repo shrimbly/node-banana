@@ -172,7 +172,7 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTitle("Switch to straight connectors")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Switch to straight connectors" })).toBeInTheDocument();
       });
     });
   });
@@ -397,7 +397,7 @@ describe("FloatingActionBar", () => {
   });
 
   describe("Browse Models Button", () => {
-    it("should render All models button with Browse models title", async () => {
+    it("should render All models button", async () => {
       render(
         <TestWrapper>
           <FloatingActionBar />
@@ -405,7 +405,6 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTitle("Browse models")).toBeInTheDocument();
         expect(screen.getByRole("button", { name: "All models" })).toBeInTheDocument();
       });
     });
@@ -512,10 +511,10 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTitle("Switch to straight connectors")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Switch to straight connectors" })).toBeInTheDocument();
       });
 
-      const toggleButton = screen.getByTitle("Switch to straight connectors");
+      const toggleButton = screen.getByRole("button", { name: "Switch to straight connectors" });
       fireEvent.click(toggleButton);
 
       expect(mockSetEdgeStyle).toHaveBeenCalledWith("straight");
@@ -535,10 +534,10 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTitle("Switch to curved connectors")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Switch to curved connectors" })).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByTitle("Switch to curved connectors"));
+      fireEvent.click(screen.getByRole("button", { name: "Switch to curved connectors" }));
 
       expect(mockSetEdgeStyle).toHaveBeenCalledWith("curved");
     });
@@ -557,10 +556,10 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTitle("Switch to angular connectors")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Switch to angular connectors" })).toBeInTheDocument();
       });
 
-      const toggleButton = screen.getByTitle("Switch to angular connectors");
+      const toggleButton = screen.getByRole("button", { name: "Switch to angular connectors" });
       fireEvent.click(toggleButton);
 
       expect(mockSetEdgeStyle).toHaveBeenCalledWith("angular");
@@ -840,7 +839,7 @@ describe("Hidden connections toggle", () => {
         <FloatingActionBar />
       </TestWrapper>
     );
-    await waitFor(() => expect(screen.getByTitle("Hide all connections")).toBeDisabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Hide all connections" })).toBeDisabled());
   });
 
   it("hides every connection when none are hidden", async () => {
@@ -852,8 +851,8 @@ describe("Hidden connections toggle", () => {
         <FloatingActionBar />
       </TestWrapper>
     );
-    await waitFor(() => expect(screen.getByTitle("Hide all connections")).toBeEnabled());
-    fireEvent.click(screen.getByTitle("Hide all connections"));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Hide all connections" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Hide all connections" }));
     expect(mockSetAllEdgesHidden).toHaveBeenCalledWith(true);
   });
 
@@ -866,7 +865,7 @@ describe("Hidden connections toggle", () => {
         <FloatingActionBar />
       </TestWrapper>
     );
-    const button = await screen.findByTitle("Show 2 hidden connections");
+    const button = await screen.findByRole("button", { name: "Show 2 hidden connections" });
     // The count badge sits beside the button, inside the same group.
     expect(button.parentElement).toHaveTextContent("2");
     fireEvent.click(button);

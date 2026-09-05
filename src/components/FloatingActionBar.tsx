@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, useMemo, useCallback, type ReactNode } from "react";
+import { ChromeIconButton as IconButton } from "./ChromeIconButton";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { useShallow } from "zustand/shallow";
 import { NodeType } from "@/types";
@@ -10,8 +11,6 @@ import { useFTUXStore, TutorialStep } from "@/store/ftuxStore";
 import type { EdgeStyle } from "@/types";
 import {
   CHROME_DIVIDER,
-  CHROME_ICON_BUTTON,
-  CHROME_ICON_BUTTON_OPEN,
   CHROME_MENU,
   CHROME_MENU_HEADING,
   CHROME_MENU_HINT,
@@ -164,53 +163,6 @@ const SpinnerIcon = () => (
 );
 
 // ---- Primitives -------------------------------------------------------------------
-
-/**
- * Hover label for an icon-only button. CSS-driven (300ms delay, fades in on
- * hover and on keyboard focus), so it never fights the popover state.
- */
-function Tooltip({ label, shortcut }: { label: string; shortcut?: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="pointer-events-none absolute bottom-full left-1/2 z-10 mb-2.5 flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-md squircle border border-white/10 bg-neutral-950 py-1 pl-2 pr-1.5 text-[10px] font-medium leading-3 text-neutral-200 opacity-0 shadow-[0_4px_12px_rgba(0,0,0,0.5)] transition-opacity delay-300 duration-[120ms] group-hover:opacity-100 group-focus-within:opacity-100"
-    >
-      {label}
-      {shortcut && (
-        <kbd className="rounded-[3px] border border-white/6 bg-white/6 px-1 font-sans text-[9px] text-neutral-500">
-          {shortcut}
-        </kbd>
-      )}
-    </span>
-  );
-}
-
-interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  label: string;
-  shortcut?: string;
-  open?: boolean;
-  /** Suppress the tooltip (while this button's own popover is up). */
-  silent?: boolean;
-  badge?: ReactNode;
-  children: ReactNode;
-}
-
-function IconButton({ label, shortcut, open = false, silent = false, badge, className = "", children, ...rest }: IconButtonProps) {
-  return (
-    <div className="group relative flex">
-      <button
-        type="button"
-        aria-label={label}
-        className={`${CHROME_ICON_BUTTON} ${open ? CHROME_ICON_BUTTON_OPEN : ""} ${className}`}
-        {...rest}
-      >
-        {children}
-      </button>
-      {badge}
-      {!silent && <Tooltip label={label} shortcut={shortcut} />}
-    </div>
-  );
-}
 
 function Divider() {
   return <div className={CHROME_DIVIDER} />;
@@ -608,18 +560,17 @@ export function FloatingActionBar() {
         <Divider />
 
         <AllNodesMenu />
-        <IconButton label="All models" title="Browse models" onClick={() => setModelSearchOpen(true)}>
+        <IconButton label="All models" onClick={() => setModelSearchOpen(true)}>
           <CubeIcon />
         </IconButton>
 
         <Divider />
 
-        <IconButton label={edgeStyleLabel} title={edgeStyleLabel} onClick={toggleEdgeStyle}>
+        <IconButton label={edgeStyleLabel} onClick={toggleEdgeStyle}>
           <EdgeStyleIcon style={edgeStyle} />
         </IconButton>
         <IconButton
           label={hiddenEdgesLabel}
-          title={hiddenEdgesLabel}
           open={hiddenEdgeCount > 0}
           disabled={totalEdgeCount === 0}
           onClick={toggleHiddenEdges}

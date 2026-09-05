@@ -10,7 +10,8 @@ import {
   useViewport,
   type Node,
 } from "@xyflow/react";
-import { CHROME_DIVIDER, CHROME_ICON_BUTTON, CHROME_ICON_BUTTON_OPEN, CHROME_SURFACE } from "./chromeStyles";
+import { ChromeIconButton } from "./ChromeIconButton";
+import { CHROME_DIVIDER, CHROME_SURFACE } from "./chromeStyles";
 
 /**
  * The navigator: minimap on top, one row of canvas controls beneath. Hiding
@@ -75,17 +76,9 @@ interface ControlButtonProps {
 
 function ControlButton({ label, disabled, onClick, on = false, pressed, children }: ControlButtonProps) {
   return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      aria-pressed={pressed}
-      disabled={disabled}
-      onClick={onClick}
-      className={`${CHROME_ICON_BUTTON} ${on ? CHROME_ICON_BUTTON_OPEN : ""}`}
-    >
+    <ChromeIconButton label={label} aria-pressed={pressed} open={on} disabled={disabled} onClick={onClick}>
       {children}
-    </button>
+    </ChromeIconButton>
   );
 }
 
