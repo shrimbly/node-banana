@@ -129,7 +129,7 @@ export function EaseCurveNode({ id, data, selected }: NodeProps<EaseCurveNodeTyp
     () =>
       ALL_EASING_NAMES.map((name) => ({
         name,
-        polyline: generateEasingPolyline(name, 36, 36),
+        polyline: generateEasingPolyline(name, 44, 44),
         isPreset: PRESET_NAMES.has(name),
       })),
     []
@@ -297,7 +297,7 @@ export function EaseCurveNode({ id, data, selected }: NodeProps<EaseCurveNodeTyp
             style={{
               top: presetsButtonRef.current?.getBoundingClientRect().bottom || 0,
               right: window.innerWidth - (presetsButtonRef.current?.getBoundingClientRect().right || 0),
-              width: 280,
+              width: 460,
             }}
           >
             <div className="grid grid-cols-4 gap-1">
@@ -308,10 +308,10 @@ export function EaseCurveNode({ id, data, selected }: NodeProps<EaseCurveNodeTyp
                   className="nodrag nopan p-1 bg-neutral-900 hover:bg-neutral-700 rounded flex flex-col items-center gap-1 transition-colors"
                   title={name}
                 >
-                  <svg width="36" height="36" viewBox="0 0 36 36" className="flex-shrink-0">
+                  <svg width="44" height="44" viewBox="0 0 44 44" className="flex-shrink-0">
                     <polyline points={polyline} fill="none" stroke="#a3a3a3" strokeWidth="1.5" />
                   </svg>
-                  <span className="text-[8px] text-neutral-400 text-center break-words w-full">{name}</span>
+                  <span className="text-[10px] text-neutral-300 text-center whitespace-nowrap overflow-hidden text-ellipsis w-full">{name}</span>
                 </button>
               ))}
             </div>
