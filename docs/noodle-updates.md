@@ -37,7 +37,7 @@ colour override.
 
 - [x] Re-plug a connection by dragging its end (`reconnectEdge` in the store, `onReconnect` on the canvas), keeping pause and order data and re-checking the loop
 - [x] The edge toolbar is rendered by the edge itself at the path midpoint (`EdgeLabelRenderer`), counter-scaled with the zoom
-- [x] Selected edges render above nodes (`elevateEdgesOnSelect`); hover and selection use the edge's own active stroke via `--edge-stroke-active`
+- [x] Noodles always sit beneath nodes, selected or not (`elevateEdgesOnSelect` is off, since a lifted noodle crossed the node it fed); hover and selection use the edge's own active stroke via `--edge-stroke-active`
 - [x] Offset handle stays angular-only. Decision: curved and straight lines have nothing to bend; offsets saved in angular mode are simply ignored in the other styles
 - [x] Multi-select edges: the first selected edge carries the toolbar, which pauses or deletes the whole selection (`removeEdges`, `setEdgesPause`)
 
@@ -74,7 +74,7 @@ the same two nodes", which is not a real case; rebuilt around a shared handle.
 
 - [x] Bundling is deliberate only. Decision (2026-09-03): the automatic modes went; a single click on a handle opens an icon bar centred above it (`HandleMenu`): the connection count, then Bundle (or Unbundle), Hide (or Show) and Remove all, for every connection on that handle. A drag on the handle still starts a connection; the pointer-down position tells the two apart, and React Flow's click-to-connect is off. An edge can be bundled at both ends
 - [x] Bundles are stored per end on the members (`sourceBundleId` / `targetBundleId`), so a fan-out bundled at its output can also be bundled at any of its inputs; the clamp can travel up to 4000px along the stem; the edge toolbar can also bundle a multi-selection that shares a handle and unbundle
-- [x] The first member draws a short shared stem at the handle; every member starts (or ends) past the stem. A glassy clamp (cable tie) sits at the split point and drags along the stem to move it, stored per handle on the node as `bundleClamps`; its tooltip carries the count. The clamp sits above elevated edges (z-index), since a selected node lifts the edge SVG over the label layer and the stem would otherwise take the press. Expands when a member is selected. Decision: no hover expansion, since members cannot share hover state without extra store traffic and selection already expands it
+- [x] The first member draws a short shared stem at the handle; every member starts (or ends) past the stem. A glassy clamp (cable tie) sits at the split point and drags along the stem to move it, stored per handle on the node as `bundleClamps`; its tooltip carries the count. The clamp keeps a high z-index in the label layer so an edge's own SVG can never take the press. Expands when a member is selected. Decision: no hover expansion, since members cannot share hover state without extra store traffic and selection already expands it
 - [x] Toolbar acts on the whole bundle: pause, hide, delete. No label or colour on bundles (colours are not user-changeable; a bundle label would hide the members' own)
 - [x] Bundle vs Router: a bundle is drawing only and keeps every connection as it is; a Router node is a real hub that fans one input out to many nodes at execution time. Use a bundle to tidy parallel wires, a Router to share one source
 
@@ -96,7 +96,7 @@ the same two nodes", which is not a real case; rebuilt around a shared handle.
 | Overview mode | `OVERVIEW_EDGES` in `WorkflowCanvas.tsx` | Already renders zero edges as a perf trick |
 | Router node | `RouterNode.tsx`, `src/store/utils/connectedInputs.ts` | The only way to bundle wiring today. Passthrough hub with dynamic typed handles, resolved at execution via `passthroughCache` |
 | Dimming | `src/store/utils/dimmingUtils.ts`, `dimmedNodeIds` | Node-level only (Switch outputs); edges just follow selection |
-| React Flow features in use | `onReconnect`, `elevateEdgesOnSelect`, `EdgeLabelRenderer` | Wired up in item 2; item 4 builds labels on the same renderer |
+| React Flow features in use | `onReconnect`, `EdgeLabelRenderer` | Wired up in item 2; item 4 builds labels on the same renderer |
 | Tests | `src/components/__tests__/{EditableEdge,ReferenceEdge,EdgeToolbar,WorkflowCanvas}.test.tsx`, `src/store/utils/__tests__/loopEdge.test.ts`, `src/store/__tests__/loopEdge.integration.test.ts` | |
 
 ## Open questions

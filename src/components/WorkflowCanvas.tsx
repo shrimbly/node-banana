@@ -2425,7 +2425,6 @@ export function WorkflowCanvas() {
         edgeTypes={edgeTypes}
         isValidConnection={isValidConnection}
         connectOnClick={false}
-        elevateEdgesOnSelect
         fitView
         deleteKeyCode={isModalOpen ? null : ["Backspace", "Delete"]}
         multiSelectionKeyCode="Shift"
