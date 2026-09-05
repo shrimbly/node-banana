@@ -10,7 +10,6 @@ import { SplitGridTemplateModal } from "../splitgrid/SplitGridTemplateModal";
 import {
   clampGridDimension,
   getSplitGridCells,
-  getSplitGridTemplate,
   needsMaterialization,
   resolveGridOffsets,
   gridFractions,
