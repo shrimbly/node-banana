@@ -2,21 +2,18 @@
 
 /**
  * Node components for the split-grid cell template editor (the mini canvas).
- * Each card mirrors the real node it will instantiate — same fullBleed card
- * chrome, floating uppercase header, handle ids/positions, and (for the
- * generate node) the same settings surface as GenerateImageNode: gemini
- * controls, external-provider ModelParameters, and the ModelSearchDialog
- * browser for the full multi-provider model catalog.
+ * Each card mirrors the real node it will instantiate — the same NodeShell
+ * anatomy (media card, sockets in the border, controls card), floating
+ * uppercase header, handle ids, and (for the generate node) the same settings
+ * surface as GenerateImageNode: gemini controls, external-provider
+ * ModelParameters, and the ModelSearchDialog browser for the full
+ * multi-provider model catalog.
  */
 
-import { createContext, memo, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useState } from "react";
 import {
   BaseEdge,
   getBezierPath,
-  Handle,
-  NodeResizer,
-  Position,
-  useReactFlow,
   type EdgeProps,
   type NodeProps,
   type Node,
@@ -34,8 +31,20 @@ import { GEMINI_IMAGE_MODELS } from "@/types";
 import type { ProviderModel } from "@/lib/providers/types";
 import { ModelSearchDialog } from "../modals/ModelSearchDialog";
 import { ModelParameters } from "../nodes/ModelParameters";
-import { InlineParameterPanel } from "../nodes/InlineParameterPanel";
 import { ProviderBadge } from "../nodes/ProviderBadge";
+import { NodeShell } from "../nodes/NodeShell";
+import {
+  CheckboxField,
+  ControlsCard,
+  EmptyState,
+  RangeField,
+  SelectField,
+  SummaryValues,
+  SOCKET_PITCH,
+  SOCKET_TOP,
+  type SocketSpec,
+  type SocketType,
+} from "../nodes/ui";
 import { getTemplateEntry, getTemplateNodeIcon, type TemplateHandleDef } from "./templateCatalog";
 
 export interface TemplateNodeData extends Record<string, unknown> {
@@ -43,8 +52,6 @@ export interface TemplateNodeData extends Record<string, unknown> {
   overrides: Record<string, unknown>;
   isBase: boolean;
   sourceImage?: string | null;
-  /** Measured settings-panel height, subtracted when persisting node size */
-  _editorPanelHeight?: number;
 }
 
 export type TemplateRFNode = Node<TemplateNodeData, "splitGridTemplateNode">;
@@ -121,80 +128,17 @@ const LLM_MODELS: Record<LLMProvider, { value: LLMModelType; label: string }[]> 
   ],
 };
 
-// Same select/slider styling as the main nodes' inline controls
-const GEMINI_SELECT_CLASS =
-  "nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 bg-[#1a1a1a] rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white";
-const SLIDER_CLASS =
-  "nodrag nopan w-full h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-blue-500";
-
-/**
- * Grows/shrinks the node to follow its settings panel's measured height —
- * the same behavior BaseNode gives inline parameter panels on the main
- * canvas — so panel content is never clipped or scrolled. The measured
- * height is stashed in node data so persistence can subtract it.
- */
-function useAutoGrowPanel(nodeId: string) {
-  const { setNodes } = useReactFlow();
-  const panelRef = useRef<HTMLDivElement>(null);
-  const lastHeightRef = useRef(0);
-
-  useEffect(() => {
-    const el = panelRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(() => {
-      const height = el.offsetHeight;
-      if (height === 0) return;
-      const delta = height - lastHeightRef.current;
-      if (Math.abs(delta) < 2) return;
-      lastHeightRef.current = height;
-      setNodes((nodes) =>
-        nodes.map((node) => {
-          if (node.id !== nodeId) return node;
-          const currentHeight =
-            (node.height as number) ??
-            (node.style?.height as number) ??
-            node.measured?.height ??
-            0;
-          const newHeight = currentHeight + delta;
-          return {
-            ...node,
-            height: newHeight,
-            style: { ...node.style, height: newHeight },
-            data: { ...node.data, _editorPanelHeight: height },
-          };
-        })
-      );
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [nodeId, setNodes]);
-
-  return panelRef;
+/** Centre of the n-th socket on a side, from the media card's top edge. */
+export function templateHandleTop(index: number): number {
+  return SOCKET_TOP + SOCKET_PITCH * index;
 }
 
-function handleOffset(handle: TemplateHandleDef, index: number, count: number): string {
-  if (handle.top) return handle.top;
-  if (count <= 1) return "50%";
-  return `${Math.round(((index + 1) / (count + 1)) * 100)}%`;
+/** Template handle defs → shell sockets. The catalog's ids double as types. */
+function toSockets(handles: TemplateHandleDef[]): SocketSpec[] {
+  return handles.map((handle) => ({ id: handle.id, type: handle.id as SocketType, title: handle.label }));
 }
 
-function TemplateHandles({ handles, side }: { handles: TemplateHandleDef[]; side: "in" | "out" }) {
-  return (
-    <>
-      {handles.map((handle, index) => (
-        <Handle
-          key={`${side}-${handle.id}`}
-          type={side === "in" ? "target" : "source"}
-          position={side === "in" ? Position.Left : Position.Right}
-          id={handle.id}
-          data-handletype={handle.id}
-          title={handle.label}
-          style={{ top: handleOffset(handle, index, handles.length), zIndex: 10 }}
-        />
-      ))}
-    </>
-  );
-}
+const EMPTY_MEDIA_HEIGHT = 120;
 
 /** Floating uppercase title above the card — parity with FloatingNodeHeader */
 function MiniFloatingHeader({
@@ -222,40 +166,39 @@ function MiniFloatingHeader({
   );
 }
 
-/** Card chrome — parity with BaseNode's fullBleed variant */
-function MiniCard({ selected, children }: { selected: boolean; children: React.ReactNode }) {
-  return (
-    <div
-      className={`h-full w-full flex flex-col overflow-visible relative rounded-lg bg-neutral-800/50 border border-neutral-700/40 ${
-        selected ? "ring-2 ring-blue-500/40 shadow-lg shadow-blue-500/25" : ""
-      }`}
-    >
-      <div className="flex-1 min-h-0 relative">{children}</div>
-    </div>
-  );
-}
-
-function BaseImageBody({ sourceImage }: { sourceImage?: string | null }) {
-  return (
-    <div className="relative w-full h-full overflow-clip rounded-lg">
-      {sourceImage ? (
-        <>
-          <img src={sourceImage} alt="Source" className="w-full h-full object-cover rounded-lg opacity-50" />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="px-2 py-1 rounded bg-neutral-950/80 text-[10px] text-neutral-300">
-              One slice of this image per cell
-            </span>
-          </div>
-        </>
-      ) : (
-        <div className="w-full h-full bg-neutral-900/40 flex flex-col items-center justify-center rounded-lg">
-          <svg className="w-8 h-8 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-          </svg>
-          <span className="text-xs text-neutral-500 mt-2">Split image lands here</span>
-        </div>
-      )}
-    </div>
+function BaseImageBody({
+  sourceImage,
+  onAspect,
+}: {
+  sourceImage?: string | null;
+  onAspect: (aspect: number) => void;
+}) {
+  return sourceImage ? (
+    <>
+      <img
+        src={sourceImage}
+        alt="Source"
+        className="absolute inset-0 w-full h-full object-cover opacity-50"
+        onLoad={(e) => {
+          const img = e.currentTarget;
+          if (img.naturalWidth > 0 && img.naturalHeight > 0) onAspect(img.naturalWidth / img.naturalHeight);
+        }}
+      />
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="px-2 py-1 rounded bg-neutral-950/80 text-[10px] text-neutral-300">
+          One slice of this image per cell
+        </span>
+      </div>
+    </>
+  ) : (
+    <EmptyState
+      message="Split image lands here"
+      icon={
+        <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+        </svg>
+      }
+    />
   );
 }
 
@@ -267,20 +210,20 @@ function PromptBody({ nodeId, overrides }: { nodeId: string; overrides: Record<s
       value={prompt}
       onChange={(event) => setOverrides(nodeId, { ...overrides, prompt: event.target.value })}
       placeholder="Describe what to generate..."
-      className="nodrag nopan nowheel w-full h-full p-3 text-xs leading-relaxed text-neutral-100 bg-neutral-800 rounded-lg resize-none focus:outline-none placeholder:text-neutral-500"
+      className="nodrag nopan nowheel absolute inset-0 w-full h-full p-3 text-xs leading-relaxed text-neutral-100 bg-neutral-900/40 resize-none focus:outline-none placeholder:text-neutral-500"
     />
   );
 }
 
 /**
- * Generate node — same settings surface as the main canvas GenerateImageNode:
+ * Generate node settings — same surface as the main canvas GenerateImageNode:
  * gemini selects, external-provider ModelParameters, ModelSearchDialog browse.
+ * Returns the controls card and the header's Browse button.
  */
-function GenerateBody({ nodeId, overrides }: { nodeId: string; overrides: Record<string, unknown> }) {
+function useGenerateControls(nodeId: string, overrides: Record<string, unknown>) {
   const { setOverrides } = useContext(TemplateEditorContext);
   const [isParamsExpanded, setIsParamsExpanded] = useState(true);
   const [isBrowseDialogOpen, setIsBrowseDialogOpen] = useState(false);
-  const panelRef = useAutoGrowPanel(nodeId);
 
   // While the browse dialog is open, Escape must close only the dialog — not
   // bubble to the template modal's own close/discard handler
@@ -309,8 +252,8 @@ function GenerateBody({ nodeId, overrides }: { nodeId: string; overrides: Record
   const resolutions = currentModelId === "nano-banana-2" ? RESOLUTIONS_NB2 : RESOLUTIONS_PRO;
 
   const handleGeminiModelChange = useCallback(
-    (event: React.ChangeEvent<HTMLSelectElement>) => {
-      const model = event.target.value as ModelType;
+    (value: string) => {
+      const model = value as ModelType;
       const nextAspectRatios = model === "nano-banana-2" ? EXTENDED_ASPECT_RATIOS : BASE_ASPECT_RATIOS;
       const nextResolutions = model === "nano-banana-2" ? RESOLUTIONS_NB2 : RESOLUTIONS_PRO;
       setOverrides(nodeId, {
@@ -350,119 +293,80 @@ function GenerateBody({ nodeId, overrides }: { nodeId: string; overrides: Record
     [nodeId, overrides, setOverrides]
   );
 
-  return (
+  const title =
+    selectedModel?.displayName ??
+    GEMINI_IMAGE_MODELS.find((m) => m.value === currentModelId)?.label ??
+    "Select model...";
+
+  const settings = isGeminiProvider && currentModelId ? (
     <>
-      {/* Browse button — parity with the floating header's Browse action */}
-      <div className="absolute -top-[26px] right-1 pointer-events-auto z-10">
-        <button
-          onClick={() => setIsBrowseDialogOpen(true)}
-          className="nodrag nopan text-[10px] py-0.5 px-1.5 bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 rounded text-neutral-300 transition-colors"
-        >
-          Browse
-        </button>
-      </div>
+      <SelectField
+        label="Model"
+        value={currentModelId}
+        options={GEMINI_IMAGE_MODELS.map((m) => ({ value: m.value, label: m.label }))}
+        onChange={handleGeminiModelChange}
+      />
+      <SelectField
+        label="Aspect ratio"
+        value={aspectRatio}
+        options={aspectRatios}
+        onChange={(v) => setOverrides(nodeId, { ...overrides, aspectRatio: v })}
+      />
+      {supportsResolution && (
+        <SelectField
+          label="Resolution"
+          value={resolution}
+          options={resolutions}
+          onChange={(v) => setOverrides(nodeId, { ...overrides, resolution: v })}
+        />
+      )}
+      {(currentModelId === "nano-banana-pro" || currentModelId === "nano-banana-2") && (
+        <CheckboxField
+          label="Google Search"
+          checked={Boolean(overrides.useGoogleSearch)}
+          onChange={(v) => setOverrides(nodeId, { ...overrides, useGoogleSearch: v })}
+        />
+      )}
+      {currentModelId === "nano-banana-2" && (
+        <CheckboxField
+          label="Image Search"
+          checked={Boolean(overrides.useImageSearch)}
+          onChange={(v) => setOverrides(nodeId, { ...overrides, useImageSearch: v })}
+        />
+      )}
+    </>
+  ) : selectedModel?.modelId ? (
+    <ModelParameters
+      modelId={selectedModel.modelId}
+      provider={currentProvider}
+      parameters={(overrides.parameters as Record<string, unknown>) || {}}
+      onParametersChange={handleParametersChange}
+    />
+  ) : undefined;
 
-      <div className="flex flex-col h-full">
-        {/* Preview area — parity with GenerateImageNode's empty state */}
-        <div className="relative flex-1 min-h-[64px] overflow-hidden rounded-t-lg">
-          <div className="w-full h-full bg-neutral-900/40 flex flex-col items-center justify-center">
-            <span className="text-neutral-500 text-[10px]">Run to generate</span>
-          </div>
-        </div>
+  const controls = (
+    <ControlsCard
+      id={`tmpl-${nodeId}`}
+      summary={{
+        icon: <ProviderBadge provider={currentProvider} />,
+        title,
+        values: <SummaryValues items={isGeminiProvider ? [aspectRatio, supportsResolution ? resolution : null] : []} />,
+      }}
+      expanded={isParamsExpanded}
+      onToggle={() => setIsParamsExpanded((prev) => !prev)}
+    >
+      {settings}
+    </ControlsCard>
+  );
 
-        {/* Settings panel in-flow so the selection ring wraps the whole node */}
-        <div ref={panelRef} className="shrink-0 rounded-b-lg overflow-hidden">
-          <InlineParameterPanel
-            expanded={isParamsExpanded}
-            onToggle={() => setIsParamsExpanded((prev) => !prev)}
-            nodeId={`tmpl-${nodeId}`}
-          >
-            <div>
-          {isGeminiProvider && currentModelId ? (
-            <div className="space-y-1.5 max-w-[280px]">
-              <div className="flex items-center gap-2">
-                <label className="text-[11px] text-neutral-400 shrink-0">Model</label>
-                <select
-                  value={currentModelId}
-                  onChange={handleGeminiModelChange}
-                  className={GEMINI_SELECT_CLASS}
-                >
-                  {GEMINI_IMAGE_MODELS.map((m) => (
-                    <option key={m.value} value={m.value}>
-                      {m.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex items-center gap-2">
-                <label className="text-[11px] text-neutral-400 shrink-0">Aspect Ratio</label>
-                <select
-                  value={aspectRatio}
-                  onChange={(e) => setOverrides(nodeId, { ...overrides, aspectRatio: e.target.value })}
-                  className={GEMINI_SELECT_CLASS}
-                >
-                  {aspectRatios.map((ratio) => (
-                    <option key={ratio} value={ratio}>
-                      {ratio}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {supportsResolution && (
-                <div className="flex items-center gap-2">
-                  <label className="text-[11px] text-neutral-400 shrink-0">Resolution</label>
-                  <select
-                    value={resolution}
-                    onChange={(e) => setOverrides(nodeId, { ...overrides, resolution: e.target.value })}
-                    className={GEMINI_SELECT_CLASS}
-                  >
-                    {resolutions.map((res) => (
-                      <option key={res} value={res}>
-                        {res}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {(currentModelId === "nano-banana-pro" || currentModelId === "nano-banana-2") && (
-                <label className="flex items-center gap-1.5 text-[11px] text-neutral-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(overrides.useGoogleSearch)}
-                    onChange={(e) => setOverrides(nodeId, { ...overrides, useGoogleSearch: e.target.checked })}
-                    className="nodrag nopan w-3 h-3 rounded bg-[#1a1a1a] text-neutral-600 focus:ring-1 focus:ring-neutral-600 focus:ring-offset-0"
-                  />
-                  Google Search
-                </label>
-              )}
-              {currentModelId === "nano-banana-2" && (
-                <label className="flex items-center gap-1.5 text-[11px] text-neutral-300 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(overrides.useImageSearch)}
-                    onChange={(e) => setOverrides(nodeId, { ...overrides, useImageSearch: e.target.checked })}
-                    className="nodrag nopan w-3 h-3 rounded bg-[#1a1a1a] text-neutral-600 focus:ring-1 focus:ring-neutral-600 focus:ring-offset-0"
-                  />
-                  Image Search
-                </label>
-              )}
-            </div>
-          ) : (
-            selectedModel?.modelId && (
-              <ModelParameters
-                modelId={selectedModel.modelId}
-                provider={currentProvider}
-                parameters={(overrides.parameters as Record<string, unknown>) || {}}
-                onParametersChange={handleParametersChange}
-              />
-            )
-          )}
-            </div>
-          </InlineParameterPanel>
-        </div>
-      </div>
-
-      {/* Model browse dialog — the full multi-provider catalog */}
+  const browse = (
+    <>
+      <button
+        onClick={() => setIsBrowseDialogOpen(true)}
+        className="nodrag nopan text-[10px] py-0.5 px-1.5 bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 rounded text-neutral-300 transition-colors"
+      >
+        Browse
+      </button>
       {isBrowseDialogOpen && (
         <ModelSearchDialog
           isOpen={isBrowseDialogOpen}
@@ -473,26 +377,28 @@ function GenerateBody({ nodeId, overrides }: { nodeId: string; overrides: Record
       )}
     </>
   );
+
+  return { controls, browse, provider: currentProvider, title };
 }
 
 /**
- * LLM node — same inline controls as the main canvas LLMGenerateNode:
+ * LLM node settings — same controls as the main canvas LLMGenerateNode:
  * provider, model, temperature, and max tokens.
  */
-function LlmBody({ nodeId, overrides }: { nodeId: string; overrides: Record<string, unknown> }) {
+function useLlmControls(nodeId: string, overrides: Record<string, unknown>) {
   const { setOverrides } = useContext(TemplateEditorContext);
   const [isParamsExpanded, setIsParamsExpanded] = useState(true);
-  const panelRef = useAutoGrowPanel(nodeId);
 
   const provider = (overrides.provider as LLMProvider | undefined) ?? "google";
   const availableModels = LLM_MODELS[provider] ?? LLM_MODELS.google;
   const model = (overrides.model as LLMModelType | undefined) ?? availableModels[0].value;
   const temperature = typeof overrides.temperature === "number" ? overrides.temperature : 0.7;
   const maxTokens = typeof overrides.maxTokens === "number" ? overrides.maxTokens : 2048;
+  const modelLabel = availableModels.find((m) => m.value === model)?.label ?? model;
 
   const handleProviderChange = useCallback(
-    (event: React.ChangeEvent<HTMLSelectElement>) => {
-      const newProvider = event.target.value as LLMProvider;
+    (value: string) => {
+      const newProvider = value as LLMProvider;
       const next: Record<string, unknown> = {
         ...overrides,
         provider: newProvider,
@@ -506,121 +412,108 @@ function LlmBody({ nodeId, overrides }: { nodeId: string; overrides: Record<stri
   );
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Preview area — parity with the main node's empty output state */}
-      <div className="relative flex-1 min-h-[64px] overflow-hidden rounded-t-lg">
-        <div className="w-full h-full bg-neutral-900/40 flex flex-col items-center justify-center gap-1.5">
-          <span className="text-neutral-600 [&>svg]:w-8 [&>svg]:h-8">
-            {getTemplateNodeIcon("llmGenerate")}
-          </span>
-          <span className="text-neutral-500 text-[10px]">AI text generation</span>
-        </div>
-      </div>
+    <ControlsCard
+      id={`tmpl-${nodeId}`}
+      summary={{ title: modelLabel, values: <SummaryValues items={[`temp ${temperature.toFixed(2)}`]} /> }}
+      expanded={isParamsExpanded}
+      onToggle={() => setIsParamsExpanded((prev) => !prev)}
+    >
+      <SelectField label="Provider" value={provider} options={LLM_PROVIDERS} onChange={handleProviderChange} />
+      <SelectField
+        label="Model"
+        value={model}
+        options={availableModels}
+        onChange={(v) => setOverrides(nodeId, { ...overrides, model: v })}
+      />
+      <RangeField
+        label="Temperature"
+        value={temperature}
+        min={0}
+        max={provider === "anthropic" ? 1 : 2}
+        step={0.01}
+        format={(v) => v.toFixed(2)}
+        onChange={(v) => setOverrides(nodeId, { ...overrides, temperature: v })}
+      />
+      <RangeField
+        label="Max tokens"
+        value={maxTokens}
+        min={256}
+        max={16384}
+        step={256}
+        format={(v) => v.toLocaleString()}
+        onChange={(v) => setOverrides(nodeId, { ...overrides, maxTokens: v })}
+      />
+    </ControlsCard>
+  );
+}
 
-      {/* Settings panel in-flow so the selection ring wraps the whole node */}
-      <div ref={panelRef} className="shrink-0 rounded-b-lg overflow-hidden">
-        <InlineParameterPanel
-          expanded={isParamsExpanded}
-          onToggle={() => setIsParamsExpanded((prev) => !prev)}
-          nodeId={`tmpl-${nodeId}`}
-        >
-          <div className="space-y-1.5 max-w-[280px]">
-            <div className="flex items-center gap-2">
-              <label className="text-[11px] text-neutral-400 shrink-0">Provider</label>
-              <select value={provider} onChange={handleProviderChange} className={GEMINI_SELECT_CLASS}>
-                {LLM_PROVIDERS.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-center gap-2">
-              <label className="text-[11px] text-neutral-400 shrink-0">Model</label>
-              <select
-                value={model}
-                onChange={(e) => setOverrides(nodeId, { ...overrides, model: e.target.value })}
-                className={GEMINI_SELECT_CLASS}
-              >
-                {availableModels.map((m) => (
-                  <option key={m.value} value={m.value}>
-                    {m.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[11px] text-neutral-400">
-                Temperature: {temperature.toFixed(2)}
-              </label>
-              <input
-                type="range"
-                min="0"
-                max={provider === "anthropic" ? "1" : "2"}
-                step="0.01"
-                value={temperature}
-                onChange={(e) =>
-                  setOverrides(nodeId, { ...overrides, temperature: parseFloat(e.target.value) })
-                }
-                className={SLIDER_CLASS}
-              />
-            </div>
-            <div className="flex flex-col gap-0.5">
-              <label className="text-[11px] text-neutral-400">
-                Max Tokens: {maxTokens.toLocaleString()}
-              </label>
-              <input
-                type="range"
-                min="256"
-                max="16384"
-                step="256"
-                value={maxTokens}
-                onChange={(e) =>
-                  setOverrides(nodeId, { ...overrides, maxTokens: parseInt(e.target.value, 10) })
-                }
-                className={SLIDER_CLASS}
-              />
-            </div>
-          </div>
-        </InlineParameterPanel>
-      </div>
+function GenerateTemplateNode({ id, data, selected }: NodeProps<TemplateRFNode>) {
+  const entry = getTemplateEntry(data.nodeType);
+  const { controls, browse, provider, title } = useGenerateControls(id, data.overrides);
+  return (
+    <div className="relative w-full">
+      <MiniFloatingHeader title={title} provider={provider} right={browse} />
+      <NodeShell
+        id={id}
+        selected={selected}
+        media={{ kind: "fixed", height: EMPTY_MEDIA_HEIGHT }}
+        inputs={toSockets(entry.inputs)}
+        outputs={toSockets(entry.outputs)}
+        controls={controls}
+      >
+        <EmptyState message="Run to generate" />
+      </NodeShell>
+    </div>
+  );
+}
+
+function LlmTemplateNode({ id, data, selected }: NodeProps<TemplateRFNode>) {
+  const entry = getTemplateEntry(data.nodeType);
+  const controls = useLlmControls(id, data.overrides);
+  return (
+    <div className="relative w-full">
+      <MiniFloatingHeader title={entry.title} />
+      <NodeShell
+        id={id}
+        selected={selected}
+        media={{ kind: "fixed", height: 100 }}
+        inputs={toSockets(entry.inputs)}
+        outputs={toSockets(entry.outputs)}
+        controls={controls}
+      >
+        <EmptyState
+          message="AI text generation"
+          icon={<span className="[&>svg]:w-6 [&>svg]:h-6">{getTemplateNodeIcon("llmGenerate")}</span>}
+        />
+      </NodeShell>
     </div>
   );
 }
 
 function GenericBody({ nodeType, description }: { nodeType: NodeType; description: string }) {
   const icon = getTemplateNodeIcon(nodeType);
-  return (
-    <div className="w-full h-full bg-neutral-900/40 rounded-lg flex flex-col items-center justify-center gap-1.5">
-      <span className="text-neutral-600 [&>svg]:w-8 [&>svg]:h-8">{icon}</span>
-      <span className="text-xs text-neutral-500 text-center px-4">{description}</span>
-    </div>
-  );
+  return <EmptyState message={description} icon={<span className="[&>svg]:w-6 [&>svg]:h-6">{icon}</span>} />;
 }
 
-function TemplateNodeComponent({ id, data, selected }: NodeProps<TemplateRFNode>) {
+function TemplateNodeComponent(props: NodeProps<TemplateRFNode>) {
+  const { id, data, selected } = props;
   const entry = getTemplateEntry(data.nodeType);
-  const isGenerate = data.nodeType === "nanoBanana";
-  const selectedModel = data.overrides.selectedModel as SelectedModel | undefined;
-  const title = isGenerate
-    ? selectedModel?.displayName ??
-      GEMINI_IMAGE_MODELS.find((m) => m.value === data.overrides.model)?.label ??
-      entry.title
-    : entry.title;
+  const [sourceAspect, setSourceAspect] = useState<number | null>(null);
+
+  if (!data.isBase && data.nodeType === "nanoBanana") return <GenerateTemplateNode {...props} />;
+  if (!data.isBase && data.nodeType === "llmGenerate") return <LlmTemplateNode {...props} />;
+
+  const media =
+    data.isBase && data.sourceImage
+      ? { kind: "aspect" as const, aspect: sourceAspect ?? 1 }
+      : data.nodeType === "prompt"
+        ? { kind: "fixed" as const, height: 140 }
+        : { kind: "fixed" as const, height: EMPTY_MEDIA_HEIGHT };
 
   return (
-    <div className="relative h-full w-full">
-      {/* Same invisible-handle resizer as BaseNode on the main canvas */}
-      <NodeResizer
-        isVisible={selected}
-        minWidth={200}
-        minHeight={120}
-        lineClassName="!border-transparent"
-        handleClassName="!w-5 !h-5 !bg-transparent !border-none"
-      />
+    <div className="relative w-full">
       <MiniFloatingHeader
-        title={title}
-        provider={isGenerate ? selectedModel?.provider ?? "gemini" : undefined}
+        title={entry.title}
         right={
           data.isBase ? (
             <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/25">
@@ -629,22 +522,21 @@ function TemplateNodeComponent({ id, data, selected }: NodeProps<TemplateRFNode>
           ) : undefined
         }
       />
-      <MiniCard selected={selected}>
-        <TemplateHandles handles={entry.inputs} side="in" />
-        <TemplateHandles handles={entry.outputs} side="out" />
-
+      <NodeShell
+        id={id}
+        selected={selected}
+        media={media}
+        inputs={toSockets(entry.inputs)}
+        outputs={toSockets(entry.outputs)}
+      >
         {data.isBase ? (
-          <BaseImageBody sourceImage={data.sourceImage} />
+          <BaseImageBody sourceImage={data.sourceImage} onAspect={setSourceAspect} />
         ) : data.nodeType === "prompt" ? (
           <PromptBody nodeId={id} overrides={data.overrides} />
-        ) : isGenerate ? (
-          <GenerateBody nodeId={id} overrides={data.overrides} />
-        ) : data.nodeType === "llmGenerate" ? (
-          <LlmBody nodeId={id} overrides={data.overrides} />
         ) : (
           <GenericBody nodeType={data.nodeType} description={entry.description} />
         )}
-      </MiniCard>
+      </NodeShell>
     </div>
   );
 }

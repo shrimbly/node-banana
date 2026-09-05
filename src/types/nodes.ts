@@ -103,6 +103,7 @@ export interface PromptNodeData extends BaseNodeData {
   prompt: string;
   variableName?: string; // Optional variable name for use in PromptConstructor templates
   isOptional?: boolean;
+  mediaHeight?: number; // Height of the text surface, set by dragging its grip
 }
 
 export type ArraySplitMode = "delimiter" | "newline" | "regex";
@@ -131,6 +132,7 @@ export interface PromptConstructorNodeData extends BaseNodeData {
   template: string;
   outputText: string | null;
   unresolvedVars: string[];
+  mediaHeight?: number; // Height of the text surface, set by dragging its grip
 }
 
 /**
@@ -206,7 +208,6 @@ export interface NanoBananaNodeData extends BaseNodeData {
   fallbackParameters?: Record<string, unknown>; // Parameters for fallback model
   inputSchema?: ModelInputDef[]; // Model's input schema for dynamic handles
   parametersExpanded?: boolean; // Collapse state for inline parameter display
-  _settingsPanelHeight?: number; // Measured settings panel height for reload correction
   status: NodeStatus;
   error: string | null;
   imageHistory: CarouselImageItem[]; // Carousel history (IDs only)
@@ -231,7 +232,6 @@ export interface GenerateVideoNodeData extends BaseNodeData {
   fallbackParameters?: Record<string, unknown>; // Parameters for fallback model
   inputSchema?: ModelInputDef[]; // Model's input schema for dynamic handles
   parametersExpanded?: boolean; // Collapse state for inline parameter display
-  _settingsPanelHeight?: number; // Measured settings panel height for reload correction
   status: NodeStatus;
   error: string | null;
   videoHistory: CarouselVideoItem[]; // Carousel history (IDs only)
@@ -257,7 +257,6 @@ export interface Generate3DNodeData extends BaseNodeData {
   fallbackParameters?: Record<string, unknown>; // Parameters for fallback model
   inputSchema?: ModelInputDef[];
   parametersExpanded?: boolean; // Collapse state for inline parameter display
-  _settingsPanelHeight?: number; // Measured settings panel height for reload correction
   status: NodeStatus;
   error: string | null;
   fallbackModel?: SelectedModel; // JSON-compatible with Node Banana Pro
@@ -288,7 +287,6 @@ export interface GenerateAudioNodeData extends BaseNodeData {
   fallbackParameters?: Record<string, unknown>; // Parameters for fallback model
   inputSchema?: ModelInputDef[]; // Model's input schema for dynamic handles
   parametersExpanded?: boolean; // Collapse state for inline parameter display
-  _settingsPanelHeight?: number; // Measured settings panel height for reload correction
   status: NodeStatus;
   error: string | null;
   audioHistory: CarouselAudioItem[]; // Carousel history (IDs only)
@@ -315,7 +313,7 @@ export interface LLMGenerateNodeData extends BaseNodeData {
   maxTokens: number;
   fallbackParameters?: Record<string, unknown>; // Parameters for fallback model (temperature, maxTokens)
   parametersExpanded?: boolean; // Collapse state for inline parameter display
-  _settingsPanelHeight?: number; // Measured settings panel height for reload correction
+  mediaHeight?: number; // Height of the text surface, set by dragging its grip
   status: NodeStatus;
   error: string | null;
   fallbackModel?: SelectedModel; // JSON-compatible with Node Banana Pro
@@ -705,7 +703,7 @@ export interface ComfyAppNodeData extends BaseNodeData {
   /** Engine-reported status while running (e.g. "queued", "in_progress"). */
   runStatus?: string | null;
   parametersExpanded?: boolean;
-  _settingsPanelHeight?: number;
+  mediaHeight?: number; // Height of the text preview, set by dragging its grip
   /** Set when the node is created from the connection menu, so it opens the
    *  import dialog immediately — it has no handles until a workflow is chosen. */
   _autoOpenImport?: boolean;

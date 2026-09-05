@@ -69,8 +69,8 @@ import { getSavedComfyNode, seedFromSavedComfyNode } from "@/lib/comfy/library";
 import { appInputHandles } from "@/lib/comfy/nodeSchema";
 import { ComfyWordmark } from "./icons/ComfyWordmark";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
+import { getNodeSize } from "@/utils/nodeDimensions";
 import { FloatingNodeHeader } from "./nodes/FloatingNodeHeader";
-import { ControlPanel } from "./nodes/ControlPanel";
 import { detectAndSplitGrid } from "@/utils/gridSplitter";
 import { logger } from "@/utils/logger";
 import { WelcomeModal } from "./quickstart";
@@ -87,7 +87,6 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { ModelSearchDialog } from "./modals/ModelSearchDialog";
 import { LLMFallbackPopover } from "./nodes/LLMFallbackPopover";
 import { browseRegistry } from "@/utils/browseRegistry";
-import { useInlineParameters } from "@/hooks/useInlineParameters";
 import { useWheelPanZoom } from "@/hooks/useWheelPanZoom";
 import { selectCanvasOverview, setCanvasPanningClass } from "@/utils/canvasPerformance";
 import { SplitGridTemplateModal } from "./splitgrid/SplitGridTemplateModal";
@@ -177,6 +176,17 @@ const MINIMAP_CLOSE_POSITION = {
     MINIMAP_GEOMETRY.controlInset -
     MINIMAP_GEOMETRY.controlSize,
 } as const;
+
+/** Height is content-derived; a stored one must not reach React Flow's wrapper. */
+function stripNodeHeight<T extends Node>(node: T): T {
+  const styleHeight = node.style && "height" in node.style;
+  if (node.height === undefined && !styleHeight) return node;
+  const { height: _height, ...rest } = node;
+  void _height;
+  const { height: _styleHeight, ...style } = (node.style ?? {}) as Record<string, unknown>;
+  void _styleHeight;
+  return { ...rest, style } as unknown as T;
+}
 
 function getMiniMapNodeColor(node: Node): string {
   switch (node.type) {
@@ -349,9 +359,9 @@ interface ConnectionDropState {
 // Detect if running on macOS for platform-specific trackpad behavior
 const isMacOS = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 
-/** Shared ref so child components (BaseNode) can check panning state without re-rendering */
+/** Shared ref so child components (NodeShell) can check panning state without re-rendering */
 export const isPanningRef = { current: false };
-/** Shared ref so child components (BaseNode) can skip hover updates during node drags */
+/** Shared ref so child components (NodeShell) can skip hover updates during node drags */
 export const isDraggingNodeRef = { current: false };
 
 export function WorkflowCanvas() {
@@ -513,9 +523,12 @@ export function WorkflowCanvas() {
     }
   }, [tutorialActive, nodes, setCenter]);
 
-  // Apply dimming className to nodes downstream of disabled Switch outputs or skipped by optional inputs
+  // Apply dimming className to nodes downstream of disabled Switch outputs or skipped by optional inputs.
+  // Also drop any stored height: node height is derived from content by the
+  // node shell, and a stale value here would pin the wrapper.
   const allNodes = useMemo(() => {
-    return nodes.map((node) => {
+    return nodes.map((storedNode) => {
+      const node = stripNodeHeight(storedNode);
       // Never dim Switch or ConditionalSwitch nodes themselves
       if (node.type === "switch" || node.type === "conditionalSwitch") return node;
 
@@ -624,7 +637,6 @@ export function WorkflowCanvas() {
   }, [regenerateNode]);
 
   // Inline parameters mode (for showing Browse in header)
-  const { inlineParametersEnabled } = useInlineParameters();
 
   // Stable callback for expanding a node from its header
   const handleExpandNode = useCallback((nodeId: string, nodeType: string) => {
@@ -646,9 +658,7 @@ export function WorkflowCanvas() {
       // Skip if it's a group node
       if (node.id.startsWith("group-")) return;
 
-      const defaults = defaultNodeDimensions[node.type as NodeType] || { width: 300, height: 280 };
-      const nodeWidth = node.measured?.width || (node.style?.width as number) || defaults.width;
-      const nodeHeight = node.measured?.height || (node.style?.height as number) || defaults.height;
+      const { width: nodeWidth, height: nodeHeight } = getNodeSize(node);
       const nodeCenterX = node.position.x + nodeWidth / 2;
       const nodeCenterY = node.position.y + nodeHeight / 2;
 
@@ -1922,7 +1932,7 @@ export function WorkflowCanvas() {
         let currentY = sortedNodes[0].position.y;
 
         const changes = sortedNodes.map((node) => {
-          const nodeHeight = (node.style?.height as number) || (node.measured?.height) || 200;
+          const nodeHeight = getNodeSize(node).height;
 
           const change = {
             type: "position" as const,
@@ -1945,7 +1955,7 @@ export function WorkflowCanvas() {
         let currentX = sortedNodes[0].position.x;
 
         const changes = sortedNodes.map((node) => {
-          const nodeWidth = (node.style?.width as number) || (node.measured?.width) || 220;
+          const nodeWidth = getNodeSize(node).width;
 
           const change = {
             type: "position" as const,
@@ -1976,12 +1986,8 @@ export function WorkflowCanvas() {
         const startY = Math.min(...sortedNodes.map((n) => n.position.y));
 
         // Get max node dimensions for consistent spacing
-        const maxWidth = Math.max(
-          ...sortedNodes.map((n) => (n.style?.width as number) || (n.measured?.width) || 220)
-        );
-        const maxHeight = Math.max(
-          ...sortedNodes.map((n) => (n.style?.height as number) || (n.measured?.height) || 200)
-        );
+        const maxWidth = Math.max(...sortedNodes.map((n) => getNodeSize(n).width));
+        const maxHeight = Math.max(...sortedNodes.map((n) => getNodeSize(n).height));
 
         // Position each node in the grid
         const changes = sortedNodes.map((node, index) => {
@@ -2537,11 +2543,10 @@ export function WorkflowCanvas() {
             const defaultWidth = defaultNodeDimensions[node.type as NodeType]?.width ?? 250;
             const headerWidth = node.measured?.width || (node.style?.width as number) || defaultWidth;
 
-            // Browse button for generate nodes in inline-parameters mode
-            const showBrowse = inlineParametersEnabled && (
+            // Browse button for generate nodes
+            const showBrowse =
               node.type === "nanoBanana" || node.type === "generateVideo" ||
-              node.type === "generate3d" || node.type === "generateAudio"
-            );
+              node.type === "generate3d" || node.type === "generateAudio";
             const browseAction = showBrowse ? (
               <button
                 onClick={() => browseRegistry.open(node.id)}
@@ -2696,7 +2701,6 @@ export function WorkflowCanvas() {
       />
 
       {/* Control panel - renders on right side when a configurable node is selected */}
-      <ControlPanel />
 
       {/* Expansion modals - rendered via portal when expand button is clicked */}
       {expandingNode && expandingNode.type === 'prompt' && (() => {

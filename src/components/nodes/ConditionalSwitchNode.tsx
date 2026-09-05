@@ -1,22 +1,50 @@
 "use client";
 
-import { memo, useMemo, useEffect, useLayoutEffect, useState, useCallback, useRef } from "react";
-import { Handle, Position, useUpdateNodeInternals, useReactFlow, NodeProps } from "@xyflow/react";
-import { BaseNode } from "./BaseNode";
+import { memo, useMemo, useEffect, useState, useCallback } from "react";
+import { useReactFlow, NodeProps } from "@xyflow/react";
+import { NodeShell } from "./NodeShell";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { evaluateRule } from "@/store/utils/ruleEvaluation";
 import { getConnectedInputsPure } from "@/store/utils/connectedInputs";
 import type { WorkflowNode, ConditionalSwitchNodeData, ConditionalSwitchRule, MatchMode } from "@/types";
+import { LogicRow, LogicRows, SelectWell, ellipsisClass, type SocketSpec } from "./ui";
 
+const INPUT_SOCKETS: SocketSpec[] = [{ id: "text", type: "text", label: "Text" }];
+
+const MODE_OPTIONS = [
+  { value: "exact", label: "exact" },
+  { value: "contains", label: "contains" },
+  { value: "starts-with", label: "starts" },
+  { value: "ends-with", label: "ends" },
+];
+
+/** Match indicator at the start of a rule row. */
+function Match({ on }: { on: boolean }) {
+  return (
+    <div className="w-3 h-3 flex items-center justify-center shrink-0">
+      {on ? (
+        <svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+        </svg>
+      ) : (
+        <div className="w-2 h-2 rounded-full bg-neutral-600" />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Routes text by rule. Row 0 shows the incoming text (the input socket sits
+ * there); every rule is a row with its own output socket, and the fallback
+ * row carries the `default` socket.
+ */
 export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>) => {
   const nodeData = data as ConditionalSwitchNodeData;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
-  const updateNodeInternals = useUpdateNodeInternals();
-  const { setNodes, setEdges } = useReactFlow();
+  const { setEdges } = useReactFlow();
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Get incoming text via store selector so it recomputes when upstream node data changes
-  // (useMemo with edges as dependency missed upstream data changes, causing stale evaluations)
   const incomingText = useWorkflowStore(
     useCallback((state) =>
       getConnectedInputsPure(id, state.nodes, state.edges, undefined, state.dimmedNodeIds).text,
@@ -33,10 +61,6 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
       isMatched: evaluateRule(incomingText, rule.value, rule.mode)
     }));
 
-    // Check if any rule matched
-    const anyMatched = updatedRules.some(r => r.isMatched);
-
-    // Only update if something changed
     const hasChanges =
       nodeData.incomingText !== incomingText ||
       updatedRules.some((r, i) => r.isMatched !== nodeData.rules[i].isMatched);
@@ -49,59 +73,6 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
     }
   }, [incomingText, nodeData.rules, nodeData.incomingText, nodeData.evaluationPaused, id, updateNodeData]);
 
-  // Ref-based handle positioning — measure actual row DOM positions
-  const ruleRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const defaultRowRef = useRef<HTMLDivElement | null>(null);
-  const [handleTops, setHandleTops] = useState<Record<string, number>>({});
-
-  // Track rule IDs for re-measurement on add/remove/reorder
-  const ruleIds = useMemo(() => nodeData.rules.map(r => r.id).join(','), [nodeData.rules]);
-
-  // Measure actual row centers relative to the node element (before paint)
-  useLayoutEffect(() => {
-    const positions: Record<string, number> = {};
-
-    for (const [ruleId, el] of Object.entries(ruleRowRefs.current)) {
-      if (el) {
-        positions[ruleId] = el.offsetTop + el.offsetHeight / 2;
-      }
-    }
-
-    const defaultEl = defaultRowRef.current;
-    if (defaultEl) {
-      positions['default'] = defaultEl.offsetTop + defaultEl.offsetHeight / 2;
-    }
-
-    setHandleTops(positions);
-  }, [ruleIds]);
-
-  // Fallback handle positioning (used before first measurement)
-  const handleSpacing = 32;
-  const fallbackBase = 70; // approximate: header + padding + text preview + half row
-
-  // Dynamic height based on rule count (rules + default)
-  const ruleCount = nodeData.rules.length;
-  const totalOutputs = ruleCount + 1; // rules + default
-  const lastHandleTop = fallbackBase + totalOutputs * handleSpacing;
-  const minHeight = lastHandleTop + 40; // Extra space for add button
-
-  // Resize node and notify React Flow when rule count changes
-  useEffect(() => {
-    setNodes((nodes) =>
-      nodes.map((node) => {
-        if (node.id === id) {
-          const currentHeight = (node.style?.height as number) || 0;
-          if (currentHeight < minHeight) {
-            return { ...node, style: { ...node.style, height: minHeight } };
-          }
-        }
-        return node;
-      })
-    );
-    updateNodeInternals(id);
-  }, [ruleCount, id, minHeight, setNodes, updateNodeInternals]);
-
-  // Handle rule value change (auto-unpauses evaluation)
   const handleRuleValueChange = useCallback(
     (ruleId: string, newValue: string) => {
       const updatedRules = nodeData.rules.map((rule) =>
@@ -112,7 +83,6 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
     [id, nodeData.rules, updateNodeData]
   );
 
-  // Handle mode change (auto-unpauses evaluation)
   const handleModeChange = useCallback(
     (ruleId: string, newMode: MatchMode) => {
       const updatedRules = nodeData.rules.map((rule) =>
@@ -123,7 +93,6 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
     [id, nodeData.rules, updateNodeData]
   );
 
-  // Handle label edit
   const handleLabelEdit = useCallback(
     (ruleId: string, newLabel: string) => {
       const updatedRules = nodeData.rules.map((rule) =>
@@ -135,22 +104,16 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
     [id, nodeData.rules, updateNodeData]
   );
 
-  // Handle delete rule
   const handleDelete = useCallback(
     (ruleId: string) => {
-      // Don't allow deletion if only one rule
       if (nodeData.rules.length <= 1) return;
-
       const updatedRules = nodeData.rules.filter((rule) => rule.id !== ruleId);
       updateNodeData(id, { rules: updatedRules });
-
-      // Remove edges connected to this handle
       setEdges((edges) => edges.filter((e) => !(e.source === id && e.sourceHandle === ruleId)));
     },
     [id, nodeData.rules, updateNodeData, setEdges]
   );
 
-  // Handle add rule
   const handleAddRule = useCallback(() => {
     const newRule: ConditionalSwitchRule = {
       id: "rule-" + Math.random().toString(36).slice(2, 9),
@@ -164,21 +127,12 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
 
   // Clear evaluation state — pauses re-evaluation, resets all matches, un-dims downstream
   const handleClear = useCallback(() => {
-    const clearedRules = nodeData.rules.map(rule => ({
-      ...rule,
-      isMatched: false,
-    }));
-    updateNodeData(id, {
-      evaluationPaused: true,
-      incomingText: null,
-      rules: clearedRules,
-    });
+    const clearedRules = nodeData.rules.map(rule => ({ ...rule, isMatched: false }));
+    updateNodeData(id, { evaluationPaused: true, incomingText: null, rules: clearedRules });
   }, [id, nodeData.rules, updateNodeData]);
 
-  // Show clear button when there's evaluation state to clear and not already paused
   const showClearButton = !nodeData.evaluationPaused && nodeData.incomingText !== null;
 
-  // Handle reorder (move up)
   const handleMoveUp = useCallback(
     (index: number) => {
       if (index === 0) return;
@@ -189,7 +143,6 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
     [id, nodeData.rules, updateNodeData]
   );
 
-  // Handle reorder (move down)
   const handleMoveDown = useCallback(
     (index: number) => {
       if (index === nodeData.rules.length - 1) return;
@@ -200,127 +153,89 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
     [id, nodeData.rules, updateNodeData]
   );
 
-  // Check if default is matched (no rules matched) — suppress when paused
   const defaultMatched = !nodeData.evaluationPaused && !nodeData.rules.some(r => r.isMatched);
 
+  // Output sockets: rules on rows 1..n, then the fallback.
+  const outputs = useMemo<SocketSpec[]>(
+    () => [
+      ...nodeData.rules.map((rule, i) => ({ id: rule.id, type: "text" as const, label: rule.label, row: i + 1 })),
+      { id: "default", type: "text" as const, label: "Fallback", row: nodeData.rules.length + 1 },
+    ],
+    [nodeData.rules]
+  );
+
   return (
-    <BaseNode
+    <NodeShell
       id={id}
       selected={selected}
-      minWidth={260}
-      minHeight={minHeight}
-      className="bg-teal-950/80 border-teal-600"
+      media={{ kind: "auto" }}
+      inputs={INPUT_SOCKETS}
+      outputs={outputs}
+      minWidth={280}
+      cardClassName="rounded-controls"
     >
-      {/* Clear button - floating absolute positioned */}
-      {showClearButton && (
-        <div className="absolute top-2 right-2 z-10">
-          <button
-            onClick={handleClear}
-            className="nodrag nopan p-0.5 rounded transition-all duration-200 ease-in-out flex items-center overflow-hidden group pr-2 text-neutral-500 hover:text-neutral-200 border border-neutral-600 bg-neutral-800/90"
-            title="Clear evaluation"
-          >
-            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-            <span className="text-[9px] whitespace-nowrap ml-1">
+      <LogicRows>
+        {/* Row 0: incoming text, where the input socket lands */}
+        <LogicRow className="justify-between">
+          <span className={`text-node text-neutral-400 min-w-0 ${ellipsisClass}`}>
+            {nodeData.evaluationPaused ? (
+              <span className="text-yellow-400">Evaluation paused</span>
+            ) : incomingText ? (
+              <>Input: &quot;{incomingText.slice(0, 50)}{incomingText.length > 50 ? "..." : ""}&quot;</>
+            ) : (
+              "No input connected"
+            )}
+          </span>
+          {showClearButton && (
+            <button
+              onClick={handleClear}
+              className="nodrag nopan shrink-0 h-[18px] px-1.5 rounded-[6px] squircle text-[9px] text-neutral-400 hover:text-neutral-100 bg-well shadow-well transition-colors"
+              title="Clear evaluation"
+            >
               Clear
-            </span>
-          </button>
-        </div>
-      )}
-
-      {/* Input handle (left) - text only, aligned with header */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="text"
-        data-handletype="text"
-        style={{
-          top: 38,
-          backgroundColor: "#3b82f6", // blue for text
-          width: 12,
-          height: 12,
-          border: "2px solid #1e1e1e",
-        }}
-      />
-
-      {/* Body content */}
-      <div className="px-2 py-1">
-        {/* Text preview — fixed height, above the handle-aligned area */}
-        <div className="text-[10px] text-neutral-400 truncate h-5 flex items-center">
-          {nodeData.evaluationPaused ? (
-            <span className="text-yellow-400">Evaluation paused</span>
-          ) : incomingText ? (
-            <>Input: &quot;{incomingText.slice(0, 50)}{incomingText.length > 50 ? "..." : ""}&quot;</>
-          ) : (
-            "No input connected"
+            </button>
           )}
-        </div>
+        </LogicRow>
 
-        {/* Rule rows — each 32px tall to align with output handles */}
         {nodeData.rules.map((rule, index) => (
-          <div
-            key={rule.id}
-            ref={(el) => {
-              if (el) ruleRowRefs.current[rule.id] = el;
-              else delete ruleRowRefs.current[rule.id];
-            }}
-            className="flex items-center gap-1 group h-8"
-          >
-            {/* Match status indicator */}
-            <div className="w-3 h-3 flex items-center justify-center flex-shrink-0">
-              {rule.isMatched ? (
-                <svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                <div className="w-2 h-2 rounded-full bg-neutral-600" />
-              )}
-            </div>
-
-            {/* Reorder buttons */}
-            <div className="flex flex-col gap-0 opacity-0 group-hover:opacity-100 transition-opacity">
+          <LogicRow key={rule.id} className="group gap-1">
+            <Match on={rule.isMatched} />
+            <div className="flex flex-col w-3 h-[26px] opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
               <button
-                className="text-neutral-400 hover:text-white disabled:opacity-30 disabled:hover:text-neutral-400"
+                className="nodrag nopan flex-1 flex items-center justify-center rounded-[3px] text-neutral-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:text-neutral-400 disabled:hover:bg-transparent"
                 onClick={() => handleMoveUp(index)}
                 disabled={index === 0}
                 title="Move up"
+                aria-label="Move rule up"
               >
-                <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M7 14l5-5 5 5z" />
-                </svg>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden><path d="M6 15l6-6 6 6" /></svg>
               </button>
               <button
-                className="text-neutral-400 hover:text-white disabled:opacity-30 disabled:hover:text-neutral-400"
+                className="nodrag nopan flex-1 flex items-center justify-center rounded-[3px] text-neutral-400 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:hover:text-neutral-400 disabled:hover:bg-transparent"
                 onClick={() => handleMoveDown(index)}
                 disabled={index === nodeData.rules.length - 1}
                 title="Move down"
+                aria-label="Move rule down"
               >
-                <svg className="w-2 h-2" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M7 10l5 5 5-5z" />
-                </svg>
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" viewBox="0 0 24 24" aria-hidden><path d="M6 9l6 6 6-6" /></svg>
               </button>
             </div>
 
-            {/* Label */}
             {editingId === rule.id ? (
               <input
                 type="text"
-                className="w-14 bg-neutral-700 text-neutral-100 text-[10px] px-1 py-0.5 rounded border border-teal-500 outline-none"
+                className="nodrag nopan w-14 h-[22px] bg-well rounded-well squircle shadow-well text-neutral-100 text-node px-[7px] outline-none focus:ring-1 focus:ring-teal-500"
                 defaultValue={rule.label}
                 autoFocus
                 onBlur={(e) => handleLabelEdit(rule.id, e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleLabelEdit(rule.id, e.currentTarget.value);
-                  } else if (e.key === "Escape") {
-                    setEditingId(null);
-                  }
+                  if (e.key === "Enter") handleLabelEdit(rule.id, e.currentTarget.value);
+                  else if (e.key === "Escape") setEditingId(null);
                 }}
               />
             ) : (
               <span
-                className="w-14 text-[10px] text-neutral-300 cursor-text truncate"
+                className="w-14 text-node text-neutral-300 cursor-text truncate shrink-0"
                 onDoubleClick={() => setEditingId(rule.id)}
                 title={rule.label}
               >
@@ -328,102 +243,55 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
               </span>
             )}
 
-            {/* Mode dropdown */}
-            <select
-              className="bg-neutral-700 text-neutral-100 text-[9px] px-1 py-0.5 rounded border border-neutral-600 outline-none"
+            <SelectWell
+              className="w-[74px] shrink-0"
               value={rule.mode}
-              onChange={(e) => handleModeChange(rule.id, e.target.value as MatchMode)}
-            >
-              <option value="exact">exact</option>
-              <option value="contains">contains</option>
-              <option value="starts-with">starts</option>
-              <option value="ends-with">ends</option>
-            </select>
+              options={MODE_OPTIONS}
+              onChange={(v) => handleModeChange(rule.id, v as MatchMode)}
+            />
 
-            {/* Value input */}
             <input
               type="text"
-              className="flex-1 bg-neutral-700 text-neutral-100 text-[10px] px-1 py-0.5 rounded border border-neutral-600 outline-none"
+              className="nodrag nopan flex-1 min-w-0 h-[22px] bg-well rounded-well squircle shadow-well text-neutral-100 text-node px-[7px] outline-none focus:ring-1 focus:ring-neutral-600 placeholder:text-neutral-500"
               placeholder="value,value2,..."
               value={rule.value}
               onChange={(e) => handleRuleValueChange(rule.id, e.target.value)}
             />
 
-            {/* Delete button (hidden if only one rule) */}
             {nodeData.rules.length > 1 && (
               <button
-                className="opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-400 transition-opacity flex-shrink-0"
+                className="nodrag nopan opacity-0 group-hover:opacity-100 text-neutral-400 hover:text-red-400 transition-opacity shrink-0"
                 onClick={() => handleDelete(rule.id)}
                 title="Delete rule"
               >
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
             )}
-          </div>
+          </LogicRow>
         ))}
 
-        {/* Default output row — 32px tall, immediately after rules to align with handle */}
-        <div ref={defaultRowRef} className="flex items-center gap-1 h-8 border-t border-neutral-700">
-          <div className="w-3 h-3 flex items-center justify-center flex-shrink-0">
-            {defaultMatched ? (
-              <svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-              </svg>
-            ) : (
-              <div className="w-2 h-2 rounded-full bg-neutral-600" />
-            )}
-          </div>
+        <LogicRow className="border-t border-neutral-700/60 gap-1">
+          <Match on={defaultMatched} />
+          {/* Same leading space as a rule row's reorder column, so the labels line up. */}
+          <span className="w-3 shrink-0" aria-hidden />
+          <span className="text-node text-neutral-300">Fallback</span>
+        </LogicRow>
 
-          <span className="text-[10px] text-neutral-300 ml-4">Fallback</span>
+        <div className="px-2 pt-1">
+          <button
+            className="nodrag nopan w-full h-[22px] flex items-center justify-center gap-1 text-neutral-400 hover:text-white text-node rounded-well squircle hover:bg-white/5 transition-colors"
+            onClick={handleAddRule}
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Rule
+          </button>
         </div>
-
-        {/* Add rule button — after Default so it doesn't displace handle alignment */}
-        <button
-          className="w-full flex items-center justify-center gap-1 text-neutral-400 hover:text-white text-[10px] py-1 mt-1 rounded hover:bg-teal-900/30 transition-colors"
-          onClick={handleAddRule}
-        >
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          Add Rule
-        </button>
-      </div>
-
-      {/* Output handles (right) - one per rule + default */}
-      {nodeData.rules.map((rule, index) => (
-        <Handle
-          key={`output-${rule.id}`}
-          type="source"
-          position={Position.Right}
-          id={rule.id}
-          data-handletype="text"
-          style={{
-            top: handleTops[rule.id] ?? (fallbackBase + index * handleSpacing),
-            backgroundColor: "#3b82f6", // blue for text
-            width: 12,
-            height: 12,
-            border: "2px solid #1e1e1e",
-          }}
-        />
-      ))}
-
-      {/* Default output handle (always at bottom) */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="default"
-        data-handletype="text"
-        style={{
-          top: handleTops['default'] ?? (fallbackBase + ruleCount * handleSpacing),
-          backgroundColor: "#3b82f6", // blue for text
-          width: 12,
-          height: 12,
-          border: "2px solid #1e1e1e",
-        }}
-      />
-    </BaseNode>
+      </LogicRows>
+    </NodeShell>
   );
 });
 

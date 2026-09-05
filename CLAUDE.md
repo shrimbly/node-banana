@@ -39,7 +39,9 @@ Node Banana is a node-based visual workflow editor for AI image generation. User
 | Central workflow state & execution logic | `src/store/workflowStore.ts` |
 | All TypeScript type definitions | `src/types/index.ts` |
 | Main canvas component & connection validation | `src/components/WorkflowCanvas.tsx` |
-| Base node component (shared by all nodes) | `src/components/nodes/BaseNode.tsx` |
+| Node shell (media card, sockets, gap row, controls card — used by every node) | `src/components/nodes/NodeShell.tsx` |
+| Node UI primitives (fields, controls card, sockets, carousel, scrub row) | `src/components/nodes/ui/` |
+| Node anatomy and tokens | `docs/node-redesign.md`, `src/app/globals.css` (`@theme`) |
 | Image generation API route | `src/app/api/generate/route.ts` |
 | LLM text generation API route | `src/app/api/llm/route.ts` |
 | Cost calculations | `src/utils/costCalculator.ts` |

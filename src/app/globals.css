@@ -2,17 +2,48 @@
 
 @theme {
   --color-canvas-bg: #171717;
+
+  /* Node anatomy (see docs/node-redesign.md) */
+  --color-card: #262626;
+  --color-card-border: rgb(64 64 64 / 0.6);
+  --color-panel: #2a2a2a;
+  --color-well: #1a1a1a;
+  --color-selection: #3b82f6;
+  --color-running: #3b82f6;
+  --color-error: #ef4444;
+
+  /* Handle / socket colours, keyed by handle type */
+  --color-handle-image: #10b981;
+  --color-handle-text: #3b82f6;
+  --color-handle-3d: #f97316;
+  --color-handle-audio: #a855f7;
+  --color-handle-video: #ec4899;
+  --color-handle-easeCurve: #bef264;
+  --color-handle-reference: #6b7280;
+
+  --radius-card: 12px;
+  --radius-media: 8px;
+  --radius-controls: 10px;
+  --radius-well: 8px;
+
+  /* Faint recess for input wells on the settings panel */
+  --shadow-well: inset 0 1px 1.5px rgb(0 0 0 / 0.3), inset 0 0 0 1px rgb(0 0 0 / 0.12), 0 1px 0 rgb(255 255 255 / 0.025);
+
+  --text-node: 10px;
+  --text-node--line-height: 14px;
+}
+
+/* Squircle corners where the engine supports them (Chrome 139+); plain
+   border-radius elsewhere. */
+@utility squircle {
+  @supports (corner-shape: squircle) {
+    corner-shape: squircle;
+  }
 }
 
 :root {
   --background: #0a0a0a;
   --foreground: #fafafa;
-  /* Handle colours. Source of truth: src/lib/edges/colors.ts (a test keeps these in step). */
-  --handle-color-image: #10b981;
-  --handle-color-text: #3b82f6;
-  --handle-color-3d: #f97316;
-  --handle-color-audio: #a78bfa;
-  --handle-color-video: #ec4899;
 }
 
 html {
@@ -107,8 +138,51 @@ body {
   transition: opacity 250ms ease-in-out;
 }
 
-/* Base handle styles */
-.react-flow__handle {
+/* Sockets: the handle is an 18×28 box whose SVG swell sits in the media
+   card's border. Position and mirroring are inline; this strips React Flow's
+   circle and gives the swell a generous hit area. */
+.react-flow__handle.socket {
+  width: 18px;
+  height: 18px;
+  min-width: 0;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  z-index: 5;
+}
+
+.react-flow__handle.socket::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 30px;
+  height: 34px;
+  border-radius: 50%;
+}
+
+.react-flow__handle.socket > svg {
+  display: block;
+  overflow: visible;
+}
+
+.react-flow__handle.socket.socket-placeholder {
+  opacity: 0.3;
+}
+
+/* While a connection is being dragged onto a socket that would accept it,
+   fill the hole so the target reads before the drop. */
+.react-flow__handle.socket.connectingto.valid [data-socket-hole] {
+  fill: currentColor;
+  stroke-opacity: 1;
+}
+
+/* Circle handles for the one mini-canvas that still draws plain React Flow
+   handles (the Comfy node preview in the import dialog). */
+.react-flow__handle:not(.socket) {
   width: 14px;
   height: 14px;
   border-radius: 50%;
@@ -118,7 +192,7 @@ body {
 }
 
 /* Larger invisible hit area for easier clicking, especially when zoomed out */
-.react-flow__handle::before {
+.react-flow__handle:not(.socket)::before {
   content: "";
   position: absolute;
   top: 50%;
@@ -129,37 +203,32 @@ body {
   border-radius: 50%;
 }
 
-.react-flow__handle-left {
+.react-flow__handle-left:not(.socket) {
   left: -7px;
 }
 
-.react-flow__handle-right {
+.react-flow__handle-right:not(.socket) {
   right: -7px;
 }
 
-/* Image handles - soft green */
-.react-flow__handle[data-handletype="image"] {
-  background: var(--handle-color-image);
+.react-flow__handle[data-handletype="image"]:not(.socket) {
+  background: var(--color-handle-image);
 }
 
-/* Text handles - soft blue */
-.react-flow__handle[data-handletype="text"] {
-  background: var(--handle-color-text);
+.react-flow__handle[data-handletype="text"]:not(.socket) {
+  background: var(--color-handle-text);
 }
 
-/* Audio handles - purple */
-.react-flow__handle[data-handletype="audio"] {
-  background: var(--handle-color-audio);
+.react-flow__handle[data-handletype="audio"]:not(.socket) {
+  background: var(--color-handle-audio);
 }
 
-/* Video handles - pink */
-.react-flow__handle[data-handletype="video"] {
-  background: var(--handle-color-video);
+.react-flow__handle[data-handletype="video"]:not(.socket) {
+  background: var(--color-handle-video);
 }
 
-/* 3D handles - orange */
-.react-flow__handle[data-handletype="3d"] {
-  background: var(--handle-color-3d);
+.react-flow__handle[data-handletype="3d"]:not(.socket) {
+  background: var(--color-handle-3d);
 }
 
 .react-flow__edge-path {

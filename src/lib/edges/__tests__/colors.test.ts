@@ -28,8 +28,8 @@ describe("edge colour tokens", () => {
   it("keeps the handle CSS variables in globals.css in step with the tokens", () => {
     const css = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
     for (const type of ["image", "text", "video", "audio", "3d"] as const) {
-      const match = css.match(new RegExp(`--handle-color-${type}:\\s*(#[0-9a-fA-F]{6})`));
-      expect(match, `--handle-color-${type} missing from globals.css`).not.toBeNull();
+      const match = css.match(new RegExp(`--color-handle-${type}:\\s*(#[0-9a-fA-F]{6})`));
+      expect(match, `--color-handle-${type} missing from globals.css`).not.toBeNull();
       expect(match![1].toLowerCase()).toBe(HANDLE_TYPE_COLORS[type]);
     }
   });

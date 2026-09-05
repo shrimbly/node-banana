@@ -1,12 +1,11 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Handle, NodeProps, Node, Position, useUpdateNodeInternals } from "@xyflow/react";
+import { NodeProps, Node, useUpdateNodeInternals } from "@xyflow/react";
 
-import { BaseNode } from "./BaseNode";
+import { NodeShell } from "./NodeShell";
 import { ComfyAppParameters } from "./ComfyAppParameters";
-import { HandleLabel } from "./HandleLabel";
-import { InlineParameterPanel } from "./InlineParameterPanel";
+import { ControlsCard, HeightGrip, SummaryValues, type SocketSpec, type SocketType } from "./ui";
 import {
   ComfyWorkflowImportModal,
   type ComfyReconfigureTarget,
@@ -14,7 +13,6 @@ import {
 } from "@/components/modals/ComfyWorkflowImportModal";
 import { ComfyWordmark } from "@/components/icons/ComfyWordmark";
 import { useComfyPreview } from "@/hooks/useComfyPreview";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { outputsToNodeData } from "@/store/execution/comfyAppExecutor";
 import { appInputHandles, appToInputSchema } from "@/lib/comfy/nodeSchema";
@@ -30,24 +28,20 @@ import { downloadMedia } from "@/utils/downloadMedia";
 
 type ComfyAppNodeType = Node<ComfyAppNodeData, "comfyApp">;
 
-const HANDLE_COLOR: Record<string, string> = {
-  image: "var(--handle-color-image)",
-  text: "var(--handle-color-text)",
-  audio: "var(--handle-color-audio)",
-  video: "var(--handle-color-video)",
-  "3d": "var(--handle-color-3d)",
-};
+const SOCKET_TYPES = new Set<string>(["image", "text", "audio", "video", "3d"]);
 
-/** Evenly space n handles down the node's left or right edge. */
-function handleTop(index: number, total: number): string {
-  return `${((index + 1) / (total + 1)) * 100}%`;
+function asSocketType(type: string): SocketType {
+  return (SOCKET_TYPES.has(type) ? type : "image") as SocketType;
 }
 
+/** Media slot height when the output is not something with a picture. */
+const TEXTUAL_HEIGHT = 120;
+/** Media slot height while there is no workflow to run. */
+const EMPTY_HEIGHT = 150;
 
 export function ComfyAppNode({ id, data, selected }: NodeProps<ComfyAppNodeType>) {
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
-  const showLabels = useShowHandleLabels(selected);
   /** `replace` picks a different workflow; `edit` revisits this one's picks. */
   const [modal, setModal] = useState<"replace" | "edit" | null>(null);
   /** A workflow dropped on the canvas, to be read instead of asking for a file. */
@@ -228,122 +222,133 @@ export function ComfyAppNode({ id, data, selected }: NodeProps<ComfyAppNodeType>
     return null;
   }, [app, nodeData.outputs]);
 
-  const settingsPanel =
-    app && app.params.length > 0 ? (
-      <InlineParameterPanel
-        expanded={Boolean(nodeData.parametersExpanded)}
-        onToggle={() => updateNodeData(id, { parametersExpanded: !nodeData.parametersExpanded })}
-        nodeId={id}
-      >
-        <ComfyAppParameters
-          params={app.params}
-          values={nodeData.paramValues ?? {}}
-          onChange={handleParamsChange}
-        />
-      </InlineParameterPanel>
-    ) : undefined;
-
   const isRunning = nodeData.status === "loading";
   // The latent as it forms. Only the v2 engines emit these, so it stays null
   // on a stock ComfyUI and the node keeps its spinner.
   const livePreview = useComfyPreview(nodeData.jobId, isRunning);
 
+  // Sockets: one per connectable input the workflow exposes, one per bound output.
+  const inputSockets = useMemo<SocketSpec[]>(
+    () =>
+      inputHandles.map((input) => ({
+        id: input.handleId,
+        type: asSocketType(input.type),
+        label: input.label,
+        schemaName: input.name,
+        title: input.description || input.label,
+      })),
+    [inputHandles]
+  );
+  const outputSockets = useMemo<SocketSpec[]>(
+    () =>
+      outputHandles.map((output) => ({
+        id: output.id,
+        type: asSocketType(output.type),
+        label: output.label,
+        title: output.label,
+      })),
+    [outputHandles]
+  );
+
+  // The clip follows a picture's real proportions; anything else gets a
+  // fixed slot. A live latent preview is a picture too.
+  const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
+  const pictureSrc =
+    isRunning && livePreview ? livePreview : primaryPreview?.type === "image" ? primaryPreview.value : null;
+  const media: { kind: "aspect"; aspect: number } | { kind: "fixed"; height: number } = !app
+    ? { kind: "fixed", height: EMPTY_HEIGHT }
+    : pictureSrc
+      ? { kind: "aspect", aspect: loadedAspect?.src === pictureSrc ? loadedAspect.aspect : 1 }
+      : primaryPreview?.type === "video"
+        ? { kind: "aspect", aspect: 16 / 9 }
+        : isRunning
+          ? { kind: "aspect", aspect: 1 }
+          : { kind: "fixed", height: nodeData.mediaHeight ?? TEXTUAL_HEIGHT };
+
+  const runStatus = isRunning ? nodeData.runStatus ?? "running" : null;
+  const hasParams = Boolean(app && app.params.length > 0);
+
   return (
     <>
-      <BaseNode
+      <NodeShell
         id={id}
         selected={selected}
         isExecuting={isRunning}
         hasError={nodeData.status === "error"}
+        media={media}
+        inputs={inputSockets}
+        outputs={outputSockets}
         minWidth={260}
-        minHeight={220}
-        aspectFitMedia={primaryPreview?.type === "image" ? primaryPreview.value : null}
-        settingsExpanded={Boolean(nodeData.parametersExpanded)}
-        // The default content box is padded for a node with a header on top —
-        // no padding above, a wider gap below. A frame drawn inside it wants
-        // the same margin on all four sides.
-        {...(app ? {} : { contentClassName: "p-3 flex-1 min-h-0 flex flex-col" })}
-        {...(settingsPanel ? { settingsPanel } : {})}
-      >
-        {/* Input handles — one per connectable input the workflow exposes */}
-        {inputHandles.map((input, index) => {
-          const top = handleTop(index, inputHandles.length);
-          return (
-            <React.Fragment key={input.id}>
-              <Handle
-                type="target"
-                position={Position.Left}
-                id={input.handleId}
-                style={{ top, zIndex: 10 }}
-                data-handletype={input.type}
-                data-schema-name={input.name}
-                title={input.description || input.label}
-                isConnectable
-              />
-              <HandleLabel
-                label={input.label}
-                side="target"
-                color={HANDLE_COLOR[input.type] ?? "var(--handle-color-image)"}
-                top={`calc(${top} - 18px)`}
-                visible={showLabels}
-              />
-            </React.Fragment>
-          );
-        })}
-
-        {/* Output handles — one per bound output node */}
-        {outputHandles.map((output, index) => {
-          const top = handleTop(index, outputHandles.length);
-          return (
-            <React.Fragment key={output.id}>
-              <Handle
-                type="source"
-                position={Position.Right}
-                id={output.id}
-                style={{ top, zIndex: 10 }}
-                data-handletype={output.type}
-                title={output.label}
-              />
-              <HandleLabel
-                label={output.label}
-                side="source"
-                color={HANDLE_COLOR[output.type] ?? "var(--handle-color-image)"}
-                top={`calc(${top} - 18px)`}
-                visible={showLabels}
-              />
-            </React.Fragment>
-          );
-        })}
-
-        <div className="relative w-full h-full min-h-0 flex flex-col overflow-hidden">
-          {!app ? (
-            <EmptyState
-              onImport={() => setModal("replace")}
-              onDropWorkflow={(upload) => {
-                setDropped(upload);
-                setModal("replace");
+        mediaClassName={app ? "bg-neutral-900/60" : undefined}
+        controls={
+          app ? (
+            <ControlsCard
+              id={id}
+              summary={{
+                icon: <ComfyWordmark className="h-3 w-auto" />,
+                title: <span title={app.name}>{app.source === "blueprint" ? "Blueprint" : "App workflow"}</span>,
+                values: (
+                  <span className="flex items-center gap-1.5">
+                    <SummaryValues
+                      items={[runStatus ? runStatus.replace(/_/g, " ") : `${app.nodeCount} node${app.nodeCount === 1 ? "" : "s"}`]}
+                    />
+                    <HeaderButton onClick={() => setModal("edit")} title="Choose inputs, settings and outputs">
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </HeaderButton>
+                    <HeaderButton onClick={() => setModal("replace")} title="Replace this workflow">
+                      <path d="M21 2v6h-6" />
+                      <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
+                      <path d="M3 22v-6h6" />
+                      <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
+                    </HeaderButton>
+                  </span>
+                ),
               }}
-            />
-          ) : (
-            <>
-              <ComfyAppHeader
-                app={app}
-                onEdit={() => setModal("edit")}
-                onReplace={() => setModal("replace")}
-                runStatus={isRunning ? nodeData.runStatus ?? "running" : null}
-              />
-              <div className="flex-1 min-h-0 rounded-md overflow-hidden bg-neutral-900/60 flex items-center justify-center">
-                <Preview
-                  preview={primaryPreview}
-                  isRunning={isRunning}
-                  livePreview={livePreview}
-                  error={nodeData.status === "error" ? nodeData.error : null}
+              expanded={Boolean(nodeData.parametersExpanded)}
+              onToggle={
+                hasParams
+                  ? () => updateNodeData(id, { parametersExpanded: !nodeData.parametersExpanded })
+                  : undefined
+              }
+            >
+              {hasParams ? (
+                <ComfyAppParameters
+                  params={app.params}
+                  values={nodeData.paramValues ?? {}}
+                  onChange={handleParamsChange}
                 />
-              </div>
-            </>
-          )}
-        </div>
-      </BaseNode>
+              ) : undefined}
+            </ControlsCard>
+          ) : undefined
+        }
+      >
+        {!app ? (
+          <NoWorkflow
+            onImport={() => setModal("replace")}
+            onDropWorkflow={(upload) => {
+              setDropped(upload);
+              setModal("replace");
+            }}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Preview
+              preview={primaryPreview}
+              isRunning={isRunning}
+              livePreview={livePreview}
+              error={nodeData.status === "error" ? nodeData.error : null}
+              onPictureLoad={(src, aspect) => setLoadedAspect({ src, aspect })}
+            />
+            {media.kind === "fixed" && (
+              <HeightGrip
+                height={media.height}
+                onChange={(h) => updateNodeData(id, { mediaHeight: h })}
+              />
+            )}
+          </div>
+        )}
+      </NodeShell>
 
       <ComfyWorkflowImportModal
         isOpen={modal !== null}
@@ -368,7 +373,7 @@ export function ComfyAppNode({ id, data, selected }: NodeProps<ComfyAppNodeType>
  * It takes a dropped file itself rather than leaving it to the canvas, which
  * would answer by making a *second* node and leaving this one still empty.
  */
-function EmptyState({
+function NoWorkflow({
   onImport,
   onDropWorkflow,
 }: {
@@ -414,12 +419,15 @@ function EmptyState({
             onDropWorkflow({ workflow: null, filename: file.name });
           });
       }}
-      className={`nodrag nopan flex-1 flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed transition-colors ${
-        dragOver
-          ? "border-blue-500 bg-blue-500/5"
-          : "border-neutral-600 hover:border-neutral-500 bg-neutral-900/40"
+      className={`nodrag nopan absolute inset-0 flex flex-col items-center justify-center gap-4 transition-colors ${
+        dragOver ? "bg-blue-500/5" : "bg-neutral-900/40"
       }`}
     >
+      <div
+        className={`absolute inset-2 rounded-[6px] squircle border border-dashed pointer-events-none ${
+          dragOver ? "border-blue-500" : "border-neutral-700/70"
+        }`}
+      />
       <ComfyWordmark className="h-5 w-auto text-neutral-500" />
       <button
         type="button"
@@ -431,45 +439,6 @@ function EmptyState({
       >
         Load workflow
       </button>
-    </div>
-  );
-}
-
-function ComfyAppHeader({
-  app,
-  onEdit,
-  onReplace,
-  runStatus,
-}: {
-  app: ComfyAppDefinition;
-  onEdit: () => void;
-  onReplace: () => void;
-  runStatus: string | null;
-}) {
-  return (
-    <div className="flex items-center gap-2 pt-2 pb-1.5 shrink-0">
-      <div className="min-w-0 flex-1">
-        {/* Where this came from, not what it is called — the node's own header
-            carries the workflow's name, and repeating it here says nothing. */}
-        <p className="text-[11px] font-medium text-neutral-200 truncate" title={app.name}>
-          {app.source === "blueprint" ? "Blueprint" : "App workflow"}
-        </p>
-        <p className="text-[9px] text-neutral-500 truncate">
-          {runStatus
-            ? runStatus.replace(/_/g, " ")
-            : `${app.nodeCount} node${app.nodeCount === 1 ? "" : "s"}`}
-        </p>
-      </div>
-      <HeaderButton onClick={onEdit} title="Choose inputs, settings and outputs">
-        <circle cx="12" cy="12" r="3" />
-        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-      </HeaderButton>
-      <HeaderButton onClick={onReplace} title="Replace this workflow">
-        <path d="M21 2v6h-6" />
-        <path d="M3 12a9 9 0 0 1 15-6.7L21 8" />
-        <path d="M3 22v-6h6" />
-        <path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
-      </HeaderButton>
     </div>
   );
 }
@@ -486,7 +455,11 @@ function HeaderButton({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={(e) => {
+        // The summary row toggles the settings panel on click; this must not.
+        e.stopPropagation();
+        onClick();
+      }}
       title={title}
       aria-label={title}
       className="nodrag nopan shrink-0 text-neutral-500 hover:text-neutral-200 transition-colors"
@@ -517,7 +490,13 @@ function HeaderButton({
  * The spinner stays for everything else: the first seconds of any run, and
  * every run on a stock ComfyUI, which has no event stream at all.
  */
-function Rendering({ livePreview }: { livePreview: string | null }) {
+function Rendering({
+  livePreview,
+  onPictureLoad,
+}: {
+  livePreview: string | null;
+  onPictureLoad?: (src: string, aspect: number) => void;
+}) {
   if (!livePreview) {
     return (
       <div className="flex flex-col items-center gap-2 text-neutral-500">
@@ -536,6 +515,10 @@ function Rendering({ livePreview }: { livePreview: string | null }) {
         // Each frame replaces the last; a fade would cross-blend two states of
         // the same image into something neither of them looked like.
         className="w-full h-full object-contain"
+        onLoad={(e) => {
+          const img = e.currentTarget;
+          if (img.naturalWidth > 0 && img.naturalHeight > 0) onPictureLoad?.(livePreview, img.naturalWidth / img.naturalHeight);
+        }}
       />
       {/* Over the image, not beside it: the preview fills the node, and this
           has to stay legible on whatever the latent happens to look like. */}
@@ -552,13 +535,15 @@ function Preview({
   isRunning,
   livePreview,
   error,
+  onPictureLoad,
 }: {
   preview: { type: ComfyOutputType; value: string; label: string } | null;
   isRunning: boolean;
   livePreview: string | null;
   error: string | null;
+  onPictureLoad?: (src: string, aspect: number) => void;
 }) {
-  if (isRunning) return <Rendering livePreview={livePreview} />;
+  if (isRunning) return <Rendering livePreview={livePreview} onPictureLoad={onPictureLoad} />;
   if (error) {
     return (
       <div className="px-3 py-2 max-h-full overflow-y-auto nowheel">
@@ -610,6 +595,14 @@ function Preview({
   }
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={preview.value} alt={preview.label} className="w-full h-full object-contain" />
+    <img
+      src={preview.value}
+      alt={preview.label}
+      className="w-full h-full object-cover"
+      onLoad={(e) => {
+        const img = e.currentTarget;
+        if (img.naturalWidth > 0 && img.naturalHeight > 0) onPictureLoad?.(preview.value, img.naturalWidth / img.naturalHeight);
+      }}
+    />
   );
 }

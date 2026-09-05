@@ -3,7 +3,7 @@
  *
  * One hue per data type, shared by the noodles (EditableEdge and the gradients
  * in SharedEdgeGradients), the handle rules in globals.css (a test keeps the
- * `--handle-color-*` variables in step with this file) and the nodes that colour
+ * `--color-handle-*` variables in step with this file) and the nodes that colour
  * handles inline. Change a hue here and both the noodle and its handles follow.
  */
 
@@ -16,15 +16,15 @@ export const HANDLE_TYPE_COLORS: Record<HandleType, string> = {
   image: "#10b981",
   text: "#3b82f6",
   video: "#ec4899",
-  audio: "#a78bfa",
+  audio: "#a855f7",
   "3d": "#f97316",
-  easeCurve: "#f59e0b",
+  easeCurve: "#bef264",
 };
 
 /** Every colour a noodle can take: the data types plus the edge-only states. */
 export const EDGE_COLORS = {
   ...HANDLE_TYPE_COLORS,
-  reference: "#52525b",
+  reference: "#6b7280",
   default: "#64748b",
   pause: "#ea580c",
   loop: "#d946ef",

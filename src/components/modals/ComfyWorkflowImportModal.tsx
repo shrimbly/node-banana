@@ -1931,11 +1931,11 @@ function describeValue(value: ComfyWidgetCandidate["currentValue"]): string {
 }
 
 function handleColor(type: string): string {
-  if (type === "text") return "var(--handle-color-text)";
-  if (type === "audio") return "var(--handle-color-audio)";
-  if (type === "video") return "var(--handle-color-video)";
-  if (type === "3d") return "var(--handle-color-3d)";
-  return "var(--handle-color-image)";
+  if (type === "text") return "var(--color-handle-text)";
+  if (type === "audio") return "var(--color-handle-audio)";
+  if (type === "video") return "var(--color-handle-video)";
+  if (type === "3d") return "var(--color-handle-3d)";
+  return "var(--color-handle-image)";
 }
 
 /** The handle type inspection assigned to a sink node. */

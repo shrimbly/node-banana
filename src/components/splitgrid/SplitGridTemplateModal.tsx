@@ -62,6 +62,7 @@ import {
   SplitGridTemplateNode,
   TemplateEditableEdge,
   TemplateEditorContext,
+  templateHandleTop,
   type TemplateNodeData,
   type TemplateRFNode,
 } from "./TemplateNodes";
@@ -157,7 +158,8 @@ function templateToRfNodes(
       type: "splitGridTemplateNode",
       position: { ...templateNode.position },
       deletable: !isBase,
-      style: { width: dims.width, height: dims.height },
+      width: dims.width,
+      style: { width: dims.width },
       data: {
         nodeType: templateNode.type,
         overrides,
@@ -212,17 +214,13 @@ function serializeTemplate(
   return {
     baseNodeId,
     nodes: rfNodes.map((node) => {
-      // Persist the node's real size, minus the editor-only settings panel
-      // (real nodes grow their own panel at runtime, like the main canvas)
+      // Persist the node's width and its measured height. Real nodes derive
+      // their height from content at runtime, so the height is only a hint
+      // for laying the cells out.
       const width =
         (node.width as number | undefined) ?? (node.style?.width as number | undefined);
-      const rawHeight =
-        (node.height as number | undefined) ?? (node.style?.height as number | undefined);
-      const panelHeight = node.data._editorPanelHeight ?? 0;
-      const size =
-        width && rawHeight
-          ? { width, height: Math.max(80, rawHeight - panelHeight) }
-          : undefined;
+      const rawHeight = node.measured?.height ?? (node.height as number | undefined);
+      const size = width && rawHeight ? { width, height: Math.max(80, rawHeight) } : undefined;
       return {
         id: node.id,
         type: node.data.nodeType,
@@ -697,14 +695,14 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
       let position: { x: number; y: number };
       let connection: Connection;
       if (dropMenu.fromHandleType === "source") {
-        // Forward drag: align the new node's input handle with the drop point
-        const input = entry.inputs.find((handle) => handle.id === kind);
-        const handleRatio = input?.top ? parseFloat(input.top) / 100 : 0.5;
-        position = { x: dropMenu.flow.x, y: dropMenu.flow.y - dims.height * handleRatio };
+        // Forward drag: align the new node's input socket with the drop point
+        const inputIndex = Math.max(0, entry.inputs.findIndex((handle) => handle.id === kind));
+        position = { x: dropMenu.flow.x, y: dropMenu.flow.y - templateHandleTop(inputIndex) };
         connection = { source: dropMenu.fromNodeId, sourceHandle: kind, target: newId, targetHandle: kind };
       } else {
-        // Backward drag: align the new node's output handle with the drop point
-        position = { x: dropMenu.flow.x - dims.width, y: dropMenu.flow.y - dims.height / 2 };
+        // Backward drag: align the new node's output socket with the drop point
+        const outputIndex = Math.max(0, entry.outputs.findIndex((handle) => handle.id === kind));
+        position = { x: dropMenu.flow.x - dims.width, y: dropMenu.flow.y - templateHandleTop(outputIndex) };
         connection = { source: newId, sourceHandle: kind, target: dropMenu.fromNodeId, targetHandle: kind };
       }
 
@@ -715,7 +713,8 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
           type: "splitGridTemplateNode" as const,
           position,
           deletable: true,
-          style: { width: dims.width, height: dims.height },
+          width: dims.width,
+          style: { width: dims.width },
           data: {
             nodeType: type,
             overrides: seedOverridesFor(type),

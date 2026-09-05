@@ -1,15 +1,23 @@
 "use client";
 
-import React, { useMemo } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
-import { BaseNode } from "./BaseNode";
+import React, { useMemo, useState } from "react";
+import { NodeProps, Node } from "@xyflow/react";
+import { NodeShell } from "./NodeShell";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { VideoFrameGrabNodeData } from "@/types";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
-import { HandleLabel } from "./HandleLabel";
+import { ChipGroup, ControlsCard, EmptyState, Field, FieldRow, PanelButton, Spinner, type SocketSpec } from "./ui";
 
 type VideoFrameGrabNodeType = Node<VideoFrameGrabNodeData, "videoFrameGrab">;
+
+const INPUT_SOCKETS: SocketSpec[] = [{ id: "video", type: "video", label: "Video In" }];
+const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "image", type: "image", label: "Image Out" }];
+const EMPTY_HEIGHT = 120;
+
+const POSITION_OPTIONS = [
+  { value: "first" as const, label: "First" },
+  { value: "last" as const, label: "Last" },
+];
 
 export function VideoFrameGrabNode({ id, data, selected }: NodeProps<VideoFrameGrabNodeType>) {
   const nodeData = data;
@@ -19,7 +27,8 @@ export function VideoFrameGrabNode({ id, data, selected }: NodeProps<VideoFrameG
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const edges = useWorkflowStore((state) => state.edges);
   const nodes = useWorkflowStore((state) => state.nodes);
-  const showLabels = useShowHandleLabels(selected);
+  const [expanded, setExpanded] = useState(true);
+  const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
   // Find connected source video from incoming edges
   const sourceVideoUrl = useMemo(() => {
@@ -36,125 +45,81 @@ export function VideoFrameGrabNode({ id, data, selected }: NodeProps<VideoFrameG
   const hasSourceVideo = Boolean(sourceVideoUrl);
   const canExtract = hasSourceVideo && nodeData.status !== "loading" && !isRunning;
 
-  const handleExtract = () => {
-    regenerateNode(id);
-  };
+  const media = nodeData.outputImage
+    ? { kind: "aspect" as const, aspect: loadedAspect?.src === nodeData.outputImage ? loadedAspect.aspect : 16 / 9 }
+    : { kind: "fixed" as const, height: EMPTY_HEIGHT };
 
   return (
-    <BaseNode
+    <NodeShell
       id={id}
       selected={selected}
       isExecuting={isRunning}
       hasError={nodeData.status === "error"}
-      minWidth={320}
-      minHeight={320}
-      aspectFitMedia={nodeData.outputImage}
+      media={media}
+      inputs={INPUT_SOCKETS}
+      outputs={OUTPUT_SOCKETS}
+      mediaClassName="group"
+      controls={
+        <ControlsCard
+          id={id}
+          summary={{ title: `${nodeData.framePosition === "last" ? "Last" : "First"} frame` }}
+          expanded={expanded}
+          onToggle={() => setExpanded((v) => !v)}
+        >
+          <Field label="Frame">
+            <ChipGroup
+              value={nodeData.framePosition === "last" ? "last" : "first"}
+              options={POSITION_OPTIONS}
+              onChange={(framePosition) => updateNodeData(id, { framePosition, outputImage: null })}
+            />
+          </Field>
+          <FieldRow className="justify-end">
+            <PanelButton primary onClick={() => regenerateNode(id)} disabled={!canExtract}>
+              {nodeData.status === "loading" ? "Extracting..." : "Extract Frame"}
+            </PanelButton>
+          </FieldRow>
+        </ControlsCard>
+      }
     >
-      {/* Video In (target, left, 50%) */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="video"
-        data-handletype="video"
-        isConnectable={true}
-        style={{ top: "50%" }}
-      />
-      <HandleLabel label="Video In" side="target" color="var(--handle-color-video)" top="calc(50% - 7px)" visible={showLabels} />
-
-      {/* Image Out (source, right, 50%) */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="image"
-        data-handletype="image"
-        isConnectable={true}
-        style={{ top: "50%" }}
-      />
-      <HandleLabel label="Image Out" side="source" color="rgb(59, 130, 246)" top="calc(50% - 7px)" visible={showLabels} />
-
-      <div className="flex-1 flex flex-col min-h-0 gap-2">
-        {/* Image preview area */}
-        <div className="flex-1 min-h-0 relative">
-          {nodeData.outputImage ? (
-            <>
-              <img
-                src={adaptiveOutputImage ?? undefined}
-                className="absolute inset-0 w-full h-full object-contain rounded"
-                alt="Extracted frame"
-              />
-              {/* Clear output button */}
-              <button
-                onClick={() => updateNodeData(id, { outputImage: null, status: "idle" })}
-                className="absolute top-1 right-1 w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
-                title="Clear extracted frame"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </>
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center border border-dashed border-neutral-600 rounded">
-              <span className="text-[10px] text-neutral-500 text-center px-4">
-                Connect a video and extract a frame
-              </span>
-            </div>
-          )}
-        </div>
-
-        {/* Frame position toggle */}
-        <div className="nodrag nowheel shrink-0 flex gap-1 px-1">
+      {nodeData.outputImage ? (
+        <>
+          <img
+            src={adaptiveOutputImage ?? undefined}
+            className="absolute inset-0 w-full h-full object-cover"
+            alt="Extracted frame"
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              if (img.naturalWidth > 0 && img.naturalHeight > 0 && nodeData.outputImage) {
+                setLoadedAspect({ src: nodeData.outputImage, aspect: img.naturalWidth / img.naturalHeight });
+              }
+            }}
+          />
           <button
-            onClick={() => updateNodeData(id, { framePosition: "first", outputImage: null })}
-            className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-              nodeData.framePosition === "first"
-                ? "bg-blue-600 text-white"
-                : "bg-neutral-800 text-neutral-400 hover:text-neutral-200"
-            }`}
+            onClick={() => updateNodeData(id, { outputImage: null, status: "idle" })}
+            className="absolute top-1 right-1 w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+            title="Clear extracted frame"
           >
-            First
-          </button>
-          <button
-            onClick={() => updateNodeData(id, { framePosition: "last", outputImage: null })}
-            className={`flex-1 px-2 py-1 rounded text-xs font-medium transition-colors ${
-              nodeData.framePosition === "last"
-                ? "bg-blue-600 text-white"
-                : "bg-neutral-800 text-neutral-400 hover:text-neutral-200"
-            }`}
-          >
-            Last
-          </button>
-        </div>
-
-        {/* Extract Frame button */}
-        <div className="shrink-0 flex justify-end px-1">
-          <button
-            onClick={handleExtract}
-            disabled={!canExtract}
-            className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed rounded text-white text-xs font-medium transition-colors"
-          >
-            {nodeData.status === "loading" ? "Extracting..." : "Extract Frame"}
-          </button>
-        </div>
-
-        {/* Processing overlay */}
-        {nodeData.status === "loading" && (
-          <div className="absolute inset-0 bg-neutral-900/70 rounded flex flex-col items-center justify-center gap-2">
-            <svg className="w-6 h-6 animate-spin text-white" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
-            <span className="text-white text-xs">Extracting frame...</span>
-          </div>
-        )}
+          </button>
+        </>
+      ) : (
+        <EmptyState message="Connect a video and extract a frame" />
+      )}
 
-        {/* Error display */}
-        {nodeData.status === "error" && nodeData.error && (
-          <div className="shrink-0 px-2 py-1.5 bg-red-900/30 border border-red-700/50 rounded">
-            <p className="text-[10px] text-red-400 break-words">{nodeData.error}</p>
-          </div>
-        )}
-      </div>
-    </BaseNode>
+      {nodeData.status === "loading" && (
+        <div className="absolute inset-0 bg-neutral-900/70 flex flex-col items-center justify-center gap-2">
+          <Spinner size={24} className="text-white" />
+          <span className="text-white text-xs">Extracting frame...</span>
+        </div>
+      )}
+
+      {nodeData.status === "error" && nodeData.error && (
+        <div className="absolute bottom-2 left-2 right-2 px-2 py-1.5 bg-red-900/30 border border-red-700/50 rounded">
+          <p className="text-[10px] text-red-400 break-words">{nodeData.error}</p>
+        </div>
+      )}
+    </NodeShell>
   );
 }

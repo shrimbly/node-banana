@@ -1,16 +1,15 @@
 "use client";
 
 import { useCallback, useState, useEffect, useMemo, useRef } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
-import { BaseNode } from "./BaseNode";
+import { NodeProps, Node } from "@xyflow/react";
+import { NodeShell } from "./NodeShell";
+import { ControlsCard, EmptyState, Field, FieldRow, PanelButton, Spinner, SummaryValues, type SocketSpec } from "./ui";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { SplitGridNodeData } from "@/types";
 import { SplitGridTemplateModal } from "../splitgrid/SplitGridTemplateModal";
 import {
   clampGridDimension,
   getSplitGridCells,
-  getSplitGridTemplate,
-  needsMaterialization,
   resolveGridOffsets,
   gridFractions,
   MIN_GRID_DIMENSION,
@@ -18,10 +17,14 @@ import {
   MIN_SLICE_GAP,
 } from "@/store/utils/splitGridTemplate";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
-import { HandleLabel } from "./HandleLabel";
 
 type SplitGridNodeType = Node<SplitGridNodeData, "splitGrid">;
+
+const INPUT_SOCKETS: SocketSpec[] = [{ id: "image", type: "image", label: "Image" }];
+const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "reference", type: "reference", label: "Ref" }];
+const EMPTY_HEIGHT = 120;
+/** Both action buttons share one width so they stack in a column. */
+const ACTION_W = "w-[136px]";
 
 interface GridDimFieldProps {
   label: string;
@@ -43,18 +46,15 @@ function GridDimField({ label, value, onChange, disabled }: GridDimFieldProps) {
   );
 
   return (
-    <div>
-      <label className="block text-[10px] uppercase tracking-wider text-neutral-500 mb-1">
-        {label}
-      </label>
-      <div className="flex items-stretch bg-neutral-900 border border-neutral-700 rounded-md overflow-hidden focus-within:border-neutral-500 transition-colors">
+    <Field label={label}>
+      <div className="flex items-stretch h-[22px] rounded-well squircle bg-well shadow-well overflow-hidden focus-within:ring-1 focus-within:ring-neutral-600">
         <button
           onClick={() => onChange(clampGridDimension(value - 1))}
           disabled={disabled || value <= MIN_GRID_DIMENSION}
-          className="nodrag nopan px-2 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 disabled:text-neutral-700 disabled:hover:bg-transparent transition-colors"
+          className="nodrag nopan px-2 text-neutral-400 hover:text-neutral-100 hover:bg-white/5 disabled:text-neutral-700 disabled:hover:bg-transparent transition-colors"
           aria-label={`Decrease ${label.toLowerCase()}`}
         >
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" />
           </svg>
         </button>
@@ -68,21 +68,21 @@ function GridDimField({ label, value, onChange, disabled }: GridDimFieldProps) {
             if (event.key === "Enter") (event.target as HTMLInputElement).blur();
           }}
           disabled={disabled}
-          className="nodrag nopan w-full min-w-0 py-1.5 bg-transparent text-center text-sm font-medium text-neutral-100 focus:outline-none disabled:text-neutral-600"
+          className="nodrag nopan w-full min-w-0 bg-transparent text-center text-node font-medium text-neutral-100 focus:outline-none disabled:text-neutral-600"
           aria-label={label}
         />
         <button
           onClick={() => onChange(clampGridDimension(value + 1))}
           disabled={disabled || value >= MAX_GRID_DIMENSION}
-          className="nodrag nopan px-2 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-800 disabled:text-neutral-700 disabled:hover:bg-transparent transition-colors"
+          className="nodrag nopan px-2 text-neutral-400 hover:text-neutral-100 hover:bg-white/5 disabled:text-neutral-700 disabled:hover:bg-transparent transition-colors"
           aria-label={`Increase ${label.toLowerCase()}`}
         >
-          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12h14" />
           </svg>
         </button>
       </div>
-    </div>
+    </Field>
   );
 }
 
@@ -96,43 +96,20 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
   const edges = useWorkflowStore((state) => state.edges);
   const nodes = useWorkflowStore((state) => state.nodes);
   const [showEditor, setShowEditor] = useState(false);
-  const showLabels = useShowHandleLabels(selected);
+  const [expanded, setExpanded] = useState(true);
 
   const gridRows = clampGridDimension(nodeData.gridRows);
   const gridCols = clampGridDimension(nodeData.gridCols);
   const cellCount = gridRows * gridCols;
 
-  // Size the grid overlay to the image's object-contain rectangle so the grid
-  // lines track the actual image, not the letterboxed preview container.
-  const previewRef = useRef<HTMLDivElement>(null);
+  // The clip takes the image's own proportions, so the grid overlay filling
+  // the clip tracks the image exactly.
   const [imageAspect, setImageAspect] = useState<number | null>(null);
-  const [fittedSize, setFittedSize] = useState<{ width: number; height: number } | null>(null);
 
   // A new source image invalidates the measured aspect until it re-loads.
   useEffect(() => {
     setImageAspect(null);
-    setFittedSize(null);
   }, [adaptiveSourceImage]);
-
-  useEffect(() => {
-    const el = previewRef.current;
-    if (!el || imageAspect == null || typeof ResizeObserver === "undefined") return;
-    const measure = () => {
-      const cw = el.clientWidth;
-      const ch = el.clientHeight;
-      if (cw === 0 || ch === 0) return;
-      const containerAspect = cw / ch;
-      const wide = imageAspect > containerAspect;
-      setFittedSize({
-        width: wide ? cw : ch * imageAspect,
-        height: wide ? cw / imageAspect : ch,
-      });
-    };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [imageAspect]);
 
   // Reactively track the connected source image
   const hasIncomingImageConnection = useMemo(() => {
@@ -152,15 +129,7 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
     }
   }, [connectedSourceImage, id, updateNodeData, nodeData.sourceImage]);
 
-  const templateNodeCount = getSplitGridTemplate(nodeData).nodes.length;
   const cells = getSplitGridCells(nodeData);
-  const cellsAreStale = useMemo(() => {
-    const existingIds = new Set(nodes.map((node) => node.id));
-    const existingRouterNodeIds = new Set(
-      nodes.filter((node) => node.type === "router").map((node) => node.id)
-    );
-    return needsMaterialization(nodeData, existingIds, { existingRouterNodeIds });
-  }, [nodeData, nodes]);
 
   // Custom interior line positions (from dragging); fall back to uniform.
   const colOffsets = useMemo(
@@ -235,198 +204,155 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
     regenerateNode(id);
   }, [id, regenerateNode]);
 
-  const statusText = nodeData.status === "error"
-    ? nodeData.error || "Error"
-    : cells.length > 0
-      ? cellsAreStale
-        ? "Cells out of date — Split rebuilds"
-        : `${cells.length} cell group${cells.length === 1 ? "" : "s"}`
-      : "Split creates a group per cell";
+  const media = nodeData.sourceImage
+    ? { kind: "aspect" as const, aspect: imageAspect ?? 1 }
+    : { kind: "fixed" as const, height: EMPTY_HEIGHT };
 
   return (
     <>
-      <BaseNode
+      <NodeShell
         id={id}
         selected={selected}
         hasError={nodeData.status === "error"}
-        minWidth={260}
-        minHeight={340}
-      >
-        {/* Image input handle */}
-        <Handle
-          type="target"
-          position={Position.Left}
-          id="image"
-          data-handletype="image"
-          style={{ zIndex: 10 }}
-        />
-        <HandleLabel label="Image" side="target" color="var(--handle-color-image)" visible={showLabels} />
-
-        {/* Reference output handle for visual links to cell nodes */}
-        <Handle
-          type="source"
-          position={Position.Right}
-          id="reference"
-          data-handletype="reference"
-          className="!bg-gray-500"
-          style={{ zIndex: 10 }}
-        />
-        <HandleLabel label="Ref" side="source" color="#6b7280" visible={showLabels} />
-
-        <div className="flex flex-col gap-2 pt-3 h-full min-h-0">
-          {/* Rows / Columns fields */}
-          <div className="grid grid-cols-2 gap-2">
+        media={media}
+        inputs={INPUT_SOCKETS}
+        outputs={OUTPUT_SOCKETS}
+        minWidth={240}
+        controls={
+          <ControlsCard
+            id={id}
+            summary={{
+              title: `${gridRows}×${gridCols} grid`,
+              values: <SummaryValues items={[cells.length > 0 ? `${cells.length} cells` : null]} />,
+            }}
+            expanded={expanded}
+            onToggle={() => setExpanded((v) => !v)}
+          >
             <GridDimField label="Rows" value={gridRows} onChange={handleRowsChange} disabled={isRunning} />
             <GridDimField label="Columns" value={gridCols} onChange={handleColsChange} disabled={isRunning} />
-          </div>
-
-          {/* Cell node set editor */}
-          <button
-            onClick={() => setShowEditor(true)}
-            disabled={isRunning}
-            title={isRunning ? "Wait for the current run to finish" : undefined}
-            className="nodrag nopan w-full flex items-center gap-2 px-2.5 py-2 bg-neutral-900 border border-neutral-700 hover:border-neutral-500 rounded-md text-neutral-300 hover:text-neutral-100 disabled:text-neutral-600 disabled:hover:border-neutral-700 disabled:cursor-not-allowed transition-colors"
-          >
-            <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" />
-            </svg>
-            <span className="text-xs font-medium">Cell nodes</span>
-            <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-400">
-              {templateNodeCount} / cell
-            </span>
-          </button>
-
-          {/* Preview with grid overlay */}
-          <div
-            ref={previewRef}
-            className="relative flex-1 min-h-[96px] rounded-md overflow-hidden bg-neutral-900/40 border border-neutral-700/40 flex items-center justify-center"
-          >
-            {nodeData.sourceImage ? (
-              <div
-                ref={innerRef}
-                className="relative"
-                style={
-                  fittedSize
-                    ? { width: fittedSize.width, height: fittedSize.height }
-                    : { width: "100%", height: "100%" }
-                }
-              >
-                <img
-                  src={adaptiveSourceImage ?? undefined}
-                  alt="Source grid"
-                  className="w-full h-full object-contain block select-none"
-                  draggable={false}
-                  onLoad={(e) => {
-                    const { naturalWidth, naturalHeight } = e.currentTarget;
-                    if (naturalWidth > 0 && naturalHeight > 0) {
-                      setImageAspect(naturalWidth / naturalHeight);
-                    }
-                  }}
-                />
-                {/* Cell outlines (non-uniform when lines have been dragged) */}
-                <div
-                  className="absolute inset-0 pointer-events-none"
-                  style={{
-                    display: "grid",
-                    gridTemplateColumns: colFractions.map((f) => `${f}fr`).join(" "),
-                    gridTemplateRows: rowFractions.map((f) => `${f}fr`).join(" "),
-                  }}
+            <Field label="Cell nodes">
+              <div className="flex items-center justify-end">
+                <PanelButton
+                  onClick={() => setShowEditor(true)}
+                  disabled={isRunning}
+                  title={isRunning ? "Wait for the current run to finish" : "Edit the nodes created for each cell"}
+                  className={`shrink-0 flex items-center justify-center gap-1.5 ${ACTION_W}`}
                 >
-                  {Array.from({ length: cellCount }).map((_, index) => (
-                    <div key={index} className="border border-blue-400/50" />
-                  ))}
-                </div>
-                {/* Draggable interior grid lines */}
-                {!isRunning && (
-                  <>
-                    {activeColOffsets.map((offset, index) => (
-                      <div
-                        key={`v-${index}`}
-                        className="nodrag nopan group absolute top-0 bottom-0"
-                        style={{
-                          left: `${offset * 100}%`,
-                          width: 12,
-                          transform: "translateX(-50%)",
-                          cursor: "col-resize",
-                        }}
-                        onPointerDown={(e) => startLineDrag("col", index, e)}
-                      >
-                        <div
-                          className={`absolute inset-y-0 left-1/2 -translate-x-1/2 transition-all ${
-                            drag?.axis === "col"
-                              ? "w-[2px] bg-blue-300"
-                              : "w-px bg-blue-400/70 group-hover:w-[2px] group-hover:bg-blue-300"
-                          }`}
-                        />
-                      </div>
-                    ))}
-                    {activeRowOffsets.map((offset, index) => (
-                      <div
-                        key={`h-${index}`}
-                        className="nodrag nopan group absolute left-0 right-0"
-                        style={{
-                          top: `${offset * 100}%`,
-                          height: 12,
-                          transform: "translateY(-50%)",
-                          cursor: "row-resize",
-                        }}
-                        onPointerDown={(e) => startLineDrag("row", index, e)}
-                      >
-                        <div
-                          className={`absolute inset-x-0 top-1/2 -translate-y-1/2 transition-all ${
-                            drag?.axis === "row"
-                              ? "h-[2px] bg-blue-300"
-                              : "h-px bg-blue-400/70 group-hover:h-[2px] group-hover:bg-blue-300"
-                          }`}
-                        />
-                      </div>
-                    ))}
-                  </>
-                )}
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" />
+                  </svg>
+                  Open cell editor
+                </PanelButton>
               </div>
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-1">
-                <svg className="w-5 h-5 text-neutral-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
-                </svg>
-                <span className="text-neutral-500 text-[10px]">Connect image</span>
-              </div>
-            )}
-            {nodeData.status === "loading" && (
-              <div className="absolute inset-0 bg-neutral-900/70 flex items-center justify-center">
-                <svg className="w-6 h-6 animate-spin text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                </svg>
-              </div>
+            </Field>
+            <FieldRow className="justify-between gap-2">
+              <span className="text-node text-red-400 truncate" title={nodeData.status === "error" ? nodeData.error || "Error" : undefined}>
+                {nodeData.status === "error" ? nodeData.error || "Error" : ""}
+              </span>
+              <PanelButton
+                primary
+                onClick={handleSplit}
+                disabled={isRunning || !nodeData.sourceImage}
+                title={!nodeData.sourceImage ? "Connect an image first" : `Split into ${gridRows}×${gridCols}`}
+                className={`shrink-0 ${ACTION_W} justify-center`}
+              >
+                Split {gridRows}×{gridCols} now
+              </PanelButton>
+            </FieldRow>
+          </ControlsCard>
+        }
+      >
+        {nodeData.sourceImage ? (
+          <div ref={innerRef} className="absolute inset-0">
+            <img
+              src={adaptiveSourceImage ?? undefined}
+              alt="Source grid"
+              className="absolute inset-0 w-full h-full object-cover select-none"
+              draggable={false}
+              onLoad={(e) => {
+                const { naturalWidth, naturalHeight } = e.currentTarget;
+                if (naturalWidth > 0 && naturalHeight > 0) {
+                  setImageAspect(naturalWidth / naturalHeight);
+                }
+              }}
+            />
+            {/* Cell outlines (non-uniform when lines have been dragged) */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                display: "grid",
+                gridTemplateColumns: colFractions.map((f) => `${f}fr`).join(" "),
+                gridTemplateRows: rowFractions.map((f) => `${f}fr`).join(" "),
+              }}
+            >
+              {Array.from({ length: cellCount }).map((_, index) => (
+                <div key={index} className="border border-blue-400/50" />
+              ))}
+            </div>
+            {/* Draggable interior grid lines */}
+            {!isRunning && (
+              <>
+                {activeColOffsets.map((offset, index) => (
+                  <div
+                    key={`v-${index}`}
+                    className="nodrag nopan group absolute top-0 bottom-0"
+                    style={{
+                      left: `${offset * 100}%`,
+                      width: 12,
+                      transform: "translateX(-50%)",
+                      cursor: "col-resize",
+                    }}
+                    onPointerDown={(e) => startLineDrag("col", index, e)}
+                  >
+                    <div
+                      className={`absolute inset-y-0 left-1/2 -translate-x-1/2 transition-all ${
+                        drag?.axis === "col"
+                          ? "w-[2px] bg-blue-300"
+                          : "w-px bg-blue-400/70 group-hover:w-[2px] group-hover:bg-blue-300"
+                      }`}
+                    />
+                  </div>
+                ))}
+                {activeRowOffsets.map((offset, index) => (
+                  <div
+                    key={`h-${index}`}
+                    className="nodrag nopan group absolute left-0 right-0"
+                    style={{
+                      top: `${offset * 100}%`,
+                      height: 12,
+                      transform: "translateY(-50%)",
+                      cursor: "row-resize",
+                    }}
+                    onPointerDown={(e) => startLineDrag("row", index, e)}
+                  >
+                    <div
+                      className={`absolute inset-x-0 top-1/2 -translate-y-1/2 transition-all ${
+                        drag?.axis === "row"
+                          ? "h-[2px] bg-blue-300"
+                          : "h-px bg-blue-400/70 group-hover:h-[2px] group-hover:bg-blue-300"
+                      }`}
+                    />
+                  </div>
+                ))}
+              </>
             )}
           </div>
-
-          {/* Status + split */}
-          <div className="flex items-center justify-between gap-2">
-            <span
-              className={`text-[10px] truncate ${
-                nodeData.status === "error"
-                  ? "text-red-400"
-                  : cellsAreStale && cells.length > 0
-                    ? "text-amber-400"
-                    : "text-neutral-500"
-              }`}
-              title={statusText}
-            >
-              {statusText}
-            </span>
-            <button
-              onClick={handleSplit}
-              disabled={isRunning || !nodeData.sourceImage}
-              className="nodrag nopan shrink-0 px-2.5 py-1 text-[10px] border border-white hover:bg-white hover:text-neutral-900 disabled:border-neutral-600 disabled:text-neutral-600 disabled:cursor-not-allowed text-white rounded transition-colors"
-              title={!nodeData.sourceImage ? "Connect an image first" : `Split into ${gridRows}×${gridCols}`}
-            >
-              Split {gridRows}×{gridCols}
-            </button>
+        ) : (
+          <EmptyState
+            message="Connect image"
+            icon={
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+              </svg>
+            }
+          />
+        )}
+        {nodeData.status === "loading" && (
+          <div className="absolute inset-0 bg-neutral-900/70 flex items-center justify-center">
+            <Spinner size={24} className="text-white" />
           </div>
-        </div>
-      </BaseNode>
+        )}
+      </NodeShell>
 
       {/* Cell template editor */}
       {showEditor && (
