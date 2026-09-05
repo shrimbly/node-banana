@@ -52,6 +52,21 @@ describe("reconnectEdge", () => {
     expect(edges[0].data?.isLoop).toBeUndefined();
   });
 
+  it("leaves the bundle on the end that moved and keeps the other", () => {
+    useWorkflowStore.setState({
+      edges: [edge("a", "b", { createdAt: 1, sourceBundleId: "fan", targetBundleId: "in" })],
+    });
+    useWorkflowStore.getState().reconnectEdge("edge-a-b-image-image", {
+      source: "a",
+      sourceHandle: "image",
+      target: "c",
+      targetHandle: "image",
+    });
+    const [moved] = useWorkflowStore.getState().edges;
+    expect(moved.data?.sourceBundleId).toBe("fan");
+    expect(moved.data?.targetBundleId).toBeUndefined();
+  });
+
   it("clears the old target's stale input images", () => {
     useWorkflowStore.getState().reconnectEdge("edge-a-b-image-image", {
       source: "a",

@@ -824,13 +824,14 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   setEdgeStyle: (style: EdgeStyle) => {
+    if (get().edgeStyle === style) return;
     pushUndoCheckpoint(get, set);
-    set({ edgeStyle: style });
+    set({ edgeStyle: style, hasUnsavedChanges: true });
   },
 
   setEdgeAppearance: (patch: Partial<EdgeAppearance>) => {
     pushUndoCheckpoint(get, set);
-    set((state) => ({ edgeAppearance: { ...state.edgeAppearance, ...patch } }));
+    set((state) => ({ edgeAppearance: { ...state.edgeAppearance, ...patch }, hasUnsavedChanges: true }));
   },
 
   incrementModalCount: () => {
@@ -1123,9 +1124,15 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     pushUndoCheckpoint(get, set);
 
-    // Loop status depends on the new geometry; everything else carries over.
+    // Loop status depends on the new geometry, and a bundle belongs to the
+    // handle it was made on, so the moved end leaves its bundle; everything
+    // else carries over.
     const { isLoop: _wasLoop, loopCount, ...kept } = (oldEdge.data ?? {}) as WorkflowEdgeData;
     void _wasLoop;
+    const sourceMoved = oldEdge.source !== connection.source || (oldEdge.sourceHandle ?? null) !== (connection.sourceHandle ?? null);
+    const targetMoved = oldEdge.target !== connection.target || (oldEdge.targetHandle ?? null) !== (connection.targetHandle ?? null);
+    if (sourceMoved) delete kept.sourceBundleId;
+    if (targetMoved) delete kept.targetBundleId;
     const loops = wouldCreateCycle(connection.source, connection.target, others);
     const data: WorkflowEdgeData = loops ? { ...kept, isLoop: true, loopCount: loopCount ?? 3 } : kept;
 
@@ -2873,6 +2880,10 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         },
       })),
       edges: hydratedWorkflow.edges,
+      // Stub UI state belongs to the outgoing graph
+      hoveredHandle: null,
+      expandedStubGroup: null,
+      stubGroupWidths: {},
       edgeStyle: hydratedWorkflow.edgeStyle || "angular",
       edgeAppearance: hydratedWorkflow.edgeAppearance
         ? normalizeEdgeAppearance(hydratedWorkflow.edgeAppearance)
@@ -2933,6 +2944,9 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       nodes: [],
       edges: [],
       groups: {},
+      hoveredHandle: null,
+      expandedStubGroup: null,
+      stubGroupWidths: {},
       edgeStyle: getEdgeDefaults().edgeStyle,
       edgeAppearance: getEdgeDefaults().appearance,
       isRunning: false,

@@ -45,6 +45,15 @@ describe("edge appearance", () => {
     });
   });
 
+  it("marks the workflow as changed, since the appearance is saved with it", () => {
+    useWorkflowStore.setState({ hasUnsavedChanges: false });
+    useWorkflowStore.getState().setEdgeAppearance({ gradient: false });
+    expect(useWorkflowStore.getState().hasUnsavedChanges).toBe(true);
+    useWorkflowStore.setState({ hasUnsavedChanges: false });
+    useWorkflowStore.getState().setEdgeStyle("straight");
+    expect(useWorkflowStore.getState().hasUnsavedChanges).toBe(true);
+  });
+
   it("is restored by undo and redo", () => {
     const store = useWorkflowStore.getState();
     store.setEdgeAppearance({ thickness: "thin" });
