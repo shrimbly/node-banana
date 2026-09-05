@@ -10,7 +10,6 @@ import { SplitGridTemplateModal } from "../splitgrid/SplitGridTemplateModal";
 import {
   clampGridDimension,
   getSplitGridCells,
-  needsMaterialization,
   resolveGridOffsets,
   gridFractions,
   MIN_GRID_DIMENSION,
@@ -24,6 +23,8 @@ type SplitGridNodeType = Node<SplitGridNodeData, "splitGrid">;
 const INPUT_SOCKETS: SocketSpec[] = [{ id: "image", type: "image", label: "Image" }];
 const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "reference", type: "reference", label: "Ref" }];
 const EMPTY_HEIGHT = 120;
+/** Both action buttons share one width so they stack in a column. */
+const ACTION_W = "w-[136px]";
 
 interface GridDimFieldProps {
   label: string;
@@ -129,13 +130,6 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
   }, [connectedSourceImage, id, updateNodeData, nodeData.sourceImage]);
 
   const cells = getSplitGridCells(nodeData);
-  const cellsAreStale = useMemo(() => {
-    const existingIds = new Set(nodes.map((node) => node.id));
-    const existingRouterNodeIds = new Set(
-      nodes.filter((node) => node.type === "router").map((node) => node.id)
-    );
-    return needsMaterialization(nodeData, existingIds, { existingRouterNodeIds });
-  }, [nodeData, nodes]);
 
   // Custom interior line positions (from dragging); fall back to uniform.
   const colOffsets = useMemo(
@@ -210,14 +204,6 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
     regenerateNode(id);
   }, [id, regenerateNode]);
 
-  const statusText = nodeData.status === "error"
-    ? nodeData.error || "Error"
-    : cells.length > 0
-      ? cellsAreStale
-        ? "Cells out of date — Split rebuilds"
-        : `${cells.length} cell group${cells.length === 1 ? "" : "s"}`
-      : "Split creates a group per cell";
-
   const media = nodeData.sourceImage
     ? { kind: "aspect" as const, aspect: imageAspect ?? 1 }
     : { kind: "fixed" as const, height: EMPTY_HEIGHT };
@@ -250,7 +236,7 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
                   onClick={() => setShowEditor(true)}
                   disabled={isRunning}
                   title={isRunning ? "Wait for the current run to finish" : "Edit the nodes created for each cell"}
-                  className="shrink-0 flex items-center gap-1.5"
+                  className={`shrink-0 flex items-center justify-center gap-1.5 ${ACTION_W}`}
                 >
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" />
@@ -260,24 +246,15 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
               </div>
             </Field>
             <FieldRow className="justify-between gap-2">
-              <span
-                className={`text-node truncate ${
-                  nodeData.status === "error"
-                    ? "text-red-400"
-                    : cellsAreStale && cells.length > 0
-                      ? "text-amber-400"
-                      : "text-neutral-500"
-                }`}
-                title={statusText}
-              >
-                {statusText}
+              <span className="text-node text-red-400 truncate" title={nodeData.status === "error" ? nodeData.error || "Error" : undefined}>
+                {nodeData.status === "error" ? nodeData.error || "Error" : ""}
               </span>
               <PanelButton
                 primary
                 onClick={handleSplit}
                 disabled={isRunning || !nodeData.sourceImage}
                 title={!nodeData.sourceImage ? "Connect an image first" : `Split into ${gridRows}×${gridCols}`}
-                className="shrink-0"
+                className={`shrink-0 ${ACTION_W} justify-center`}
               >
                 Split {gridRows}×{gridCols} now
               </PanelButton>
