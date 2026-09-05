@@ -129,7 +129,6 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
     }
   }, [connectedSourceImage, id, updateNodeData, nodeData.sourceImage]);
 
-  const templateNodeCount = getSplitGridTemplate(nodeData).nodes.length;
   const cells = getSplitGridCells(nodeData);
   const cellsAreStale = useMemo(() => {
     const existingIds = new Set(nodes.map((node) => node.id));
@@ -247,7 +246,7 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
             <GridDimField label="Rows" value={gridRows} onChange={handleRowsChange} disabled={isRunning} />
             <GridDimField label="Columns" value={gridCols} onChange={handleColsChange} disabled={isRunning} />
             <Field label="Cell nodes">
-              <div className="flex items-center gap-2 min-w-0">
+              <div className="flex items-center justify-end">
                 <PanelButton
                   onClick={() => setShowEditor(true)}
                   disabled={isRunning}
@@ -257,9 +256,8 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
                   <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" />
                   </svg>
-                  Edit cell nodes
+                  Open cell editor
                 </PanelButton>
-                <span className="text-node text-neutral-500 truncate">{templateNodeCount} / cell</span>
               </div>
             </Field>
             <FieldRow className="justify-between gap-2">
@@ -282,7 +280,7 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
                 title={!nodeData.sourceImage ? "Connect an image first" : `Split into ${gridRows}×${gridCols}`}
                 className="shrink-0"
               >
-                Split {gridRows}×{gridCols}
+                Split {gridRows}×{gridCols} now
               </PanelButton>
             </FieldRow>
           </ControlsCard>

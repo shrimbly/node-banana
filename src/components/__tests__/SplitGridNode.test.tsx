@@ -285,7 +285,7 @@ describe("SplitGridNode", () => {
 
       expect(screen.queryByTestId("split-grid-template-modal")).not.toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole("button", { name: /cell nodes/i }));
+      fireEvent.click(screen.getByRole("button", { name: /open cell editor/i }));
 
       expect(screen.getByTestId("split-grid-template-modal")).toBeInTheDocument();
     });
@@ -293,7 +293,7 @@ describe("SplitGridNode", () => {
     it("closes the template modal via onClose", () => {
       renderNode();
 
-      fireEvent.click(screen.getByRole("button", { name: /cell nodes/i }));
+      fireEvent.click(screen.getByRole("button", { name: /open cell editor/i }));
       expect(screen.getByTestId("split-grid-template-modal")).toBeInTheDocument();
 
       fireEvent.click(screen.getByText("Close Modal"));
@@ -307,39 +307,33 @@ describe("SplitGridNode", () => {
       expect(screen.queryByTestId("split-grid-template-modal")).not.toBeInTheDocument();
     });
 
-    it("shows the template node count per cell", () => {
-      // Default template is image-only: 1 node per cell
-      renderNode();
-
-      expect(screen.getByText("1 / cell")).toBeInTheDocument();
-    });
   });
 
   describe("Split button", () => {
     it("is labeled with the current grid dimensions", () => {
       renderNode({ gridRows: 2, gridCols: 3 });
 
-      expect(screen.getByRole("button", { name: "Split 2×3" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Split 2×3 now" })).toBeInTheDocument();
     });
 
     it("is disabled when there is no source image", () => {
       renderNode({ sourceImage: null });
 
-      expect(screen.getByRole("button", { name: "Split 2×3" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Split 2×3 now" })).toBeDisabled();
     });
 
     it("is disabled while the workflow is running", () => {
       setStoreState({ isRunning: true, ...connectedImageState(SOURCE_IMAGE) });
       renderNode({ sourceImage: SOURCE_IMAGE });
 
-      expect(screen.getByRole("button", { name: "Split 2×3" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Split 2×3 now" })).toBeDisabled();
     });
 
     it("calls regenerateNode when clicked with a source image", () => {
       setStoreState(connectedImageState(SOURCE_IMAGE));
       renderNode({ sourceImage: SOURCE_IMAGE });
 
-      const splitButton = screen.getByRole("button", { name: "Split 2×3" });
+      const splitButton = screen.getByRole("button", { name: "Split 2×3 now" });
       expect(splitButton).toBeEnabled();
 
       fireEvent.click(splitButton);
