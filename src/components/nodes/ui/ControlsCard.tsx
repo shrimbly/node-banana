@@ -116,6 +116,7 @@ export function ControlsCard({
           className="grid transition-[grid-template-rows] duration-150 ease-out"
           style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
           aria-hidden={!expanded}
+          inert={!expanded}
         >
           <div className="min-h-0 overflow-hidden">
             <div

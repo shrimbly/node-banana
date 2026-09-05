@@ -247,7 +247,8 @@ export function NumberField({
     }
     const n = integer ? parseInt(text, 10) : parseFloat(text);
     if (Number.isNaN(n)) {
-      onChange(undefined);
+      if (allowEmpty) onChange(undefined);
+      else setText(value === undefined || value === null ? "" : String(value));
       return;
     }
     let clamped = n;

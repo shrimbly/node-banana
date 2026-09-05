@@ -286,7 +286,7 @@ export function ComfyAppNode({ id, data, selected }: NodeProps<ComfyAppNodeType>
               id={id}
               summary={{
                 icon: <ComfyWordmark className="h-3 w-auto" />,
-                title: app.source === "blueprint" ? "Blueprint" : "App workflow",
+                title: <span title={app.name}>{app.source === "blueprint" ? "Blueprint" : "App workflow"}</span>,
                 values: (
                   <span className="flex items-center gap-1.5">
                     <SummaryValues
@@ -455,11 +455,14 @@ function HeaderButton({
   return (
     <button
       type="button"
-      onClick={onClick}
+      onClick={(e) => {
+        // The summary row toggles the settings panel on click; this must not.
+        e.stopPropagation();
+        onClick();
+      }}
       title={title}
       aria-label={title}
       className="nodrag nopan shrink-0 text-neutral-500 hover:text-neutral-200 transition-colors"
-      onClickCapture={(e) => e.stopPropagation()}
     >
       <svg
         className="w-3.5 h-3.5"

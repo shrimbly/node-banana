@@ -3,7 +3,7 @@
 import { useCallback, useState, useEffect, useMemo, useRef, ReactNode } from "react";
 import { NodeProps, Node } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
-import { ControlsCard, HeightGrip, type SocketSpec } from "./ui";
+import { CARD_PAD, ControlsCard, HeightGrip, type SocketSpec } from "./ui";
 import { usePromptAutocomplete } from "@/hooks/usePromptAutocomplete";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { PromptConstructorNodeData, PromptNodeData, LLMGenerateNodeData, AvailableVariable } from "@/types";
@@ -200,6 +200,39 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
         media={{ kind: "fixed", height: mediaHeight }}
         inputs={INPUT_SOCKETS}
         outputs={OUTPUT_SOCKETS}
+        cardChildren={
+          // Outside the clip so it can hang below the text surface; the clip
+          // starts CARD_PAD inside the card, so its offsets shift by that much.
+          showAutocomplete && filteredAutocompleteVars.length > 0 ? (
+            <div
+              className="absolute z-20 bg-neutral-800 border border-neutral-600 rounded shadow-xl max-h-40 overflow-y-auto nowheel"
+              style={{
+                top: autocompletePosition.top + CARD_PAD,
+                left: autocompletePosition.left + CARD_PAD,
+              }}
+            >
+              {filteredAutocompleteVars.map((variable, index) => (
+                <button
+                  key={variable.nodeId}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleAutocompleteSelect(variable.name);
+                  }}
+                  className={`w-full px-3 py-2 text-left text-[11px] flex flex-col gap-0.5 transition-colors ${
+                    index === selectedAutocompleteIndex
+                      ? "bg-neutral-700 text-neutral-100"
+                      : "text-neutral-300 hover:bg-neutral-700"
+                  }`}
+                >
+                  <div className="font-medium text-blue-400">@{variable.name}</div>
+                  <div className="text-neutral-500 truncate max-w-[200px]">
+                    {variable.value || "(empty)"}
+                  </div>
+                </button>
+              ))}
+            </div>
+          ) : undefined
+        }
         controls={
           <ControlsCard
             id={id}
@@ -239,36 +272,6 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
           title={resolvedPreview ? `Preview: ${resolvedPreview}` : undefined}
         />
 
-        {/* Autocomplete dropdown */}
-        {showAutocomplete && filteredAutocompleteVars.length > 0 && (
-          <div
-            className="absolute z-20 bg-neutral-800 border border-neutral-600 rounded shadow-xl max-h-40 overflow-y-auto"
-            style={{
-              top: autocompletePosition.top,
-              left: autocompletePosition.left,
-            }}
-          >
-            {filteredAutocompleteVars.map((variable, index) => (
-              <button
-                key={variable.nodeId}
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  handleAutocompleteSelect(variable.name);
-                }}
-                className={`w-full px-3 py-2 text-left text-[11px] flex flex-col gap-0.5 transition-colors ${
-                  index === selectedAutocompleteIndex
-                    ? "bg-neutral-700 text-neutral-100"
-                    : "text-neutral-300 hover:bg-neutral-700"
-                }`}
-              >
-                <div className="font-medium text-blue-400">@{variable.name}</div>
-                <div className="text-neutral-500 truncate max-w-[200px]">
-                  {variable.value || "(empty)"}
-                </div>
-              </button>
-            ))}
-          </div>
-        )}
         <HeightGrip height={mediaHeight} onChange={(h) => updateNodeData(id, { mediaHeight: h })} />
       </NodeShell>
     </>

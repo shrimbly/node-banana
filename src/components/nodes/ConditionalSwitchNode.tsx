@@ -18,6 +18,21 @@ const MODE_OPTIONS = [
   { value: "ends-with", label: "ends" },
 ];
 
+/** Match indicator at the start of a rule row. */
+function Match({ on }: { on: boolean }) {
+  return (
+    <div className="w-3 h-3 flex items-center justify-center shrink-0">
+      {on ? (
+        <svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+        </svg>
+      ) : (
+        <div className="w-2 h-2 rounded-full bg-neutral-600" />
+      )}
+    </div>
+  );
+}
+
 /**
  * Routes text by rule. Row 0 shows the incoming text (the input socket sits
  * there); every rule is a row with its own output socket, and the fallback
@@ -147,18 +162,6 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
       { id: "default", type: "text" as const, label: "Fallback", row: nodeData.rules.length + 1 },
     ],
     [nodeData.rules]
-  );
-
-  const Match = ({ on }: { on: boolean }) => (
-    <div className="w-3 h-3 flex items-center justify-center shrink-0">
-      {on ? (
-        <svg className="w-3 h-3 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-        </svg>
-      ) : (
-        <div className="w-2 h-2 rounded-full bg-neutral-600" />
-      )}
-    </div>
   );
 
   return (
