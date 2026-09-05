@@ -1,12 +1,14 @@
 "use client";
 
-import React, { ReactNode, useCallback, useLayoutEffect, useRef } from "react";
+import React, { ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   NodeResizeControl,
   OnResize,
   OnResizeEnd,
   useReactFlow,
+  useStore,
   useUpdateNodeInternals,
+  type ReactFlowState,
   type ResizeControlVariant,
 } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -23,6 +25,62 @@ export type { ShellMedia };
 
 /** Widest a node can be dragged. Auto-sizing uses the tighter NODE_MAX_W. */
 const RESIZE_MAX_W = 1200;
+
+/** How much of the remaining distance the controls close per frame while trailing. */
+const TRAIL_EASE = 0.28;
+
+/**
+ * The controls card trails the media card while the node moves, as if the
+ * media were towing it. The node's position is read from React Flow; a
+ * smoothed copy eases toward it each frame, and the difference is applied
+ * as a transform to the parts beneath the media card.
+ */
+function useTrailingOffset(id: string): { x: number; y: number } {
+  const position = useStore(
+    useCallback((s: ReactFlowState) => s.nodeLookup.get(id)?.internals.positionAbsolute, [id])
+  );
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const target = useRef<{ x: number; y: number } | null>(null);
+  const smoothed = useRef<{ x: number; y: number } | null>(null);
+  const frame = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!position) return;
+    target.current = { x: position.x, y: position.y };
+    if (!smoothed.current) {
+      // First sighting: start in place, nothing to trail.
+      smoothed.current = { x: position.x, y: position.y };
+      return;
+    }
+    if (frame.current !== null) return;
+
+    const step = () => {
+      frame.current = null;
+      const t = target.current;
+      const s = smoothed.current;
+      if (!t || !s) return;
+      s.x += (t.x - s.x) * TRAIL_EASE;
+      s.y += (t.y - s.y) * TRAIL_EASE;
+      const dx = s.x - t.x;
+      const dy = s.y - t.y;
+      if (Math.abs(dx) < 0.3 && Math.abs(dy) < 0.3) {
+        s.x = t.x;
+        s.y = t.y;
+        setOffset({ x: 0, y: 0 });
+        return;
+      }
+      setOffset({ x: dx, y: dy });
+      frame.current = requestAnimationFrame(step);
+    };
+    frame.current = requestAnimationFrame(step);
+  }, [position?.x, position?.y]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => () => {
+    if (frame.current !== null) cancelAnimationFrame(frame.current);
+  }, []);
+
+  return offset;
+}
 
 export interface NodeShellProps {
   id: string;
@@ -93,6 +151,8 @@ export function NodeShell({
   const labels = showLabels ?? connectingLabels;
 
   const rows = Math.max(socketRowCount(inputs), socketRowCount(outputs));
+  const trail = useTrailingOffset(id);
+  const trailing = trail.x !== 0 || trail.y !== 0;
   // Same precedence as the card's classes below: error beats selection beats running.
   const outline: SocketOutline = hasError ? "error" : selected ? "selected" : running ? "running" : "none";
 
@@ -233,17 +293,26 @@ export function NodeShell({
         <SocketColumn nodeId={id} side="right" sockets={outputs} showLabels={labels} outline={outline} />
       </div>
 
-      {(gap !== undefined && gap !== null) || controls ? (
+      {((gap !== undefined && gap !== null) || controls) && (
         <div
-          data-gap-row
-          className="w-full shrink-0 flex items-center justify-center"
-          style={{ height: gap !== undefined && gap !== null ? GAP_ROW_H : CONTROLS_GAP }}
+          data-trailing
+          className="w-full flex flex-col items-center"
+          style={
+            trailing
+              ? { transform: `translate3d(${trail.x}px, ${trail.y}px, 0)`, willChange: "transform" }
+              : undefined
+          }
         >
-          {gap}
+          <div
+            data-gap-row
+            className="w-full shrink-0 flex items-center justify-center"
+            style={{ height: gap !== undefined && gap !== null ? GAP_ROW_H : CONTROLS_GAP }}
+          >
+            {gap}
+          </div>
+          {controls}
         </div>
-      ) : null}
-
-      {controls}
+      )}
     </div>
   );
 }
