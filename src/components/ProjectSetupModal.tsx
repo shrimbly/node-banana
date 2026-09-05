@@ -12,6 +12,15 @@ import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { ComfySettingsTab, useComfySettingsDraft } from "@/components/settings/ComfySettingsTab";
 import { saveComfySettings } from "@/lib/comfy/settings";
 import { ConnectionSettings } from "@/components/settings/ConnectionSettings";
+import {
+  Dialog,
+  DialogBody,
+  DialogButton,
+  DialogDescription,
+  DialogFooter,
+  DialogTitle,
+} from "@/components/ui/Dialog";
+import { cn } from "@/components/nodes/ui/cn";
 
 // LLM provider and model options (mirrored from LLMGenerateNode)
 const LLM_PROVIDERS: { value: LLMProvider; label: string }[] = [
@@ -83,6 +92,18 @@ const getProviderIcon = (provider: ProviderType) => {
   }
 };
 
+type SettingsTab = "project" | "providers" | "comfy" | "nodeDefaults" | "canvas" | "noodles";
+
+/** The rail's entries, with each page's heading and one-line subtitle. */
+const SETTINGS_PAGES: { id: SettingsTab; label: string; title: string; description: string }[] = [
+  { id: "project", label: "Project", title: "Project", description: "Name, location and how the file is written." },
+  { id: "providers", label: "Providers", title: "Providers", description: "API keys for the model providers this project can call." },
+  { id: "comfy", label: "ComfyUI", title: "ComfyUI", description: "Where Comfy app nodes run." },
+  { id: "nodeDefaults", label: "Node Defaults", title: "Node defaults", description: "Applied when a node is added from the bar or a shortcut." },
+  { id: "canvas", label: "Canvas", title: "Canvas", description: "How you navigate and select on the canvas." },
+  { id: "noodles", label: "Noodles", title: "Noodles", description: "How the connections between nodes are drawn." },
+];
+
 interface ProjectSetupModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -150,7 +171,7 @@ export function ProjectSetupModal({
 
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<"project" | "providers" | "comfy" | "nodeDefaults" | "canvas" | "noodles">("project");
+  const [activeTab, setActiveTab] = useState<SettingsTab>("project");
 
   // Project tab state
   const [name, setName] = useState("");
@@ -400,9 +421,6 @@ export function ProjectSetupModal({
     if (e.key === "Enter" && !isValidating && !isBrowsing) {
       handleSave();
     }
-    if (e.key === "Escape") {
-      onClose();
-    }
   };
 
   const updateLocalProvider = (
@@ -422,69 +440,52 @@ export function ProjectSetupModal({
 
   if (!isOpen) return null;
 
+  const page = SETTINGS_PAGES.find((p) => p.id === activeTab) ?? SETTINGS_PAGES[0];
+
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      onWheelCapture={(e) => e.stopPropagation()}
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      className="w-[720px] h-[480px]"
+      panelProps={{ onKeyDown: handleKeyDown }}
     >
-      <div
-        className="bg-neutral-800 rounded-xl w-[580px] border border-neutral-700 shadow-2xl overflow-clip flex flex-col max-h-[80vh]"
-        onKeyDown={handleKeyDown}
-      >
-        <div className="px-8 pt-8 pb-0 shrink-0">
-          <div className="flex items-center gap-2 mb-5">
-            <img src="/banana_icon.png" alt="" className="w-6 h-6" />
-            <h2 className="text-xl font-medium text-neutral-100">
-              {mode === "new" ? "New Project" : "Project Settings"}
-            </h2>
+      <div className="flex-1 min-h-0 flex">
+        {/* Rail: one entry per page, the dialog's title at its head */}
+        <nav
+          aria-label="Settings pages"
+          className="w-40 shrink-0 flex flex-col gap-0.5 p-2 pt-3.5 bg-neutral-900/50 border-r border-chrome-border/50"
+        >
+          <div className="flex items-center gap-2 px-2.5 pb-3">
+            <img src="/banana_icon.png" alt="" className="w-5 h-5" />
+            <DialogTitle compact>{mode === "new" ? "New Project" : "Project Settings"}</DialogTitle>
+          </div>
+          {SETTINGS_PAGES.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setActiveTab(p.id)}
+              aria-current={activeTab === p.id ? "page" : undefined}
+              className={cn(
+                "h-[30px] px-2.5 rounded-md text-left text-[13px] whitespace-nowrap transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
+                activeTab === p.id
+                  ? "bg-neutral-700 text-neutral-100 font-medium"
+                  : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50"
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="flex-1 min-w-0 flex flex-col">
+          <div className="px-5 pt-3.5 pb-2 shrink-0 flex flex-col gap-0.5">
+            <h3 className="text-base font-semibold leading-6 text-neutral-100">{page.title}</h3>
+            <DialogDescription>{page.description}</DialogDescription>
           </div>
 
-          {/* Tab Bar */}
-          <div className="flex gap-1.5 p-1 bg-neutral-900/50 rounded-lg">
-          <button
-            onClick={() => setActiveTab("project")}
-            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "project" ? "bg-neutral-700 text-neutral-100 font-medium" : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"}`}
-          >
-            Project
-          </button>
-          <button
-            onClick={() => setActiveTab("providers")}
-            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "providers" ? "bg-neutral-700 text-neutral-100 font-medium" : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"}`}
-          >
-            Providers
-          </button>
-          <button
-            onClick={() => setActiveTab("comfy")}
-            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "comfy" ? "bg-neutral-700 text-neutral-100 font-medium" : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"}`}
-          >
-            ComfyUI
-          </button>
-          <button
-            onClick={() => setActiveTab("nodeDefaults")}
-            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "nodeDefaults" ? "bg-neutral-700 text-neutral-100 font-medium" : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"}`}
-          >
-            Node Defaults
-          </button>
-          <button
-            onClick={() => setActiveTab("canvas")}
-            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "canvas" ? "bg-neutral-700 text-neutral-100 font-medium" : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"}`}
-          >
-            Canvas
-          </button>
-          <button
-            onClick={() => setActiveTab("noodles")}
-            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "noodles" ? "bg-neutral-700 text-neutral-100 font-medium" : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"}`}
-          >
-            Noodles
-          </button>
-          </div>
-        </div>
-
-        {/* Scrollable tab content area */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-8 py-5">
+        {/* Scrollable page content */}
+        <DialogBody className="pt-1">
 
         {/* Project Tab Content */}
         {activeTab === "project" && (
@@ -1270,26 +1271,23 @@ export function ProjectSetupModal({
           </div>
         )}
 
-        </div>
+        </DialogBody>
 
-        {/* Fixed footer */}
-        <div className="flex justify-end gap-2 px-8 py-5 border-t border-neutral-700/50 shrink-0">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-100 transition-colors"
-          >
+        <DialogFooter>
+          <DialogButton variant="ghost" onClick={onClose}>
             Cancel
-          </button>
-          <button
+          </DialogButton>
+          <DialogButton
+            variant="primary"
             onClick={handleSave}
             disabled={activeTab === "project" && (isValidating || isBrowsing)}
-            className="px-4 py-2 text-sm bg-white text-neutral-900 rounded-lg hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {activeTab === "project"
               ? (isValidating ? "Validating..." : mode === "new" ? "Create" : "Save")
               : "Save"
             }
-          </button>
+          </DialogButton>
+        </DialogFooter>
         </div>
       </div>
 
@@ -1336,6 +1334,6 @@ export function ProjectSetupModal({
           initialCapabilityFilter="video"
         />
       )}
-    </div>
+    </Dialog>
   );
 }

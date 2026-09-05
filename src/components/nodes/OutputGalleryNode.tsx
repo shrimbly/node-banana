@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
 import { NodeProps, Node, useReactFlow } from "@xyflow/react";
+import { Dialog } from "@/components/ui/Dialog";
 import { NodeShell } from "./NodeShell";
 import { ControlsCard, EmptyState, type SocketSpec } from "./ui";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -386,14 +386,9 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
         )}
       </NodeShell>
 
-      {/* Lightbox Portal */}
-      {lightboxIndex !== null && currentItem && typeof document !== "undefined" &&
-        createPortal(
-          <div
-            className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-8"
-            onClick={closeLightbox}
-          >
-            <div className="relative max-w-full max-h-full" onClick={(e) => e.stopPropagation()}>
+      {/* Lightbox */}
+      {lightboxIndex !== null && currentItem && (
+        <Dialog open onClose={closeLightbox} variant="lightbox" portal label={`Gallery image ${lightboxIndex + 1}`}>
               {currentItem.type === "video" ? (
                 <LightboxVideo src={currentItem.src} />
               ) : (
@@ -464,10 +459,8 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-black/50 rounded text-white text-xs font-medium">
                 {lightboxIndex + 1} / {displayMedia.length}
               </div>
-            </div>
-          </div>,
-          document.body
-        )}
+        </Dialog>
+      )}
     </>
   );
 }
