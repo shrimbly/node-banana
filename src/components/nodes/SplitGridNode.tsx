@@ -247,18 +247,20 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
             <GridDimField label="Rows" value={gridRows} onChange={handleRowsChange} disabled={isRunning} />
             <GridDimField label="Columns" value={gridCols} onChange={handleColsChange} disabled={isRunning} />
             <Field label="Cell nodes">
-              <button
-                onClick={() => setShowEditor(true)}
-                disabled={isRunning}
-                title={isRunning ? "Wait for the current run to finish" : undefined}
-                className="nodrag nopan h-[22px] w-full flex items-center gap-1.5 px-[7px] rounded-well squircle bg-well shadow-well text-neutral-300 hover:text-neutral-100 disabled:text-neutral-600 disabled:cursor-not-allowed transition-colors"
-              >
-                <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" />
-                </svg>
-                <span className="text-node">Cell nodes</span>
-                <span className="ml-auto text-node text-neutral-500">{templateNodeCount} / cell</span>
-              </button>
+              <div className="flex items-center gap-2 min-w-0">
+                <PanelButton
+                  onClick={() => setShowEditor(true)}
+                  disabled={isRunning}
+                  title={isRunning ? "Wait for the current run to finish" : "Edit the nodes created for each cell"}
+                  className="shrink-0 flex items-center gap-1.5"
+                >
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" />
+                  </svg>
+                  Edit cell nodes
+                </PanelButton>
+                <span className="text-node text-neutral-500 truncate">{templateNodeCount} / cell</span>
+              </div>
             </Field>
             <FieldRow className="justify-between gap-2">
               <span
