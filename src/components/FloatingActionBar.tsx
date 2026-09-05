@@ -151,12 +151,12 @@ const CaretUpIcon = ({ open = false }: { open?: boolean }) => (
   </svg>
 );
 const PlayIcon = () => (
-  <svg className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <path d="M8 5v14l11-7z" />
   </svg>
 );
 const SpinnerIcon = () => (
-  <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+  <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.25" />
     <path d="M12 3a9 9 0 019 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
   </svg>
@@ -595,7 +595,7 @@ export function FloatingActionBar() {
               disabled={!valid && !isRunning}
               title={runTitle}
               data-tutorial="floating-run-button"
-              className="flex items-center gap-1.5 whitespace-nowrap pl-3.5 pr-3 text-[11px] font-semibold focus-visible:outline-none disabled:cursor-not-allowed"
+              className="flex items-center gap-2 whitespace-nowrap pl-4 pr-3.5 text-[13px] font-semibold focus-visible:outline-none disabled:cursor-not-allowed"
             >
               {isRunning ? (
                 <>
@@ -622,7 +622,7 @@ export function FloatingActionBar() {
                 title="Run options"
                 className={`flex w-7 items-center justify-center border-l border-black/10 transition-colors duration-[120ms] focus-visible:outline-none ${runMenuOpen ? "bg-neutral-200" : ""}`}
               >
-                <svg className={`h-2.5 w-2.5 transition-transform duration-[120ms] ${runMenuOpen ? "rotate-180" : ""}`} {...iconProps} strokeWidth={2.5}>
+                <svg className={`h-3 w-3 transition-transform duration-[120ms] ${runMenuOpen ? "rotate-180" : ""}`} {...iconProps} strokeWidth={2.5}>
                   <path d="M19 9l-7 7-7-7" />
                 </svg>
               </button>
