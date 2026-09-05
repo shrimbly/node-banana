@@ -321,32 +321,49 @@ describe("WorkflowCanvas", () => {
       expect(closeButton).toHaveStyle({ right: "23px", bottom: "129px" });
     });
 
-    it("keeps edges visible and scopes native pan state to this canvas", () => {
-      const edge = { id: "edge-1", source: "source", target: "target" };
-      mockViewport.zoom = 0.2;
-      mockUseWorkflowStore.mockImplementation((selector) =>
-        selector(createDefaultState({ edges: [edge] }))
-      );
+    it("keeps edges visible and holds native pan state on this canvas until the moves stop", () => {
+      vi.useFakeTimers();
+      try {
+        const edge = { id: "edge-1", source: "source", target: "target" };
+        mockViewport.zoom = 0.2;
+        mockUseWorkflowStore.mockImplementation((selector) =>
+          selector(createDefaultState({ edges: [edge] }))
+        );
 
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
+        render(
+          <TestWrapper>
+            <WorkflowCanvas />
+          </TestWrapper>
+        );
 
-      const canvas = document.querySelector(".bg-canvas-bg") as HTMLElement;
-      act(() => {
-        (mockReactFlowProps.current?.onMoveStart as (() => void) | undefined)?.();
-      });
+        const canvas = document.querySelector(".bg-canvas-bg") as HTMLElement;
+        const move = (handler: "onMoveStart" | "onMoveEnd") =>
+          act(() => {
+            (mockReactFlowProps.current?.[handler] as (() => void) | undefined)?.();
+          });
+        move("onMoveStart");
 
-      expect(mockReactFlowProps.current?.edges).toEqual([edge]);
-      expect(canvas).toHaveClass("canvas-native-navigation-active");
-      expect(document.documentElement).not.toHaveClass("canvas-native-navigation-active");
+        expect(mockReactFlowProps.current?.edges).toEqual([edge]);
+        expect(canvas).toHaveClass("canvas-native-navigation-active");
+        expect(document.documentElement).toHaveClass("canvas-interacting");
+        expect(document.documentElement).not.toHaveClass("canvas-native-navigation-active");
 
-      act(() => {
-        (mockReactFlowProps.current?.onMoveEnd as (() => void) | undefined)?.();
-      });
-      expect(canvas).not.toHaveClass("canvas-native-navigation-active");
+        // A wheel pan reports a start/end pair every frame; the classes must
+        // not flip off between them, since each flip restyles the document
+        move("onMoveEnd");
+        move("onMoveStart");
+        move("onMoveEnd");
+        expect(canvas).toHaveClass("canvas-native-navigation-active");
+        expect(document.documentElement).toHaveClass("canvas-interacting");
+
+        act(() => {
+          vi.advanceTimersByTime(200);
+        });
+        expect(canvas).not.toHaveClass("canvas-native-navigation-active");
+        expect(document.documentElement).not.toHaveClass("canvas-interacting");
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("should render MultiSelectToolbar component", () => {
