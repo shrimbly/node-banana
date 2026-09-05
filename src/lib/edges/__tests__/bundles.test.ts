@@ -26,7 +26,7 @@ describe("edgeBundles", () => {
   it("bundles a fan-out at the shared output handle", () => {
     const fanOut = [bundled("e1", "x"), bundled("e2", "x"), bundled("e3", "x")];
     const { source, target } = edgeBundles("e2", fanOut);
-    expect(source).toMatchObject({ end: "source", index: 1, count: 3, manual: true, key: "source:x" });
+    expect(source).toMatchObject({ end: "source", index: 1, count: 3, key: "source:x" });
     expect(target).toBeNull();
   });
 

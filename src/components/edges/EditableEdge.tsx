@@ -112,14 +112,14 @@ export function EditableEdge({
   // so the selector stays referentially stable.
   const bundleKey = useWorkflowStore((state) => {
     const { source: sb, target: tb } = edgeBundles(id, state.edges);
-    const pack = (m: BundleMembership | null) => (m ? `${m.index}|${m.count}|${m.manual ? 1 : 0}|${m.members.join(",")}` : "");
+    const pack = (m: BundleMembership | null) => (m ? `${m.index}|${m.count}|${m.members.join(",")}` : "");
     return `${pack(sb)}\u0002${pack(tb)}`;
   });
   const bundles = useMemo(() => {
     const unpack = (packed: string, end: "source" | "target"): BundleMembership | null => {
       if (!packed) return null;
-      const [index, count, manual, members] = packed.split("|");
-      return { end, key: "", index: Number(index), count: Number(count), manual: manual === "1", members: members.split(",") };
+      const [index, count, members] = packed.split("|");
+      return { end, key: "", index: Number(index), count: Number(count), members: members.split(",") };
     };
     const [sb, tb] = bundleKey.split("\u0002");
     return { source: unpack(sb, "source"), target: unpack(tb, "target") };

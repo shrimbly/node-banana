@@ -24,7 +24,6 @@ export interface BundleMembership {
   /** This edge's position among the members; 0 draws the stem. */
   index: number;
   count: number;
-  manual: boolean;
 }
 
 export interface EdgeBundles {
@@ -59,7 +58,7 @@ function membership(edge: WorkflowEdge, edges: WorkflowEdge[], end: BundleEnd): 
     .sort(byCreation);
   if (members.length < 2) return null;
   const index = members.findIndex((e) => e.id === edge.id);
-  return { end, key: `${end}:${bundleId}`, members: members.map((e) => e.id), index: index < 0 ? 0 : index, count: members.length, manual: true };
+  return { end, key: `${end}:${bundleId}`, members: members.map((e) => e.id), index: index < 0 ? 0 : index, count: members.length };
 }
 
 /** The bundles an edge belongs to at each end, or null where it is alone. */

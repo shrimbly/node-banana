@@ -117,10 +117,13 @@ describe("EdgeToolbar", () => {
     withEdges([edge("e1", { selected: true, data: { label: "old" } })]);
     render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
     const input = screen.getByLabelText("Connection label") as HTMLInputElement;
+    input.focus();
     fireEvent.change(input, { target: { value: "typo" } });
     fireEvent.keyDown(input, { key: "Escape" });
     expect(input.value).toBe("old");
+    // The blur Escape triggers must not commit the discarded draft
     expect(mockSetEdgeLabel).not.toHaveBeenCalled();
+    expect(document.activeElement).not.toBe(input);
   });
 
   it("offers to show a hidden edge instead of hiding it", () => {
@@ -220,6 +223,25 @@ describe("EdgeToolbar bundles", () => {
     render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
     fireEvent.click(screen.getByTitle("Bundle 2 connections"));
     expect(mockBundleEdges).toHaveBeenCalledWith(["e1", "e2"]);
+  });
+
+  it("does not offer to bundle a selection that is already one bundle", () => {
+    withEdges([
+      edge("e1", { selected: true, data: { sourceBundleId: "x", createdAt: 1 } }),
+      edge("e2", { selected: true, target: "z", data: { sourceBundleId: "x", createdAt: 2 } }),
+    ]);
+    render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
+    expect(screen.queryByTitle(/^Bundle/)).toBeNull();
+    expect(screen.getByTitle("Unbundle")).toBeTruthy();
+  });
+
+  it("offers to bundle a selection at the other end of an edge already bundled at one", () => {
+    withEdges([
+      edge("e1", { selected: true, data: { targetBundleId: "in", createdAt: 1 } }),
+      edge("e2", { selected: true, target: "z", data: { createdAt: 2 } }),
+    ]);
+    render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
+    expect(screen.getByTitle("Bundle 2 connections")).toBeTruthy();
   });
 
   it("does not offer to bundle edges on different handles", () => {

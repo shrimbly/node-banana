@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EdgeLabelRenderer, useViewport } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { getImageSequenceNumber } from "@/lib/edges/labels";
-import { bundleMembership, shareHandle } from "@/lib/edges/bundles";
+import { bundleIdAt, bundleMembership, sharedEnd } from "@/lib/edges/bundles";
 
 export { getImageSequenceNumber };
 
@@ -46,6 +46,8 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
   const edgeLabel = useWorkflowStore((state) => state.edges.find((e) => e.id === edgeId)?.data?.label ?? "");
   const [draftLabel, setDraftLabel] = useState(edgeLabel);
   useEffect(() => setDraftLabel(edgeLabel), [edgeLabel, edgeId]);
+  // Escape blurs the field, and that blur must not commit the draft it discards
+  const discardingRef = useRef(false);
 
   const selectedEdges = useMemo(() => edges.filter((e) => e.selected), [edges]);
   const bundle = useMemo(() => bundleMembership(edgeId, edges), [edgeId, edges]);
@@ -63,8 +65,14 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
   const loopCount = edge.data?.loopCount ?? 3;
   const allPaused = groupEdges.every((e) => e.data?.hasPause);
   const hasPause = grouped ? allPaused : Boolean(edge.data?.hasPause);
-  const canBundle = multi && !bundle?.manual && shareHandle(selectedEdges) && selectedEdges.every((e) => !e.data?.hidden && e.type !== "reference");
-  const canUnbundle = Boolean(bundle?.manual) && (bundled || multi);
+  // A multi-selection leaving one handle can be bundled, unless it already is
+  const selectedEnd = multi ? sharedEnd(selectedEdges) : null;
+  const alreadyBundled =
+    selectedEnd !== null &&
+    Boolean(bundleIdAt(selectedEdges[0], selectedEnd)) &&
+    selectedEdges.every((e) => bundleIdAt(e, selectedEnd) === bundleIdAt(selectedEdges[0], selectedEnd));
+  const canBundle = selectedEnd !== null && !alreadyBundled && selectedEdges.every((e) => !e.data?.hidden && e.type !== "reference");
+  const canUnbundle = bundle !== null && (bundled || multi);
   const isHiddenEdge = Boolean(edge.data?.hidden);
 
   const handleTogglePause = () => {
@@ -132,7 +140,9 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
               placeholder="Label"
               aria-label="Connection label"
               onChange={(e) => setDraftLabel(e.target.value)}
-              onBlur={() => setEdgeLabel(edge.id, draftLabel)}
+              onBlur={() => {
+                if (!discardingRef.current) setEdgeLabel(edge.id, draftLabel);
+              }}
               onKeyDown={(e) => {
                 e.stopPropagation();
                 if (e.key === "Enter") {
@@ -140,7 +150,10 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
                   (e.target as HTMLInputElement).blur();
                 } else if (e.key === "Escape") {
                   setDraftLabel(edgeLabel);
+                  // blur() fires the handler synchronously, before the reset draft renders
+                  discardingRef.current = true;
                   (e.target as HTMLInputElement).blur();
+                  discardingRef.current = false;
                 }
               }}
               className="nodrag nopan nokey w-24 h-6 px-2 text-[11px] text-neutral-100 bg-neutral-900 border border-neutral-600 rounded placeholder:text-neutral-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
