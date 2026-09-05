@@ -42,7 +42,6 @@ describe("edge appearance", () => {
       fadedOpacity: 0.5,
       gradient: false,
       loadingPulse: true,
-      labels: "hover",
     });
   });
 
@@ -65,14 +64,13 @@ describe("edge appearance", () => {
       nodes: [],
       edges: [],
       edgeStyle: "angular",
-      edgeAppearance: { thickness: "thick", fadedOpacity: 0.6, gradient: false, loadingPulse: false, labels: "always" },
+      edgeAppearance: { thickness: "thick", fadedOpacity: 0.6, gradient: false, loadingPulse: false },
     });
     expect(useWorkflowStore.getState().edgeAppearance).toEqual({
       thickness: "thick",
       fadedOpacity: 0.6,
       gradient: false,
       loadingPulse: false,
-      labels: "always",
     });
   });
 

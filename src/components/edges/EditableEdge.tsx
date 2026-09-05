@@ -315,11 +315,9 @@ export function EditableEdge({
   const activeStroke = appearance.gradient ? `url(#${activeGradientId})` : edgeColor;
   const showPulse = isTargetLoading && appearance.loadingPulse;
 
-  // Labels: the user's own always shows; automatic ones follow the setting
-  const labelMode = appearance.labels ?? "hover";
-  const autoVisible =
-    labelMode === "always" || (labelMode === "hover" && (hovered || Boolean(selected) || isConnectedToSelection));
-  const labelText = hasOwnLabel || autoVisible ? displayLabel : "";
+  // Labels: only one the user typed sits on the noodle; the automatic type
+  // and image-order names stay on the toolbar and the hidden-connection stubs
+  const labelText = hasOwnLabel ? displayLabel : "";
   const showLabel = Boolean(labelText) || Boolean(edgeData?.isLoop);
 
   if (isHidden) {

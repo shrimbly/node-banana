@@ -58,7 +58,7 @@ save; they just leave selection and hit-testing.
 - [x] `label` on edge data, edited in the toolbar's label field (Enter commits, Escape reverts). Decision: no double-click editing; selecting the noodle already puts the field on it
 - [x] One `EdgeLabel` component via `EdgeLabelRenderer`, replacing the `foreignObject` loop badge. The pause marker stays an SVG mark by the target, since its position is the information
 - [x] Auto labels: "Image N" order or the data type; loop count in the same pill
-- [x] Labels setting: always / on hover (hover, selection, or an attached selected node) / never. Typed labels always show
+- [x] Only a label the user typed sits on the noodle itself; the automatic names live on the toolbar and the hidden-connection stubs (the always / hover / never setting was dropped)
 - [x] Placed at the path midpoint, offset for parallel connections between the same nodes; hidden stubs reuse the label
 
 ### 5. Noodle grouping and bundling — done

@@ -1,6 +1,6 @@
 "use client";
 
-import { EdgeAppearance, EdgeLabelMode, EdgeStyle, EdgeThickness } from "@/types";
+import { EdgeAppearance, EdgeStyle, EdgeThickness } from "@/types";
 import { EDGE_THICKNESS_PX } from "@/lib/edges/appearance";
 import { HANDLE_TYPE_COLORS } from "@/lib/edges/colors";
 import { gradientOpacities } from "@/components/edges/SharedEdgeGradients";
@@ -25,12 +25,6 @@ const LINE_STYLES: { value: EdgeStyle; label: string }[] = [
   { value: "curved", label: "Curved" },
   { value: "angular", label: "Angular" },
   { value: "straight", label: "Straight" },
-];
-
-const LABEL_MODES: { value: EdgeLabelMode; label: string }[] = [
-  { value: "always", label: "Always" },
-  { value: "hover", label: "On hover" },
-  { value: "never", label: "Never" },
 ];
 
 const THICKNESSES: { value: EdgeThickness; label: string }[] = [
@@ -214,15 +208,6 @@ export function ConnectionSettings({
               />
               <span className="w-8 text-right text-xs text-neutral-300 tabular-nums">{fadedPercent}%</span>
             </div>
-          </SettingRow>
-
-          <SettingRow label="Labels" hint="Type and image order; your own labels always show">
-            <Segmented
-              label="Labels"
-              options={LABEL_MODES}
-              value={appearance.labels}
-              onChange={(labels) => update({ labels })}
-            />
           </SettingRow>
 
           <div className="flex items-center justify-between pt-2.5 border-t border-neutral-700">

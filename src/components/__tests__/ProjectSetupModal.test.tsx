@@ -64,7 +64,7 @@ const createDefaultState = (overrides = {}) => ({
   updateProviderApiKey: mockUpdateProviderApiKey,
   toggleProvider: mockToggleProvider,
   edgeStyle: "curved",
-  edgeAppearance: { thickness: "regular", fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const },
+  edgeAppearance: { thickness: "regular", fadedOpacity: 0.25, gradient: true, loadingPulse: true },
   setEdgeStyle: vi.fn(),
   setEdgeAppearance: vi.fn(),
   ...overrides,

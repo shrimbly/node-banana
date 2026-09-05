@@ -7,7 +7,7 @@ function makeSnapshot(label: string): UndoSnapshot {
     edges: [],
     groups: {},
     edgeStyle: "curved",
-    edgeAppearance: { thickness: "regular", fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const },
+    edgeAppearance: { thickness: "regular", fadedOpacity: 0.25, gradient: true, loadingPulse: true },
   };
 }
 
@@ -243,7 +243,7 @@ describe("clonePreservingStrings", () => {
       edges: [{ id: "e1", source: "n1", target: "n2" }],
       groups: { g1: { name: "Group", color: "blue", nodeIds: ["n1", "n2"] } },
       edgeStyle: "curved",
-      edgeAppearance: { thickness: "regular", fadedOpacity: 0.25, gradient: true, loadingPulse: true, labels: "hover" as const },
+      edgeAppearance: { thickness: "regular", fadedOpacity: 0.25, gradient: true, loadingPulse: true },
     };
 
     const jsonClone = JSON.parse(JSON.stringify(input));
