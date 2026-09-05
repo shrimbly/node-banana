@@ -369,7 +369,7 @@ interface WorkflowStore {
   maxConcurrentCalls: number;  // Configurable concurrency limit (1-10)
   _abortController: AbortController | null;  // Internal: for cancellation
   _buildExecutionContext: (node: WorkflowNode, signal?: AbortSignal) => NodeExecutionContext;
-  executeWorkflow: (startFromNodeId?: string) => Promise<void>;
+  executeWorkflow: (startFromNodeId?: string, options?: { skipCompleted?: boolean }) => Promise<void>;
   regenerateNode: (nodeId: string) => Promise<void>;
   executeSelectedNodes: (nodeIds: string[]) => Promise<void>;
   stopWorkflow: () => void;
@@ -1830,7 +1830,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     get: get as () => unknown,
   }),
 
-  executeWorkflow: async (startFromNodeId?: string) => {
+  executeWorkflow: async (startFromNodeId?: string, options?: { skipCompleted?: boolean }) => {
     // Resume support: if Run is pressed with no explicit start node while the
     // workflow is paused at a node (pause edge), resume from that node instead
     // of restarting the whole graph (which would re-run/re-bill upstream nodes
@@ -1854,6 +1854,10 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     }
 
     const { nodes, edges, groups, maxConcurrentCalls } = get();
+
+    // "Run unprocessed only" mode: skip generative nodes that already completed.
+    const skipCompleted = options?.skipCompleted ?? false;
+    const GENERATIVE_NODE_TYPES = new Set(["nanoBanana", "generateVideo", "generate3d", "generateAudio"]);
 
     // Create AbortController for this execution run
     const abortController = new AbortController();
@@ -1929,8 +1933,19 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         return; // Skip this node but continue with others
       }
 
-      // Check 1: Optional input node with no data → skip this node
+      // "Run unprocessed only": skip a generative node that already completed, so re-running
+      // only fills in newly-added / not-yet-generated nodes. Existing output is preserved
+      // (early return keeps node data) and still flows to downstream nodes.
       const nodeData = node.data as Record<string, unknown>;
+      if (skipCompleted && GENERATIVE_NODE_TYPES.has(node.type as string) && nodeData.status === "complete") {
+        logger.info('node.execution', 'Node skipped (already generated — run-unprocessed mode)', {
+          nodeId: node.id,
+          nodeType: node.type,
+        });
+        return;
+      }
+
+      // Check 1: Optional input node with no data → skip this node
       if (nodeData.isOptional) {
         const isEmpty =
           (node.type === "imageInput" && !nodeData.image) ||
