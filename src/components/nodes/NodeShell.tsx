@@ -107,6 +107,37 @@ function useTrailingOffset(id: string): React.RefObject<HTMLDivElement | null> {
   return el;
 }
 
+export interface NodeShellProps {
+  id: string;
+  selected?: boolean;
+  isExecuting?: boolean;
+  hasError?: boolean;
+  /** Tutorial hook, placed on the media card. */
+  dataTutorial?: string;
+  /** How tall the media clip is: from the width and an aspect, or fixed. */
+  media: ShellMedia;
+  inputs?: ReadonlyArray<SocketSpec>;
+  outputs?: ReadonlyArray<SocketSpec>;
+  /** Overrides the default (selected or connecting). */
+  showLabels?: boolean;
+  /** Content of the gap row between media and controls. */
+  gap?: ReactNode;
+  /** Usually a <ControlsCard>. Its presence also adds the gap row. */
+  controls?: ReactNode;
+  /** Media content, rendered inside the clip. */
+  children?: ReactNode;
+  /** Clip the media to the rounded rect (default). Off for legacy content that positions its own handles. */
+  clip?: boolean;
+  /** Rendered inside the media card but outside the clip: never clipped. */
+  cardChildren?: ReactNode;
+  mediaClassName?: string;
+  cardClassName?: string;
+  className?: string;
+  minWidth?: number;
+  maxWidth?: number;
+  onMediaDoubleClick?: (e: React.MouseEvent<HTMLDivElement>) => void;
+}
+
 const EMPTY: ReadonlyArray<SocketSpec> = [];
 
 /**
