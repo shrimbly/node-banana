@@ -319,7 +319,7 @@ export function EaseCurveNode({ id, data, selected }: NodeProps<EaseCurveNodeTyp
                     preserveAspectRatio="xMidYMid meet"
                     overflow="visible"
                   >
-                    <polyline points={polyline} fill="none" stroke="#a3a3a3" strokeWidth="1.5" />
+                    <polyline points={polyline} fill="none" stroke="#a3a3a3" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                   <span className="text-[11px] text-neutral-300 text-center whitespace-nowrap overflow-hidden text-ellipsis w-full shrink-0">{name}</span>
                 </button>
