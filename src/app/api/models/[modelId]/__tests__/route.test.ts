@@ -414,6 +414,88 @@ describe("/api/models/[modelId] schema endpoint", () => {
     });
   });
 
+  describe("isVideoInput classification", () => {
+    it("should NOT classify string settings like video_size as video inputs", async () => {
+      // Regression: string enums such as video_size ("720p"/"1080p") matched the
+      // video_ name pattern and surfaced as a bogus video handle instead of a
+      // settings parameter.
+      mockFetch.mockResolvedValueOnce(
+        createReplicateModelResponse({
+          video_size: {
+            type: "string",
+            description: "Output resolution of the generated video",
+            enum: ["720p", "1080p"],
+            default: "720p",
+          },
+          prompt: {
+            type: "string",
+            description: "Text prompt",
+          },
+        })
+      );
+
+      const modelId = `test/model-video-size-${testCounter}`;
+      const request = createMockSchemaRequest(modelId, "replicate");
+      const response = await GET(request, { params: Promise.resolve({ modelId }) });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      const paramNames = data.parameters.map((p: { name: string }) => p.name);
+      const videoInputNames = data.inputs
+        .filter((i: { type: string }) => i.type === "video")
+        .map((i: { name: string }) => i.name);
+
+      expect(paramNames).toContain("video_size");
+      expect(videoInputNames).not.toContain("video_size");
+    });
+
+    it("should classify mid-name video params like ref_video_url as video inputs", async () => {
+      mockFetch.mockResolvedValueOnce(
+        createReplicateModelResponse({
+          ref_video_url: {
+            type: "string",
+            description: "Reference clip",
+          },
+        })
+      );
+
+      const modelId = `test/model-mid-video-${testCounter}`;
+      const request = createMockSchemaRequest(modelId, "replicate");
+      const response = await GET(request, { params: Promise.resolve({ modelId }) });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      const videoInputNames = data.inputs
+        .filter((i: { type: string }) => i.type === "video")
+        .map((i: { name: string }) => i.name);
+
+      expect(videoInputNames).toContain("ref_video_url");
+    });
+
+    it("should classify params described as a source video as video inputs", async () => {
+      mockFetch.mockResolvedValueOnce(
+        createReplicateModelResponse({
+          media_reference: {
+            type: "string",
+            description: "URL of the source video to restyle",
+          },
+        })
+      );
+
+      const modelId = `test/model-source-video-${testCounter}`;
+      const request = createMockSchemaRequest(modelId, "replicate");
+      const response = await GET(request, { params: Promise.resolve({ modelId }) });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      const videoInputNames = data.inputs
+        .filter((i: { type: string }) => i.type === "video")
+        .map((i: { name: string }) => i.name);
+
+      expect(videoInputNames).toContain("media_reference");
+    });
+  });
+
   describe("fal.ai provider", () => {
     it("should correctly classify inputs from fal.ai schema", async () => {
       mockFetch.mockResolvedValueOnce(
