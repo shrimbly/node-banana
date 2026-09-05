@@ -27,7 +27,7 @@ export type { ShellMedia };
 const RESIZE_MAX_W = 1200;
 
 /** Fraction of the remaining distance the controls close per 16.7ms while trailing. */
-const TRAIL_EASE = 0.45;
+const TRAIL_EASE = 0.4;
 /** The controls never fall further behind than this, however fast the drag. */
 const TRAIL_MAX = 14;
 
