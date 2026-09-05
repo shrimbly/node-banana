@@ -1,10 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { NodeProps, Node } from "@xyflow/react";
 import { ReactCompareSlider, ReactCompareSliderImage } from "react-compare-slider";
 import { NodeShell } from "./NodeShell";
 import { useWorkflowStore } from "@/store/workflowStore";
+import { useShallow } from "zustand/shallow";
+import { nodeGraphIndex } from "@/lib/edges/graphIndex";
 import { ImageCompareNodeData } from "@/types";
 import { EmptyState, type SocketSpec } from "./ui";
 
@@ -18,16 +20,17 @@ const EMPTY_HEIGHT = 160;
 
 export function ImageCompareNode({ id, data, selected }: NodeProps<ImageCompareNodeType>) {
   const nodeData = data;
-  const edges = useWorkflowStore((state) => state.edges);
-  const nodes = useWorkflowStore((state) => state.nodes);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
-  // Collect images in real-time from connected nodes (same pattern as OutputGalleryNode)
-  const displayImages = useMemo(() => {
+  // Collect images in real-time from connected nodes (same pattern as
+  // OutputGalleryNode). Selected as the list of image strings, compared by
+  // value, so a drag frame elsewhere does not re-render the comparison
+  const displayImages = useWorkflowStore(useShallow((state) => {
     const connectedImages: string[] = [];
+    const { byId } = nodeGraphIndex(state.nodes);
 
     // Get edges connected to this node, sorted by creation time for stable ordering
-    const sortedEdges = edges
+    const sortedEdges = state.edges
       .filter((edge) => edge.target === id)
       .sort((a, b) => {
         const aTime = (a.data?.createdAt as number) || 0;
@@ -36,7 +39,7 @@ export function ImageCompareNode({ id, data, selected }: NodeProps<ImageCompareN
       });
 
     sortedEdges.forEach((edge) => {
-      const sourceNode = nodes.find((n) => n.id === edge.source);
+      const sourceNode = byId.get(edge.source);
       if (!sourceNode) return;
 
       let image: string | null = null;
@@ -55,7 +58,7 @@ export function ImageCompareNode({ id, data, selected }: NodeProps<ImageCompareN
     });
 
     return connectedImages;
-  }, [edges, nodes, id]);
+  }));
 
   const imageA = displayImages[0] || nodeData.imageA || null;
   const imageB = displayImages[1] || nodeData.imageB || null;

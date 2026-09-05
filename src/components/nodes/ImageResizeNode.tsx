@@ -57,9 +57,7 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
-  const getConnectedInputs = useWorkflowStore((state) => state.getConnectedInputs);
   const edges = useWorkflowStore((state) => state.edges);
-  const nodes = useWorkflowStore((state) => state.nodes);
   const [expanded, setExpanded] = useState(true);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
@@ -69,12 +67,8 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
     [edges, id],
   );
 
-  const upstreamImage = useMemo(() => {
-    if (!hasIncomingImage) return null;
-    const { images } = getConnectedInputs(id);
-    return images[0] ?? null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasIncomingImage, id, getConnectedInputs, nodes]);
+  // Read through the store so it follows the upstream image, not the nodes array
+  const upstreamImage = useWorkflowStore((state) => (hasIncomingImage ? state.getConnectedInputs(id).images[0] ?? null : null));
 
   useEffect(() => {
     if (upstreamImage !== nodeData.sourceImage) {

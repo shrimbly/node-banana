@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback, useDeferredValue, useSyncExternalStore } from "react";
 import { useStore, useStoreApi, type ReactFlowState } from "@xyflow/react";
 
 /**
@@ -111,8 +111,12 @@ export function useNodeMounted(id: string, type: string, selected: boolean, drag
       [id]
     )
   );
+  // Mounting is deferred so a zoom out, which brings many nodes into the
+  // area at once, does not block a frame on them; the area's margin keeps
+  // them off screen while they wait. Unmounting is immediate.
+  const inAreaDeferred = useDeferredValue(inArea);
   const focused = useNodeHasFocus(id);
-  return inArea || focused || selected || dragging || ALWAYS_MOUNTED.has(type);
+  return (inArea && inAreaDeferred) || focused || selected || dragging || ALWAYS_MOUNTED.has(type);
 }
 
 interface NodePlaceholderProps {

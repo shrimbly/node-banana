@@ -5,6 +5,7 @@ import { Node, NodeProps, useReactFlow } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
 import { CheckboxField, Field, LogicRow, LogicRows, SelectWell, TextField, type SocketSpec } from "./ui";
 import { useWorkflowStore } from "@/store/workflowStore";
+import { nodeGraphIndex } from "@/lib/edges/graphIndex";
 import { ArrayNodeData } from "@/types";
 import { getConnectedInputsPure } from "@/store/utils/connectedInputs";
 import { parseTextToArray } from "@/utils/arrayParser";
@@ -31,15 +32,12 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const addNode = useWorkflowStore((state) => state.addNode);
   const onConnect = useWorkflowStore((state) => state.onConnect);
-  const nodes = useWorkflowStore((state) => state.nodes);
   const edges = useWorkflowStore((state) => state.edges);
 
-  // Derive nodeData from the Zustand store (already subscribed via `nodes`)
-  // rather than React Flow props, so settings changes are reflected immediately.
-  const nodeData = useMemo(() => {
-    const n = nodes.find((nd) => nd.id === id);
-    return (n?.data as ArrayNodeData) ?? data;
-  }, [nodes, id, data]);
+  // Derive nodeData from the Zustand store rather than React Flow props, so
+  // settings changes are reflected immediately. Only this node's data: the
+  // nodes array changes on every frame of a drag.
+  const nodeData = useWorkflowStore((state) => (nodeGraphIndex(state.nodes).byId.get(id)?.data as ArrayNodeData | undefined) ?? data);
   const { getNodes } = useReactFlow();
   const lastSyncedInputRef = useRef<string | null>(null);
   const lastDerivedWriteRef = useRef<string | null>(null);
@@ -55,10 +53,9 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
     [edges, id]
   );
 
-  const connectedText = useMemo(() => {
-    if (!hasIncomingTextConnection) return null;
-    return getConnectedInputsPure(id, nodes, edges).text;
-  }, [edges, hasIncomingTextConnection, id, nodes]);
+  const connectedText = useWorkflowStore((state) =>
+    hasIncomingTextConnection ? getConnectedInputsPure(id, state.nodes, state.edges).text : null
+  );
 
   // Pull upstream text into this node whenever the connected input changes.
   useEffect(() => {

@@ -6,7 +6,9 @@ import { NodeShell } from "./NodeShell";
 import { CARD_PAD, ControlsCard, HeightGrip, type SocketSpec } from "./ui";
 import { usePromptAutocomplete } from "@/hooks/usePromptAutocomplete";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { PromptConstructorNodeData, PromptNodeData, LLMGenerateNodeData, AvailableVariable } from "@/types";
+import { useShallow } from "zustand/shallow";
+import { nodeGraphIndex } from "@/lib/edges/graphIndex";
+import { PromptConstructorNodeData, PromptNodeData, LLMGenerateNodeData, AvailableVariable, WorkflowNode } from "@/types";
 import { resolveTextSourcesThroughRouters } from "@/store/utils/connectedInputs";
 import { parseVarTags } from "@/utils/parseVarTags";
 
@@ -19,8 +21,18 @@ const DEFAULT_HEIGHT = 160;
 export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptConstructorNodeType>) {
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
-  const edges = useWorkflowStore((state) => state.edges);
-  const nodes = useWorkflowStore((state) => state.nodes);
+  // The text nodes feeding this one, as the store's own node objects, so the
+  // list only changes when one of them does and not on every drag frame
+  const connectedTextNodes = useWorkflowStore(
+    useShallow((state) => {
+      const { byId } = nodeGraphIndex(state.nodes);
+      const directTextNodes = state.edges
+        .filter((e) => e.target === id && e.targetHandle === "text")
+        .map((e) => byId.get(e.source))
+        .filter((n): n is WorkflowNode => n !== undefined);
+      return resolveTextSourcesThroughRouters(directTextNodes, state.nodes, state.edges);
+    })
+  );
 
   // Local state for template to prevent cursor jumping
   const [localTemplate, setLocalTemplate] = useState(nodeData.template);
@@ -37,12 +49,6 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
 
   // Get available variables from connected prompt nodes (named variables + inline <var> tags)
   const availableVariables = useMemo((): AvailableVariable[] => {
-    const directTextNodes = edges
-      .filter((e) => e.target === id && e.targetHandle === "text")
-      .map((e) => nodes.find((n) => n.id === e.source))
-      .filter((n): n is typeof nodes[0] => n !== undefined);
-    const connectedTextNodes = resolveTextSourcesThroughRouters(directTextNodes, nodes, edges);
-
     const vars: AvailableVariable[] = [];
     const usedNames = new Set<string>();
 
@@ -89,7 +95,7 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
     });
 
     return vars;
-  }, [edges, nodes, id]);
+  }, [connectedTextNodes]);
 
   // Autocomplete via shared hook
   const {

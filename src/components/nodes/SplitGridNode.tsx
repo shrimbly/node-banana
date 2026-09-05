@@ -92,9 +92,7 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
-  const getConnectedInputs = useWorkflowStore((state) => state.getConnectedInputs);
   const edges = useWorkflowStore((state) => state.edges);
-  const nodes = useWorkflowStore((state) => state.nodes);
   const [showEditor, setShowEditor] = useState(false);
   const [expanded, setExpanded] = useState(true);
 
@@ -116,12 +114,10 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
     return edges.some((edge) => edge.target === id && edge.targetHandle === "image");
   }, [edges, id]);
 
-  const connectedSourceImage = useMemo(() => {
-    if (!hasIncomingImageConnection) return null;
-    const { images } = getConnectedInputs(id);
-    return images[0] || null;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasIncomingImageConnection, id, getConnectedInputs, nodes]);
+  // Read through the store so it follows the upstream image, not the nodes array
+  const connectedSourceImage = useWorkflowStore((state) =>
+    hasIncomingImageConnection ? state.getConnectedInputs(id).images[0] || null : null
+  );
 
   useEffect(() => {
     if (connectedSourceImage !== nodeData.sourceImage) {
