@@ -208,3 +208,10 @@ describe("hidden stub groups", () => {
     expect(pluralTypeLabel("3d")).toBe("3D");
   });
 });
+
+describe("edgeTypeLabel for the split grid link", () => {
+  it("names a reference connection after the split that made it", () => {
+    expect(edgeTypeLabel("reference")).toBe("Split");
+    expect(pluralTypeLabel("reference")).toBe("Splits");
+  });
+});

@@ -10,8 +10,20 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { getSharedGradientId } from "./SharedEdgeGradients";
 import { EDGE_COLORS } from "@/lib/edges/colors";
 import { EdgeToolbar, useIsToolbarEdge } from "@/components/EdgeToolbar";
+import { EditableEdge } from "./EditableEdge";
 
-export function ReferenceEdge({
+/**
+ * The dashed grey link from a split grid to the image inputs it feeds.
+ * Hidden, it draws the same labelled stubs as any other connection, so it
+ * defers to EditableEdge rather than disappearing without a trace.
+ */
+export function ReferenceEdge(props: EdgeProps) {
+  const isHidden = Boolean((props.data as { hidden?: boolean } | undefined)?.hidden);
+  if (isHidden) return <EditableEdge {...props} />;
+  return <VisibleReferenceEdge {...props} />;
+}
+
+function VisibleReferenceEdge({
   id,
   sourceX,
   sourceY,
@@ -24,11 +36,9 @@ export function ReferenceEdge({
   selected,
   source,
   target,
-  data,
 }: EdgeProps) {
   const appearance = useWorkflowStore((state) => state.edgeAppearance);
   const carriesToolbar = useIsToolbarEdge(id);
-  const isHidden = Boolean((data as { hidden?: boolean } | undefined)?.hidden);
 
   // Narrow selector: returns boolean, only re-renders when selection relevance changes
   const isConnectedToSelection = useWorkflowStore((state) => {
@@ -55,8 +65,6 @@ export function ReferenceEdge({
     const selectionKey = isConnectedToSelection ? "active" : "dimmed";
     return getSharedGradientId("reference", selectionKey);
   }, [isConnectedToSelection]);
-
-  if (isHidden) return null;
 
   return (
     <>

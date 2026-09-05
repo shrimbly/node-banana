@@ -10,7 +10,7 @@ export function edgeTypeLabel(handleId: string | null | undefined): string {
     case "audio": return "Audio";
     case "3d": return "3D";
     case "easeCurve": return "Ease curve";
-    case "reference": return "Reference";
+    case "reference": return "Split";
     default: return "Connection";
   }
 }
