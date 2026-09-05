@@ -275,40 +275,6 @@ body {
   cursor: nesw-resize !important;
 }
 
-/* React Flow Controls dark theme */
-.react-flow__controls {
-  background: #262626 !important;
-  border: 1px solid #404040 !important;
-  border-radius: 8px !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
-}
-
-.react-flow__controls-button {
-  background: #262626 !important;
-  border-bottom: 1px solid #404040 !important;
-}
-
-.react-flow__controls-button svg {
-  fill: #d4d4d4 !important;
-}
-
-.react-flow__controls-button svg path {
-  fill: #d4d4d4 !important;
-}
-
-.react-flow__controls-button:hover {
-  background: #404040 !important;
-}
-
-.react-flow__controls-button:hover svg,
-.react-flow__controls-button:hover svg path {
-  fill: #fafafa !important;
-}
-
-.react-flow__controls-button:last-child {
-  border-bottom: none !important;
-}
-
 /* Scrollbars.
  *
  * A thumb and nothing else. The groove is chrome nobody asked for, and it drew
