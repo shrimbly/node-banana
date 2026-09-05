@@ -76,3 +76,14 @@ describe("setExpandedStubGroup", () => {
     expect(useWorkflowStore.getState().expandedStubGroup).toBeNull();
   });
 });
+
+describe("setStubGroupWidth", () => {
+  it("records a collapsed pill's width by group key without churning on repeats", () => {
+    useWorkflowStore.setState({ ...initial, stubGroupWidths: {} });
+    useWorkflowStore.getState().setStubGroupWidth("b:target:image", 80);
+    const widths = useWorkflowStore.getState().stubGroupWidths;
+    expect(widths).toEqual({ "b:target:image": 80 });
+    useWorkflowStore.getState().setStubGroupWidth("b:target:image", 80);
+    expect(useWorkflowStore.getState().stubGroupWidths).toBe(widths);
+  });
+});

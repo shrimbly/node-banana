@@ -155,6 +155,15 @@ export function EditableEdge({
   const targetRole = useWorkflowStore((state) => (isHidden ? hiddenStubRole(id, state.edges, "target", state.expandedStubGroup) : "single"));
   const setExpandedStubGroup = useWorkflowStore((state) => state.setExpandedStubGroup);
   const setHoveredHandle = useWorkflowStore((state) => state.setHoveredHandle);
+  // A collapsed pill is drawn by one member but every member's ghost must
+  // leave from its outer edge, so its measured width goes through the store
+  const sourceGroupKey = stubGroupKey(source, "source", sourceHandleId ?? null);
+  const targetGroupKey = stubGroupKey(target, "target", targetHandleId ?? null);
+  const setStubGroupWidth = useWorkflowStore((state) => state.setStubGroupWidth);
+  const sourceGroupWidth = useWorkflowStore((state) => (isHidden ? state.stubGroupWidths?.[sourceGroupKey] ?? 0 : 0));
+  const targetGroupWidth = useWorkflowStore((state) => (isHidden ? state.stubGroupWidths?.[targetGroupKey] ?? 0 : 0));
+  const measureSourceGroup = useCallback((w: number) => setStubGroupWidth?.(sourceGroupKey, w), [setStubGroupWidth, sourceGroupKey]);
+  const measureTargetGroup = useCallback((w: number) => setStubGroupWidth?.(targetGroupKey, w), [setStubGroupWidth, targetGroupKey]);
 
   // Narrow selector: returns boolean, only re-renders when selection relevance changes
   const isConnectedToSelection = useWorkflowStore((state) =>
@@ -328,12 +337,11 @@ export function EditableEdge({
     const revealed = stubHovered || handleHovered || Boolean(selected);
     const sourceCollapsed = sourceRole.startsWith("collapsed");
     const targetCollapsed = targetRole.startsWith("collapsed");
-    // Stub pills sit just past the handles; the ghost runs between their outer
-    // edges, or from under a collapsed pill, whose width only its leader knows
+    // Stub pills sit just past the handles; the ghost runs between their outer edges
     const sourceStub = { x: sourceX + sourceDir * (stubLength + 4), y: sourceY + sourceStack };
     const targetStub = { x: targetX + targetDir * (stubLength + 4), y: targetY + targetStack };
-    const sourceWidth = sourceCollapsed ? 0 : stubWidths.source;
-    const targetWidth = targetCollapsed ? 0 : stubWidths.target;
+    const sourceWidth = sourceCollapsed ? sourceGroupWidth : stubWidths.source;
+    const targetWidth = targetCollapsed ? targetGroupWidth : stubWidths.target;
     const [ghostPath] = getBezierPath({
       sourceX: sourceStub.x + sourceDir * sourceWidth,
       sourceY: sourceStub.y,
@@ -382,7 +390,7 @@ export function EditableEdge({
               y={sourceStub.y}
               direction={sourceDir}
               color={edgeColor}
-              onMeasure={measureSource}
+              onMeasure={sourceCollapsed ? measureSourceGroup : measureSource}
               {...(sourceCollapsed
                 ? { ...groupStub("source"), selected: false }
                 : { label: stubLabel, selected: Boolean(selected), onHoverChange: setStubHovered, onSelect: () => selectThisEdge("source") })}
@@ -396,7 +404,7 @@ export function EditableEdge({
               y={targetStub.y}
               direction={targetDir}
               color={edgeColor}
-              onMeasure={measureTarget}
+              onMeasure={targetCollapsed ? measureTargetGroup : measureTarget}
               {...(targetCollapsed
                 ? { ...groupStub("target"), selected: false }
                 : { label: stubLabel, selected: Boolean(selected), onHoverChange: setStubHovered, onSelect: () => selectThisEdge("target") })}

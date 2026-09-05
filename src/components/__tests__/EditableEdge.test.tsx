@@ -644,6 +644,34 @@ describe("EditableEdge when hidden", () => {
     expect(screen.getByTestId("hidden-edge-stub-source").style.transform).toContain("50px");
   });
 
+  it("starts a collapsed member's ghost at the outer edge of the shared pill", () => {
+    // edge-1 draws no target pill; the pill edge-0 drew measured 80px wide
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edges: siblings, stubGroupWidths: { "node-2:target:image": 80 } }))
+    );
+    const { container } = render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps({ data: { hidden: true }, selected: true })} />
+      </TestWrapper>
+    );
+    // Target handle at x=300, stub anchored 12px inside it, pill extends 80px further left
+    const ghost = container.querySelector('[data-testid="hidden-edge-ghost"]')!;
+    expect(ghost.getAttribute("d")).toMatch(/208,50$/);
+  });
+
+  it("publishes the collapsed pill's width for its members", () => {
+    const setStubGroupWidth = vi.fn();
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edges: siblings, setStubGroupWidth, setHoveredHandle: mockSetHoveredHandle }))
+    );
+    render(
+      <TestWrapper>
+        <EditableEdge {...createDefaultProps({ id: "edge-0", source: "x", data: { hidden: true } })} />
+      </TestWrapper>
+    );
+    expect(setStubGroupWidth).toHaveBeenCalledWith("node-2:target:image", expect.any(Number));
+  });
+
   it("ghosts the line while a stub is hovered", () => {
     const { container } = renderHidden();
     expect(container.querySelector('[data-testid="hidden-edge-ghost"]')).toBeNull();

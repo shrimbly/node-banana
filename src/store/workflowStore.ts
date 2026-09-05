@@ -350,6 +350,9 @@ interface WorkflowStore {
   /** The handle whose hidden connections are shown one per row instead of as a single pill. */
   expandedStubGroup: string | null;
   setExpandedStubGroup: (key: string | null) => void;
+  /** Measured width of each collapsed stub pill, by group key, so every member's ghost can start at its outer edge. */
+  stubGroupWidths: Record<string, number>;
+  setStubGroupWidth: (key: string, width: number) => void;
   openModalCount: number;
   isModalOpen: boolean;
   showQuickstart: boolean;
@@ -700,6 +703,11 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   expandedStubGroup: null,
   setExpandedStubGroup: (key) => {
     if (get().expandedStubGroup !== key) set({ expandedStubGroup: key });
+  },
+  stubGroupWidths: {},
+  setStubGroupWidth: (key, width) => {
+    if (get().stubGroupWidths[key] === width) return;
+    set({ stubGroupWidths: { ...get().stubGroupWidths, [key]: width } });
   },
   openModalCount: 0,
   isModalOpen: false,
