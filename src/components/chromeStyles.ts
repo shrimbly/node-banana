@@ -9,13 +9,16 @@ export const CHROME_SURFACE =
   "squircle border border-white/8 bg-neutral-800/92 backdrop-blur-md " +
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_1px_2px_rgba(0,0,0,0.4),0_12px_32px_-8px_rgba(0,0,0,0.5)]";
 
-/** 32px icon button: rest → hover lift → pressed dip. */
+/** Icon button, sized by CHROME_ICON_BUTTON_SIZE: rest → hover lift → pressed dip. */
 export const CHROME_ICON_BUTTON =
-  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg squircle text-neutral-400 " +
+  "flex shrink-0 items-center justify-center rounded-lg squircle text-neutral-400 " +
   "transition-[background-color,color,transform] duration-[120ms] ease-out " +
   "hover:bg-white/7 hover:text-neutral-100 active:scale-[0.96] active:bg-white/12 active:text-white " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 " +
   "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-neutral-400";
+
+/** md: navigator controls (32px). lg: the action bar (36px). */
+export const CHROME_ICON_BUTTON_SIZE = { md: "h-8 w-8", lg: "h-9 w-9" } as const;
 
 /** A button whose popover is up, or a stateful toggle that is on. */
 export const CHROME_ICON_BUTTON_OPEN = "bg-white/10 text-white";

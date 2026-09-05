@@ -319,7 +319,7 @@ describe("WorkflowCanvas", () => {
       const navigator = screen.getByTestId("canvas-navigator");
 
       // Static, so it flows inside the card instead of pinning itself to the pane corner.
-      expect(minimap).toHaveStyle({ width: "200px", height: "120px", margin: "0px", position: "static" });
+      expect(minimap).toHaveStyle({ width: "266px", height: "150px", margin: "0px", position: "static" });
       expect(navigator).toHaveStyle({ margin: "16px" });
       expect(navigator).toContainElement(screen.getByRole("button", { name: "Hide minimap" }));
     });

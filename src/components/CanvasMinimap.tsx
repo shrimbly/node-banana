@@ -17,17 +17,18 @@ import { CHROME_DIVIDER, CHROME_SURFACE } from "./chromeStyles";
  * The navigator: minimap on top, one row of canvas controls beneath. Hiding
  * the minimap leaves the row on its own, so zoom, fit and lock never move.
  */
+/** Card width, with its 1px border: wide enough for the control row. Neighbours to the left offset from this. */
+export const NAVIGATOR_WIDTH = 280;
+
 export const MINIMAP_GEOMETRY = {
-  width: 200,
-  height: 120,
+  /** Fills the card between the insets. */
+  width: NAVIGATOR_WIDTH - 6 * 2 - 2,
+  height: 150,
   /** Distance from the canvas edges. */
   margin: 16,
   /** Inset between the card edge and the minimap. */
   padding: 6,
 } as const;
-
-/** Card width, with its 1px border. Neighbours to the left offset from this. */
-export const NAVIGATOR_WIDTH = MINIMAP_GEOMETRY.width + MINIMAP_GEOMETRY.padding * 2 + 2;
 
 export function getMiniMapNodeColor(node: Node): string {
   switch (node.type) {
@@ -120,7 +121,7 @@ export function CanvasMinimap({ disabled = false }: CanvasMinimapProps) {
     <Panel
       position="bottom-right"
       data-testid="canvas-navigator"
-      style={{ margin: MINIMAP_GEOMETRY.margin }}
+      style={{ margin: MINIMAP_GEOMETRY.margin, width: NAVIGATOR_WIDTH }}
       className={`${CHROME_SURFACE} nodrag nopan nowheel flex flex-col overflow-hidden rounded-xl ${
         disabled ? "opacity-30 pointer-events-none" : ""
       }`}
@@ -128,7 +129,8 @@ export function CanvasMinimap({ disabled = false }: CanvasMinimapProps) {
       {isMinimapVisible && (
         <div style={{ padding: `${MINIMAP_GEOMETRY.padding}px ${MINIMAP_GEOMETRY.padding}px 0` }}>
           <MiniMap
-            className="rounded-[7px] squircle bg-well shadow-well"
+            // 6px radius = the card's 12px minus the 6px inset, so the corners run concentric.
+            className="overflow-hidden rounded-md squircle bg-well shadow-well"
             style={{
               position: "static",
               margin: 0,
@@ -145,7 +147,7 @@ export function CanvasMinimap({ disabled = false }: CanvasMinimapProps) {
           />
         </div>
       )}
-      <div className="flex h-[38px] items-center gap-0.5 px-1">
+      <div className="flex h-[38px] items-center justify-center gap-0.5 px-1">
         <ControlButton label="Zoom out" disabled={disabled} onClick={() => zoomOut()}>
           <svg className="h-[18px] w-[18px]" {...iconProps}><path d="M5 12h14" /></svg>
         </ControlButton>

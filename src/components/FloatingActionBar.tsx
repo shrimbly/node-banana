@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect, useMemo, useCallback, type ReactNode } from "react";
-import { ChromeIconButton as IconButton } from "./ChromeIconButton";
+import { ChromeIconButton, type ChromeIconButtonProps } from "./ChromeIconButton";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { useShallow } from "zustand/shallow";
 import { NodeType } from "@/types";
@@ -95,7 +95,7 @@ function getPaneCenter() {
 
 // ---- Icons: 16px, 1.5 stroke, one style throughout ------------------------------
 
-const ICON = "h-[18px] w-[18px]";
+const ICON = "h-5 w-5";
 const iconProps = { fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", viewBox: "0 0 24 24", "aria-hidden": true } as const;
 
 const ImageIcon = () => (
@@ -163,6 +163,11 @@ const SpinnerIcon = () => (
 );
 
 // ---- Primitives -------------------------------------------------------------------
+
+/** The bar runs one size up from the navigator. */
+function IconButton(props: ChromeIconButtonProps) {
+  return <ChromeIconButton size="lg" {...props} />;
+}
 
 function Divider() {
   return <div className={CHROME_DIVIDER} />;
@@ -541,7 +546,7 @@ export function FloatingActionBar() {
   return (
     <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
       {/* w-max: a fixed element anchored at left-1/2 otherwise shrinks to half the viewport and wraps. */}
-      <div className={`${CHROME_SURFACE} flex h-11 w-max items-center gap-0.5 rounded-xl px-1.5`}>
+      <div className={`${CHROME_SURFACE} flex h-12 w-max items-center gap-0.5 rounded-xl px-1.5`}>
         <NodeButton type="imageInput" label="Image" shortcut="⇧I" dataTutorial="image-button"><ImageIcon /></NodeButton>
         <NodeButton type="videoInput" label="Video" shortcut="⇧Y"><VideoIcon /></NodeButton>
         <NodeButton type="prompt" label="Prompt" shortcut="⇧P" dataTutorial="prompt-button"><PromptIcon /></NodeButton>
@@ -578,7 +583,7 @@ export function FloatingActionBar() {
 
         <div className="relative ml-0.5 flex items-center" ref={runMenuRef}>
           <div
-            className={`flex h-8 items-stretch overflow-hidden rounded-lg squircle transition-[background-color,box-shadow,transform] duration-[120ms] ease-out ${
+            className={`flex h-9 items-stretch overflow-hidden rounded-lg squircle transition-[background-color,box-shadow,transform] duration-[120ms] ease-out ${
               !valid && !isRunning
                 ? "bg-white/8 text-neutral-500"
                 : "bg-neutral-50 text-neutral-900 hover:bg-white hover:shadow-[0_0_0_1px_rgba(255,255,255,0.35),0_1px_2px_rgba(0,0,0,0.3)] active:scale-[0.97] active:bg-neutral-200"
@@ -590,7 +595,7 @@ export function FloatingActionBar() {
               disabled={!valid && !isRunning}
               title={runTitle}
               data-tutorial="floating-run-button"
-              className="flex items-center gap-1.5 whitespace-nowrap pl-3 pr-2.5 text-[11px] font-semibold focus-visible:outline-none disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 whitespace-nowrap pl-3.5 pr-3 text-[11px] font-semibold focus-visible:outline-none disabled:cursor-not-allowed"
             >
               {isRunning ? (
                 <>
@@ -615,7 +620,7 @@ export function FloatingActionBar() {
                 data-tutorial="floating-run-dropdown"
                 aria-expanded={runMenuOpen}
                 title="Run options"
-                className={`flex w-6 items-center justify-center border-l border-black/10 transition-colors duration-[120ms] focus-visible:outline-none ${runMenuOpen ? "bg-neutral-200" : ""}`}
+                className={`flex w-7 items-center justify-center border-l border-black/10 transition-colors duration-[120ms] focus-visible:outline-none ${runMenuOpen ? "bg-neutral-200" : ""}`}
               >
                 <svg className={`h-2.5 w-2.5 transition-transform duration-[120ms] ${runMenuOpen ? "rotate-180" : ""}`} {...iconProps} strokeWidth={2.5}>
                   <path d="M19 9l-7 7-7-7" />

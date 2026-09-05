@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { CHROME_ICON_BUTTON, CHROME_ICON_BUTTON_OPEN } from "./chromeStyles";
+import { CHROME_ICON_BUTTON, CHROME_ICON_BUTTON_OPEN, CHROME_ICON_BUTTON_SIZE } from "./chromeStyles";
 
 /**
  * Hover label for an icon-only button. CSS-driven (300ms delay, fades in on
@@ -32,17 +32,18 @@ export interface ChromeIconButtonProps extends React.ButtonHTMLAttributes<HTMLBu
   /** Suppress the hover label (while this button's own popover is up). */
   silent?: boolean;
   badge?: ReactNode;
+  size?: keyof typeof CHROME_ICON_BUTTON_SIZE;
   children: ReactNode;
 }
 
-/** 32px icon-only button on the chrome surface, with its hover label. */
-export function ChromeIconButton({ label, shortcut, open = false, silent = false, badge, className = "", children, ...rest }: ChromeIconButtonProps) {
+/** Icon-only button on the chrome surface, with its hover label. */
+export function ChromeIconButton({ label, shortcut, open = false, silent = false, badge, size = "md", className = "", children, ...rest }: ChromeIconButtonProps) {
   return (
     <div className="group relative flex">
       <button
         type="button"
         aria-label={label}
-        className={`${CHROME_ICON_BUTTON} ${open ? CHROME_ICON_BUTTON_OPEN : ""} ${className}`}
+        className={`${CHROME_ICON_BUTTON} ${CHROME_ICON_BUTTON_SIZE[size]} ${open ? CHROME_ICON_BUTTON_OPEN : ""} ${className}`}
         {...rest}
       >
         {children}
