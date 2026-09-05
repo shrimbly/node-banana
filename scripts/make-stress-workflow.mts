@@ -90,6 +90,8 @@ function wire(source: string, sourceHandle: string, target: string, targetHandle
 interface Cell {
   image: string;
   generate: string;
+  /** The node whose image output links to the neighbouring cells. */
+  imageOut: string;
 }
 
 // Five variants keep the node mix wide without any one of them dominating;
@@ -113,7 +115,8 @@ function buildCell(index: number): Cell {
     wire(llm, "text", generate, "text");
     wire(image, "image", generate, "image");
     wire(generate, "video", sink, "video");
-    return { image, generate };
+    // The video has no image output, so the neighbours take the source image
+    return { image, generate, imageOut: image };
   }
 
   if (variant === 7) {
@@ -127,7 +130,7 @@ function buildCell(index: number): Cell {
     wire(array, "text", generate, "text");
     wire(generate, "image", sink, "image");
     wire(image, "image", sink, "image", { data: { hidden: true } });
-    return { image, generate };
+    return { image, generate, imageOut: generate };
   }
 
   if (variant === 9) {
@@ -142,11 +145,11 @@ function buildCell(index: number): Cell {
     });
     const router = add("router", col + 1, row + 1);
     const generate = add("nanoBanana", col + 2, row, { aspectRatio: "16:9", parametersExpanded: false });
-    wire(prompt, "text", sw, "generic-input");
+    wire(prompt, "text", sw, "text");
     wire(sw, "sw-a", generate, "text");
-    wire(image, "image", router, "generic-input");
+    wire(image, "image", router, "image");
     wire(router, "image", generate, "image");
-    return { image, generate };
+    return { image, generate, imageOut: generate };
   }
 
   if (variant === 2) {
@@ -160,7 +163,7 @@ function buildCell(index: number): Cell {
     wire(generate, "image", resize, "image");
     wire(resize, "image", compare, "image");
     wire(image, "image", compare, "image-1");
-    return { image, generate };
+    return { image, generate, imageOut: generate };
   }
 
   // The common case: image + prompt -> LLM -> generate -> output
@@ -181,7 +184,7 @@ function buildCell(index: number): Cell {
   wire(llm, "text", generate, "text");
   wire(image, "image", generate, "image");
   wire(generate, "image", sink, "image");
-  return { image, generate };
+  return { image, generate, imageOut: generate };
 }
 
 const cells: Cell[] = Array.from({ length: CELLS }, (_, i) => buildCell(i));
@@ -194,7 +197,7 @@ cells.forEach((cell, i) => {
   const next = cells[(i + 1) % CELLS];
   wire(cell.image, "image", next.generate, "image", i % 5 === 0 ? { data: { hidden: true } } : {});
   if (i % 3 === 0 && i + 2 < CELLS) {
-    wire(cell.generate, "image", cells[i + 2].generate, "image");
+    wire(cell.imageOut, "image", cells[i + 2].generate, "image");
   }
   if (i % 10 === 0 && i + 4 < CELLS) {
     const bundleId = `bundle-${i}`;
@@ -209,7 +212,7 @@ for (const i of [11, 33, 55]) {
   const col = (i % GRID_COLS) * CELL_COLS + 2;
   const row = Math.floor(i / GRID_COLS) * CELL_ROWS + 1;
   const split = add("splitGrid", col, row);
-  wire(cells[i].generate, "image", split, "image");
+  wire(cells[i].imageOut, "image", split, "image");
   wire(split, "reference", cells[i + 1].image, "reference", { type: "reference" });
 }
 

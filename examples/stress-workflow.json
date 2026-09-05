@@ -6907,11 +6907,11 @@
       }
     },
     {
-      "id": "edge-prompt-47-switch-48-text-generic-input",
+      "id": "edge-prompt-47-switch-48-text-text",
       "source": "prompt-47",
       "sourceHandle": "text",
       "target": "switch-48",
-      "targetHandle": "generic-input",
+      "targetHandle": "text",
       "data": {
         "createdAt": 1756000046000
       }
@@ -6927,11 +6927,11 @@
       }
     },
     {
-      "id": "edge-imageInput-46-router-49-image-generic-input",
+      "id": "edge-imageInput-46-router-49-image-image",
       "source": "imageInput-46",
       "sourceHandle": "image",
       "target": "router-49",
-      "targetHandle": "generic-input",
+      "targetHandle": "image",
       "data": {
         "createdAt": 1756000048000
       }
@@ -7398,11 +7398,11 @@
       }
     },
     {
-      "id": "edge-prompt-97-switch-98-text-generic-input",
+      "id": "edge-prompt-97-switch-98-text-text",
       "source": "prompt-97",
       "sourceHandle": "text",
       "target": "switch-98",
-      "targetHandle": "generic-input",
+      "targetHandle": "text",
       "data": {
         "createdAt": 1756000095000
       }
@@ -7418,11 +7418,11 @@
       }
     },
     {
-      "id": "edge-imageInput-96-router-99-image-generic-input",
+      "id": "edge-imageInput-96-router-99-image-image",
       "source": "imageInput-96",
       "sourceHandle": "image",
       "target": "router-99",
-      "targetHandle": "generic-input",
+      "targetHandle": "image",
       "data": {
         "createdAt": 1756000097000
       }
@@ -7889,11 +7889,11 @@
       }
     },
     {
-      "id": "edge-prompt-147-switch-148-text-generic-input",
+      "id": "edge-prompt-147-switch-148-text-text",
       "source": "prompt-147",
       "sourceHandle": "text",
       "target": "switch-148",
-      "targetHandle": "generic-input",
+      "targetHandle": "text",
       "data": {
         "createdAt": 1756000144000
       }
@@ -7909,11 +7909,11 @@
       }
     },
     {
-      "id": "edge-imageInput-146-router-149-image-generic-input",
+      "id": "edge-imageInput-146-router-149-image-image",
       "source": "imageInput-146",
       "sourceHandle": "image",
       "target": "router-149",
-      "targetHandle": "generic-input",
+      "targetHandle": "image",
       "data": {
         "createdAt": 1756000146000
       }
@@ -8380,11 +8380,11 @@
       }
     },
     {
-      "id": "edge-prompt-197-switch-198-text-generic-input",
+      "id": "edge-prompt-197-switch-198-text-text",
       "source": "prompt-197",
       "sourceHandle": "text",
       "target": "switch-198",
-      "targetHandle": "generic-input",
+      "targetHandle": "text",
       "data": {
         "createdAt": 1756000193000
       }
@@ -8400,11 +8400,11 @@
       }
     },
     {
-      "id": "edge-imageInput-196-router-199-image-generic-input",
+      "id": "edge-imageInput-196-router-199-image-image",
       "source": "imageInput-196",
       "sourceHandle": "image",
       "target": "router-199",
-      "targetHandle": "generic-input",
+      "targetHandle": "image",
       "data": {
         "createdAt": 1756000195000
       }
@@ -8871,11 +8871,11 @@
       }
     },
     {
-      "id": "edge-prompt-247-switch-248-text-generic-input",
+      "id": "edge-prompt-247-switch-248-text-text",
       "source": "prompt-247",
       "sourceHandle": "text",
       "target": "switch-248",
-      "targetHandle": "generic-input",
+      "targetHandle": "text",
       "data": {
         "createdAt": 1756000242000
       }
@@ -8891,11 +8891,11 @@
       }
     },
     {
-      "id": "edge-imageInput-246-router-249-image-generic-input",
+      "id": "edge-imageInput-246-router-249-image-image",
       "source": "imageInput-246",
       "sourceHandle": "image",
       "target": "router-249",
-      "targetHandle": "generic-input",
+      "targetHandle": "image",
       "data": {
         "createdAt": 1756000244000
       }
@@ -9362,11 +9362,11 @@
       }
     },
     {
-      "id": "edge-prompt-297-switch-298-text-generic-input",
+      "id": "edge-prompt-297-switch-298-text-text",
       "source": "prompt-297",
       "sourceHandle": "text",
       "target": "switch-298",
-      "targetHandle": "generic-input",
+      "targetHandle": "text",
       "data": {
         "createdAt": 1756000291000
       }
@@ -9382,11 +9382,11 @@
       }
     },
     {
-      "id": "edge-imageInput-296-router-299-image-generic-input",
+      "id": "edge-imageInput-296-router-299-image-image",
       "source": "imageInput-296",
       "sourceHandle": "image",
       "target": "router-299",
-      "targetHandle": "generic-input",
+      "targetHandle": "image",
       "data": {
         "createdAt": 1756000293000
       }
@@ -9836,8 +9836,8 @@
       }
     },
     {
-      "id": "edge-generateVideo-124-nanoBanana-134-image-image",
-      "source": "generateVideo-124",
+      "id": "edge-imageInput-121-nanoBanana-134-image-image",
+      "source": "imageInput-121",
       "sourceHandle": "image",
       "target": "nanoBanana-134",
       "targetHandle": "image",
@@ -10341,8 +10341,8 @@
       }
     },
     {
-      "id": "edge-generateVideo-274-nanoBanana-284-image-image",
-      "source": "generateVideo-274",
+      "id": "edge-imageInput-271-nanoBanana-284-image-image",
+      "source": "imageInput-271",
       "sourceHandle": "image",
       "target": "nanoBanana-284",
       "targetHandle": "image",
