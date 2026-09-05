@@ -10,10 +10,11 @@ import {
   getBezierPath,
   getStraightPath,
   useReactFlow,
-  useInternalNode,
+  useStore,
   useConnection,
+  type ReactFlowState,
 } from "@xyflow/react";
-import { useShallow } from "zustand/shallow";
+import { shallow, useShallow } from "zustand/shallow";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { NanoBananaNodeData, WorkflowEdgeData } from "@/types";
 import { getSharedGradientId } from "./SharedEdgeGradients";
@@ -38,9 +39,16 @@ interface EdgeData extends WorkflowEdgeData {
   offsetY?: number;
 }
 
-/** Absolute y of the centre of each handle on one side of a node, by handle id. */
-function useHandleY(nodeId: string, side: "source" | "target") {
-  const node = useInternalNode(nodeId);
+/**
+ * Absolute y of the centre of each handle on one side of a node, by handle id.
+ * Only a hidden edge needs it, and every edge subscribes, so the subscription
+ * selects nothing until then rather than comparing the node on every update.
+ */
+function useHandleY(nodeId: string, side: "source" | "target", enabled: boolean) {
+  const node = useStore(
+    useCallback((s: ReactFlowState) => (enabled ? s.nodeLookup.get(nodeId) : undefined), [nodeId, enabled]),
+    shallow
+  );
   const bounds = node?.internals.handleBounds?.[side];
   const top = node?.internals.positionAbsolute.y ?? 0;
   return useCallback(
@@ -182,8 +190,8 @@ export function EditableEdge({
   const endX = targetBundle ? targetX + tDir * targetReach : targetX;
   // Hidden stubs stack down the side of the node without overlapping, which
   // needs the y of every handle on that side, not just this edge's own
-  const sourceHandleY = useHandleY(source, "source");
-  const targetHandleY = useHandleY(target, "target");
+  const sourceHandleY = useHandleY(source, "source", isHidden);
+  const targetHandleY = useHandleY(target, "target", isHidden);
   const sourceStack = useWorkflowStore((state) =>
     isHidden ? hiddenStubOffset(id, state.edges, "source", sourceHandleY, sourceY, state.expandedStubGroup) : 0
   );

@@ -125,11 +125,25 @@ const rawNodeTypes: NodeTypes = {
   comfyApp: ComfyAppNode,
 };
 
+// React Flow hands every node its absolute position as props and applies
+// that position to the wrapper itself; no node component reads them, so
+// they are left out of the comparison, or the dragged node would re-render
+// on every frame of its own drag.
+const nodePropsEqual = (a: Record<string, unknown>, b: Record<string, unknown>): boolean => {
+  const keys = Object.keys(b);
+  if (keys.length !== Object.keys(a).length) return false;
+  for (const key of keys) {
+    if (key === "positionAbsoluteX" || key === "positionAbsoluteY") continue;
+    if (!Object.is(a[key], b[key])) return false;
+  }
+  return true;
+};
+
 // Wrap every node component in a per-node error boundary so a single
 // throwing node (e.g. malformed data from a loaded workflow) renders a small
 // fallback card instead of unmounting the entire canvas/app.
 // Memoised on the node's props, which React Flow keeps stable for a node
-// that did not change, so a drag frame renders the dragged node only. A
+// that did not change, so a drag frame renders nothing under the wrapper. A
 // node far off screen renders as a placeholder of its measured size instead
 // (see nodeCulling.ts for what keeps a node mounted).
 const withNodeErrorBoundary = (
@@ -146,7 +160,7 @@ const withNodeErrorBoundary = (
         <NodeComponent {...props} />
       </ErrorBoundary>
     );
-  });
+  }, nodePropsEqual);
   Wrapped.displayName = `NodeErrorBoundary(${type})`;
   return Wrapped;
 };
