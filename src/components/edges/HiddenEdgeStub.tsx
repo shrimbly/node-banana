@@ -52,8 +52,11 @@ export function HiddenEdgeStub({ side, x, y, direction, label, title = "Hidden c
     <div
       className="nodrag nopan"
       data-testid={`hidden-edge-stub-${side}`}
-      // Flex, so the wrapper is exactly the pill's height and -50% centres it on the handle
-      style={{ position: "absolute", display: "flex", transform: `translate(${x}px, ${y}px) ${anchor}`, pointerEvents: "all" }}
+      // Flex, so the wrapper is exactly the pill's height and -50% centres it on
+      // the handle. A selected node or edge lifts edge SVGs above the label
+      // layer, so the pill keeps a z-index above any elevated edge or a noodle
+      // would be drawn across it.
+      style={{ position: "absolute", display: "flex", transform: `translate(${x}px, ${y}px) ${anchor}`, pointerEvents: "all", zIndex: 2001 }}
     >
       <button
         ref={pillRef}

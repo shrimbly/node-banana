@@ -549,6 +549,12 @@ describe("EditableEdge when hidden", () => {
     }
   });
 
+  it("keeps the stubs above elevated edge SVGs", () => {
+    renderHidden();
+    expect(Number(screen.getByTestId("hidden-edge-stub-source").style.zIndex)).toBeGreaterThan(2000);
+    expect(Number(screen.getByTestId("hidden-edge-stub-target").style.zIndex)).toBeGreaterThan(2000);
+  });
+
   it("draws labelled stubs instead of the line", () => {
     const { container } = renderHidden();
     expect(container.querySelector(".react-flow__edge-path")).toBeNull();
