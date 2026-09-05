@@ -11,7 +11,6 @@ import { ProviderModel } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { ComfySettingsTab, useComfySettingsDraft } from "@/components/settings/ComfySettingsTab";
 import { saveComfySettings } from "@/lib/comfy/settings";
-import { useInlineParameters } from "@/hooks/useInlineParameters";
 
 // LLM provider and model options (mirrored from LLMGenerateNode)
 const LLM_PROVIDERS: { value: LLMProvider; label: string }[] = [
@@ -144,8 +143,6 @@ export function ProjectSetupModal({
     updateCanvasNavigationSettings,
   } = useWorkflowStore();
 
-  // Inline parameters hook
-  const { inlineParametersEnabled, setInlineParameters } = useInlineParameters();
 
   // Tab state
   const [activeTab, setActiveTab] = useState<"project" | "providers" | "comfy" | "nodeDefaults" | "canvas">("project");
@@ -516,26 +513,6 @@ export function ProjectSetupModal({
                   className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${!externalStorage ? "bg-blue-500" : "bg-neutral-600"}`}
                 >
                   <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${!externalStorage ? "translate-x-[18px]" : "translate-x-[3px]"}`} />
-                </button>
-              </label>
-            </div>
-
-            <div className="pt-2 border-t border-neutral-700">
-              <label className="flex items-center justify-between gap-3 cursor-pointer">
-                <div>
-                  <span className="text-sm text-neutral-200">Show model settings on nodes</span>
-                  <p className="text-xs text-neutral-400">
-                    Show model parameters inside generation nodes instead of the side panel
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={inlineParametersEnabled}
-                  onClick={() => setInlineParameters(!inlineParametersEnabled)}
-                  className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${inlineParametersEnabled ? "bg-blue-500" : "bg-neutral-600"}`}
-                >
-                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${inlineParametersEnabled ? "translate-x-[18px]" : "translate-x-[3px]"}`} />
                 </button>
               </label>
             </div>

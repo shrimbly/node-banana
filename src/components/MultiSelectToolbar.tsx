@@ -10,6 +10,7 @@ import type {
   NanoBananaNodeData,
   OutputNodeData,
 } from "@/types";
+import { getNodeSize } from "@/utils/nodeDimensions";
 
 const STACK_GAP = 20;
 
@@ -42,7 +43,7 @@ export function MultiSelectToolbar() {
     let maxX = -Infinity;
 
     selectedNodes.forEach((node) => {
-      const nodeWidth = (node.style?.width as number) || node.measured?.width || 220;
+      const nodeWidth = getNodeSize(node).width;
       minX = Math.min(minX, node.position.x);
       minY = Math.min(minY, node.position.y);
       maxX = Math.max(maxX, node.position.x + nodeWidth);
@@ -68,7 +69,7 @@ export function MultiSelectToolbar() {
     let currentX = sortedNodes[0].position.x;
 
     const changes = sortedNodes.map((node) => {
-      const nodeWidth = (node.style?.width as number) || node.measured?.width || 220;
+      const nodeWidth = getNodeSize(node).width;
 
       const change = {
         type: "position" as const,
@@ -95,7 +96,7 @@ export function MultiSelectToolbar() {
     let currentY = sortedNodes[0].position.y;
 
     const changes = sortedNodes.map((node) => {
-      const nodeHeight = (node.style?.height as number) || node.measured?.height || 200;
+      const nodeHeight = getNodeSize(node).height;
 
       const change = {
         type: "position" as const,
@@ -130,12 +131,8 @@ export function MultiSelectToolbar() {
     const startY = Math.min(...sortedNodes.map((n) => n.position.y));
 
     // Get max node dimensions for consistent spacing
-    const maxWidth = Math.max(
-      ...sortedNodes.map((n) => (n.style?.width as number) || n.measured?.width || 220)
-    );
-    const maxHeight = Math.max(
-      ...sortedNodes.map((n) => (n.style?.height as number) || n.measured?.height || 200)
-    );
+    const maxWidth = Math.max(...sortedNodes.map((n) => getNodeSize(n).width));
+    const maxHeight = Math.max(...sortedNodes.map((n) => getNodeSize(n).height));
 
     // Position each node in the grid
     const changes = sortedNodes.map((node, index) => {

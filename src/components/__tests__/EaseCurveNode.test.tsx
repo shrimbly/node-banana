@@ -33,6 +33,10 @@ vi.mock("@xyflow/react", () => {
   return {
     Handle: MockHandle,
     NodeResizer: () => null,
+    NodeResizeControl: () => null,
+    useNodeConnections: () => [],
+    useStore: () => undefined,
+    useUpdateNodeInternals: () => () => {},
     Position: { Left: "left", Right: "right", Top: "top", Bottom: "bottom" },
     ReactFlowProvider: ({ children }: { children: React.ReactNode }) => children,
     useReactFlow: () => ({
@@ -227,7 +231,9 @@ describe("EaseCurveNode", () => {
       );
       const video = document.querySelector("video");
       expect(video).toHaveAttribute("loop");
-      expect(video).toHaveAttribute("controls");
+      // Playback is driven from the scrub row, not native controls.
+      expect(video).not.toHaveAttribute("controls");
+      expect(screen.getByTitle("Play")).toBeInTheDocument();
     });
 
     it("should show clear button when outputVideo exists", () => {
@@ -310,7 +316,7 @@ describe("EaseCurveNode", () => {
       });
       // Rendering should not throw even when inherited
       const { container } = render(<EaseCurveNode {...createNodeProps()} />);
-      expect(container.querySelector('[data-testid="base-node"]')).toBeInTheDocument();
+      expect(container.querySelector("[data-node-shell]")).toBeInTheDocument();
     });
 
     it("should not detect inheritance when edge targets different node", () => {
@@ -325,7 +331,7 @@ describe("EaseCurveNode", () => {
         ],
       });
       const { container } = render(<EaseCurveNode {...createNodeProps()} />);
-      expect(container.querySelector('[data-testid="base-node"]')).toBeInTheDocument();
+      expect(container.querySelector("[data-node-shell]")).toBeInTheDocument();
     });
   });
 });

@@ -2,21 +2,23 @@
 
 import { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
-import { BaseNode } from "./BaseNode";
+import { NodeProps, Node } from "@xyflow/react";
+import { NodeShell } from "./NodeShell";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { PromptNodeData } from "@/types";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
-import { HandleLabel } from "./HandleLabel";
+import { ControlsCard, HeightGrip, SummaryValues, type SocketSpec } from "./ui";
 
 type PromptNodeType = Node<PromptNodeData, "prompt">;
+
+const INPUT_SOCKETS: SocketSpec[] = [{ id: "text", type: "text", label: "Text" }];
+const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "text", type: "text", label: "Text", dataTutorial: "prompt-output-handle" }];
+const DEFAULT_HEIGHT = 160;
 
 export function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const getConnectedInputs = useWorkflowStore((state) => state.getConnectedInputs);
   const edges = useWorkflowStore((state) => state.edges);
-  const showLabels = useShowHandleLabels(selected);
 
   // Local state for prompt to prevent cursor jumping during typing
   const [localPrompt, setLocalPrompt] = useState(nodeData.prompt);
@@ -28,7 +30,7 @@ export function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
 
   // Check if this node has any incoming text connections
   const hasIncomingTextConnection = useMemo(() => {
-    return edges.some((edge) => edge.target === id && edge.targetHandle === "text");
+    return (edges ?? []).some((edge) => edge.target === id && edge.targetHandle === "text");
   }, [edges, id]);
 
   // Track the last received text from connected LLM node to detect when it changes
@@ -91,52 +93,45 @@ export function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
     setVarNameInput(sanitized);
   }, []);
 
+  const mediaHeight = nodeData.mediaHeight ?? DEFAULT_HEIGHT;
+  const charCount = (localPrompt ?? "").length;
+
   return (
     <>
-      <BaseNode
+      <NodeShell
         id={id}
         selected={selected}
-        fullBleed
+        media={{ kind: "fixed", height: mediaHeight }}
+        inputs={INPUT_SOCKETS}
+        outputs={OUTPUT_SOCKETS}
+        controls={
+          <ControlsCard
+            id={id}
+            summary={{
+              title: (
+                <button
+                  onClick={() => setShowVarDialog(true)}
+                  className="nodrag nopan text-node text-blue-400 hover:text-blue-300 transition-colors"
+                  title="Set variable name"
+                >
+                  {nodeData.variableName ? `@${nodeData.variableName}` : "Add variable"}
+                </button>
+              ),
+              values: <SummaryValues items={[`${charCount} chars`, nodeData.isOptional ? "optional" : null]} />,
+            }}
+          />
+        }
       >
-        {/* Text input handle - for receiving text from LLM nodes */}
-        <Handle
-          type="target"
-          position={Position.Left}
-          id="text"
-          data-handletype="text"
-          style={{ zIndex: 10 }}
-        />
-        <HandleLabel label="Text" side="target" color="var(--handle-color-text)" visible={showLabels} />
-
         <textarea
           value={localPrompt}
           onChange={handleChange}
           onFocus={handleFocus}
           onBlur={handleBlur}
           placeholder={hasIncomingTextConnection ? "Text from connected node (editable)..." : nodeData.isOptional ? "Optional prompt (leave empty to skip)..." : "Describe what to generate..."}
-          className="nodrag nopan nowheel w-full h-full p-3 pb-7 text-xs leading-relaxed text-neutral-100 bg-neutral-800 rounded-t-lg resize-none focus:outline-none placeholder:text-neutral-500"
+          className="nodrag nopan nowheel absolute inset-0 w-full h-full p-3 pb-4 text-xs leading-relaxed text-neutral-100 bg-neutral-900/40 resize-none focus:outline-none placeholder:text-neutral-500"
         />
-        <div className="absolute bottom-0 left-0 right-0 z-10 px-3 py-1.5 bg-neutral-900/90 rounded-b-lg">
-          <button
-            onClick={() => setShowVarDialog(true)}
-            className="nodrag nopan text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
-            title="Set variable name"
-          >
-            {nodeData.variableName ? `@${nodeData.variableName}` : "Add variable"}
-          </button>
-        </div>
-
-        {/* Text output handle */}
-        <Handle
-          type="source"
-          position={Position.Right}
-          id="text"
-          data-handletype="text"
-          data-tutorial="prompt-output-handle"
-          style={{ zIndex: 10 }}
-        />
-        <HandleLabel label="Text" side="source" color="var(--handle-color-text)" visible={showLabels} />
-      </BaseNode>
+        <HeightGrip height={mediaHeight} onChange={(h) => updateNodeData(id, { mediaHeight: h })} />
+      </NodeShell>
 
       {/* Variable Naming Dialog - rendered via portal */}
       {showVarDialog && createPortal(
