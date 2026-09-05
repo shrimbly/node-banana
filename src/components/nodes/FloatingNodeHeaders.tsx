@@ -1,8 +1,9 @@
 "use client";
 
 import { memo, useMemo } from "react";
-import { ViewportPortal, useStore, type Node, type ReactFlowState } from "@xyflow/react";
+import { ViewportPortal, useStore, type Node } from "@xyflow/react";
 import { FloatingNodeHeader } from "./FloatingNodeHeader";
+import { selectMountedArea } from "./nodeCulling";
 import { ComfyWordmark } from "../icons/ComfyWordmark";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import type { NodeType } from "@/types";
@@ -24,22 +25,6 @@ export interface FloatingNodeHeadersProps extends HeaderActions {
 
 /** Room above a node for its header, in flow units. */
 const HEADER_REACH = 48;
-/**
- * The area that keeps a header mounted is the view plus a full viewport on
- * every side, snapped to this grid, so a pan re-evaluates the list every few
- * hundred pixels rather than every frame.
- */
-const CULL_STEP = 500;
-
-const selectMountedArea = (s: ReactFlowState): string => {
-  const [x, y, zoom] = s.transform;
-  const left = -x / zoom;
-  const top = -y / zoom;
-  const width = s.width / zoom;
-  const height = s.height / zoom;
-  const snap = (v: number) => Math.floor(v / CULL_STEP) * CULL_STEP;
-  return [snap(left - width), snap(top - height), snap(left + 2 * width) + CULL_STEP, snap(top + 2 * height) + CULL_STEP].join(" ");
-};
 
 const GENERATE_TYPES = new Set(["nanoBanana", "generateVideo", "generate3d", "generateAudio"]);
 const INPUT_TYPES = new Set(["imageInput", "audioInput", "prompt"]);
@@ -47,8 +32,9 @@ const INPUT_TYPES = new Set(["imageInput", "audioInput", "prompt"]);
 /**
  * The floating headers for every node on the canvas. Each one is its own
  * memoised element, so a drag frame re-renders the dragged node's header and
- * compares the rest, and headers a viewport or more off screen are not
- * mounted at all. A selected node keeps its header wherever it is.
+ * compares the rest, and headers outside the mounted area (the same area
+ * that keeps nodes rendered, see nodeCulling.ts) are not mounted at all. A
+ * selected node keeps its header wherever it is.
  */
 export const FloatingNodeHeaders = memo(function FloatingNodeHeaders({ nodes, ...actions }: FloatingNodeHeadersProps) {
   const area = useStore(selectMountedArea);

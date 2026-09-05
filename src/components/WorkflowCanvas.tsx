@@ -69,6 +69,7 @@ import { appInputHandles } from "@/lib/comfy/nodeSchema";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import { getNodeSize } from "@/utils/nodeDimensions";
 import { FloatingNodeHeaders } from "./nodes/FloatingNodeHeaders";
+import { NodePlaceholder, useNodeMounted } from "./nodes/nodeCulling";
 import { detectAndSplitGrid } from "@/utils/gridSplitter";
 import { logger } from "@/utils/logger";
 import { WelcomeModal } from "./quickstart";
@@ -128,16 +129,24 @@ const rawNodeTypes: NodeTypes = {
 // throwing node (e.g. malformed data from a loaded workflow) renders a small
 // fallback card instead of unmounting the entire canvas/app.
 // Memoised on the node's props, which React Flow keeps stable for a node
-// that did not change, so a drag frame renders the dragged node only.
+// that did not change, so a drag frame renders the dragged node only. A
+// node far off screen renders as a placeholder of its measured size instead
+// (see nodeCulling.ts for what keeps a node mounted).
 const withNodeErrorBoundary = (
   type: string,
   NodeComponent: ComponentType<Record<string, unknown>>
 ): ComponentType<Record<string, unknown>> => {
-  const Wrapped = memo((props: Record<string, unknown>) => (
-    <ErrorBoundary label={type}>
-      <NodeComponent {...props} />
-    </ErrorBoundary>
-  ));
+  const Wrapped = memo((props: Record<string, unknown>) => {
+    const mounted = useNodeMounted(props.id as string, type, !!props.selected, !!props.dragging);
+    if (!mounted) {
+      return <NodePlaceholder id={props.id as string} width={props.width as number} height={props.height as number} />;
+    }
+    return (
+      <ErrorBoundary label={type}>
+        <NodeComponent {...props} />
+      </ErrorBoundary>
+    );
+  });
   Wrapped.displayName = `NodeErrorBoundary(${type})`;
   return Wrapped;
 };
