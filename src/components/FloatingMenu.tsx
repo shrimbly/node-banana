@@ -140,12 +140,16 @@ export function FloatingMenu() {
     isSaving,
     setWorkflowMetadata,
     saveToFile,
-    loadWorkflow,
     previousWorkflowSnapshot,
     revertToSnapshot,
     shortcutsDialogOpen,
     setShortcutsDialogOpen,
     setShowQuickstart,
+    tabCount,
+    activeTabId,
+    newTab,
+    closeTab,
+    openWorkflowInNewTab,
   } = useWorkflowStore(
     useShallow((state) => ({
       workflowName: state.workflowName,
@@ -156,12 +160,16 @@ export function FloatingMenu() {
       isSaving: state.isSaving,
       setWorkflowMetadata: state.setWorkflowMetadata,
       saveToFile: state.saveToFile,
-      loadWorkflow: state.loadWorkflow,
       previousWorkflowSnapshot: state.previousWorkflowSnapshot,
       revertToSnapshot: state.revertToSnapshot,
       shortcutsDialogOpen: state.shortcutsDialogOpen,
       setShortcutsDialogOpen: state.setShortcutsDialogOpen,
       setShowQuickstart: state.setShowQuickstart,
+      tabCount: state.tabs.length,
+      activeTabId: state.activeTabId,
+      newTab: state.newTab,
+      closeTab: state.closeTab,
+      openWorkflowInNewTab: state.openWorkflowInNewTab,
     }))
   );
 
@@ -178,6 +186,7 @@ export function FloatingMenu() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const isProjectConfigured = !!workflowName;
+  const showTabStrip = tabCount > 1;
   const canSave = !!(workflowId && workflowName && saveDirectoryPath);
   const showUnsavedDot = isProjectConfigured ? hasUnsavedChanges && !isSaving : true;
 
@@ -341,11 +350,11 @@ export function FloatingMenu() {
         onClose={() => setShowWorkflowBrowser(false)}
         onWorkflowLoaded={async (workflow, dirPath) => {
           setShowWorkflowBrowser(false);
-          await loadWorkflow(workflow, dirPath);
+          await openWorkflowInNewTab(workflow, dirPath);
         }}
       />
 
-      <div ref={rootRef} className="fixed top-4 left-4 z-50 flex flex-col items-start gap-1.5">
+      <div ref={rootRef} className="absolute top-4 left-4 z-50 flex flex-col items-start gap-1.5">
         <div className="flex h-8 items-center gap-0.5 rounded-lg border border-neutral-700/80 bg-neutral-800/95 px-1 shadow-lg">
           <button
             ref={toggleRef}
@@ -372,11 +381,13 @@ export function FloatingMenu() {
           <div className="mx-1 h-5 w-px bg-neutral-600" />
 
           <div className="flex max-w-[260px] items-baseline gap-2 overflow-hidden px-1">
-            {isProjectConfigured ? (
-              <span className="truncate text-xs font-medium text-neutral-200">{workflowName}</span>
-            ) : (
-              <span className="text-xs font-medium italic text-neutral-500">Untitled</span>
-            )}
+            {/* With the tab strip showing, the active tab already carries the name */}
+            {!showTabStrip &&
+              (isProjectConfigured ? (
+                <span className="truncate text-xs font-medium text-neutral-200">{workflowName}</span>
+              ) : (
+                <span className="text-xs font-medium italic text-neutral-500">Untitled</span>
+              ))}
             <span className="whitespace-nowrap text-[11px] text-neutral-500">{saveStatus}</span>
           </div>
 
@@ -446,6 +457,7 @@ export function FloatingMenu() {
               }
               label="Open project…"
               onClick={choose(() => setShowWorkflowBrowser(true))}
+              title="Opens in a new tab unless this one is untouched"
             />
             {saveDirectoryPath && (
               <MenuRow
@@ -476,6 +488,27 @@ export function FloatingMenu() {
               label="Project settings"
               onClick={choose(handleOpenSettings)}
             />
+
+            <div role="separator" className="my-1 h-px bg-neutral-700/60" />
+            <MenuRow
+              icon={
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
+                  <path strokeLinecap="round" d="M12 5v14M5 12h14" />
+                </svg>
+              }
+              label="New tab"
+              onClick={choose(() => newTab())}
+            />
+            {showTabStrip && (
+              <MenuRow
+                icon={<span className="h-4 w-4" />}
+                label="Close tab"
+                onClick={choose(() => {
+                  if (hasUnsavedChanges && !window.confirm("Close this tab and discard its unsaved changes?")) return;
+                  closeTab(activeTabId);
+                })}
+              />
+            )}
 
             {(previousWorkflowSnapshot || commentCount > 0) && (
               <div role="separator" className="my-1 h-px bg-neutral-700/60" />

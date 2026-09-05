@@ -11,6 +11,9 @@ const mockSetShowQuickstart = vi.fn();
 const mockGetNodesWithComments = vi.fn();
 const mockMarkCommentViewed = vi.fn();
 const mockSetNavigationTarget = vi.fn();
+const mockNewTab = vi.fn();
+const mockCloseTab = vi.fn();
+const mockOpenWorkflowInNewTab = vi.fn();
 const mockUseWorkflowStore = vi.fn();
 
 vi.mock("@/store/workflowStore", () => ({
@@ -28,8 +31,18 @@ vi.mock("@/components/ProjectSetupModal", () => ({
 }));
 
 vi.mock("@/components/WorkflowBrowserModal", () => ({
-  WorkflowBrowserModal: ({ isOpen }: { isOpen: boolean }) =>
-    isOpen ? <div data-testid="workflow-browser-modal">Workflow Browser</div> : null,
+  WorkflowBrowserModal: ({
+    isOpen,
+    onWorkflowLoaded,
+  }: {
+    isOpen: boolean;
+    onWorkflowLoaded: (workflow: unknown, dirPath?: string) => void;
+  }) =>
+    isOpen ? (
+      <div data-testid="workflow-browser-modal">
+        <button onClick={() => onWorkflowLoaded({ name: "Picked" }, "/tmp/picked")}>pick</button>
+      </div>
+    ) : null,
 }));
 
 vi.mock("@/components/KeyboardShortcutsDialog", () => ({
@@ -46,6 +59,8 @@ const createDefaultState = (overrides = {}) => ({
   isSaving: false,
   previousWorkflowSnapshot: null,
   shortcutsDialogOpen: false,
+  tabs: [{ id: "tab-1", snapshot: null }],
+  activeTabId: "tab-1",
   nodes: [],
   viewedCommentNodeIds: new Set<string>(),
   setWorkflowMetadata: mockSetWorkflowMetadata,
@@ -57,8 +72,19 @@ const createDefaultState = (overrides = {}) => ({
   getNodesWithComments: mockGetNodesWithComments,
   markCommentViewed: mockMarkCommentViewed,
   setNavigationTarget: mockSetNavigationTarget,
+  newTab: mockNewTab,
+  closeTab: mockCloseTab,
+  openWorkflowInNewTab: mockOpenWorkflowInNewTab,
   ...overrides,
 });
+
+const twoTabs = {
+  tabs: [
+    { id: "tab-1", snapshot: { workflowName: "Other", hasUnsavedChanges: false } },
+    { id: "tab-2", snapshot: null },
+  ],
+  activeTabId: "tab-2",
+};
 
 const configuredState = (overrides = {}) =>
   createDefaultState({
@@ -184,6 +210,7 @@ describe("FloatingMenu", () => {
         "Open project…",
         "Open project folder",
         "Project settings",
+        "New tab",
         "Welcome screen",
         "Keyboard shortcuts",
         "Discord",
@@ -271,6 +298,51 @@ describe("FloatingMenu", () => {
       const willie = menuItem(/Made by Willie/);
       expect(willie).toHaveAttribute("href", "https://x.com/ReflctWillie");
       expect(willie).toHaveAttribute("target", "_blank");
+    });
+  });
+
+  describe("tabs", () => {
+    it("loads a picked workflow through openWorkflowInNewTab", () => {
+      render(<FloatingMenu />);
+      openMenu();
+      fireEvent.click(menuItem("Open project…"));
+      fireEvent.click(screen.getByText("pick"));
+      expect(mockOpenWorkflowInNewTab).toHaveBeenCalledWith({ name: "Picked" }, "/tmp/picked");
+    });
+
+    it("opens a new tab from the menu", () => {
+      render(<FloatingMenu />);
+      openMenu();
+      fireEvent.click(menuItem("New tab"));
+      expect(mockNewTab).toHaveBeenCalledTimes(1);
+    });
+
+    it("offers Close tab only once a second tab exists", () => {
+      render(<FloatingMenu />);
+      openMenu();
+      expect(within(screen.getByRole("menu")).queryByText("Close tab")).not.toBeInTheDocument();
+    });
+
+    it("closes the active tab from the menu, asking first when it is unsaved", () => {
+      useState(configuredState({ ...twoTabs, hasUnsavedChanges: true }));
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      render(<FloatingMenu />);
+      openMenu();
+      fireEvent.click(menuItem("Close tab"));
+      expect(confirm).toHaveBeenCalled();
+      expect(mockCloseTab).not.toHaveBeenCalled();
+
+      confirm.mockReturnValue(true);
+      openMenu();
+      fireEvent.click(menuItem("Close tab"));
+      expect(mockCloseTab).toHaveBeenCalledWith("tab-2");
+    });
+
+    it("drops the project name from the pill once the tab strip shows it", () => {
+      useState(configuredState(twoTabs));
+      render(<FloatingMenu />);
+      expect(screen.queryByText("Summer campaign")).not.toBeInTheDocument();
+      expect(screen.getByText("Not saved")).toBeInTheDocument();
     });
   });
 
