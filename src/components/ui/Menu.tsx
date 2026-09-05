@@ -70,7 +70,7 @@ export function MenuSectionLabel({ className, children, ...rest }: HTMLAttribute
   );
 }
 
-export function MenuList({ className, children, ...rest }: HTMLAttributes<HTMLDivElement>) {
+export function MenuList({ className, children, ...rest }: ComponentPropsWithRef<"div">) {
   return (
     <div {...rest} className={cn("py-1", className)}>
       {children}

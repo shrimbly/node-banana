@@ -31,8 +31,9 @@ import { cn } from "@/components/nodes/ui/cn";
  * - Body scroll is locked, wheel events do not reach the canvas, and the
  *   store's modal count is held so canvas shortcuts stay off.
  *
- * Nothing about *what* a dialog does lives here: content, actions and data
- * flow are the caller's. Pass `onClose` undefined to make a dialog
+ * The scale is the compact one from the design canvas: 20px sides, 32px
+ * footer buttons at 13px, a 16px semibold title. Nothing about *what* a
+ * dialog does lives here: content, actions and data flow are the caller's. Pass `onClose` undefined to make a dialog
  * undismissable (no Escape, no backdrop click), as the onboarding flow is.
  */
 
@@ -91,12 +92,28 @@ export interface DialogProps {
   closeOnEscape?: boolean;
   /** Put focus here on open instead of the first focusable element. */
   initialFocusRef?: RefObject<HTMLElement | null>;
-  /** Render inline (inside the caller's tree) rather than in a body portal. */
+  /**
+   * Render in a body portal. Off by default: top-level dialogs mount inline
+   * where they are used, as they always have; node-local dialogs turn this on
+   * so they escape the canvas's transformed stacking context.
+   */
   portal?: boolean;
   /** Extra classes on the panel — width, height, transitions. */
   className?: string;
   /** Extra classes on the backdrop (the `fixed inset-0` layer). */
   overlayClassName?: string;
+  /**
+   * Handlers on the backdrop, for a dialog with its own rules about what a
+   * backdrop click means (the split-grid editor: a drag that ends outside
+   * the panel is not a click).
+   */
+  overlayProps?: HTMLAttributes<HTMLDivElement>;
+  /**
+   * Stop wheel events in the capture phase so the canvas behind never scrolls.
+   * Off for a dialog whose own content has native wheel listeners that must
+   * run first (the split-grid mini canvas); it then stops the bubble itself.
+   */
+  stopWheel?: boolean;
   /** `aria-labelledby` target when the title is not a `<DialogTitle>`. */
   labelledBy?: string;
   /** `aria-label` when the dialog has no visible title. */
@@ -114,9 +131,11 @@ export function Dialog({
   closeOnBackdrop = onClose !== undefined,
   closeOnEscape = onClose !== undefined,
   initialFocusRef,
-  portal = true,
+  portal = false,
   className,
   overlayClassName,
+  overlayProps,
+  stopWheel = true,
   labelledBy,
   label,
   panelProps,
@@ -135,14 +154,15 @@ export function Dialog({
   const decrementModalCount = useWorkflowStore((state) => state.decrementModalCount);
 
   // Canvas shortcuts (delete, pan, zoom) are off while any dialog is open.
+  // Optional calls: component tests stub the store with a bare state object.
   useEffect(() => {
     if (!open) return;
-    incrementModalCount();
+    incrementModalCount?.();
     const overlay = overlayRef.current;
     if (overlay) openOverlays.add(overlay);
     return () => {
       if (overlay) openOverlays.delete(overlay);
-      decrementModalCount();
+      decrementModalCount?.();
     };
   }, [open, incrementModalCount, decrementModalCount]);
 
@@ -223,15 +243,20 @@ export function Dialog({
   const node = (
     <DialogContext.Provider value={{ titleId, onClose }}>
       <div
+        {...overlayProps}
         ref={overlayRef}
         data-dialog-overlay=""
         className={cn(
           "fixed inset-0 z-100 flex items-center justify-center animate-dialog-backdrop",
           isLightbox ? "bg-scrim-heavy p-8" : "bg-scrim",
-          overlayClassName
+          overlayClassName,
+          overlayProps?.className
         )}
-        onClick={onBackdropClick}
-        onWheelCapture={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          onBackdropClick(event);
+          overlayProps?.onClick?.(event);
+        }}
+        onWheelCapture={stopWheel ? (event) => event.stopPropagation() : overlayProps?.onWheelCapture}
       >
         <div
           {...panelProps}
@@ -297,12 +322,12 @@ export function DialogHeader({
     <div
       className={cn(
         "flex items-start gap-3 shrink-0",
-        compact ? "px-5 pt-4 pb-1" : "px-6 pt-5 pb-4",
+        compact ? "px-4 pt-3 pb-1" : "px-5 pt-3.5 pb-2.5",
         divider && "border-b border-chrome-border/50",
         className
       )}
     >
-      {icon && <div className="shrink-0 flex items-center h-6">{icon}</div>}
+      {icon && <div className="shrink-0 flex items-center h-6 [&>*]:w-5 [&>*]:h-5">{icon}</div>}
       <div className="flex-1 min-w-0 flex flex-col gap-0.5">{children}</div>
       {(actions || showClose) && (
         <div className="shrink-0 flex items-center gap-1 -my-0.5">
@@ -329,7 +354,7 @@ export function DialogTitle({
       id={titleId}
       className={cn(
         "font-semibold text-neutral-100 truncate",
-        compact ? "text-sm leading-5" : "text-base leading-6",
+        compact ? "text-[13px] leading-5" : "text-base leading-6",
         className
       )}
     >
@@ -350,7 +375,7 @@ export function DialogCloseButton({ className, label = "Close" }: { className?: 
       onClick={onClose}
       aria-label={label}
       className={cn(
-        "w-7 h-7 flex items-center justify-center rounded-lg text-neutral-500 hover:text-neutral-200 hover:bg-neutral-700/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
+        "w-7 h-7 flex items-center justify-center rounded-md text-neutral-500 hover:text-neutral-200 hover:bg-neutral-700/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
         className
       )}
     >
@@ -374,7 +399,7 @@ export function DialogBody({
       className={cn(
         "flex-1 min-h-0",
         scroll && "overflow-y-auto",
-        compact ? "px-5 py-2" : "px-6 py-4",
+        compact ? "px-4 py-2" : "px-5 py-3",
         className
       )}
     >
@@ -398,7 +423,7 @@ export function DialogFooter({
     <div
       className={cn(
         "flex items-center justify-end gap-2 shrink-0",
-        compact ? "px-5 py-3" : "px-6 py-4",
+        compact ? "px-4 py-2.5" : "px-5 py-3",
         divider && "border-t border-chrome-border/50",
         className
       )}
@@ -450,7 +475,7 @@ export function DialogButton({
         "inline-flex items-center justify-center font-medium rounded-lg transition-colors",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection focus-visible:ring-offset-2 focus-visible:ring-offset-card",
         "disabled:opacity-50 disabled:cursor-not-allowed",
-        compact ? "h-[30px] px-3 text-xs" : "h-9 px-4 text-sm",
+        compact ? "h-7 px-2.5 text-xs" : "h-8 px-3.5 text-[13px]",
         BUTTON_VARIANT[variant],
         className
       )}

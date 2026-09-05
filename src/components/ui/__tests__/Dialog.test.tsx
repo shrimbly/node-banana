@@ -152,14 +152,15 @@ describe("Dialog", () => {
     expect(document.body.style.overflow).toBe("");
   });
 
-  it("renders inline when asked not to portal", () => {
+  it("renders inline by default and in a body portal when asked", () => {
     const { container } = render(<Basic onClose={() => {}} />);
-    expect(container.querySelector("[role=dialog]")).toBeNull();
-    const inline = render(
-      <Dialog open portal={false} label="Inline">
+    expect(container.querySelector("[role=dialog]")).not.toBeNull();
+    const portaled = render(
+      <Dialog open portal label="Portaled">
         <p>x</p>
       </Dialog>
     );
-    expect(inline.container.querySelector("[role=dialog]")).not.toBeNull();
+    expect(portaled.container.querySelector("[role=dialog]")).toBeNull();
+    expect(screen.getByRole("dialog", { name: "Portaled" })).toBeInTheDocument();
   });
 });
