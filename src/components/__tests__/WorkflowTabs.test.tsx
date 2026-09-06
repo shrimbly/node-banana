@@ -97,6 +97,12 @@ describe("WorkflowTabs", () => {
     const [first, second] = screen.getAllByRole("tab");
     expect(first.querySelector('[aria-label="Unsaved"]')).toBeInTheDocument();
     expect(second.querySelector('[aria-label="Unsaved"]')).not.toBeInTheDocument();
+    // The dot and the close button share one slot over the label's end, so
+    // swapping them on hover never moves the text
+    const dot = first.querySelector('[aria-label="Unsaved"]')!;
+    const close = first.querySelector('button[aria-label^="Close"]')!;
+    expect(dot.parentElement).toBe(close.parentElement);
+    expect(dot.parentElement?.className).toContain("absolute");
   });
 
   it("switches on click of a parked tab, not the active one", () => {
