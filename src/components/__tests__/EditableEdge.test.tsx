@@ -87,6 +87,23 @@ describe("EditableEdge", () => {
   });
 
   describe("Basic Rendering", () => {
+    it("carries a noodle on the fork mid-sweep, without a handle until release", () => {
+      const edges = [{ id: "edge-1", source: "a", target: "b", selected: true, data: {} }];
+      mockUseWorkflowStore.mockImplementation((selector) =>
+        selector(createDefaultState({ edges, hookDrag: { x: 200, y: 80, edgeIds: ["edge-1"] } })));
+      const { container } = render(<TestWrapper><EditableEdge {...createDefaultProps({ selected: true })} /></TestWrapper>);
+      expect(container.querySelector(".react-flow__edge-path")?.getAttribute("d")).toContain("L216,80");
+      expect(screen.queryByTestId("hook-bundle-clamp")).toBeNull();
+    });
+
+    it("leaves a noodle the sweep has not caught on its own route", () => {
+      const edges = [{ id: "edge-1", source: "a", target: "b", data: {} }];
+      mockUseWorkflowStore.mockImplementation((selector) =>
+        selector(createDefaultState({ edges, hookDrag: { x: 200, y: 80, edgeIds: ["edge-9"] } })));
+      const { container } = render(<TestWrapper><EditableEdge {...createDefaultProps()} /></TestWrapper>);
+      expect(container.querySelector(".react-flow__edge-path")?.getAttribute("d")).not.toContain("L216,80");
+    });
+
     it.each(["angular", "curved", "straight"])("routes %s edges through multiple handles with one active menu", (edgeStyle) => {
       const hookBundles = [{ id: "first", x: 180, y: 80 }, { id: "second", x: 260, y: 120 }];
       const edges = [

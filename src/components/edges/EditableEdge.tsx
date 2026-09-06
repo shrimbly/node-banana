@@ -35,7 +35,7 @@ import { edgeBundles, bundleReach, bundleClampKey, type BundleMembership } from 
 import { edgeGraphIndex, nodeGraphIndex } from "@/lib/edges/graphIndex";
 import { bundleClampStyle } from "./BundleClamp";
 import { HookBundleClamp } from "./HookBundleClamp";
-import { hookHandles } from "@/lib/edges/hook";
+import { hookHandles, insertHookHandle } from "@/lib/edges/hook";
 
 interface EdgeData extends WorkflowEdgeData {
   offsetX?: number;
@@ -89,7 +89,14 @@ export function EditableEdge({
   const hookGroups = useWorkflowStore(useShallow((state) => hookData.map((handle) =>
     edgeGraphIndex(state.edges).hookBundles.get(handle.id))));
   const hookBundles = useMemo(() => hookData.filter((_, index) => (hookGroups[index]?.length ?? 0) > 1), [hookData, hookGroups]);
-  const hookBundle = hookBundles.length > 0;
+  // Mid-sweep, a caught noodle is carried on the fork: it routes through the
+  // pointer as if a handle sat there, and the handle itself appears on release
+  const hookDrag = useWorkflowStore((state) => (state.hookDrag?.edgeIds.includes(id) ? state.hookDrag : null));
+  const routeHandles = useMemo(() => {
+    if (!hookDrag) return hookBundles;
+    return insertHookHandle(hookBundles, { id: "hook-drag", x: hookDrag.x, y: hookDrag.y }, { x: sourceX, y: sourceY }, { x: targetX, y: targetY });
+  }, [hookBundles, hookDrag, sourceX, sourceY, targetX, targetY]);
+  const hookBundle = routeHandles.length > 0;
   const activeHookBundleId = useWorkflowStore((state) => state.activeHookBundleId);
 
   // Hidden connections: labelled stubs at the handles; hover ghosts the line back
@@ -237,14 +244,14 @@ export function EditableEdge({
       let from = { sourceX: startX, sourceY, sourcePosition };
       let path = "";
       const append = (segment: string) => { path += path ? ` ${segment.replace(/^M[^A-Za-z]*/, "")}` : segment; };
-      for (const { x, y } of hookBundles) {
+      for (const { x, y } of routeHandles) {
         const [segment] = route({ ...from, targetX: x - reach, targetY: y, targetPosition: direction > 0 ? Position.Left : Position.Right });
         append(segment);
         path += ` L${x + reach},${y}`;
         from = { sourceX: x + reach, sourceY: y, sourcePosition: direction > 0 ? Position.Right : Position.Left };
       }
       append(route({ ...from, targetX: endX, targetY, targetPosition })[0]);
-      return [path, hookBundles[0].x, hookBundles[0].y] as [string, number, number];
+      return [path, routeHandles[0].x, routeHandles[0].y] as [string, number, number];
     }
     // Loop edges: smooth arc that exits/enters along handle directions, bowed below nodes
     if (edgeData?.isLoop) {
@@ -298,7 +305,7 @@ export function EditableEdge({
         offset: offsetX,
       });
     }
-  }, [hookBundle, hookBundles, edgeStyle, edgeData?.isLoop, startX, endX, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, offsetX]);
+  }, [hookBundle, routeHandles, edgeStyle, edgeData?.isLoop, startX, endX, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, offsetX]);
 
   // Calculate handle positions on the path segments (only for angular mode)
   const handlePositions = useMemo(() => {

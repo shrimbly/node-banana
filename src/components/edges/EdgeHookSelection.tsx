@@ -17,6 +17,8 @@ export function EdgeHookSelection({ canvas, disabled }: { canvas: RefObject<HTML
     gesture.current = null;
     if (!sweep) return;
     const store = useWorkflowStore.getState();
+    // The noodles drop where the pointer is: as a bundle with its handle, or back to their own routes
+    store.setHookDrag(null);
     if (!cancel) store.hookEdges([...sweep.ids], screenToFlowPosition(sweep.last));
     else store.onEdgesChange([...sweep.ids].map((id) => ({ type: "select", id, selected: false })));
     setCount(0);
@@ -58,10 +60,13 @@ export function EdgeHookSelection({ canvas, disabled }: { canvas: RefObject<HTML
       if (!sweep.ids.has(path.id) && crossesEdge(sweep.last, point, path.points)) added.add(path.id);
     }
     sweep.last = point;
-    if (!added.size) return;
-    added.forEach((id) => sweep.ids.add(id));
-    useWorkflowStore.getState().onEdgesChange([...added].map((id) => ({ type: "select", id, selected: true })));
-    setCount(sweep.ids.size);
+    if (added.size) {
+      added.forEach((id) => sweep.ids.add(id));
+      useWorkflowStore.getState().onEdgesChange([...added].map((id) => ({ type: "select", id, selected: true })));
+      setCount(sweep.ids.size);
+    }
+    // Everything caught so far is carried along on the fork
+    if (sweep.ids.size) useWorkflowStore.getState().setHookDrag({ ...screenToFlowPosition(point), edgeIds: [...sweep.ids] });
   };
 
   return (
@@ -104,7 +109,7 @@ export function EdgeHookSelection({ canvas, disabled }: { canvas: RefObject<HTML
       onContextMenu={(event) => event.preventDefault()}
     >
       <div role="status" className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-controls border border-chrome-border bg-card px-3 py-1.5 text-[11px] text-neutral-300 pointer-events-none">
-        {count ? `${count} connections hooked · release to bundle` : "Drag across connections to bundle · Esc to cancel"}
+        {count ? `${count} connections on the fork · release to bundle here` : "Drag across connections to bundle · Esc to cancel"}
       </div>
     </div>
   );

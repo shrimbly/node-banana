@@ -363,6 +363,9 @@ export interface WorkflowStore {
   /** The handle whose hidden connections are shown one per row instead of as a single pill. */
   expandedStubGroup: string | null;
   activeHookBundleId: string | null;
+  /** The hook sweep in progress: the noodles caught so far follow this point until release. Never saved. */
+  hookDrag: { x: number; y: number; edgeIds: string[] } | null;
+  setHookDrag: (drag: { x: number; y: number; edgeIds: string[] } | null) => void;
   edgeMenuAnchor: { edgeId: string; x: number; y: number } | null;
   setExpandedStubGroup: (key: string | null) => void;
   /** Measured width of each collapsed stub pill, by group key, so every member's ghost can start at its outer edge. */
@@ -784,6 +787,11 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
   expandedStubGroup: null,
   activeHookBundleId: null,
+  hookDrag: null,
+  setHookDrag: (drag) => {
+    if (drag === null && get().hookDrag === null) return;
+    set({ hookDrag: drag });
+  },
   edgeMenuAnchor: null,
   setExpandedStubGroup: (key) => {
     if (get().expandedStubGroup !== key) set({ expandedStubGroup: key });
@@ -3033,6 +3041,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       hoveredHandle: null,
       expandedStubGroup: null,
       stubGroupWidths: {},
+      hookDrag: null,
       edgeStyle: hydratedWorkflow.edgeStyle || "angular",
       edgeAppearance: hydratedWorkflow.edgeAppearance
         ? normalizeEdgeAppearance(hydratedWorkflow.edgeAppearance)
@@ -3170,6 +3179,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       hoveredHandle: null,
       expandedStubGroup: null,
       stubGroupWidths: {},
+      hookDrag: null,
       edgeStyle: getEdgeDefaults().edgeStyle,
       edgeAppearance: getEdgeDefaults().appearance,
       isRunning: false,

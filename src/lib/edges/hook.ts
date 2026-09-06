@@ -51,11 +51,13 @@ export function crossesEdge(from: Point, to: Point, points: Point[], tolerance =
 }
 
 // A fork, drawn to Lucide's rules (24px grid, 2px stroke, round caps and
-// joins), shown at 32px with a dark halo so it stays visible over any node.
+// joins), in the selection blue at 32px with a dark halo so it stays visible
+// over any node.
 // The hotspot is the tip of the tines.
 const FORK_PATHS = ["M5 2v6a3 3 0 0 0 3 3h0a3 3 0 0 0 3-3V2", "M8 2v9", "M8 11v11"];
 const HALO = 'stroke="#101820" stroke-opacity=".9" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none"';
-const LINE = 'stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"';
+// blue-500, the app's selection and focus colour: the sweep is a selection
+const LINE = 'stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"';
 const fork =
   '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">' +
   FORK_PATHS.map((d) => `<path d="${d}" ${HALO}/>`).join("") +

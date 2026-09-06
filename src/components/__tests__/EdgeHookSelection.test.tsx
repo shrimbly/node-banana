@@ -73,6 +73,24 @@ describe("hold-H edge selection", () => {
     expect(screen.queryByTestId("edge-hook-selection")).not.toBeInTheDocument();
   });
 
+  it("carries the caught noodles on the fork and drops them on release", () => {
+    setup();
+    const overlay = startSweep();
+    expect(useWorkflowStore.getState().hookDrag).toEqual({ x: 100, y: 50, edgeIds: ["e1", "e2"] });
+    fireEvent.pointerMove(overlay, { pointerId: 1, clientX: 140, clientY: 90 });
+    expect(useWorkflowStore.getState().hookDrag).toMatchObject({ x: 140, y: 90 });
+    fireEvent.pointerUp(overlay, { pointerId: 1, clientX: 140, clientY: 90 });
+    expect(useWorkflowStore.getState().hookDrag).toBeNull();
+    expect(useWorkflowStore.getState().edges[0].data?.hookBundles?.[0]).toMatchObject({ x: 140, y: 90 });
+  });
+
+  it("drops the carried noodles back when the sweep is cancelled", () => {
+    setup();
+    startSweep();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(useWorkflowStore.getState().hookDrag).toBeNull();
+  });
+
   it("finishes when H is released before the pointer", () => {
     setup();
     startSweep();
