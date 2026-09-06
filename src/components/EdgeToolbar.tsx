@@ -12,9 +12,9 @@ export { getImageSequenceNumber };
 
 /**
  * The toolbar for a selected connection. It is rendered by the edge itself
- * (through React Flow's EdgeLabelRenderer) at the path's midpoint, so it
- * follows the noodle through pans, zooms and node drags instead of sitting
- * where the mouse last went down. Only the first selected edge carries it;
+ * (through React Flow's EdgeLabelRenderer) above the last click, in flow
+ * coordinates so the anchor follows pan and zoom. Keyboard selections fall
+ * back to the path's midpoint. Only the first selected edge carries it;
  * when several edges are selected its actions apply to all of them.
  */
 
@@ -35,6 +35,7 @@ const iconButton =
 
 export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
   const edges = useWorkflowStore((state) => state.edges);
+  const clickAnchor = useWorkflowStore((state) => state.edgeMenuAnchor);
   const toggleEdgePause = useWorkflowStore((state) => state.toggleEdgePause);
   const setEdgesPause = useWorkflowStore((state) => state.setEdgesPause);
   const removeEdges = useWorkflowStore((state) => state.removeEdges);
@@ -52,6 +53,7 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
   const discardingRef = useRef(false);
 
   const selectedEdges = useMemo(() => edges.filter((e) => e.selected), [edges]);
+  const anchor = clickAnchor && selectedEdges.some((e) => e.id === clickAnchor.edgeId) ? clickAnchor : { x, y };
   const bundle = useMemo(() => bundleMembership(edgeId, edges), [edgeId, edges]);
   const edge = edges.find((e) => e.id === edgeId);
   if (!edge) return null;
@@ -88,7 +90,7 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
         className="nodrag nopan nokey"
         data-testid="edge-toolbar"
         // Above selected nodes (1000) and the hidden-connection pills and bundle clamps (2001)
-        style={{ position: "absolute", transform: `translate(${x}px, ${y}px)`, pointerEvents: "all", zIndex: 2100 }}
+        style={{ position: "absolute", transform: `translate(${anchor.x}px, ${anchor.y}px)`, pointerEvents: "all", zIndex: 2100 }}
         onPointerDown={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}

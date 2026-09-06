@@ -363,6 +363,7 @@ export interface WorkflowStore {
   /** The handle whose hidden connections are shown one per row instead of as a single pill. */
   expandedStubGroup: string | null;
   activeHookBundleId: string | null;
+  edgeMenuAnchor: { edgeId: string; x: number; y: number } | null;
   setExpandedStubGroup: (key: string | null) => void;
   /** Measured width of each collapsed stub pill, by group key, so every member's ghost can start at its outer edge. */
   stubGroupWidths: Record<string, number>;
@@ -783,6 +784,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
   expandedStubGroup: null,
   activeHookBundleId: null,
+  edgeMenuAnchor: null,
   setExpandedStubGroup: (key) => {
     if (get().expandedStubGroup !== key) set({ expandedStubGroup: key });
   },

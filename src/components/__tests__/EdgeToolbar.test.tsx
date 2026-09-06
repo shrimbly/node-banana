@@ -83,6 +83,27 @@ describe("EdgeToolbar", () => {
     expect((anchor.firstElementChild as HTMLElement).style.transform).toContain("scale(0.5)");
   });
 
+  it("opens above the clicked position and moves on subsequent clicks", () => {
+    let edgeMenuAnchor = { edgeId: "e1", x: 310, y: 190 };
+    mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({
+      edges: [edge("e1", { selected: true })], edgeMenuAnchor,
+    })));
+    const { rerender } = render(<EdgeToolbar edgeId="e1" x={120} y={80} />);
+    expect(screen.getByTestId("edge-toolbar").style.transform).toBe("translate(310px, 190px)");
+    expect((screen.getByTestId("edge-toolbar").firstElementChild as HTMLElement).style.transform).toContain("calc(-100% - 12px)");
+    edgeMenuAnchor = { edgeId: "e1", x: 420, y: 230 };
+    rerender(<EdgeToolbar edgeId="e1" x={120} y={80} />);
+    expect(screen.getByTestId("edge-toolbar").style.transform).toBe("translate(420px, 230px)");
+  });
+
+  it("ignores the click position of an edge outside the current selection", () => {
+    mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({
+      edges: [edge("e1", { selected: true })], edgeMenuAnchor: { edgeId: "other", x: 310, y: 190 },
+    })));
+    render(<EdgeToolbar edgeId="e1" x={120} y={80} />);
+    expect(screen.getByTestId("edge-toolbar").style.transform).toBe("translate(120px, 80px)");
+  });
+
   it("sits above selected nodes and the hidden-connection pills", () => {
     withEdges([edge("e1", { selected: true })]);
     render(<EdgeToolbar edgeId="e1" x={0} y={0} />);

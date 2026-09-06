@@ -2115,7 +2115,11 @@ export function WorkflowCanvas() {
   // Fix for React Flow selection bug where nodes with undefined bounds get incorrectly selected.
   // Uses statistical outlier detection to identify and deselect nodes that are clearly
   // outside the actual selection area.
-  const handleSelectionChange = useCallback(({ nodes: selectedNodes }: OnSelectionChangeParams) => {
+  const handleSelectionChange = useCallback(({ nodes: selectedNodes, edges: selectedConnections = [] }: OnSelectionChangeParams) => {
+    const anchor = useWorkflowStore.getState().edgeMenuAnchor;
+    if (anchor && !selectedConnections.some((edge) => edge.id === anchor.edgeId)) {
+      useWorkflowStore.setState({ edgeMenuAnchor: null });
+    }
     // Shift-clicking nodes must not retain a previous edge selection either.
     if (selectedNodes.length > 0) {
       const selectedEdges = useWorkflowStore.getState().edges.filter((edge) => edge.selected);
@@ -2454,6 +2458,12 @@ export function WorkflowCanvas() {
         onConnect={handleConnect}
         onConnectEnd={handleConnectEnd}
         onReconnect={handleReconnect}
+        onEdgeClick={(event, edge) => {
+          useWorkflowStore.setState({ edgeMenuAnchor: {
+            edgeId: edge.id,
+            ...screenToFlowPosition({ x: event.clientX, y: event.clientY }),
+          } });
+        }}
         onPaneClick={() => setExpandedStubGroup?.(null)}
         onMoveStart={handleMoveStart}
         onMove={handleMove}
