@@ -23,14 +23,13 @@ const MENU_ROW = `${menuItemClass} whitespace-nowrap [&>svg]:shrink-0 [&>svg]:te
 
 const MENU_ITEM_SELECTOR = '[role="menuitem"]';
 
+/** A floppy disk, at the same 1.75 stroke as the Open folder beside it. */
 function SaveIcon() {
   return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m.75 12 3 3m0 0 3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"
-      />
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M5 3.5h11l3.5 3.5v13a1 1 0 0 1-1 1h-13.5a1 1 0 0 1-1-1v-15.5a1 1 0 0 1 1-1z" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 3.5v5.5h8v-5.5" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21v-7h9v7" />
     </svg>
   );
 }
