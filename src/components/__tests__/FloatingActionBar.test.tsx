@@ -654,9 +654,11 @@ describe("FloatingActionBar", () => {
       expect(screen.getByTitle("Run options")).toBeInTheDocument();
     });
 
-    it("disables Run when nothing is connected", async () => {
+    it("keeps Run enabled for a self-contained node with no edges", async () => {
+      // A ComfyUI app whose values are baked in has no inputs to wire, and it
+      // runs from Cmd/Ctrl+Enter — the Run button must offer the same.
       mockUseWorkflowStore.mockImplementation((selector) =>
-        selector(createDefaultState({ nodes: [{ id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} }], edges: [] })));
+        selector(createDefaultState({ nodes: [{ id: "app", type: "comfyApp", position: { x: 0, y: 0 }, data: {} }], edges: [] })));
 
       render(
         <TestWrapper>
@@ -665,10 +667,13 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        const runButton = screen.getByText("Run").closest("button");
-        expect(runButton).toBeDisabled();
-        expect(runButton).toHaveAttribute("title", "Connect some nodes to run");
+        expect(screen.getByText("Run")).toBeInTheDocument();
       });
+
+      const runButton = screen.getByText("Run").closest("button");
+      expect(runButton).not.toBeDisabled();
+      expect(runButton).toHaveAttribute("title", "Run");
+      expect(screen.getByTitle("Run options")).toBeInTheDocument();
     });
 
     it("should disable Run button when the workflow is empty", async () => {
