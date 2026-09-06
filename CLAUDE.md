@@ -149,7 +149,7 @@ Returns `{ images: string[], text: string | null }`.
 5. Create the component in `src/components/nodes/`
 6. Export from `src/components/nodes/index.ts`
 7. Register in `nodeTypes` in `WorkflowCanvas.tsx`
-8. Add minimap color in `WorkflowCanvas.tsx`
+8. Add minimap color to `getMiniMapNodeColor()` in `src/components/CanvasMinimap.tsx`
 9. Update `getConnectedInputs()` if the node produces consumable output
 10. Add execution logic in `executeWorkflow()` if the node requires processing
 11. Update `ConnectionDropMenu.tsx` to include the node in source/target lists

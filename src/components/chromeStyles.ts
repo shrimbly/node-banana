@@ -27,7 +27,7 @@ export const CHROME_DIVIDER = "mx-1 h-5 w-px shrink-0 bg-white/10";
 
 /** Popover anchored above a bar button. */
 export const CHROME_MENU =
-  CHROME_SURFACE + " absolute bottom-full mb-2 flex flex-col gap-px rounded-[10px] p-1";
+  CHROME_SURFACE + " absolute bottom-full z-20 mb-2 flex flex-col gap-px rounded-[10px] p-1";
 
 export const CHROME_MENU_ITEM =
   "flex h-7 w-full items-center gap-2 rounded-md squircle px-2 text-left text-[11px] font-medium " +

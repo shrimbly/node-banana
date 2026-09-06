@@ -13,21 +13,18 @@ import {
 import { ChromeIconButton } from "./ChromeIconButton";
 import { CHROME_DIVIDER, CHROME_SURFACE } from "./chromeStyles";
 
-/**
- * The navigator: minimap on top, one row of canvas controls beneath. Hiding
- * the minimap leaves the row on its own, so zoom, fit and lock never move.
- */
 /** Card width, with its 1px border: wide enough for the control row. Neighbours to the left offset from this. */
 export const NAVIGATOR_WIDTH = 280;
+/** Inset between the card edge and the minimap. */
+const MINIMAP_PADDING = 6;
 
 export const MINIMAP_GEOMETRY = {
   /** Fills the card between the insets. */
-  width: NAVIGATOR_WIDTH - 6 * 2 - 2,
+  width: NAVIGATOR_WIDTH - MINIMAP_PADDING * 2 - 2,
   height: 150,
   /** Distance from the canvas edges. */
   margin: 16,
-  /** Inset between the card edge and the minimap. */
-  padding: 6,
+  padding: MINIMAP_PADDING,
 } as const;
 
 export function getMiniMapNodeColor(node: Node): string {
@@ -101,6 +98,10 @@ interface CanvasMinimapProps {
   disabled?: boolean;
 }
 
+/**
+ * The navigator: minimap on top, one row of canvas controls beneath. Hiding
+ * the minimap leaves the row on its own, so zoom, fit and lock never move.
+ */
 export function CanvasMinimap({ disabled = false }: CanvasMinimapProps) {
   const [isMinimapVisible, setIsMinimapVisible] = useState(true);
   const { zoomIn, zoomOut, fitView } = useReactFlow();
