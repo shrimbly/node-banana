@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
 import { useWorkflowStore } from "@/store/workflowStore";
+import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@/components/ui/Dialog";
 import { PredictedCostResult, CostBreakdownItem, formatCost } from "@/utils/costCalculator";
 import { ProviderType } from "@/types/providers";
 
@@ -94,16 +94,6 @@ function ExternalLinkIcon() {
 export function CostDialog({ predictedCost, incurredCost, onClose }: CostDialogProps) {
   const resetIncurredCost = useWorkflowStore((state) => state.resetIncurredCost);
 
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
-
   const handleReset = () => {
     if (confirm("Reset incurred cost to $0.00?")) {
       resetIncurredCost();
@@ -134,26 +124,15 @@ export function CostDialog({ predictedCost, incurredCost, onClose }: CostDialogP
   const hasExternal = externalItems.length > 0;
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50">
-      <div className="bg-neutral-800 rounded-lg p-6 w-[400px] border border-neutral-700 shadow-xl">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-lg font-semibold text-neutral-100">
-            Workflow Costs
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1 text-neutral-400 hover:text-neutral-200 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-
-        <div className="space-y-4">
+    <Dialog open onClose={onClose} size="sm">
+      <DialogHeader>
+        <DialogTitle>Workflow Costs</DialogTitle>
+      </DialogHeader>
+      <DialogBody className="pb-4">
+        <div className="space-y-3">
           {/* Gemini Cost Section - prices are reliable */}
           {hasGemini && (
-            <div className="bg-neutral-900 rounded-lg p-4">
+            <div className="bg-well border border-card-border rounded-well p-3.5">
               <div className="flex items-center gap-2 mb-2">
                 <ProviderIcon provider="gemini" />
                 <span className="text-sm text-neutral-300">Gemini Cost</span>
@@ -179,7 +158,7 @@ export function CostDialog({ predictedCost, incurredCost, onClose }: CostDialogP
 
           {/* External Providers Section - show model links instead of prices */}
           {hasExternal && (
-            <div className="bg-neutral-900 rounded-lg p-4">
+            <div className="bg-well border border-card-border rounded-well p-3.5">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-sm text-neutral-300">External Providers</span>
                 <span className="text-xs text-neutral-500">
@@ -229,7 +208,7 @@ export function CostDialog({ predictedCost, incurredCost, onClose }: CostDialogP
 
           {/* No nodes message */}
           {predictedCost.nodeCount === 0 && (
-            <div className="bg-neutral-900 rounded-lg p-4">
+            <div className="bg-well border border-card-border rounded-well p-3.5">
               <p className="text-xs text-neutral-500">
                 No generation nodes in workflow
               </p>
@@ -237,7 +216,7 @@ export function CostDialog({ predictedCost, incurredCost, onClose }: CostDialogP
           )}
 
           {/* Incurred Cost Section - Gemini only */}
-          <div className="bg-neutral-900 rounded-lg p-4">
+          <div className="bg-well border border-card-border rounded-well p-3.5">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-neutral-400">Incurred Cost</span>
               <span className="text-lg font-semibold text-green-400">
@@ -263,7 +242,7 @@ export function CostDialog({ predictedCost, incurredCost, onClose }: CostDialogP
             <p>Gemini pricing: $0.034-$0.24/image. External providers not tracked.</p>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogBody>
+    </Dialog>
   );
 }

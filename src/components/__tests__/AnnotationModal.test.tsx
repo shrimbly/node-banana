@@ -505,9 +505,9 @@ describe("AnnotationModal", () => {
     it("should render bottom options bar", () => {
       const { container } = render(<AnnotationModal />);
 
-      // Find bottom bar (h-14 at the bottom with border-t)
-      const bottomBars = container.querySelectorAll(".h-14.bg-neutral-900");
-      expect(bottomBars.length).toBe(2); // Top and bottom bars
+      // Top bar is the shared dialog header; the bottom options bar keeps its own
+      expect(container.querySelector(".h-12.bg-card")).toBeInTheDocument();
+      expect(container.querySelectorAll(".h-14.bg-neutral-900").length).toBe(1);
     });
 
     it("should render canvas container in the middle", () => {

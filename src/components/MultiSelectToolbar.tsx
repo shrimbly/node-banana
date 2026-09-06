@@ -1,5 +1,6 @@
 "use client";
 
+import { MenuDivider, MenuIconButton, MenuSurface } from "@/components/ui/Menu";
 import { useReactFlow } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { useMemo, useCallback } from "react";
@@ -217,81 +218,75 @@ export function MultiSelectToolbar() {
   if (!toolbarPosition || selectedNodes.length < 2) return null;
 
   return (
-    <div
-      className="fixed z-[100] flex items-center gap-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl p-1"
+    <MenuSurface
+      variant="bar"
       style={{
         left: toolbarPosition.x,
         top: toolbarPosition.y,
         transform: "translateX(-50%)",
       }}
     >
-      <button
+      <MenuIconButton
         onClick={handleStackHorizontally}
-        className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-neutral-100 transition-colors"
         title="Stack horizontally (H)"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 4h4v16H6zM14 4h4v16h-4z" />
         </svg>
-      </button>
-      <button
+      </MenuIconButton>
+      <MenuIconButton
         onClick={handleStackVertically}
-        className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-neutral-100 transition-colors"
         title="Stack vertically (V)"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16v4H4zM4 14h16v4H4z" />
         </svg>
-      </button>
-      <button
+      </MenuIconButton>
+      <MenuIconButton
         onClick={handleArrangeAsGrid}
-        className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-neutral-100 transition-colors"
         title="Arrange as grid (G)"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
         </svg>
-      </button>
+      </MenuIconButton>
 
       {/* Separator */}
-      <div className="w-px h-4 bg-neutral-600 mx-0.5" />
+      <MenuDivider variant="bar" className="mx-0.5" />
 
       {/* Group/Ungroup buttons */}
       {someInGroup ? (
-        <button
+        <MenuIconButton
           onClick={handleUngroup}
-          className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-neutral-100 transition-colors"
-          title="Remove from group"
+            title="Remove from group"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 9V4.5M9 9H4.5M9 9L3.75 3.75M9 15v4.5M9 15H4.5M9 15l-5.25 5.25M15 9h4.5M15 9V4.5M15 9l5.25-5.25M15 15h4.5M15 15v4.5m0-4.5l5.25 5.25" />
           </svg>
-        </button>
+        </MenuIconButton>
       ) : (
-        <button
+        <MenuIconButton
           onClick={handleCreateGroup}
-          className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-neutral-100 transition-colors"
-          title="Create group"
+            title="Create group"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 7.125C2.25 6.504 2.754 6 3.375 6h6c.621 0 1.125.504 1.125 1.125v3.75c0 .621-.504 1.125-1.125 1.125h-6a1.125 1.125 0 01-1.125-1.125v-3.75zM14.25 8.625c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v8.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-8.25zM3.75 16.125c0-.621.504-1.125 1.125-1.125h5.25c.621 0 1.125.504 1.125 1.125v2.25c0 .621-.504 1.125-1.125 1.125h-5.25a1.125 1.125 0 01-1.125-1.125v-2.25z" />
           </svg>
-        </button>
+        </MenuIconButton>
       )}
 
       {/* Separator */}
-      <div className="w-px h-4 bg-neutral-600 mx-0.5" />
+      <MenuDivider variant="bar" className="mx-0.5" />
 
       {/* Download images button */}
-      <button
+      <MenuIconButton
         onClick={handleDownloadImages}
-        className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-neutral-100 transition-colors"
         title="Download images as ZIP"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
         </svg>
-      </button>
-    </div>
+      </MenuIconButton>
+    </MenuSurface>
   );
 }

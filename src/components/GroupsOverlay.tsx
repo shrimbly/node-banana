@@ -383,7 +383,7 @@ const GroupControls = memo(function GroupControls({
 
               {/* Vertical context menu - appears above the three-dot button */}
               {showMenu && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-neutral-800/90 backdrop-blur rounded-lg py-1 min-w-[130px] shadow-lg shadow-black/30" ref={colorPickerRef}>
+                <div role="menu" aria-label="Group options" className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 bg-card/90 backdrop-blur border border-chrome-border rounded-controls py-1 min-w-[140px] shadow-menu" ref={colorPickerRef}>
                   {/* Color fan - anchored to top-left corner of menu */}
                   {showColorPicker && (
                     <>
@@ -449,8 +449,9 @@ const GroupControls = memo(function GroupControls({
 
                   {/* Background color row */}
                   <button
+                    role="menuitem"
                     onClick={(e) => { e.stopPropagation(); setShowColorPicker(!showColorPicker); }}
-                    className="flex items-center gap-2 px-3 py-1.5 w-full hover:bg-white/10 text-xs text-white/80 transition-colors"
+                    className="w-full px-3 py-2 text-left text-[11px] font-medium flex items-center gap-2 text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors"
                   >
                     <div
                       className="w-3 h-3 rounded-full border border-white/30"
@@ -461,8 +462,9 @@ const GroupControls = memo(function GroupControls({
 
                   {/* Lock/Unlock row */}
                   <button
+                    role="menuitem"
                     onClick={(e) => { e.stopPropagation(); handleToggleLock(); setShowMenu(false); }}
-                    className="flex items-center gap-2 px-3 py-1.5 w-full hover:bg-white/10 text-xs text-white/80 transition-colors"
+                    className="w-full px-3 py-2 text-left text-[11px] font-medium flex items-center gap-2 text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors"
                   >
                     {group.locked ? (
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -478,8 +480,9 @@ const GroupControls = memo(function GroupControls({
 
                   {/* NBP Input toggle row */}
                   <button
+                    role="menuitem"
                     onClick={(e) => { e.stopPropagation(); updateGroup(groupId, { isNbpInput: !group.isNbpInput }); setShowMenu(false); }}
-                    className="flex items-center gap-2 px-3 py-1.5 w-full hover:bg-white/10 text-xs text-white/80 transition-colors"
+                    className="w-full px-3 py-2 text-left text-[11px] font-medium flex items-center gap-2 text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
@@ -494,8 +497,9 @@ const GroupControls = memo(function GroupControls({
 
                   {/* Delete row */}
                   <button
+                    role="menuitem"
                     onClick={(e) => { e.stopPropagation(); handleDelete(); }}
-                    className="flex items-center gap-2 px-3 py-1.5 w-full hover:bg-white/10 text-xs text-white/80 transition-colors"
+                    className="w-full px-3 py-2 text-left text-[11px] font-medium flex items-center gap-2 text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />

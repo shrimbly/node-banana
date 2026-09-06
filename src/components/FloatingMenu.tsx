@@ -14,12 +14,12 @@ import { useShallow } from "zustand/shallow";
 import { ProjectSetupModal } from "./ProjectSetupModal";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { WorkflowBrowserModal } from "./WorkflowBrowserModal";
+import { MenuDivider, MenuSurface, menuItemClass } from "@/components/ui/Menu";
 
 const ICON_BUTTON =
   "relative flex h-7 w-7 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-neutral-700 hover:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50";
 
-const MENU_ROW =
-  "flex h-7 w-full items-center gap-2 rounded px-2 text-left text-xs text-neutral-300 whitespace-nowrap transition-colors hover:bg-neutral-700 hover:text-neutral-100 focus-visible:outline-none focus-visible:bg-neutral-700 focus-visible:text-neutral-100 [&>svg]:shrink-0 [&>svg]:text-neutral-400";
+const MENU_ROW = `${menuItemClass} whitespace-nowrap [&>svg]:shrink-0 [&>svg]:text-neutral-400`;
 
 const MENU_ITEM_SELECTOR = '[role="menuitem"]';
 
@@ -470,12 +470,13 @@ export function FloatingMenu() {
         </div>
 
         {isOpen && (
-          <div
+          <MenuSurface
             ref={menuRef}
+            floating={false}
             role="menu"
             aria-label="Node Banana menu"
             onKeyDown={handleMenuKeyDown}
-            className="flex min-w-[224px] flex-col rounded-lg border border-neutral-600 bg-neutral-800 p-1 shadow-xl"
+            className="flex min-w-[224px] flex-col py-1"
           >
             <MenuRow
               icon={<SaveIcon />}
@@ -520,7 +521,7 @@ export function FloatingMenu() {
               onClick={choose(handleOpenSettings)}
             />
 
-            <div role="separator" className="my-1 h-px bg-neutral-700/60" />
+            <MenuDivider role="separator" className="my-1" />
             <MenuRow
               icon={
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.25}>
@@ -544,7 +545,7 @@ export function FloatingMenu() {
             />
 
             {(previousWorkflowSnapshot || commentCount > 0) && (
-              <div role="separator" className="my-1 h-px bg-neutral-700/60" />
+              <MenuDivider role="separator" className="my-1" />
             )}
             {previousWorkflowSnapshot && (
               <MenuRow
@@ -568,7 +569,7 @@ export function FloatingMenu() {
               />
             )}
 
-            <div role="separator" className="my-1 h-px bg-neutral-700/60" />
+            <MenuDivider role="separator" className="my-1" />
             <MenuRow
               icon={
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -619,7 +620,7 @@ export function FloatingMenu() {
               hint="↗"
               href="https://x.com/ReflctWillie"
             />
-          </div>
+          </MenuSurface>
         )}
       </div>
 
