@@ -50,6 +50,16 @@ export function crossesEdge(from: Point, to: Point, points: Point[], tolerance =
   return false;
 }
 
-// A compact, tilted crook with an open bowl; the hook tip is the hotspot.
-const crook = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><defs><linearGradient id="metal" x1="9" y1="4" x2="22" y2="28" gradientUnits="userSpaceOnUse"><stop stop-color="#fff"/><stop offset="1" stop-color="#b8c4d0"/></linearGradient></defs><path d="M10 28 18.5 10.5C21.5 4.5 16 1.5 12.5 4.5 10.5 6.2 10.3 8.5 12 10" fill="none" stroke="#101820" stroke-opacity=".9" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 28 18.5 10.5C21.5 4.5 16 1.5 12.5 4.5 10.5 6.2 10.3 8.5 12 10" fill="none" stroke="url(#metal)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="10" r="1.3" fill="#fff"/></svg>';
-export const HOOK_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(crook)}") 12 10, crosshair`;
+// A fork, drawn to Lucide's rules (24px grid, 2px stroke, round caps and
+// joins), shown at 32px with a dark halo so it stays visible over any node.
+// The hotspot is the tip of the tines.
+const FORK_PATHS = ["M5 2v6a3 3 0 0 0 3 3h0a3 3 0 0 0 3-3V2", "M8 2v9", "M8 11v11"];
+const HALO = 'stroke="#101820" stroke-opacity=".9" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none"';
+const LINE = 'stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"';
+const fork =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">' +
+  FORK_PATHS.map((d) => `<path d="${d}" ${HALO}/>`).join("") +
+  FORK_PATHS.map((d) => `<path d="${d}" ${LINE}/>`).join("") +
+  "</svg>";
+// Hotspot (8, 2) on the 24 grid, scaled to the 32px cursor
+export const HOOK_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(fork)}") 11 3, crosshair`;
