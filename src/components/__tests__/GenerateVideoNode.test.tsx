@@ -143,6 +143,14 @@ describe("GenerateVideoNode", () => {
     type: "generateVideo" as const,
     data: createNodeData(data),
     selected: false,
+    dragging: false,
+    zIndex: 0,
+    selectable: true,
+    deletable: true,
+    draggable: true,
+    isConnectable: true,
+    positionAbsoluteX: 0,
+    positionAbsoluteY: 0,
   });
 
   describe("Basic Rendering", () => {
@@ -639,6 +647,56 @@ describe("GenerateVideoNode", () => {
         expect(imageDiff).toBe(30);
         expect(topText).toBe(top1 + 60);
       });
+    });
+  });
+
+
+  describe("Schema reported on mount", () => {
+    // ModelParameters reports its inputs on every mount, and a culled node
+    // remounts on every pan. The cache is the path a remount takes.
+    const inputs = [
+      { name: "image", type: "image" as const, required: true, label: "Input Image" },
+      { name: "prompt", type: "text" as const, required: true, label: "Prompt" },
+    ];
+    const model = { provider: "fal" as const, modelId: "cached/video-model", displayName: "Cached Model" };
+
+    beforeEach(() => {
+      localStorage.setItem(
+        "node-banana-schema-cache",
+        JSON.stringify({ [`fal:${model.modelId}`]: { parameters: [], inputs, timestamp: Date.now() } })
+      );
+    });
+    afterEach(() => {
+      localStorage.removeItem("node-banana-schema-cache");
+    });
+
+    it("does not rewrite an inputSchema the node already has", () => {
+      render(
+        <TestWrapper>
+          <GenerateVideoNode {...createNodeProps({
+            selectedModel: model,
+            inputSchema: inputs.map((input) => ({ ...input })),
+          })} />
+        </TestWrapper>
+      );
+
+      expect(mockUpdateNodeData).not.toHaveBeenCalledWith(
+        "test-node-1",
+        expect.objectContaining({ inputSchema: expect.anything() })
+      );
+    });
+
+    it("writes the inputSchema when the model's inputs differ", () => {
+      render(
+        <TestWrapper>
+          <GenerateVideoNode {...createNodeProps({
+            selectedModel: model,
+            inputSchema: [inputs[1]],
+          })} />
+        </TestWrapper>
+      );
+
+      expect(mockUpdateNodeData).toHaveBeenCalledWith("test-node-1", { inputSchema: inputs });
     });
   });
 

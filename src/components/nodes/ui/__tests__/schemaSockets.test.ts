@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { schemaSockets } from "../schemaSockets";
+import { schemaSockets, sameInputSchema } from "../schemaSockets";
 
 describe("schemaSockets", () => {
   it("gives defaults when there is no schema", () => {
@@ -34,5 +34,27 @@ describe("schemaSockets", () => {
       { name: "prompt", type: "text", required: true, label: "Prompt" },
     ], { types: ["image", "text"] });
     expect(sockets.filter((s) => !s.hidden).map((s) => s.id)).toEqual(["image", "text-0"]);
+  });
+});
+
+describe("sameInputSchema", () => {
+  const image = { name: "image", type: "image", required: true, label: "Input Image" } as const;
+  const prompt = { name: "prompt", type: "text", required: true, label: "Prompt" } as const;
+
+  it("treats a missing schema as empty", () => {
+    expect(sameInputSchema(undefined, [])).toBe(true);
+    expect(sameInputSchema([], undefined)).toBe(true);
+    expect(sameInputSchema(undefined, [prompt])).toBe(false);
+  });
+
+  it("compares by content, not identity", () => {
+    expect(sameInputSchema([image, prompt], [{ ...image }, { ...prompt }])).toBe(true);
+  });
+
+  it("notices a changed, added, or reordered input", () => {
+    expect(sameInputSchema([image, prompt], [prompt, image])).toBe(false);
+    expect(sameInputSchema([image, prompt], [image])).toBe(false);
+    expect(sameInputSchema([image, prompt], [image, { ...prompt, required: false }])).toBe(false);
+    expect(sameInputSchema([image, prompt], [image, { ...prompt, description: "A prompt" }])).toBe(false);
   });
 });

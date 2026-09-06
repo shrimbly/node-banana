@@ -71,3 +71,29 @@ export function schemaSockets(
 
   return [...sockets, ...hidden];
 }
+
+/**
+ * Whether two input schemas describe the same sockets. A missing schema
+ * counts as empty. Used to skip writing a schema the node already has:
+ * ModelParameters reports its inputs on every mount, and a culled node
+ * remounts on every pan, so an unguarded write would dirty the workflow
+ * and push a no-op undo step each time.
+ */
+export function sameInputSchema(
+  a: ReadonlyArray<ModelInputDef> | undefined,
+  b: ReadonlyArray<ModelInputDef> | undefined
+): boolean {
+  const left = a ?? [];
+  const right = b ?? [];
+  if (left.length !== right.length) return false;
+  return left.every((x, i) => {
+    const y = right[i];
+    return (
+      x.name === y.name &&
+      x.type === y.type &&
+      x.required === y.required &&
+      x.label === y.label &&
+      x.description === y.description
+    );
+  });
+}

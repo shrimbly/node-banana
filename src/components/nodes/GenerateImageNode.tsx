@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useState, useEffect, useMemo } from "react";
+import React, { useCallback, useState, useEffect, useMemo, useRef } from "react";
 import { NodeProps, Node } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
 import { ModelParameters } from "./ModelParameters";
@@ -30,6 +30,7 @@ import {
   SelectField,
   Spinner,
   SummaryValues,
+  sameInputSchema,
   type SocketSpec,
 } from "./ui";
 
@@ -239,8 +240,15 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   );
 
   // Handle inputs loaded from schema
+  // Read through a ref so the callback stays stable: it is a dependency of
+  // ModelParameters' schema effect, and a new identity would refetch.
+  const inputSchemaRef = useRef(nodeData.inputSchema);
+  inputSchemaRef.current = nodeData.inputSchema;
   const handleInputsLoaded = useCallback(
     (inputs: ModelInputDef[]) => {
+      // ModelParameters reports on every mount, and a culled node remounts on
+      // every pan; a schema the node already has must not dirty the workflow.
+      if (sameInputSchema(inputSchemaRef.current, inputs)) return;
       updateNodeData(id, { inputSchema: inputs });
     },
     [id, updateNodeData]
