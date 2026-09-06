@@ -59,6 +59,7 @@ const createDefaultState = (overrides = {}) => ({
   isSaving: false,
   previousWorkflowSnapshot: null,
   shortcutsDialogOpen: false,
+  isRunning: false,
   tabs: [{ id: "tab-1", snapshot: null }],
   activeTabId: "tab-1",
   nodes: [],
@@ -348,6 +349,19 @@ describe("FloatingMenu", () => {
       openMenu();
       fireEvent.click(menuItem("Close tab"));
       expect(mockCloseTab).toHaveBeenCalledWith("tab-2");
+    });
+
+    it("disables New tab and Close tab while a run is in flight, without asking", () => {
+      useState(configuredState({ isRunning: true, hasUnsavedChanges: true }));
+      const confirm = vi.spyOn(window, "confirm");
+      render(<FloatingMenu />);
+      openMenu();
+      expect(menuItem("New tab")).toBeDisabled();
+      expect(menuItem("Close tab")).toBeDisabled();
+      expect(menuItem("Close tab")).toHaveAttribute("title", "Wait for the run to finish");
+      fireEvent.click(menuItem("Close tab"));
+      expect(confirm).not.toHaveBeenCalled();
+      expect(mockCloseTab).not.toHaveBeenCalled();
     });
 
     it("opens the project browser from the pill's Open button", () => {

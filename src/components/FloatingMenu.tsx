@@ -67,6 +67,7 @@ function MenuRow({
   href,
   onClick,
   title,
+  disabled,
 }: {
   icon: ReactNode;
   label: string;
@@ -74,6 +75,7 @@ function MenuRow({
   href?: string;
   onClick?: () => void;
   title?: string;
+  disabled?: boolean;
 }) {
   const content = (
     <>
@@ -97,7 +99,14 @@ function MenuRow({
     );
   }
   return (
-    <button type="button" role="menuitem" onClick={onClick} className={MENU_ROW} title={title}>
+    <button
+      type="button"
+      role="menuitem"
+      onClick={onClick}
+      disabled={disabled}
+      className={`${MENU_ROW} disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent`}
+      title={title}
+    >
       {content}
     </button>
   );
@@ -161,6 +170,7 @@ export function FloatingMenu() {
     newTab,
     closeTab,
     openWorkflowInNewTab,
+    isRunning,
   } = useWorkflowStore(
     useShallow((state) => ({
       workflowName: state.workflowName,
@@ -180,6 +190,7 @@ export function FloatingMenu() {
       newTab: state.newTab,
       closeTab: state.closeTab,
       openWorkflowInNewTab: state.openWorkflowInNewTab,
+      isRunning: state.isRunning,
     }))
   );
 
@@ -196,6 +207,9 @@ export function FloatingMenu() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const isProjectConfigured = !!workflowName;
+  // The store refuses tab changes mid-run or mid-save; say so instead of asking
+  const tabsBusy = isRunning || isSaving;
+  const tabsBusyReason = isRunning ? "Wait for the run to finish" : "Wait for the save to finish";
   const canSave = !!(workflowId && workflowName && saveDirectoryPath);
   const showUnsavedDot = isProjectConfigured ? hasUnsavedChanges && !isSaving : true;
 
@@ -509,6 +523,8 @@ export function FloatingMenu() {
               }
               label="New tab"
               onClick={choose(() => newTab())}
+              disabled={tabsBusy}
+              title={tabsBusy ? tabsBusyReason : undefined}
             />
             <MenuRow
               icon={<span className="h-4 w-4" />}
@@ -517,6 +533,8 @@ export function FloatingMenu() {
                 if (hasUnsavedChanges && !window.confirm("Close this tab and discard its unsaved changes?")) return;
                 closeTab(activeTabId);
               })}
+              disabled={tabsBusy}
+              title={tabsBusy ? tabsBusyReason : undefined}
             />
 
             {(previousWorkflowSnapshot || commentCount > 0) && (
