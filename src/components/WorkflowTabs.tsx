@@ -74,7 +74,8 @@ export function WorkflowTabs() {
     <div
       role="tablist"
       aria-label="Open workflows"
-      className="flex h-[38px] shrink-0 items-end overflow-x-auto bg-[#0f0f0f] px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      // Above the canvas frame, so the active tab can sit over its top border
+      className="relative z-20 flex h-[38px] min-w-0 shrink-0 items-end bg-[#0f0f0f] pl-3 pr-2"
     >
       {summaries.map((tab, index) => {
         const name = tab.name ?? "Untitled";
@@ -89,12 +90,19 @@ export function WorkflowTabs() {
               // Middle-click closes, as in a browser
               if (event.button === 1) handleClose(tab.id, tab.name, tab.hasUnsavedChanges);
             }}
-            className={`group relative flex h-[30px] min-w-[120px] max-w-[220px] shrink items-center gap-2 rounded-t-lg pl-3 pr-2 text-xs whitespace-nowrap ${
+            className={`group relative flex h-[30px] min-w-[72px] max-w-[220px] shrink items-center rounded-t-lg pl-3 pr-2 text-xs whitespace-nowrap ${
               tab.isActive
-                ? "bg-canvas-bg text-neutral-100 shadow-[inset_1px_0_0_rgba(64,64,64,0.6),inset_-1px_0_0_rgba(64,64,64,0.6),inset_0_1px_0_rgba(64,64,64,0.6)]"
+                ? "-mb-px h-[31px] bg-canvas-bg text-neutral-100 shadow-[inset_1px_0_0_rgba(64,64,64,0.6),inset_-1px_0_0_rgba(64,64,64,0.6),inset_0_1px_0_rgba(64,64,64,0.6)]"
                 : `text-neutral-400 ${busy ? "opacity-60" : "hover:bg-white/[0.04] hover:text-neutral-200"}`
             }`}
           >
+            {/* The active tab flows into the canvas frame: concave corners at its feet */}
+            {tab.isActive && (
+              <>
+                <TabEar side="left" />
+                <TabEar side="right" />
+              </>
+            )}
             {/* Hairline between two inactive neighbours */}
             {index > 0 && !tab.isActive && !previousActive && (
               <span aria-hidden className="absolute top-[7px] bottom-[7px] -left-px w-px bg-neutral-800" />
@@ -103,35 +111,39 @@ export function WorkflowTabs() {
               type="button"
               onClick={() => !tab.isActive && switchTab(tab.id)}
               disabled={busy && !tab.isActive}
-              className={`min-w-0 flex-1 truncate text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-sm disabled:cursor-not-allowed ${
+              // The label always leaves room for the slot on its right, so the
+              // close button and the unsaved dot never move the text
+              className={`min-w-0 flex-1 truncate pr-5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-sm disabled:cursor-not-allowed ${
                 tab.name ? "" : "italic text-neutral-500"
               }`}
             >
               {name}
             </button>
-            {/* Unsaved dot sits where the close lives; hover swaps them */}
-            {tab.hasUnsavedChanges && (
-              <span
-                aria-label="Unsaved"
-                className="h-2 w-2 shrink-0 rounded-full bg-red-500 group-hover:hidden group-focus-within:hidden"
-              />
-            )}
-            <button
-              type="button"
-              onClick={() => handleClose(tab.id, tab.name, tab.hasUnsavedChanges)}
-              disabled={busy}
-              aria-label={`Close ${name}`}
-              title={busy ? busyReason : "Close tab"}
-              className={`flex h-4 w-4 shrink-0 items-center justify-center rounded text-neutral-500 hover:bg-neutral-700 hover:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed ${
-                tab.hasUnsavedChanges || !tab.isActive
-                  ? "hidden group-hover:flex group-focus-within:flex"
-                  : ""
-              }`}
-            >
-              <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
-              </svg>
-            </button>
+            {/* One slot over the label's end: the unsaved dot at rest, the close on hover */}
+            <span className="absolute top-1/2 right-1.5 flex h-4 w-4 -translate-y-1/2 items-center justify-center">
+              {tab.hasUnsavedChanges && (
+                <span
+                  aria-label="Unsaved"
+                  className="h-2 w-2 rounded-full bg-red-500 group-hover:hidden group-focus-within:hidden"
+                />
+              )}
+              <button
+                type="button"
+                onClick={() => handleClose(tab.id, tab.name, tab.hasUnsavedChanges)}
+                disabled={busy}
+                aria-label={`Close ${name}`}
+                title={busy ? busyReason : "Close tab"}
+                className={`h-4 w-4 items-center justify-center rounded text-neutral-500 hover:bg-neutral-700 hover:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed ${
+                  tab.hasUnsavedChanges || !tab.isActive
+                    ? "hidden group-hover:flex group-focus-within:flex"
+                    : "flex"
+                }`}
+              >
+                <svg className="h-2.5 w-2.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
+                </svg>
+              </button>
+            </span>
           </div>
         );
       })}
@@ -148,5 +160,24 @@ export function WorkflowTabs() {
         </svg>
       </button>
     </div>
+  );
+}
+
+/**
+ * The concave corner where the active tab meets the canvas frame, drawn just
+ * outside the tab's foot on one side. Canvas-coloured, with the frame's border
+ * running along its curve, so the tab and the canvas read as one sheet.
+ */
+function TabEar({ side }: { side: "left" | "right" }) {
+  return (
+    <svg
+      aria-hidden
+      className={`pointer-events-none absolute bottom-0 h-2 w-2 ${side === "left" ? "-left-2" : "-right-2 -scale-x-100"}`}
+      viewBox="0 0 8 8"
+      fill="none"
+    >
+      <path d="M8 0 A8 8 0 0 1 0 8 L8 8 Z" fill="var(--color-canvas-bg)" />
+      <path d="M8 0 A8 8 0 0 1 0 8" stroke="var(--color-card-border)" strokeWidth="1" />
+    </svg>
   );
 }
