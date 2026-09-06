@@ -455,9 +455,8 @@ export function ProjectSetupModal({
           aria-label="Settings pages"
           className="w-44 shrink-0 flex flex-col gap-0.5 p-2 pt-3.5 bg-neutral-900/50 border-r border-chrome-border/50"
         >
-          <div className="flex items-center gap-2 px-2.5 pb-3">
-            <img src="/banana_icon.png" alt="" className="w-5 h-5" />
-            <DialogTitle compact>{mode === "new" ? "New Project" : "Project Settings"}</DialogTitle>
+          <div className="px-2.5 pb-3">
+            <DialogTitle>{mode === "new" ? "New Project" : "Project Settings"}</DialogTitle>
           </div>
           {SETTINGS_PAGES.map((p) => (
             <button
