@@ -2324,7 +2324,7 @@ export function WorkflowCanvas() {
       {showQuickstart && (
         <WelcomeModal
           onWorkflowGenerated={async (workflow, directoryPath) => {
-            await loadWorkflow(workflow, directoryPath);
+            await useWorkflowStore.getState().openWorkflowInNewTab(workflow, directoryPath);
             setShowQuickstart(false);
           }}
           onClose={() => setShowQuickstart(false)}
