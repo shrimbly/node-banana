@@ -74,7 +74,7 @@ export function WorkflowTabs() {
     <div
       role="tablist"
       aria-label="Open workflows"
-      className="flex h-[38px] shrink-0 items-end overflow-x-auto bg-[#0f0f0f] px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      className="flex h-[38px] shrink-0 items-end overflow-x-auto bg-[#0f0f0f] pl-4 pr-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
       {summaries.map((tab, index) => {
         const name = tab.name ?? "Untitled";
