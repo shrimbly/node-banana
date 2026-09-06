@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, cleanup } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EdgeHookSelection } from "../edges/EdgeHookSelection";
 import { HookBundleClamp } from "../edges/HookBundleClamp";
+import { HOOK_CURSOR } from "@/lib/edges/hook";
 import { useWorkflowStore } from "@/store/workflowStore";
 import type { WorkflowNode } from "@/types";
 
@@ -82,6 +83,16 @@ describe("hold-H edge selection", () => {
     fireEvent.pointerUp(overlay, { pointerId: 1, clientX: 140, clientY: 90 });
     expect(useWorkflowStore.getState().hookDrag).toBeNull();
     expect(useWorkflowStore.getState().edges[0].data?.hookBundles?.[0]).toMatchObject({ x: 140, y: 90 });
+  });
+
+  it("changes the fork and counts the catch beside it while carrying", () => {
+    setup();
+    const overlay = startSweep();
+    const rest = HOOK_CURSOR;
+    expect(overlay.style.cursor).not.toBe(rest);
+    expect(screen.getByTestId("edge-hook-count")).toHaveTextContent("2");
+    fireEvent.pointerUp(overlay, { pointerId: 1, clientX: 100, clientY: 50 });
+    expect(screen.queryByTestId("edge-hook-count")).toBeNull();
   });
 
   it("drops the carried noodles back when the sweep is cancelled", () => {

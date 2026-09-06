@@ -51,17 +51,23 @@ export function crossesEdge(from: Point, to: Point, points: Point[], tolerance =
 }
 
 // A fork, drawn to Lucide's rules (24px grid, 2px stroke, round caps and
-// joins), in the selection blue at 32px with a dark halo so it stays visible
-// over any node.
-// The hotspot is the tip of the tines.
+// joins), light neutral at 32px with a dark halo so it stays visible over any
+// node. The hotspot is the tip of the tines. Once the sweep has caught
+// something the fork carries a strand across its tines.
 const FORK_PATHS = ["M5 2v6a3 3 0 0 0 3 3h0a3 3 0 0 0 3-3V2", "M8 2v9", "M8 11v11"];
+const STRAND_PATH = "M1 6c2.5-2 4.5 2 7 0s4.5-2 7 0s4 2 7 0";
 const HALO = 'stroke="#101820" stroke-opacity=".9" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none"';
-// blue-500, the app's selection and focus colour: the sweep is a selection
-const LINE = 'stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"';
-const fork =
-  '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">' +
-  FORK_PATHS.map((d) => `<path d="${d}" ${HALO}/>`).join("") +
-  FORK_PATHS.map((d) => `<path d="${d}" ${LINE}/>`).join("") +
-  "</svg>";
-// Hotspot (8, 2) on the 24 grid, scaled to the 32px cursor
-export const HOOK_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(fork)}") 11 3, crosshair`;
+// neutral-200, the same light rule the bundle handle is drawn with
+const LINE = 'stroke="#e5e5e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"';
+function forkCursor(paths: string[]): string {
+  const svg =
+    '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">' +
+    paths.map((d) => `<path d="${d}" ${HALO}/>`).join("") +
+    paths.map((d) => `<path d="${d}" ${LINE}/>`).join("") +
+    "</svg>";
+  // Hotspot (8, 2) on the 24 grid, scaled to the 32px cursor
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 11 3, crosshair`;
+}
+export const HOOK_CURSOR = forkCursor(FORK_PATHS);
+/** The fork with a strand caught on it: shown once the sweep is carrying noodles. */
+export const HOOK_CURSOR_CARRYING = forkCursor([...FORK_PATHS, STRAND_PATH]);

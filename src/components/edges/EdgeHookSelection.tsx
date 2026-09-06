@@ -3,12 +3,14 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { useReactFlow } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { crossesEdge, HOOK_CURSOR, type Point } from "@/lib/edges/hook";
+import { crossesEdge, HOOK_CURSOR, HOOK_CURSOR_CARRYING, type Point } from "@/lib/edges/hook";
 
 /** Hold H and sweep the rendered noodles; nodes never participate in this gesture. */
 export function EdgeHookSelection({ canvas, disabled }: { canvas: RefObject<HTMLDivElement | null>; disabled: boolean }) {
   const [held, setHeld] = useState(false);
   const [count, setCount] = useState(0);
+  // Where the pointer is, in the overlay's own coordinates, so the count can ride beside the fork
+  const [pointer, setPointer] = useState<Point | null>(null);
   const { screenToFlowPosition } = useReactFlow();
   const gesture = useRef<{ last: Point; ids: Set<string>; paths: { id: string; points: Point[] }[] } | null>(null);
   const finish = useRef<(cancel?: boolean) => void>(() => {});
@@ -22,6 +24,7 @@ export function EdgeHookSelection({ canvas, disabled }: { canvas: RefObject<HTML
     if (!cancel) store.hookEdges([...sweep.ids], screenToFlowPosition(sweep.last));
     else store.onEdgesChange([...sweep.ids].map((id) => ({ type: "select", id, selected: false })));
     setCount(0);
+    setPointer(null);
   };
 
   useEffect(() => {
@@ -68,12 +71,16 @@ export function EdgeHookSelection({ canvas, disabled }: { canvas: RefObject<HTML
     // Everything caught so far is carried along on the fork
     if (sweep.ids.size) useWorkflowStore.getState().setHookDrag({ ...screenToFlowPosition(point), edgeIds: [...sweep.ids] });
   };
+  const track = (event: React.PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    setPointer({ x: event.clientX - rect.left, y: event.clientY - rect.top });
+  };
 
   return (
     <div
       data-testid="edge-hook-selection"
       className="absolute inset-0 z-[3000] nodrag nopan touch-none"
-      style={{ cursor: HOOK_CURSOR }}
+      style={{ cursor: count ? HOOK_CURSOR_CARRYING : HOOK_CURSOR }}
       onPointerDown={(event) => {
         if (event.button !== 0) return;
         event.preventDefault();
@@ -98,9 +105,13 @@ export function EdgeHookSelection({ canvas, disabled }: { canvas: RefObject<HTML
         });
         const point = { x: event.clientX, y: event.clientY };
         gesture.current = { last: point, ids: new Set(), paths };
+        track(event);
         collect(point);
       }}
-      onPointerMove={(event) => collect({ x: event.clientX, y: event.clientY })}
+      onPointerMove={(event) => {
+        if (gesture.current) track(event);
+        collect({ x: event.clientX, y: event.clientY });
+      }}
       onPointerUp={(event) => {
         collect({ x: event.clientX, y: event.clientY });
         finish.current();
@@ -108,6 +119,17 @@ export function EdgeHookSelection({ canvas, disabled }: { canvas: RefObject<HTML
       onPointerCancel={() => finish.current(true)}
       onContextMenu={(event) => event.preventDefault()}
     >
+      {/* The catch count rides just off the fork's handle while the sweep is carrying something */}
+      {count > 0 && pointer && (
+        <div
+          data-testid="edge-hook-count"
+          aria-hidden
+          className="pointer-events-none absolute flex h-4 min-w-4 items-center justify-center rounded-full bg-neutral-200 px-1 text-[10px] font-semibold leading-none text-neutral-900"
+          style={{ left: pointer.x + 14, top: pointer.y + 18 }}
+        >
+          {count}
+        </div>
+      )}
       <div role="status" className="absolute bottom-6 left-1/2 -translate-x-1/2 rounded-controls border border-chrome-border bg-card px-3 py-1.5 text-[11px] text-neutral-300 pointer-events-none">
         {count ? `${count} connections on the fork · release to bundle here` : "Drag across connections to bundle · Esc to cancel"}
       </div>
