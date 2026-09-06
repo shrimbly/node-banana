@@ -393,6 +393,13 @@ export interface WorkflowStore {
   // Workflow tabs: several workflows open, one live in the canvas
   tabs: WorkflowTab[];
   activeTabId: string;
+  /** Last known pan/zoom of the live workflow, parked with its tab. */
+  canvasViewport: { x: number; y: number; zoom: number } | null;
+  setCanvasViewport: (viewport: { x: number; y: number; zoom: number }) => void;
+  /** Media saves still writing to disk after a run; they update nodes by id when they land. */
+  pendingMediaSaves: number;
+  /** Why tab changes are refused right now, or null when they are allowed. */
+  tabsBusyReason: () => string | null;
   /** Park the live workflow and open an empty tab. Returns the new tab id, or null while a run or save is in flight. */
   newTab: () => string | null;
   /** Park the live workflow and bring `tabId` into the canvas. False when nothing changed. */
@@ -736,7 +743,6 @@ function applyTabSnapshot(
     stubGroupWidths: {},
     isRunning: false,
     currentNodeIds: [],
-    pausedAtNodeId: null,
     _abortController: null,
     workflowLoadCount: get().workflowLoadCount + 1,
     showQuickstart: false,
@@ -804,6 +810,16 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   // Workflow tabs initial state: one live tab
   tabs: [{ id: initialTabId, snapshot: null }],
   activeTabId: initialTabId,
+  canvasViewport: null,
+  setCanvasViewport: (viewport) => set({ canvasViewport: viewport }),
+  pendingMediaSaves: 0,
+  tabsBusyReason: () => {
+    const { isRunning, isSaving, pendingMediaSaves } = get();
+    if (isRunning) return "Wait for the run to finish";
+    if (isSaving) return "Wait for the save to finish";
+    if (pendingMediaSaves > 0) return "Wait for the media to finish saving";
+    return null;
+  },
   useExternalImageStorage: true,  // Default: store images as separate files
   imageRefBasePath: null,  // Directory from which current imageRefs are valid
 
@@ -1878,7 +1894,11 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     saveDirectoryPath: get().saveDirectoryPath,
     trackSaveGeneration: (key: string, promise: Promise<void>) => {
       pendingImageSyncs.set(key, promise);
-      promise.finally(() => pendingImageSyncs.delete(key));
+      set({ pendingMediaSaves: pendingImageSyncs.size });
+      promise.finally(() => {
+        pendingImageSyncs.delete(key);
+        set({ pendingMediaSaves: pendingImageSyncs.size });
+      });
     },
     appendOutputGalleryImage: (targetId: string, image: string) => {
       set((state) => ({
@@ -2990,7 +3010,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   newTab: () => {
-    if (get().isRunning || get().isSaving) return null;
+    if (get().tabsBusyReason()) return null;
     const { tabs, activeTabId, edgeStyle, edgeAppearance, useExternalImageStorage } = get();
     const parked = captureWorkflowTabSnapshot(get());
     const id = createTabId();
@@ -3009,7 +3029,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     const { tabs, activeTabId } = get();
     const target = tabs.find((tab) => tab.id === tabId);
     if (!target || tabId === activeTabId || !target.snapshot) return false;
-    if (get().isRunning || get().isSaving) return false;
+    if (get().tabsBusyReason()) return false;
     const parked = captureWorkflowTabSnapshot(get());
     set({
       tabs: tabs.map((tab) =>
@@ -3025,7 +3045,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     const { tabs, activeTabId, edgeStyle, edgeAppearance, useExternalImageStorage } = get();
     const closing = tabs.find((tab) => tab.id === tabId);
     if (!closing) return false;
-    if (get().isRunning || get().isSaving) return false;
+    if (get().tabsBusyReason()) return false;
 
     const empty = () => emptyWorkflowTabSnapshot({ edgeStyle, edgeAppearance, useExternalImageStorage });
 

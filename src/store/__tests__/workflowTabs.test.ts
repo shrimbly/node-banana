@@ -67,6 +67,8 @@ function resetTabs() {
   useWorkflowStore.setState({
     isRunning: false,
     isSaving: false,
+    pendingMediaSaves: 0,
+    canvasViewport: null,
     tabs: [{ id: s.activeTabId, snapshot: null }],
   });
   s.clearWorkflow();
@@ -200,6 +202,60 @@ describe("workflow tabs (store)", () => {
     expect(store().activeTabId).not.toBe(initial);
     expect(store().workflowName).toBe("Loaded");
     expect(store().tabs[0].snapshot?.workflowName).toBe("Busy");
+  });
+
+  it("keeps a paused run's resume point with its tab", () => {
+    useWorkflowStore.setState({ nodes: [promptNode("prompt-1")], workflowName: "Paused", pausedAtNodeId: "prompt-1" });
+    const pausedId = store().activeTabId;
+
+    store().newTab();
+    expect(store().pausedAtNodeId).toBeNull();
+
+    store().switchTab(pausedId);
+    expect(store().pausedAtNodeId).toBe("prompt-1");
+  });
+
+  it("parks the viewport with its tab", () => {
+    store().setCanvasViewport({ x: 100, y: 50, zoom: 2 });
+    const firstId = store().activeTabId;
+
+    store().newTab();
+    expect(store().canvasViewport).toBeNull();
+    store().setCanvasViewport({ x: -20, y: 0, zoom: 0.5 });
+
+    store().switchTab(firstId);
+    expect(store().canvasViewport).toEqual({ x: 100, y: 50, zoom: 2 });
+    expect(store().tabs[1].snapshot?.canvasViewport).toEqual({ x: -20, y: 0, zoom: 0.5 });
+  });
+
+  it("refuses tab changes while a media save is still writing", () => {
+    store().newTab();
+    const [first] = store().tabs;
+    useWorkflowStore.setState({ pendingMediaSaves: 1 });
+
+    expect(store().tabsBusyReason()).toBe("Wait for the media to finish saving");
+    expect(store().switchTab(first.id)).toBe(false);
+    expect(store().newTab()).toBeNull();
+    expect(store().closeTab(first.id)).toBe(false);
+
+    useWorkflowStore.setState({ pendingMediaSaves: 0 });
+    expect(store().tabsBusyReason()).toBeNull();
+    expect(store().switchTab(first.id)).toBe(true);
+  });
+
+  it("counts media saves from the execution context until they land", async () => {
+    let finish!: () => void;
+    const promise = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    const ctx = store()._buildExecutionContext(promptNode("prompt-1"));
+    ctx.trackSaveGeneration("img-1", promise);
+    expect(store().pendingMediaSaves).toBe(1);
+
+    finish();
+    await promise;
+    await Promise.resolve();
+    expect(store().pendingMediaSaves).toBe(0);
   });
 
   it("a switch clears undo history and the AI snapshot follows its tab", () => {

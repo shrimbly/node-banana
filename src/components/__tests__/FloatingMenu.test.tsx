@@ -60,6 +60,7 @@ const createDefaultState = (overrides = {}) => ({
   previousWorkflowSnapshot: null,
   shortcutsDialogOpen: false,
   isRunning: false,
+  pendingMediaSaves: 0,
   tabs: [{ id: "tab-1", snapshot: null }],
   activeTabId: "tab-1",
   nodes: [],

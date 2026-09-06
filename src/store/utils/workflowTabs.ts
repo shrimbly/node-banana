@@ -33,6 +33,8 @@ const SNAPSHOT_KEYS = [
   "manualChangeCount",
   "dimmedNodeIds",
   "skippedNodeIds",
+  "pausedAtNodeId",
+  "canvasViewport",
 ] as const satisfies readonly (keyof WorkflowStore)[];
 
 export type WorkflowTabSnapshot = Pick<WorkflowStore, (typeof SNAPSHOT_KEYS)[number]>;
@@ -94,6 +96,8 @@ export function emptyWorkflowTabSnapshot(defaults: {
     manualChangeCount: 0,
     dimmedNodeIds: new Set<string>(),
     skippedNodeIds: new Set<string>(),
+    pausedAtNodeId: null,
+    canvasViewport: null,
   };
 }
 

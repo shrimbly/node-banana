@@ -1,6 +1,7 @@
 "use client";
 
-import type { MouseEvent } from "react";
+import { useEffect, type MouseEvent } from "react";
+import { useOnViewportChange, useReactFlow } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { useShallow } from "zustand/shallow";
 import { summarizeWorkflowTabs } from "@/store/utils/workflowTabs";
@@ -9,28 +10,59 @@ import { summarizeWorkflowTabs } from "@/store/utils/workflowTabs";
  * Open workflows as browser-style tabs across the top of the window. The bar
  * is always there, so the workflow name has one home. The active tab is the
  * canvas colour and open at the bottom, so it reads as part of the canvas.
- * Switching and closing are blocked while a run or save is in flight, because
- * the store holds only the live workflow's execution state.
+ * Switching and closing are blocked while a run, a save or a media write is
+ * in flight, because the store holds only the live workflow's execution state.
+ * Each tab also remembers its pan and zoom.
  */
 export function WorkflowTabs() {
-  const { tabs, activeTabId, workflowName, hasUnsavedChanges, isRunning, isSaving, switchTab, closeTab, newTab } =
-    useWorkflowStore(
-      useShallow((state) => ({
-        tabs: state.tabs,
-        activeTabId: state.activeTabId,
-        workflowName: state.workflowName,
-        hasUnsavedChanges: state.hasUnsavedChanges,
-        isRunning: state.isRunning,
-        isSaving: state.isSaving,
-        switchTab: state.switchTab,
-        closeTab: state.closeTab,
-        newTab: state.newTab,
-      }))
-    );
+  const {
+    tabs,
+    activeTabId,
+    workflowName,
+    hasUnsavedChanges,
+    isRunning,
+    isSaving,
+    pendingMediaSaves,
+    canvasViewport,
+    setCanvasViewport,
+    switchTab,
+    closeTab,
+    newTab,
+  } = useWorkflowStore(
+    useShallow((state) => ({
+      tabs: state.tabs,
+      activeTabId: state.activeTabId,
+      workflowName: state.workflowName,
+      hasUnsavedChanges: state.hasUnsavedChanges,
+      isRunning: state.isRunning,
+      isSaving: state.isSaving,
+      pendingMediaSaves: state.pendingMediaSaves,
+      canvasViewport: state.canvasViewport,
+      setCanvasViewport: state.setCanvasViewport,
+      switchTab: state.switchTab,
+      closeTab: state.closeTab,
+      newTab: state.newTab,
+    }))
+  );
+
+  // The viewport lives in React Flow; mirror it into the store so it parks with the tab
+  const { getViewport, setViewport } = useReactFlow();
+  useOnViewportChange({ onEnd: setCanvasViewport });
+  useEffect(() => {
+    // A tab that has been viewed before comes back where it was left; a tab
+    // shown for the first time adopts the current view as its own
+    if (canvasViewport) setViewport(canvasViewport);
+    else setCanvasViewport(getViewport());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTabId]);
 
   const summaries = summarizeWorkflowTabs(tabs, activeTabId, { workflowName, hasUnsavedChanges });
-  const busy = isRunning || isSaving;
-  const busyReason = isRunning ? "Wait for the run to finish" : "Wait for the save to finish";
+  const busy = isRunning || isSaving || pendingMediaSaves > 0;
+  const busyReason = isRunning
+    ? "Wait for the run to finish"
+    : isSaving
+      ? "Wait for the save to finish"
+      : "Wait for the media to finish saving";
 
   const handleClose = (id: string, name: string | null, unsaved: boolean) => {
     if (busy) return;

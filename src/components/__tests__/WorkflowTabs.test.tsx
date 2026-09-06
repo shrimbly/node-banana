@@ -6,7 +6,15 @@ import type { WorkflowTab } from "@/store/utils/workflowTabs";
 const mockSwitchTab = vi.fn();
 const mockCloseTab = vi.fn();
 const mockNewTab = vi.fn();
+const mockSetCanvasViewport = vi.fn();
+const mockSetViewport = vi.fn();
+const mockUseOnViewportChange = vi.fn();
 const mockUseWorkflowStore = vi.fn();
+
+vi.mock("@xyflow/react", () => ({
+  useReactFlow: () => ({ setViewport: mockSetViewport, getViewport: () => ({ x: 1, y: 2, zoom: 3 }) }),
+  useOnViewportChange: (handlers: unknown) => mockUseOnViewportChange(handlers),
+}));
 
 vi.mock("@/store/workflowStore", () => ({
   useWorkflowStore: (selector?: (state: unknown) => unknown) => {
@@ -31,6 +39,9 @@ function useState(overrides = {}) {
     hasUnsavedChanges: false,
     isRunning: false,
     isSaving: false,
+    pendingMediaSaves: 0,
+    canvasViewport: null,
+    setCanvasViewport: mockSetCanvasViewport,
     switchTab: mockSwitchTab,
     closeTab: mockCloseTab,
     newTab: mockNewTab,
@@ -120,6 +131,25 @@ describe("WorkflowTabs", () => {
     render(<WorkflowTabs />);
     fireEvent.click(screen.getByRole("button", { name: "New tab" }));
     expect(mockNewTab).toHaveBeenCalledTimes(1);
+  });
+
+  it("blocks tab changes while a media save is still writing, and says so", () => {
+    useState({ pendingMediaSaves: 2 });
+    render(<WorkflowTabs />);
+    expect(screen.getByRole("button", { name: "New tab" })).toHaveAttribute("title", "Wait for the media to finish saving");
+    expect(screen.getByRole("button", { name: "New tab" })).toBeDisabled();
+  });
+
+  it("mirrors viewport moves into the store and restores the tab's viewport on a switch", () => {
+    const { rerender } = render(<WorkflowTabs />);
+    expect(mockUseOnViewportChange).toHaveBeenCalledWith({ onEnd: mockSetCanvasViewport });
+    // First showing of a tab with no viewport of its own: it adopts the current one
+    expect(mockSetViewport).not.toHaveBeenCalled();
+    expect(mockSetCanvasViewport).toHaveBeenCalledWith({ x: 1, y: 2, zoom: 3 });
+
+    useState({ activeTabId: "tab-1", canvasViewport: { x: 10, y: 20, zoom: 1.5 } });
+    rerender(<WorkflowTabs />);
+    expect(mockSetViewport).toHaveBeenCalledWith({ x: 10, y: 20, zoom: 1.5 });
   });
 
   it("blocks switching, closing and opening while a run is in flight", () => {

@@ -171,6 +171,7 @@ export function FloatingMenu() {
     closeTab,
     openWorkflowInNewTab,
     isRunning,
+    pendingMediaSaves,
   } = useWorkflowStore(
     useShallow((state) => ({
       workflowName: state.workflowName,
@@ -191,6 +192,7 @@ export function FloatingMenu() {
       closeTab: state.closeTab,
       openWorkflowInNewTab: state.openWorkflowInNewTab,
       isRunning: state.isRunning,
+      pendingMediaSaves: state.pendingMediaSaves,
     }))
   );
 
@@ -208,8 +210,12 @@ export function FloatingMenu() {
 
   const isProjectConfigured = !!workflowName;
   // The store refuses tab changes mid-run or mid-save; say so instead of asking
-  const tabsBusy = isRunning || isSaving;
-  const tabsBusyReason = isRunning ? "Wait for the run to finish" : "Wait for the save to finish";
+  const tabsBusy = isRunning || isSaving || pendingMediaSaves > 0;
+  const tabsBusyReason = isRunning
+    ? "Wait for the run to finish"
+    : isSaving
+      ? "Wait for the save to finish"
+      : "Wait for the media to finish saving";
   const canSave = !!(workflowId && workflowName && saveDirectoryPath);
   const showUnsavedDot = isProjectConfigured ? hasUnsavedChanges && !isSaving : true;
 
