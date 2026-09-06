@@ -74,8 +74,10 @@ export function WorkflowTabs() {
     <div
       role="tablist"
       aria-label="Open workflows"
-      // Above the canvas frame, so the active tab can sit over its top border
-      className="relative z-20 flex h-[38px] min-w-0 shrink-0 items-end bg-[#0f0f0f] pl-3 pr-2"
+      // Just above the canvas frame, so the active tab can sit over its top
+      // border; everything the frame clips stays below it, and everything
+      // fixed (modals, menus) still stacks above
+      className="relative z-[1] flex h-[38px] min-w-0 shrink-0 items-end bg-[#0f0f0f] pl-3 pr-2"
     >
       {summaries.map((tab, index) => {
         const name = tab.name ?? "Untitled";
@@ -92,7 +94,7 @@ export function WorkflowTabs() {
             }}
             className={`group relative flex h-[30px] min-w-[72px] max-w-[220px] shrink items-center rounded-t-lg pl-3 pr-2 text-xs whitespace-nowrap ${
               tab.isActive
-                ? "-mb-px h-[31px] bg-canvas-bg text-neutral-100 shadow-[inset_1px_0_0_rgba(64,64,64,0.6),inset_-1px_0_0_rgba(64,64,64,0.6),inset_0_1px_0_rgba(64,64,64,0.6)]"
+                ? "-mb-0.5 h-[32px] bg-canvas-bg text-neutral-100 shadow-[inset_1px_0_0_rgba(64,64,64,0.6),inset_-1px_0_0_rgba(64,64,64,0.6),inset_0_1px_0_rgba(64,64,64,0.6)]"
                 : `text-neutral-400 ${busy ? "opacity-60" : "hover:bg-white/[0.04] hover:text-neutral-200"}`
             }`}
           >
@@ -170,14 +172,18 @@ export function WorkflowTabs() {
  */
 function TabEar({ side }: { side: "left" | "right" }) {
   return (
+    // 9px square, one column into the tab so the curve starts on the tab's own
+    // 1px side border and ends on the centre of the frame's top border row.
+    // The tab hangs 2px over the frame; the ear stops 1px short so its curve
+    // lands on the border row, not below it.
     <svg
       aria-hidden
-      className={`pointer-events-none absolute bottom-0 h-2 w-2 ${side === "left" ? "-left-2" : "-right-2 -scale-x-100"}`}
-      viewBox="0 0 8 8"
+      className={`pointer-events-none absolute bottom-px h-[9px] w-[9px] ${side === "left" ? "-left-2" : "-right-2 -scale-x-100"}`}
+      viewBox="0 0 9 9"
       fill="none"
     >
-      <path d="M8 0 A8 8 0 0 1 0 8 L8 8 Z" fill="var(--color-canvas-bg)" />
-      <path d="M8 0 A8 8 0 0 1 0 8" stroke="var(--color-card-border)" strokeWidth="1" />
+      <path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5 L0.5 9 L9 9 L9 0 Z" fill="var(--color-canvas-bg)" />
+      <path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5" stroke="var(--color-card-border)" strokeWidth="1" />
     </svg>
   );
 }

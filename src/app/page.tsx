@@ -63,8 +63,9 @@ export default function Home() {
         <WorkflowTabs />
         {/* The floating menu is positioned against this box, so it clears the tab
             strip. The box is the canvas frame: rounded top corners the active tab
-            flows into, and its own stacking context so the tab can overlap it. */}
-        <div className="relative isolate flex-1 min-h-0 flex flex-col overflow-hidden rounded-t-lg border border-card-border bg-canvas-bg">
+            flows into. It must not isolate its stacking: modals and menus inside
+            it are fixed and have to cover the strip too. */}
+        <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden rounded-t-md border border-card-border bg-canvas-bg">
         <ErrorBoundary
           label="Canvas"
           onError={(error, info) =>
