@@ -74,8 +74,12 @@ const defaultProviderSettings: ProviderSettings = {
 
 // Default store state factory
 const createDefaultState = (overrides = {}) => ({
-  // One node, so Run has something to run; wiring never disables it
-  nodes: [{ id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} }],
+  // Two connected nodes, so Run has something to run; a node missing a
+  // connection never disables it, only a graph with no connections at all
+  nodes: [
+    { id: "p", type: "prompt", position: { x: 0, y: 0 }, data: { prompt: "hi" } },
+    { id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} },
+  ],
   isRunning: false,
   currentNodeIds: [],
   executeWorkflow: mockExecuteWorkflow,
@@ -86,7 +90,7 @@ const createDefaultState = (overrides = {}) => ({
   edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true },
   setEdgeStyle: mockSetEdgeStyle,
   setAllEdgesHidden: mockSetAllEdgesHidden,
-  edges: [],
+  edges: [{ id: "e", source: "p", target: "gen", sourceHandle: "text", targetHandle: "text" }],
   setModelSearchOpen: mockSetModelSearchOpen,
   modelSearchOpen: false,
   modelSearchProvider: null,
@@ -625,9 +629,16 @@ describe("FloatingActionBar", () => {
       expect(mockStopWorkflow).toHaveBeenCalled();
     });
 
-    it("keeps Run enabled when nodes are missing connections", async () => {
+    it("keeps Run enabled when some nodes are missing connections", async () => {
       mockUseWorkflowStore.mockImplementation((selector) =>
-        selector(createDefaultState({ nodes: [{ id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} }], edges: [] })));
+        selector(createDefaultState({
+          nodes: [
+            { id: "p", type: "prompt", position: { x: 0, y: 0 }, data: { prompt: "hi" } },
+            { id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} },
+            { id: "lonely", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} },
+          ],
+          edges: [{ id: "e", source: "p", target: "gen", sourceHandle: "text", targetHandle: "text" }],
+        })));
 
       render(
         <TestWrapper>
@@ -641,6 +652,23 @@ describe("FloatingActionBar", () => {
 
       expect(screen.getByText("Run").closest("button")).not.toBeDisabled();
       expect(screen.getByTitle("Run options")).toBeInTheDocument();
+    });
+
+    it("disables Run when nothing is connected", async () => {
+      mockUseWorkflowStore.mockImplementation((selector) =>
+        selector(createDefaultState({ nodes: [{ id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} }], edges: [] })));
+
+      render(
+        <TestWrapper>
+          <FloatingActionBar />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        const runButton = screen.getByText("Run").closest("button");
+        expect(runButton).toBeDisabled();
+        expect(runButton).toHaveAttribute("title", "Connect some nodes to run");
+      });
     });
 
     it("should disable Run button when the workflow is empty", async () => {
@@ -852,6 +880,7 @@ describe("Hidden connections toggle", () => {
   });
 
   it("is disabled when there are no connections", async () => {
+    mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ edges: [] })));
     render(
       <TestWrapper>
         <FloatingActionBar />

@@ -55,7 +55,10 @@ export const FloatingNodeHeaders = memo(function FloatingNodeHeaders({ nodes, hi
           node.position.y + height >= minY &&
           node.position.y - HEADER_REACH <= maxY;
         if (!inView && !node.selected) return null;
-        return <NodeHeader key={`header-${node.id}`} node={node} hint={hints?.[node.id]} {...actions} />;
+        // Generate nodes say "connect inputs and run" in their own body, so
+        // their header carries no hint; the others have nowhere else to say it
+        const hint = GENERATE_TYPES.has(node.type as string) ? undefined : hints?.[node.id];
+        return <NodeHeader key={`header-${node.id}`} node={node} hint={hint} {...actions} />;
       })}
     </ViewportPortal>
   );

@@ -446,11 +446,12 @@ export function FloatingActionBar() {
   };
   const [runMenuOpen, setRunMenuOpen] = useState(false);
   const runMenuRef = useRef<HTMLDivElement>(null);
-  // Run is never held back by wiring: a node with nothing to work with is
-  // skipped during the run and flagged on the node. Only an empty graph
-  // has nothing to run.
-  const valid = nodes.length > 0;
-  const errors = valid ? [] : ["Workflow is empty"];
+  // Run is never held back by which nodes are wired: a node with nothing to
+  // work with is skipped during the run and flagged on the node. Only a graph
+  // with nothing connected at all has nothing to run.
+  const totalEdgeCount = useWorkflowStore((state) => state.edges.length);
+  const valid = nodes.length > 0 && totalEdgeCount > 0;
+  const errors = valid ? [] : [nodes.length === 0 ? "Workflow is empty" : "Connect some nodes to run"];
 
   // Get the selected nodes
   const selectedNodes = useMemo(() => {
@@ -499,7 +500,6 @@ export function FloatingActionBar() {
 
   // Hidden connections: the eye shows how many are hidden and toggles them all
   const hiddenEdgeCount = useWorkflowStore((state) => state.edges.filter((e) => e.data?.hidden).length);
-  const totalEdgeCount = useWorkflowStore((state) => state.edges.length);
   const toggleHiddenEdges = () => {
     setAllEdgesHidden(hiddenEdgeCount === 0);
   };
