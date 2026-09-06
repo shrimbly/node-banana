@@ -446,7 +446,7 @@ export function ProjectSetupModal({
     <Dialog
       open={isOpen}
       onClose={onClose}
-      className="w-[720px] h-[480px]"
+      className="w-[820px] max-w-[92vw] h-[560px]"
       panelProps={{ onKeyDown: handleKeyDown }}
     >
       <div className="flex-1 min-h-0 flex">
