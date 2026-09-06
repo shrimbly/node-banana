@@ -4,7 +4,7 @@ import { MenuDivider, MenuIconButton, MenuSurface } from "@/components/ui/Menu";
 import { useReactFlow } from "@xyflow/react";
 import { useShallow } from "zustand/shallow";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { memo, useMemo, useCallback } from "react";
+import { memo, useMemo, useCallback, useState } from "react";
 import JSZip from "jszip";
 import type {
   ImageInputNodeData,
@@ -15,6 +15,7 @@ import type {
 import { getNodeSize } from "@/utils/nodeDimensions";
 
 const STACK_GAP = 20;
+type Arrangement = "horizontal" | "vertical" | "grid";
 
 // Memoised: rendered by the canvas, which re-renders on every drag frame
 export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
@@ -24,6 +25,20 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
   const createGroup = useWorkflowStore((state) => state.createGroup);
   const removeNodesFromGroup = useWorkflowStore((state) => state.removeNodesFromGroup);
   const { getViewport } = useReactFlow();
+  const selectionKey = JSON.stringify(selectedNodes.map((node) => node.id).sort());
+  const [arrangement, setArrangement] = useState<{
+    selectionKey: string;
+    mode: Arrangement;
+    nodes: typeof selectedNodes;
+    position: { x: number; y: number };
+    gap: number;
+  } | null>(null);
+
+  // Clear the spacing control when the selection changes, including deselection.
+  if (arrangement && arrangement.selectionKey !== selectionKey) {
+    setArrangement(null);
+  }
+  const activeArrangement = arrangement?.selectionKey === selectionKey ? arrangement : null;
 
   // Check if any selected nodes are in a group
   const selectedNodeGroups = useMemo(() => {
@@ -59,11 +74,11 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
     return { x: screenX, y: screenY };
   }, [selectedNodes, getViewport]);
 
-  const handleStackHorizontally = () => {
+  const handleStackHorizontally = (gap: number, nodes = selectedNodes) => {
     if (selectedNodes.length < 2) return;
 
     // Sort by current x position to maintain relative order
-    const sortedNodes = [...selectedNodes].sort((a, b) => a.position.x - b.position.x);
+    const sortedNodes = [...nodes].sort((a, b) => a.position.x - b.position.x);
 
     // Use the topmost y position as the alignment point
     const alignY = Math.min(...sortedNodes.map((n) => n.position.y));
@@ -79,18 +94,18 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
         position: { x: currentX, y: alignY },
       };
 
-      currentX += nodeWidth + STACK_GAP;
+      currentX += nodeWidth + gap;
       return change;
     });
 
     onNodesChange(changes);
   };
 
-  const handleStackVertically = () => {
+  const handleStackVertically = (gap: number, nodes = selectedNodes) => {
     if (selectedNodes.length < 2) return;
 
     // Sort by current y position to maintain relative order
-    const sortedNodes = [...selectedNodes].sort((a, b) => a.position.y - b.position.y);
+    const sortedNodes = [...nodes].sort((a, b) => a.position.y - b.position.y);
 
     // Use the leftmost x position as the alignment point
     const alignX = Math.min(...sortedNodes.map((n) => n.position.x));
@@ -106,22 +121,22 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
         position: { x: alignX, y: currentY },
       };
 
-      currentY += nodeHeight + STACK_GAP;
+      currentY += nodeHeight + gap;
       return change;
     });
 
     onNodesChange(changes);
   };
 
-  const handleArrangeAsGrid = () => {
+  const handleArrangeAsGrid = (gap: number, nodes = selectedNodes) => {
     if (selectedNodes.length < 2) return;
 
     // Calculate optimal grid dimensions (as square as possible)
-    const count = selectedNodes.length;
+    const count = nodes.length;
     const cols = Math.ceil(Math.sqrt(count));
 
     // Sort nodes by their current position (top-to-bottom, left-to-right)
-    const sortedNodes = [...selectedNodes].sort((a, b) => {
+    const sortedNodes = [...nodes].sort((a, b) => {
       const rowA = Math.floor(a.position.y / 100);
       const rowB = Math.floor(b.position.y / 100);
       if (rowA !== rowB) return rowA - rowB;
@@ -145,13 +160,29 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
         type: "position" as const,
         id: node.id,
         position: {
-          x: startX + col * (maxWidth + STACK_GAP),
-          y: startY + row * (maxHeight + STACK_GAP),
+          x: startX + col * (maxWidth + gap),
+          y: startY + row * (maxHeight + gap),
         },
       };
     });
 
     onNodesChange(changes);
+  };
+
+  const applyArrangement = (mode: Arrangement, gap: number, nodes = selectedNodes) => {
+    if (mode === "horizontal") handleStackHorizontally(gap, nodes);
+    else if (mode === "vertical") handleStackVertically(gap, nodes);
+    else handleArrangeAsGrid(gap, nodes);
+  };
+
+  const chooseArrangement = (mode: Arrangement) => {
+    if (!toolbarPosition) return;
+    const gap = activeArrangement?.gap ?? STACK_GAP;
+    setArrangement({
+      selectionKey, mode, nodes: selectedNodes, gap,
+      position: activeArrangement?.position ?? toolbarPosition,
+    });
+    applyArrangement(mode, gap);
   };
 
   const handleCreateGroup = () => {
@@ -221,14 +252,16 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
   return (
     <MenuSurface
       variant="bar"
+      className="nodrag nopan"
       style={{
-        left: toolbarPosition.x,
-        top: toolbarPosition.y,
+        left: activeArrangement?.position.x ?? toolbarPosition.x,
+        top: activeArrangement?.position.y ?? toolbarPosition.y,
         transform: "translateX(-50%)",
       }}
     >
       <MenuIconButton
-        onClick={handleStackHorizontally}
+        onClick={() => chooseArrangement("horizontal")}
+        aria-pressed={activeArrangement?.mode === "horizontal"}
         title="Stack horizontally (H)"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -236,7 +269,8 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
         </svg>
       </MenuIconButton>
       <MenuIconButton
-        onClick={handleStackVertically}
+        onClick={() => chooseArrangement("vertical")}
+        aria-pressed={activeArrangement?.mode === "vertical"}
         title="Stack vertically (V)"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -244,7 +278,8 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
         </svg>
       </MenuIconButton>
       <MenuIconButton
-        onClick={handleArrangeAsGrid}
+        onClick={() => chooseArrangement("grid")}
+        aria-pressed={activeArrangement?.mode === "grid"}
         title="Arrange as grid (G)"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -288,6 +323,36 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
           <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
         </svg>
       </MenuIconButton>
+      {activeArrangement && (
+        <MenuSurface
+          variant="bar"
+          floating={false}
+          className="absolute top-full left-1/2 mt-1.5 -translate-x-1/2 w-[200px] gap-2 px-2.5 py-1.5"
+          onPointerDown={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
+        >
+          <span className="text-[10px] text-neutral-400">Gap</span>
+          <input
+            type="range"
+            aria-label="Node spacing"
+            aria-valuetext={`${activeArrangement.gap} pixels`}
+            min={0}
+            max={200}
+            step={1}
+            value={activeArrangement.gap}
+            className="nodrag nopan min-w-0 flex-1 h-4 accent-neutral-300 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection rounded"
+            onChange={(event) => {
+              const gap = Number(event.target.value);
+              setArrangement({ ...activeArrangement, gap });
+              applyArrangement(activeArrangement.mode, gap, activeArrangement.nodes);
+            }}
+          />
+          <span className="w-9 text-right text-[10px] text-neutral-400 tabular-nums">
+            {activeArrangement.gap}px
+          </span>
+        </MenuSurface>
+      )}
     </MenuSurface>
   );
 });
