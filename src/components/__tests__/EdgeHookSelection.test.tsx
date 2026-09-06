@@ -3,7 +3,6 @@ import { act, fireEvent, render, screen, cleanup } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EdgeHookSelection } from "../edges/EdgeHookSelection";
 import { HookBundleClamp } from "../edges/HookBundleClamp";
-import { HOOK_CURSOR } from "@/lib/edges/hook";
 import { useWorkflowStore } from "@/store/workflowStore";
 import type { WorkflowNode } from "@/types";
 
@@ -62,7 +61,8 @@ describe("hold-H edge selection", () => {
   it("shows a crook, collects crossed edges only and bundles on release", () => {
     setup();
     const overlay = startSweep();
-    expect(overlay.style.cursor).toContain("data:image/svg+xml");
+    expect(overlay.style.cursor).toBe("none");
+    expect(screen.getByTestId("edge-hook-cursor")).toBeInTheDocument();
     expect(useWorkflowStore.getState().nodes[0].selected).toBe(false);
     expect(useWorkflowStore.getState().edges.filter((e) => e.selected).map((e) => e.id)).toEqual(["e1", "e2"]);
     fireEvent.pointerUp(overlay, { pointerId: 1, clientX: 100, clientY: 50 });
@@ -85,14 +85,16 @@ describe("hold-H edge selection", () => {
     expect(useWorkflowStore.getState().edges[0].data?.hookBundles?.[0]).toMatchObject({ x: 140, y: 90 });
   });
 
-  it("tightens the fork while it is carrying noodles", () => {
+  it("follows the pointer and tightens while it is carrying noodles", () => {
     setup();
     const overlay = startSweep();
-    expect(overlay.style.cursor).not.toBe(HOOK_CURSOR);
-    expect(overlay.style.cursor).toContain("scale(0.95)");
+    const cursor = screen.getByTestId("edge-hook-cursor");
+    const svg = cursor.querySelector("svg")!;
+    expect(cursor.style.transform).toContain("translate(");
+    expect(svg.style.transform).toBe("scale(0.95)");
+    expect(svg.style.transition).toContain("transform");
     fireEvent.pointerUp(overlay, { pointerId: 1, clientX: 100, clientY: 50 });
-    fireEvent.keyDown(window, { key: "h" });
-    expect(screen.getByTestId("edge-hook-selection").style.cursor).toBe(HOOK_CURSOR);
+    expect(svg.style.transform).toBe("scale(1)");
   });
 
   it("drops the carried noodles back when the sweep is cancelled", () => {

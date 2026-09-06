@@ -50,26 +50,11 @@ export function crossesEdge(from: Point, to: Point, points: Point[], tolerance =
   return false;
 }
 
-// A fork, drawn to Lucide's rules (24px grid, 2px stroke, round caps and
-// joins), light neutral at 32px with a dark halo so it stays visible over any
-// node. The hotspot is the tip of the tines. Once the sweep has caught
-// something the fork tightens: the same drawing at 0.95, about the hotspot.
-const FORK_PATHS = ["M5 2v6a3 3 0 0 0 3 3h0a3 3 0 0 0 3-3V2", "M8 2v9", "M8 11v11"];
-const HOTSPOT = { x: 8, y: 2 };
-const HALO = 'stroke="#101820" stroke-opacity=".9" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" fill="none"';
-// neutral-200, the same light rule the bundle handle is drawn with
-const LINE = 'stroke="#e5e5e5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"';
-function forkCursor(scale: number): string {
-  const group = `<g transform="translate(${HOTSPOT.x} ${HOTSPOT.y}) scale(${scale}) translate(${-HOTSPOT.x} ${-HOTSPOT.y})">`;
-  const svg =
-    '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">' +
-    group +
-    FORK_PATHS.map((d) => `<path d="${d}" ${HALO}/>`).join("") +
-    FORK_PATHS.map((d) => `<path d="${d}" ${LINE}/>`).join("") +
-    "</g></svg>";
-  // Hotspot (8, 2) on the 24 grid, scaled to the 32px cursor
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}") 11 3, crosshair`;
-}
-export const HOOK_CURSOR = forkCursor(1);
-/** The fork with a catch on it: a touch smaller, so picking up a noodle registers in the hand. */
-export const HOOK_CURSOR_CARRYING = forkCursor(0.95);
+// The fork the sweep is made with, drawn to Lucide's rules (24px grid, 2px
+// stroke, round caps and joins). It is rendered as an element that follows the
+// pointer rather than as a native cursor image, so it can ease between sizes;
+// the tip of the tines is the hotspot.
+export const FORK_PATHS = ["M5 2v6a3 3 0 0 0 3 3h0a3 3 0 0 0 3-3V2", "M8 2v9", "M8 11v11"];
+export const FORK_SIZE = 32;
+/** Hotspot (8, 2) on the 24 grid, scaled to the rendered size. */
+export const FORK_HOTSPOT = { x: (8 * FORK_SIZE) / 24, y: (2 * FORK_SIZE) / 24 };
