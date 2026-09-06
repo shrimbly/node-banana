@@ -676,6 +676,23 @@ describe("FloatingActionBar", () => {
       expect(screen.getByTitle("Run options")).toBeInTheDocument();
     });
 
+    it("disables Run when nothing is connected and nothing runs on its own", async () => {
+      mockUseWorkflowStore.mockImplementation((selector) =>
+        selector(createDefaultState({ nodes: [{ id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} }], edges: [] })));
+
+      render(
+        <TestWrapper>
+          <FloatingActionBar />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        const runButton = screen.getByText("Run").closest("button");
+        expect(runButton).toBeDisabled();
+        expect(runButton).toHaveAttribute("title", "Connect some nodes to run");
+      });
+    });
+
     it("should disable Run button when the workflow is empty", async () => {
       mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes: [], edges: [] })));
 

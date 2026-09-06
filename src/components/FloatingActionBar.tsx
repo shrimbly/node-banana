@@ -446,13 +446,14 @@ export function FloatingActionBar() {
   };
   const [runMenuOpen, setRunMenuOpen] = useState(false);
   const runMenuRef = useRef<HTMLDivElement>(null);
-  // Run is never held back by wiring: a node with nothing to work with is
-  // skipped during the run and flagged on the node, and a node whose values
-  // are baked in (a ComfyUI app with no inputs) runs with no edges at all —
-  // just as it does from Cmd/Ctrl+Enter. Only an empty graph has nothing to run.
+  // Run is never held back by which nodes are wired: a node with nothing to
+  // work with is skipped during the run and flagged on the node. A graph with
+  // no connections at all has nothing to run, unless it holds a node that runs
+  // on its own (a ComfyUI app with its values baked in).
   const totalEdgeCount = useWorkflowStore((state) => state.edges.length);
-  const valid = nodes.length > 0;
-  const errors = valid ? [] : ["Workflow is empty"];
+  const hasStandaloneNode = nodes.some((n) => n.type === "comfyApp");
+  const valid = nodes.length > 0 && (totalEdgeCount > 0 || hasStandaloneNode);
+  const errors = valid ? [] : [nodes.length === 0 ? "Workflow is empty" : "Connect some nodes to run"];
 
   // Get the selected nodes
   const selectedNodes = useMemo(() => {
