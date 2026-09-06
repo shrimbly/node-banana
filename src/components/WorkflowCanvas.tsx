@@ -2153,8 +2153,12 @@ export function WorkflowCanvas() {
     () =>
       createPanActivityTracker({
         setActive: (active) => {
-          document.documentElement.classList.toggle("canvas-interacting", active);
           if (reactFlowWrapper.current) setCanvasPanningClass(active, reactFlowWrapper.current);
+          // A node drag holds this class itself: a pan timer that runs out
+          // during the drag must not take it away
+          if (active || !isDraggingNodeRef.current) {
+            document.documentElement.classList.toggle("canvas-interacting", active);
+          }
         },
       }),
     []
@@ -2175,9 +2179,12 @@ export function WorkflowCanvas() {
   }, []);
   const handleNodeDragEnd = useCallback((event: React.MouseEvent, node: Node) => {
     isDraggingNodeRef.current = false;
+    // A pan just before the drag may still hold the tracker active; resetting
+    // it drops its classes now and lets the next pan put them back
+    interactionClasses.dispose();
     document.documentElement.classList.remove("canvas-interacting");
     handleNodeDragStop(event, node);
-  }, [handleNodeDragStop]);
+  }, [handleNodeDragStop, interactionClasses]);
 
   // Fix for React Flow selection bug where nodes with undefined bounds get incorrectly selected.
   // Uses statistical outlier detection to identify and deselect nodes that are clearly
