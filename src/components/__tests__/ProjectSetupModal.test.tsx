@@ -19,6 +19,22 @@ vi.mock("@/store/workflowStore", () => ({
   generateWorkflowId: () => "mock-workflow-id",
 }));
 
+// Stand-in for the model browser: a search box rendered, like the real one,
+// as a React child of the settings dialog's panel.
+vi.mock("@/components/modals/ModelSearchDialog", () => ({
+  ModelSearchDialog: ({ onModelSelected }: { onModelSelected?: (m: unknown) => void }) => (
+    <div data-testid="model-search-dialog">
+      <input placeholder="Search models..." />
+      <button
+        type="button"
+        onClick={() => onModelSelected?.({ provider: "fal", id: "fal/test-model", name: "Test Model" })}
+      >
+        Test Model
+      </button>
+    </div>
+  ),
+}));
+
 // Mock fetch
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -943,6 +959,34 @@ describe("ProjectSetupModal", () => {
       await waitFor(() => {
         expect(onSave).toHaveBeenCalled();
       });
+    });
+
+    it("should not save and close when Enter is pressed inside the model browser", async () => {
+      const onClose = vi.fn();
+
+      render(
+        <ProjectSetupModal
+          isOpen={true}
+          onClose={onClose}
+          onSave={vi.fn()}
+          mode="settings"
+        />
+      );
+
+      fireEvent.click(screen.getByText("Node Defaults"));
+      fireEvent.click(screen.getAllByText("Select Model")[0]);
+
+      const search = screen.getByPlaceholderText("Search models...");
+      fireEvent.keyDown(search, { key: "Enter" });
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByTestId("model-search-dialog")).toBeInTheDocument();
+
+      // The pick still lands in the draft, and the settings dialog stays open.
+      fireEvent.click(screen.getByText("Test Model"));
+      expect(screen.queryByTestId("model-search-dialog")).not.toBeInTheDocument();
+      expect(screen.getByText("Test Model")).toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
     });
   });
 

@@ -418,6 +418,10 @@ export function ProjectSetupModal({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // The model browsers are React children of this panel, so their key events
+    // bubble here through the portal. Enter in one of them picks a model; it
+    // must not save the (still stale) draft and close the settings dialog.
+    if (showImageModelDialog || showVideoModelDialog) return;
     if (e.key === "Enter" && !isValidating && !isBrowsing) {
       handleSave();
     }
