@@ -21,6 +21,8 @@ interface HeaderActions {
 
 export interface FloatingNodeHeadersProps extends HeaderActions {
   nodes: Node[];
+  /** Short hint per node id for nodes that cannot run as wired ("needs a prompt"). */
+  hints?: Record<string, string>;
 }
 
 /** Room above a node for its header, in flow units. */
@@ -36,7 +38,7 @@ const INPUT_TYPES = new Set(["imageInput", "audioInput", "prompt"]);
  * that keeps nodes rendered, see nodeCulling.ts) are not mounted at all. A
  * selected node keeps its header wherever it is.
  */
-export const FloatingNodeHeaders = memo(function FloatingNodeHeaders({ nodes, ...actions }: FloatingNodeHeadersProps) {
+export const FloatingNodeHeaders = memo(function FloatingNodeHeaders({ nodes, hints, ...actions }: FloatingNodeHeadersProps) {
   const area = useStore(selectMountedArea);
   const [minX, minY, maxX, maxY] = useMemo(() => area.split(" ").map(Number), [area]);
 
@@ -53,7 +55,7 @@ export const FloatingNodeHeaders = memo(function FloatingNodeHeaders({ nodes, ..
           node.position.y + height >= minY &&
           node.position.y - HEADER_REACH <= maxY;
         if (!inView && !node.selected) return null;
-        return <NodeHeader key={`header-${node.id}`} node={node} {...actions} />;
+        return <NodeHeader key={`header-${node.id}`} node={node} hint={hints?.[node.id]} {...actions} />;
       })}
     </ViewportPortal>
   );
@@ -66,10 +68,12 @@ function headerWidth(node: Node): number {
 
 interface NodeHeaderProps extends HeaderActions {
   node: Node;
+  hint?: string;
 }
 
 const NodeHeader = memo(function NodeHeader({
   node,
+  hint,
   getNodeTitle,
   onCustomTitleChange,
   onCommentChange,
@@ -159,6 +163,17 @@ const NodeHeader = memo(function NodeHeader({
         ) : undefined
       }
       headerButtons={optionalToggle}
+      alwaysVisibleButtons={
+        hint ? (
+          <span
+            data-testid="node-readiness-hint"
+            title={`${hint}: this node will be skipped when the workflow runs`}
+            className="rounded-full border border-amber-500/40 bg-amber-500/10 px-1.5 text-[10px] leading-4 text-amber-200/90 whitespace-nowrap"
+          >
+            {hint}
+          </span>
+        ) : undefined
+      }
       onCustomTitleChange={onCustomTitleChange}
       onCommentChange={onCommentChange}
       onRunNode={onRunNode}

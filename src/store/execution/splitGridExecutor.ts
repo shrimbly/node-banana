@@ -10,6 +10,7 @@
 import type { SplitGridNodeData } from "@/types";
 import { clampGridDimension, getSplitGridCells } from "@/store/utils/splitGridTemplate";
 import type { NodeExecutionContext } from "./types";
+import { MissingInputError } from "./missingInput";
 
 export async function executeSplitGrid(ctx: NodeExecutionContext): Promise<void> {
   const { node, getConnectedInputs, updateNodeData, getFreshNode, materializeSplitGridCells } = ctx;
@@ -19,10 +20,10 @@ export async function executeSplitGrid(ctx: NodeExecutionContext): Promise<void>
 
   if (!sourceImage) {
     updateNodeData(node.id, {
-      status: "error",
+      status: "skipped",
       error: "No input image connected",
     });
-    throw new Error("No input image connected");
+    throw new MissingInputError("No input image connected");
   }
 
   const nodeData = (getFreshNode(node.id)?.data ?? node.data) as SplitGridNodeData;

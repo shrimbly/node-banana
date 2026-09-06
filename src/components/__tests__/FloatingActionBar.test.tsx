@@ -74,7 +74,8 @@ const defaultProviderSettings: ProviderSettings = {
 
 // Default store state factory
 const createDefaultState = (overrides = {}) => ({
-  nodes: [],
+  // One node, so Run has something to run; wiring never disables it
+  nodes: [{ id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} }],
   isRunning: false,
   currentNodeIds: [],
   executeWorkflow: mockExecuteWorkflow,
@@ -624,8 +625,26 @@ describe("FloatingActionBar", () => {
       expect(mockStopWorkflow).toHaveBeenCalled();
     });
 
-    it("should disable Run button when workflow is invalid", async () => {
-      mockValidateWorkflow.mockReturnValue({ valid: false, errors: ["No nodes"] });
+    it("keeps Run enabled when nodes are missing connections", async () => {
+      mockUseWorkflowStore.mockImplementation((selector) =>
+        selector(createDefaultState({ nodes: [{ id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} }], edges: [] })));
+
+      render(
+        <TestWrapper>
+          <FloatingActionBar />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Run")).toBeInTheDocument();
+      });
+
+      expect(screen.getByText("Run").closest("button")).not.toBeDisabled();
+      expect(screen.getByTitle("Run options")).toBeInTheDocument();
+    });
+
+    it("should disable Run button when the workflow is empty", async () => {
+      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes: [], edges: [] })));
 
       render(
         <TestWrapper>
@@ -641,8 +660,8 @@ describe("FloatingActionBar", () => {
       expect(runButton).toBeDisabled();
     });
 
-    it("should show error message in title when workflow is invalid", async () => {
-      mockValidateWorkflow.mockReturnValue({ valid: false, errors: ["Missing required nodes"] });
+    it("says why in the title when the workflow is empty", async () => {
+      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes: [], edges: [] })));
 
       render(
         <TestWrapper>
@@ -652,7 +671,7 @@ describe("FloatingActionBar", () => {
 
       await waitFor(() => {
         const runButton = screen.getByText("Run").closest("button");
-        expect(runButton).toHaveAttribute("title", "Missing required nodes");
+        expect(runButton).toHaveAttribute("title", "Workflow is empty");
       });
     });
   });
@@ -670,8 +689,8 @@ describe("FloatingActionBar", () => {
       });
     });
 
-    it("should not show dropdown chevron when workflow is invalid", async () => {
-      mockValidateWorkflow.mockReturnValue({ valid: false, errors: ["No nodes"] });
+    it("should not show dropdown chevron when the workflow is empty", async () => {
+      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes: [], edges: [] })));
 
       render(
         <TestWrapper>

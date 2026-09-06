@@ -84,7 +84,8 @@ import {
   revokeBlobUrl,
   wouldCreateCycle,
 } from "./utils/executionUtils";
-import { getConnectedInputsPure, validateWorkflowPure, type ConnectedInputs } from "./utils/connectedInputs";
+import { getConnectedInputsPure, validateWorkflowPure, nodeReadinessPure, type ConnectedInputs, type NodeReadiness } from "./utils/connectedInputs";
+import { isMissingInputError } from "./execution/missingInput";
 import {
   buildCellInstances,
   clampGridDimension,
@@ -422,6 +423,8 @@ export interface WorkflowStore {
   getNodeById: (id: string) => WorkflowNode | undefined;
   getConnectedInputs: (nodeId: string) => ConnectedInputs;
   validateWorkflow: () => { valid: boolean; errors: string[] };
+  /** Which nodes cannot run as wired, and why. Advisory only; Run is never blocked by it. */
+  nodeReadiness: () => Record<string, NodeReadiness>;
 
   // Global Image History
   globalImageHistory: ImageHistoryItem[];
@@ -1959,6 +1962,11 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     return validateWorkflowPure(nodes, edges);
   },
 
+  nodeReadiness: () => {
+    const { nodes, edges } = get();
+    return nodeReadinessPure(nodes, edges);
+  },
+
   _buildExecutionContext: (node: WorkflowNode, signal?: AbortSignal): NodeExecutionContext => ({
     node,
     getConnectedInputs: get().getConnectedInputs,
@@ -2041,6 +2049,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       }
     };
     set({ isRunning: true, pausedAtNodeId: null, currentNodeIds: [], skippedNodeIds: new Set(), _abortController: abortController });
+    // Nodes that had nothing to work with, named for the end-of-run summary
+    const unreadyNodes: string[] = [];
 
     // Start logging session
     await logger.startSession();
@@ -2142,6 +2152,23 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
       const executionCtx = get()._buildExecutionContext(node, signal);
 
+      try {
+        await runNode(node, executionCtx);
+      } catch (error) {
+        // Nothing to work with is not a failure: the node and what depends on
+        // it are skipped, and the rest of the graph keeps going
+        if (!isMissingInputError(error)) throw error;
+        set({ skippedNodeIds: new Set([...get().skippedNodeIds, node.id]) });
+        unreadyNodes.push(String(nodeData.customTitle || node.type));
+        logger.info('node.execution', 'Node skipped (missing input)', {
+          nodeId: node.id,
+          nodeType: node.type,
+          reason: error.message,
+        });
+      }
+    };
+
+    const runNode = async (node: WorkflowNode, executionCtx: NodeExecutionContext): Promise<void> => {
       // Batch mode: for generate-type nodes, detect textItems and loop through them
       if (await runBatchIfApplicable(executionCtx)) {
         return;
@@ -2389,7 +2416,16 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
       // Check if we completed or were aborted
       if (!abortController.signal.aborted && get().isRunning) {
-        logger.info('workflow.end', 'Workflow execution completed successfully');
+        logger.info('workflow.end', 'Workflow execution completed successfully', { unreadyNodes });
+        if (unreadyNodes.length > 0) {
+          const skipped = get().skippedNodeIds.size;
+          useToast.getState().show(
+            `Skipped ${skipped} node${skipped === 1 ? "" : "s"}: ${unreadyNodes.length} had no input to work with`,
+            "warning",
+            false,
+            unreadyNodes.join(", ")
+          );
+        }
       }
 
       // Reset skipped nodes' status back to idle

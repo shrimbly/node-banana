@@ -56,6 +56,7 @@ const GLBViewerNode = dynamic(() => import("./nodes/GLBViewerNode").then(mod => 
 import { EditableEdge, ReferenceEdge, SharedEdgeGradients } from "./edges";
 import { ConnectionDropMenu, MenuAction } from "./ConnectionDropMenu";
 import { HandleMenu, type HandleMenuTarget } from "./HandleMenu";
+import { nodeReadinessPure } from "@/store/utils/connectedInputs";
 import { NodeSearchMenu } from "./NodeSearchMenu";
 import { MultiSelectToolbar } from "./MultiSelectToolbar";
 import { GlobalImageHistory } from "./GlobalImageHistory";
@@ -546,6 +547,13 @@ export function WorkflowCanvas() {
   // Apply dimming className to nodes downstream of disabled Switch outputs or skipped by optional inputs.
   // Also drop any stored height: node height is derived from content by the
   // node shell, and a stale value here would pin the wrapper.
+  // Nodes that cannot run as wired, hinted on their headers; recomputed only when the graph changes
+  const readinessHints = useMemo(() => {
+    const hints: Record<string, string> = {};
+    for (const [id, r] of Object.entries(nodeReadinessPure(nodes, edges))) hints[id] = r.hint;
+    return hints;
+  }, [nodes, edges]);
+
   const allNodes = useMemo(() => {
     return nodes.map((storedNode) => {
       const node = stripNodeHeight(storedNode);
@@ -2541,6 +2549,7 @@ export function WorkflowCanvas() {
         <CanvasMinimap disabled={tutorialActive && lockedFeatures} />
         <FloatingNodeHeaders
           nodes={allNodes}
+          hints={readinessHints}
           getNodeTitle={getNodeTitle}
           onCustomTitleChange={handleCustomTitleChange}
           onCommentChange={handleCommentChange}

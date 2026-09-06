@@ -1544,7 +1544,7 @@ describe("workflowStore integration tests", () => {
 
   describe("Error handling and edge cases", () => {
     describe("Missing input errors", () => {
-      it("should set error status when nanoBanana has no text input", async () => {
+      it("skips a nanoBanana with no text input instead of failing the run", async () => {
         // Mock fetch to track if it was called
         const mockFetch = vi.fn();
         vi.stubGlobal("fetch", mockFetch);
@@ -1565,8 +1565,9 @@ describe("workflowStore integration tests", () => {
         await store.executeWorkflow();
 
         const nanoBananaNode = useWorkflowStore.getState().nodes.find(n => n.id === "nanoBanana-1");
-        expect(nanoBananaNode?.data).toHaveProperty("status", "error");
-        expect(nanoBananaNode?.data).toHaveProperty("error");
+        expect(nanoBananaNode?.data.status).not.toBe("error");
+        expect(mockFetch).not.toHaveBeenCalled();
+        expect(useWorkflowStore.getState().isRunning).toBe(false);
 
         vi.unstubAllGlobals();
       });
@@ -1597,7 +1598,7 @@ describe("workflowStore integration tests", () => {
         vi.unstubAllGlobals();
       });
 
-      it("should stop execution on error (subsequent nodes not executed)", async () => {
+      it("skips what depends on an unready node and finishes the run", async () => {
         vi.stubGlobal("fetch", vi.fn());
 
         useWorkflowStore.setState({
@@ -1618,12 +1619,12 @@ describe("workflowStore integration tests", () => {
         const store = useWorkflowStore.getState();
         await store.executeWorkflow();
 
-        // nanoBanana should have error (no text input)
-        const nanoBananaNode = useWorkflowStore.getState().nodes.find(n => n.id === "nanoBanana-1");
-        expect(nanoBananaNode?.data).toHaveProperty("status", "error");
-
-        // Workflow should have stopped running
-        expect(useWorkflowStore.getState().isRunning).toBe(false);
+        // Neither node fails: the generate node had no prompt, so it and the
+        // output downstream of it are skipped and the run completes
+        const state = useWorkflowStore.getState();
+        expect(state.nodes.find(n => n.id === "nanoBanana-1")?.data.status).not.toBe("error");
+        expect(state.nodes.find(n => n.id === "output-1")?.data.status).not.toBe("error");
+        expect(state.isRunning).toBe(false);
 
         vi.unstubAllGlobals();
       });

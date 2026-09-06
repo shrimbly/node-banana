@@ -384,7 +384,6 @@ export function FloatingActionBar() {
     executeSelectedNodes,
     stopWorkflow,
     mockTutorialExecution,
-    validateWorkflow,
     edgeStyle,
     setEdgeStyle,
     setAllEdgesHidden,
@@ -400,7 +399,6 @@ export function FloatingActionBar() {
     executeSelectedNodes: state.executeSelectedNodes,
     stopWorkflow: state.stopWorkflow,
     mockTutorialExecution: state.mockTutorialExecution,
-    validateWorkflow: state.validateWorkflow,
     edgeStyle: state.edgeStyle,
     setEdgeStyle: state.setEdgeStyle,
     setAllEdgesHidden: state.setAllEdgesHidden,
@@ -448,7 +446,11 @@ export function FloatingActionBar() {
   };
   const [runMenuOpen, setRunMenuOpen] = useState(false);
   const runMenuRef = useRef<HTMLDivElement>(null);
-  const { valid, errors } = validateWorkflow();
+  // Run is never held back by wiring: a node with nothing to work with is
+  // skipped during the run and flagged on the node. Only an empty graph
+  // has nothing to run.
+  const valid = nodes.length > 0;
+  const errors = valid ? [] : ["Workflow is empty"];
 
   // Get the selected nodes
   const selectedNodes = useMemo(() => {
