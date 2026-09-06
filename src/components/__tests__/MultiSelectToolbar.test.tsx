@@ -15,6 +15,7 @@ vi.mock("jszip", () => ({
 const mockOnNodesChange = vi.fn();
 const mockCreateGroup = vi.fn();
 const mockRemoveNodesFromGroup = vi.fn();
+const mockExecuteSelectedNodes = vi.fn();
 const mockUseWorkflowStore = vi.fn();
 
 vi.mock("@/store/workflowStore", () => ({
@@ -61,6 +62,8 @@ const createDefaultState = (overrides = {}) => ({
   onNodesChange: mockOnNodesChange,
   createGroup: mockCreateGroup,
   removeNodesFromGroup: mockRemoveNodesFromGroup,
+  executeSelectedNodes: mockExecuteSelectedNodes,
+  isRunning: false,
   ...overrides,
 });
 
@@ -149,6 +152,24 @@ describe("MultiSelectToolbar", () => {
           ],
         }));
       });
+    });
+
+    it("runs the selected nodes from the bar", () => {
+      render(<TestWrapper><MultiSelectToolbar /></TestWrapper>);
+      const runButton = screen.getByRole("button", { name: "Run selected nodes" });
+      expect(runButton).toHaveAttribute("title", "Run 2 selected nodes");
+      fireEvent.click(runButton);
+      expect(mockExecuteSelectedNodes).toHaveBeenCalledWith(["node-1", "node-2"]);
+    });
+
+    it("holds the run button while a run is in progress", () => {
+      mockUseWorkflowStore.mockImplementation((selector) =>
+        selector(createDefaultState({
+          isRunning: true,
+          nodes: [createMockNode("node-1", { position: { x: 0, y: 0 } }), createMockNode("node-2", { position: { x: 300, y: 0 } })],
+        })));
+      render(<TestWrapper><MultiSelectToolbar /></TestWrapper>);
+      expect(screen.getByRole("button", { name: "Run selected nodes" })).toBeDisabled();
     });
 
     it("should render stack horizontally button", () => {

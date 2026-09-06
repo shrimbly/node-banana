@@ -24,6 +24,8 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
   const onNodesChange = useWorkflowStore((state) => state.onNodesChange);
   const createGroup = useWorkflowStore((state) => state.createGroup);
   const removeNodesFromGroup = useWorkflowStore((state) => state.removeNodesFromGroup);
+  const executeSelectedNodes = useWorkflowStore((state) => state.executeSelectedNodes);
+  const isRunning = useWorkflowStore((state) => state.isRunning);
   const { getViewport } = useReactFlow();
   const selectionKey = JSON.stringify(selectedNodes.map((node) => node.id).sort());
   const [arrangement, setArrangement] = useState<{
@@ -259,6 +261,21 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
         transform: "translateX(-50%)",
       }}
     >
+      {/* Run just the selection */}
+      <MenuIconButton
+        onClick={() => executeSelectedNodes(selectedNodes.map((node) => node.id))}
+        disabled={isRunning}
+        title={isRunning ? "A run is in progress" : `Run ${selectedNodes.length} selected nodes`}
+        aria-label="Run selected nodes"
+      >
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
+        </svg>
+      </MenuIconButton>
+
+      {/* Separator */}
+      <MenuDivider variant="bar" className="mx-0.5" />
+
       <MenuIconButton
         onClick={() => chooseArrangement("horizontal")}
         aria-pressed={activeArrangement?.mode === "horizontal"}
