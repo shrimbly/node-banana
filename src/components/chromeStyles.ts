@@ -11,11 +11,11 @@ export const CHROME_SURFACE =
 
 /** Icon button, sized by CHROME_ICON_BUTTON_SIZE: rest → hover lift → pressed dip. */
 export const CHROME_ICON_BUTTON =
-  "flex shrink-0 items-center justify-center rounded-lg squircle text-neutral-400 " +
+  "flex shrink-0 items-center justify-center rounded-lg squircle text-neutral-300 " +
   "transition-[background-color,color,transform] duration-[120ms] ease-out " +
-  "hover:bg-white/7 hover:text-neutral-100 active:scale-[0.96] active:bg-white/12 active:text-white " +
+  "hover:bg-white/7 hover:text-white active:scale-[0.96] active:bg-white/12 active:text-white " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30 " +
-  "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-neutral-400";
+  "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-neutral-300";
 
 /** md: navigator controls (32px). lg: the action bar (36px). */
 export const CHROME_ICON_BUTTON_SIZE = { md: "h-8 w-8", lg: "h-9 w-9" } as const;
@@ -31,7 +31,7 @@ export const CHROME_MENU =
 
 export const CHROME_MENU_ITEM =
   "flex h-7 w-full items-center gap-2 rounded-md squircle px-2 text-left text-[11px] font-medium " +
-  "text-neutral-300 transition-colors duration-[120ms] hover:bg-white/7 hover:text-neutral-100 " +
+  "text-neutral-200 transition-colors duration-[120ms] hover:bg-white/7 hover:text-white " +
   "disabled:cursor-not-allowed disabled:text-neutral-500 disabled:hover:bg-transparent";
 
 export const CHROME_MENU_HEADING = "px-2 pb-0.5 pt-1.5 text-[10px] uppercase tracking-[0.06em] text-neutral-500";

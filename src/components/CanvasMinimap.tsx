@@ -88,7 +88,7 @@ function ZoomReadout() {
   const { zoom } = useViewport();
   return (
     <span
-      className="min-w-9 text-center text-[10px] font-medium tabular-nums text-neutral-400"
+      className="min-w-9 text-center text-[10px] font-medium tabular-nums text-neutral-300"
       aria-label="Zoom level"
     >
       {Math.round(zoom * 100)}%

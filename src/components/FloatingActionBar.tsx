@@ -276,7 +276,7 @@ function GenerateMenu() {
               onDragStart={(e) => { dragStart(e, g.type); setIsOpen(false); }}
               className={`${CHROME_MENU_ITEM} cursor-grab active:cursor-grabbing`}
             >
-              <span className="text-neutral-400">{g.icon}</span>
+              <span className="text-neutral-300">{g.icon}</span>
               {g.label}
               {g.shortcut && <span className={CHROME_MENU_HINT}>{g.shortcut}</span>}
             </button>
