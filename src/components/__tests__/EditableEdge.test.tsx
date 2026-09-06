@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { EditableEdge } from "@/components/edges/EditableEdge";
 import { ReactFlowProvider, Position } from "@xyflow/react";
+import { EDGE_COLORS } from "@/lib/edges/colors";
 
 // Mock the workflow store
 const mockSetEdges = vi.fn();
@@ -868,6 +869,18 @@ describe("EditableEdge bundles", () => {
     expect(d.startsWith("M156")).toBe(true);
     // The stem is thicker than a single noodle
     expect(container.querySelector('[data-testid="edge-bundle-stem"]')).toHaveAttribute("stroke-width", "4.5");
+  });
+
+  it("strokes the stem with a solid colour, since a gradient cannot paint a flat line", () => {
+    // The stem is purely horizontal, so its bounding box has no height and an
+    // objectBoundingBox gradient on it is an invalid paint server: nothing draws.
+    const { container } = renderMember(fanOut());
+    const stem = container.querySelector('[data-testid="edge-bundle-stem"]') as SVGPathElement;
+    expect(stem.getAttribute("stroke")).not.toMatch(/^url\(/);
+    expect(stem.getAttribute("stroke")).toBe(EDGE_COLORS.image);
+    expect(stem.style.getPropertyValue("--edge-stroke-active")).toBe(EDGE_COLORS.image);
+    // At the opacity of the noodle's first gradient stop, so the two meet seamlessly
+    expect(stem.getAttribute("stroke-opacity")).toBe("0.25");
   });
 
   it("starts the other members past the stem without drawing it again", () => {

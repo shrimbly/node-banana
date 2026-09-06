@@ -378,6 +378,10 @@ export function EditableEdge({
   const stroke = appearance.gradient ? `url(#${gradientId})` : edgeColor;
   const strokeOpacity = appearance.gradient || isConnectedToSelection ? 1 : appearance.fadedOpacity;
   const activeStroke = appearance.gradient ? `url(#${activeGradientId})` : edgeColor;
+  // A bundle stem is a flat horizontal line, and an objectBoundingBox gradient
+  // paints nothing on a box with no height, so the stem takes the solid type
+  // colour at the opacity of the noodle's first gradient stop.
+  const stemOpacity = isConnectedToSelection ? 1 : appearance.fadedOpacity;
   const showPulse = isTargetLoading && appearance.loadingPulse;
 
   // Labels: only one the user typed sits on the noodle; the automatic type
@@ -508,11 +512,9 @@ export function EditableEdge({
           dir={sDir}
           reach={sourceReach}
           count={sourceBundle.count}
-          stroke={stroke}
-          strokeOpacity={strokeOpacity}
+          strokeOpacity={stemOpacity}
           width={strokeWidth}
           color={edgeColor}
-          activeStroke={activeStroke}
           screenToFlowPosition={screenToFlowPosition}
           onReachChange={(reach) => setBundleClamp(source, bundleClampKey("source", sourceHandleId), reach)}
         />
@@ -524,11 +526,9 @@ export function EditableEdge({
           dir={tDir}
           reach={targetReach}
           count={targetBundle.count}
-          stroke={stroke}
-          strokeOpacity={strokeOpacity}
+          strokeOpacity={stemOpacity}
           width={strokeWidth}
           color={edgeColor}
-          activeStroke={activeStroke}
           screenToFlowPosition={screenToFlowPosition}
           onReachChange={(reach) => setBundleClamp(target, bundleClampKey("target", targetHandleId), reach)}
         />
@@ -639,11 +639,10 @@ interface BundleStemProps {
   dir: 1 | -1;
   reach: number;
   count: number;
-  stroke: string;
   strokeOpacity: number;
   width: number;
+  /** The type colour. Solid: a gradient cannot paint a flat line, and a stem has no height. */
   color: string;
-  activeStroke: string;
   screenToFlowPosition: (position: { x: number; y: number }) => { x: number; y: number };
   /** Called while the clamp is dragged, with the new distance from the handle. */
   onReachChange: (reach: number) => void;
@@ -654,7 +653,7 @@ interface BundleStemProps {
  * and a clamp, a cable tie, at the split point that drags along the stem to
  * tie the noodles closer to or further from the handle.
  */
-function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, activeStroke, screenToFlowPosition, onReachChange }: BundleStemProps) {
+function BundleStem({ x, y, dir, reach, count, strokeOpacity, width, color, screenToFlowPosition, onReachChange }: BundleStemProps) {
   const stemWidth = width * (1 + Math.min(count - 1, 4) * 0.5);
   const splitX = x + dir * reach;
   const path = `M${x},${y} L${splitX},${y}`;
@@ -683,12 +682,12 @@ function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, act
       <path
         d={path}
         fill="none"
-        stroke={stroke}
+        stroke={color}
         strokeOpacity={strokeOpacity}
         strokeWidth={stemWidth}
         strokeLinecap="round"
         className="react-flow__edge-path"
-        style={{ "--edge-stroke-active": activeStroke } as React.CSSProperties}
+        style={{ "--edge-stroke-active": color } as React.CSSProperties}
         data-testid="edge-bundle-stem"
       />
       <path d={path} fill="none" strokeWidth={stemWidth + 12} stroke="transparent" className="react-flow__edge-interaction" />
