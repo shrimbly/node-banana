@@ -151,12 +151,12 @@ const CaretUpIcon = ({ open = false }: { open?: boolean }) => (
   </svg>
 );
 const PlayIcon = () => (
-  <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+  <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
     <path d="M8 5v14l11-7z" />
   </svg>
 );
 const SpinnerIcon = () => (
-  <svg className="h-3.5 w-3.5 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
     <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.25" />
     <path d="M12 3a9 9 0 019 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
   </svg>
@@ -595,7 +595,7 @@ export function FloatingActionBar() {
               disabled={!valid && !isRunning}
               title={runTitle}
               data-tutorial="floating-run-button"
-              className="flex items-center gap-2 whitespace-nowrap pl-4 pr-3.5 text-[13px] font-semibold focus-visible:outline-none disabled:cursor-not-allowed"
+              className="flex items-center gap-1.5 whitespace-nowrap pl-3 pr-3.5 text-[13px] font-semibold focus-visible:outline-none disabled:cursor-not-allowed"
             >
               {isRunning ? (
                 <>
