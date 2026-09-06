@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { useLayoutEffect, useState } from "react";
 import { render, screen, act, fireEvent } from "@testing-library/react";
-import { ReactFlowProvider, useStoreApi } from "@xyflow/react";
-import { mountedArea, useNodeMounted, CULL_STEP } from "@/components/nodes/nodeCulling";
+import { ReactFlowProvider, useStoreApi, Position } from "@xyflow/react";
+import { mountedArea, useNodeMounted, NodePlaceholder, CULL_STEP } from "@/components/nodes/nodeCulling";
 
 describe("mountedArea", () => {
   it("covers the view plus a viewport on every side, snapped to the grid", () => {
@@ -67,12 +67,13 @@ describe("useNodeMounted", () => {
     expect(screen.getByTestId("probe-unmeasured")).toHaveTextContent("component");
   });
 
-  it("keeps a far node while it is selected or dragging", () => {
-    renderProbes(
-      <>
-        <Probe id="far" selected />
-      </>
-    );
+  it("keeps a far node while it is selected", () => {
+    renderProbes(<Probe id="far" selected />);
+    expect(screen.getByTestId("probe-far")).toHaveTextContent("component");
+  });
+
+  it("keeps a far node while it is dragging", () => {
+    renderProbes(<Probe id="far" dragging />);
     expect(screen.getByTestId("probe-far")).toHaveTextContent("component");
   });
 
@@ -104,5 +105,41 @@ describe("useNodeMounted", () => {
     } finally {
       host.remove();
     }
+  });
+});
+
+describe("NodePlaceholder", () => {
+  /** Puts a measured node with one handle per side in the store, then renders its placeholder. */
+  function SeededPlaceholder() {
+    const store = useStoreApi();
+    const [ready, setReady] = useState(false);
+    useLayoutEffect(() => {
+      store.getState().setNodes([{ id: "far", position: { x: 4000, y: 4000 }, data: {}, measured: { width: 200, height: 100 } }]);
+      store.getState().nodeLookup.get("far")!.internals.handleBounds = {
+        source: [{ id: "image", type: "source", nodeId: "far", position: Position.Right, x: 196, y: 42, width: 8, height: 8 }],
+        target: [{ id: "text", type: "target", nodeId: "far", position: Position.Left, x: -4, y: 20, width: 8, height: 8 }],
+      };
+      setReady(true);
+    }, [store]);
+    return ready ? <NodePlaceholder id="far" width={200} height={100} /> : null;
+  }
+
+  it("carries an element per measured handle with what React Flow's re-measure reads, so the edges keep their ends", () => {
+    const { container } = render(
+      <ReactFlowProvider>
+        <SeededPlaceholder />
+      </ReactFlowProvider>
+    );
+    expect(container.firstElementChild).toHaveStyle({ width: "200px", height: "100px" });
+
+    const source = container.querySelector(".source");
+    expect(source).toHaveAttribute("data-handleid", "image");
+    expect(source).toHaveAttribute("data-handlepos", "right");
+    expect(source).toHaveStyle({ position: "absolute", left: "196px", top: "42px", width: "8px", height: "8px" });
+
+    const target = container.querySelector(".target");
+    expect(target).toHaveAttribute("data-handleid", "text");
+    expect(target).toHaveAttribute("data-handlepos", "left");
+    expect(target).toHaveStyle({ left: "-4px", top: "20px" });
   });
 });

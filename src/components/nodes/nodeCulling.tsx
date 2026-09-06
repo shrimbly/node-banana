@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useDeferredValue, useLayoutEffect, useSyncExternalStore } from "react";
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useSyncExternalStore } from "react";
 import { useStore, useStoreApi, type ReactFlowState } from "@xyflow/react";
 
 /**
@@ -151,6 +151,8 @@ export function useNodeMounted(id: string, type: string, selected: boolean, drag
     const element = document.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`);
     return element ? observeExactSize(element, id) : undefined;
   }, [id, mounted]);
+  // The size outlives the component while the node is culled, and the node itself when it is deleted
+  useEffect(() => () => void exactSizes.delete(id), [id]);
   return mounted;
 }
 
