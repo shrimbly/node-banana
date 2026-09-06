@@ -251,14 +251,21 @@ export function ComfyAppNode({ id, data, selected }: NodeProps<ComfyAppNodeType>
   );
 
   // The clip follows a picture's real proportions; anything else gets a
-  // fixed slot. A live latent preview is a picture too.
-  const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
+  // fixed slot. A live latent preview is a picture too. The last measured
+  // aspect stays in force while the picture changes underneath it: every
+  // preview frame is a new data URL, and snapping to square until each one
+  // loads would pulse the node twice per frame. A picture that does differ
+  // corrects it from its own onLoad.
+  const [loadedAspect, setLoadedAspect] = useState<number | null>(null);
+  useEffect(() => {
+    setLoadedAspect(null);
+  }, [app?.id]);
   const pictureSrc =
     isRunning && livePreview ? livePreview : primaryPreview?.type === "image" ? primaryPreview.value : null;
   const media: { kind: "aspect"; aspect: number } | { kind: "fixed"; height: number } = !app
     ? { kind: "fixed", height: EMPTY_HEIGHT }
     : pictureSrc
-      ? { kind: "aspect", aspect: loadedAspect?.src === pictureSrc ? loadedAspect.aspect : 1 }
+      ? { kind: "aspect", aspect: loadedAspect ?? 1 }
       : primaryPreview?.type === "video"
         ? { kind: "aspect", aspect: 16 / 9 }
         : isRunning
@@ -338,7 +345,7 @@ export function ComfyAppNode({ id, data, selected }: NodeProps<ComfyAppNodeType>
               isRunning={isRunning}
               livePreview={livePreview}
               error={nodeData.status === "error" ? nodeData.error : null}
-              onPictureLoad={(src, aspect) => setLoadedAspect({ src, aspect })}
+              onPictureLoad={setLoadedAspect}
             />
             {media.kind === "fixed" && (
               <HeightGrip
@@ -495,7 +502,7 @@ function Rendering({
   onPictureLoad,
 }: {
   livePreview: string | null;
-  onPictureLoad?: (src: string, aspect: number) => void;
+  onPictureLoad?: (aspect: number) => void;
 }) {
   if (!livePreview) {
     return (
@@ -517,7 +524,7 @@ function Rendering({
         className="w-full h-full object-contain"
         onLoad={(e) => {
           const img = e.currentTarget;
-          if (img.naturalWidth > 0 && img.naturalHeight > 0) onPictureLoad?.(livePreview, img.naturalWidth / img.naturalHeight);
+          if (img.naturalWidth > 0 && img.naturalHeight > 0) onPictureLoad?.(img.naturalWidth / img.naturalHeight);
         }}
       />
       {/* Over the image, not beside it: the preview fills the node, and this
@@ -541,7 +548,7 @@ function Preview({
   isRunning: boolean;
   livePreview: string | null;
   error: string | null;
-  onPictureLoad?: (src: string, aspect: number) => void;
+  onPictureLoad?: (aspect: number) => void;
 }) {
   if (isRunning) return <Rendering livePreview={livePreview} onPictureLoad={onPictureLoad} />;
   if (error) {
@@ -601,7 +608,7 @@ function Preview({
       className="w-full h-full object-cover"
       onLoad={(e) => {
         const img = e.currentTarget;
-        if (img.naturalWidth > 0 && img.naturalHeight > 0) onPictureLoad?.(preview.value, img.naturalWidth / img.naturalHeight);
+        if (img.naturalWidth > 0 && img.naturalHeight > 0) onPictureLoad?.(img.naturalWidth / img.naturalHeight);
       }}
     />
   );
