@@ -784,7 +784,6 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
       closeOnBackdrop={false}
       stopWheel={false}
       portal
-      labelledBy="split-grid-title"
       className="w-[min(1080px,94vw)] h-[min(720px,88vh)] max-h-none"
       overlayProps={{
         // Bubble-phase (not capture): the mini-canvas's native wheel-to-pan
@@ -833,9 +832,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
             </>
           }
         >
-          <DialogTitle>
-            <span id="split-grid-title">Cell Node Set</span>
-          </DialogTitle>
+          <DialogTitle>Cell Node Set</DialogTitle>
           <DialogDescription className="truncate">
             These nodes are created for every split image and grouped per cell
           </DialogDescription>

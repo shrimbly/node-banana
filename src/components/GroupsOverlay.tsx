@@ -449,6 +449,7 @@ const GroupControls = memo(function GroupControls({
 
                   {/* Background color row */}
                   <button
+                    role="menuitem"
                     onClick={(e) => { e.stopPropagation(); setShowColorPicker(!showColorPicker); }}
                     className="w-full px-3 py-2 text-left text-[11px] font-medium flex items-center gap-2 text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors"
                   >
@@ -461,6 +462,7 @@ const GroupControls = memo(function GroupControls({
 
                   {/* Lock/Unlock row */}
                   <button
+                    role="menuitem"
                     onClick={(e) => { e.stopPropagation(); handleToggleLock(); setShowMenu(false); }}
                     className="w-full px-3 py-2 text-left text-[11px] font-medium flex items-center gap-2 text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors"
                   >
@@ -478,6 +480,7 @@ const GroupControls = memo(function GroupControls({
 
                   {/* NBP Input toggle row */}
                   <button
+                    role="menuitem"
                     onClick={(e) => { e.stopPropagation(); updateGroup(groupId, { isNbpInput: !group.isNbpInput }); setShowMenu(false); }}
                     className="w-full px-3 py-2 text-left text-[11px] font-medium flex items-center gap-2 text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors"
                   >
@@ -494,6 +497,7 @@ const GroupControls = memo(function GroupControls({
 
                   {/* Delete row */}
                   <button
+                    role="menuitem"
                     onClick={(e) => { e.stopPropagation(); handleDelete(); }}
                     className="w-full px-3 py-2 text-left text-[11px] font-medium flex items-center gap-2 text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors"
                   >

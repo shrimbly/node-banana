@@ -193,6 +193,8 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
                 src={contentSrc}
                 alt="Output full size"
                 className="max-w-full max-h-[90vh] object-contain rounded"
+                // A click on the image closes, as it always has; the video keeps its controls
+                onClick={() => setShowLightbox(false)}
               />
             )}
             <button
