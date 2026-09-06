@@ -2,8 +2,9 @@
 
 import { MenuDivider, MenuIconButton, MenuSurface } from "@/components/ui/Menu";
 import { useReactFlow } from "@xyflow/react";
+import { useShallow } from "zustand/shallow";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { useMemo, useCallback } from "react";
+import { memo, useMemo, useCallback } from "react";
 import JSZip from "jszip";
 import type {
   ImageInputNodeData,
@@ -15,14 +16,14 @@ import { getNodeSize } from "@/utils/nodeDimensions";
 
 const STACK_GAP = 20;
 
-export function MultiSelectToolbar() {
-  const { nodes, onNodesChange, createGroup, removeNodesFromGroup } = useWorkflowStore();
+// Memoised: rendered by the canvas, which re-renders on every drag frame
+export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
+  // Only the selection: a drag of anything else must not re-render the toolbar
+  const selectedNodes = useWorkflowStore(useShallow((state) => state.nodes.filter((node) => node.selected)));
+  const onNodesChange = useWorkflowStore((state) => state.onNodesChange);
+  const createGroup = useWorkflowStore((state) => state.createGroup);
+  const removeNodesFromGroup = useWorkflowStore((state) => state.removeNodesFromGroup);
   const { getViewport } = useReactFlow();
-
-  const selectedNodes = useMemo(
-    () => nodes.filter((node) => node.selected),
-    [nodes]
-  );
 
   // Check if any selected nodes are in a group
   const selectedNodeGroups = useMemo(() => {
@@ -289,4 +290,4 @@ export function MultiSelectToolbar() {
       </MenuIconButton>
     </MenuSurface>
   );
-}
+});

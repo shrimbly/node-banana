@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 // Shared SVG gradient definitions for all edge types.
 // Rendered once inside the React Flow SVG layer to avoid duplicating
 // <defs>/<linearGradient> in every edge component.
@@ -30,7 +31,8 @@ export function getSharedGradientId(colorKey: string, selectionKey: "active" | "
   return `edge-grad-${colorKey}-${selectionKey}`;
 }
 
-export function SharedEdgeGradients() {
+// Memoised: rendered by the canvas, which re-renders on every drag frame
+export const SharedEdgeGradients = memo(function SharedEdgeGradients() {
   const fadedOpacity = useWorkflowStore((state) => state.edgeAppearance.fadedOpacity);
   return (
     <svg style={{ position: "absolute", width: 0, height: 0 }}>
@@ -52,4 +54,4 @@ export function SharedEdgeGradients() {
       </defs>
     </svg>
   );
-}
+});

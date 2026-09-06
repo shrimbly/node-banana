@@ -9,6 +9,7 @@ import {
 import { useWorkflowStore } from "@/store/workflowStore";
 import { getSharedGradientId } from "./SharedEdgeGradients";
 import { EDGE_COLORS } from "@/lib/edges/colors";
+import { nodeGraphIndex } from "@/lib/edges/graphIndex";
 import { EdgeToolbar, useIsToolbarEdge } from "@/components/EdgeToolbar";
 import { EditableEdge } from "./EditableEdge";
 
@@ -42,9 +43,8 @@ function VisibleReferenceEdge({
 
   // Narrow selector: returns boolean, only re-renders when selection relevance changes
   const isConnectedToSelection = useWorkflowStore((state) => {
-    const selectedNodes = state.nodes.filter((n) => n.selected);
-    if (selectedNodes.length === 0) return false;
-    return selectedNodes.some((n) => n.id === source || n.id === target);
+    const { selectedIds } = nodeGraphIndex(state.nodes);
+    return selectedIds.has(source) || selectedIds.has(target);
   });
 
   // Calculate the path - always use curved for reference edges for softer look

@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useCallback, useState, useRef, useEffect } from "react";
-import { useStore, ViewportPortal, type ReactFlowState } from "@xyflow/react";
+import { useStore, ViewportPortal, type ReactFlowState, useReactFlow } from "@xyflow/react";
 import { useShallow } from "zustand/shallow";
 import { useWorkflowStore, GROUP_COLORS } from "@/store/workflowStore";
 import { GroupColor } from "@/types";
@@ -30,8 +30,10 @@ interface GroupBackgroundProps {
   groupId: string;
 }
 
-// Renders just the group background - displayed below nodes (z-index 1)
-function GroupBackground({ groupId }: GroupBackgroundProps) {
+// Renders just the group background - displayed below nodes (z-index 1).
+// Memoised, with the portals below, because the canvas re-renders on every
+// drag frame and would take every group with it.
+const GroupBackground = memo(function GroupBackground({ groupId }: GroupBackgroundProps) {
   const group = useWorkflowStore((state) => state.groups[groupId]);
 
   if (!group) return null;
@@ -52,18 +54,18 @@ function GroupBackground({ groupId }: GroupBackgroundProps) {
       }}
     />
   );
-}
+});
 
 interface GroupControlsProps {
   groupId: string;
-  zoom: number;
   showInteractiveControls: boolean;
 }
 
 // Renders the group header and resize handles - displayed above nodes (z-index 5)
+// The zoom reaches the header as a CSS variable on the overlay and the drag
+// math reads it at event time, so a zoom step does not re-render every group.
 const GroupControls = memo(function GroupControls({
   groupId,
-  zoom,
   showInteractiveControls,
 }: GroupControlsProps) {
   const { group, updateGroup, deleteGroup, moveGroupNodes, toggleGroupLock } =
@@ -77,6 +79,7 @@ const GroupControls = memo(function GroupControls({
       }))
     );
 
+  const { getViewport } = useReactFlow();
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(group?.name || "");
   const [showColorPicker, setShowColorPicker] = useState(false);
@@ -212,6 +215,7 @@ const GroupControls = memo(function GroupControls({
     const handleMouseMove = (e: MouseEvent) => {
       if (!dragStartRef.current) return;
 
+      const { zoom } = getViewport();
       const deltaX = (e.clientX - dragStartRef.current.x) / zoom;
       const deltaY = (e.clientY - dragStartRef.current.y) / zoom;
 
@@ -241,7 +245,7 @@ const GroupControls = memo(function GroupControls({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isDragging, groupId, group?.position, moveGroupNodes, updateGroup, zoom]);
+  }, [isDragging, groupId, group?.position, moveGroupNodes, updateGroup, getViewport]);
 
   useEffect(() => {
     if (!isResizing || !resizeHandle) return;
@@ -249,6 +253,7 @@ const GroupControls = memo(function GroupControls({
     const handleMouseMove = (e: MouseEvent) => {
       if (!resizeStartRef.current) return;
 
+      const { zoom } = getViewport();
       const deltaX = (e.clientX - resizeStartRef.current.x) / zoom;
       const deltaY = (e.clientY - resizeStartRef.current.y) / zoom;
 
@@ -294,7 +299,7 @@ const GroupControls = memo(function GroupControls({
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseup", handleMouseUp);
     };
-  }, [isResizing, resizeHandle, groupId, updateGroup, zoom]);
+  }, [isResizing, resizeHandle, groupId, updateGroup, getViewport]);
 
   if (!group) return null;
 
@@ -328,7 +333,7 @@ const GroupControls = memo(function GroupControls({
           }`}
           style={{
             bottom: 0,
-            transform: `scale(${1 / zoom})`,
+            transform: "scale(calc(1 / var(--group-zoom, 1)))",
             transformOrigin: "bottom left",
             whiteSpace: "nowrap",
           }}
@@ -558,7 +563,7 @@ export function selectViewportZoom(state: Pick<ReactFlowState, "transform">): nu
 
 // Renders group backgrounds inside ReactFlow's viewport using ViewportPortal
 // This participates in React Flow's stacking context so z-index works properly
-export function GroupBackgroundsPortal() {
+export const GroupBackgroundsPortal = memo(function GroupBackgroundsPortal() {
   const groupIds = useWorkflowStore(useShallow((state) => Object.keys(state.groups)));
 
   if (groupIds.length === 0) return null;
@@ -572,7 +577,7 @@ export function GroupBackgroundsPortal() {
       </div>
     </ViewportPortal>
   );
-}
+});
 
 // Renders group controls (headers, resize handles) using ViewportPortal above nodes
 export function GroupControlsOverlay() {
@@ -584,12 +589,14 @@ export function GroupControlsOverlay() {
 
   return (
     <ViewportPortal>
-      <div className="group-controls-overlay" style={{ position: "absolute", top: 0, left: 0, zIndex: 1000, pointerEvents: "none" }}>
+      <div
+        className="group-controls-overlay"
+        style={{ position: "absolute", top: 0, left: 0, zIndex: 1000, pointerEvents: "none", "--group-zoom": zoom } as React.CSSProperties}
+      >
         {groupIds.map((groupId) => (
           <GroupControls
             key={groupId}
             groupId={groupId}
-            zoom={zoom}
             showInteractiveControls={showInteractiveControls}
           />
         ))}

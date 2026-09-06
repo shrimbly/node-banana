@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useEffect, DragEvent, useMemo, type ComponentType } from "react";
+import { memo, useCallback, useRef, useState, useEffect, DragEvent, useMemo, type ComponentType } from "react";
 import {
   ReactFlow,
   Background,
@@ -12,7 +12,6 @@ import {
   OnConnectEnd,
   Node,
   OnSelectionChangeParams,
-  ViewportPortal,
   useStore,
   useUpdateNodeInternals,
 } from "@xyflow/react";
@@ -66,10 +65,10 @@ import { NodeType, NanoBananaNodeData, HandleType, PromptNodeData, LLMGenerateNo
 import { isComfyWorkflow, isNodeBananaWorkflow } from "@/lib/comfy/detect";
 import { getSavedComfyNode, seedFromSavedComfyNode } from "@/lib/comfy/library";
 import { appInputHandles } from "@/lib/comfy/nodeSchema";
-import { ComfyWordmark } from "./icons/ComfyWordmark";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import { getNodeSize } from "@/utils/nodeDimensions";
-import { FloatingNodeHeader } from "./nodes/FloatingNodeHeader";
+import { FloatingNodeHeaders } from "./nodes/FloatingNodeHeaders";
+import { NodePlaceholder, useNodeMounted } from "./nodes/nodeCulling";
 import { detectAndSplitGrid } from "@/utils/gridSplitter";
 import { logger } from "@/utils/logger";
 import { WelcomeModal } from "./quickstart";
@@ -86,7 +85,7 @@ import { ErrorBoundary } from "./ErrorBoundary";
 import { ModelSearchDialog } from "./modals/ModelSearchDialog";
 import { LLMFallbackPopover } from "./nodes/LLMFallbackPopover";
 import { browseRegistry } from "@/utils/browseRegistry";
-import { useWheelPanZoom } from "@/hooks/useWheelPanZoom";
+import { createPanActivityTracker, useWheelPanZoom } from "@/hooks/useWheelPanZoom";
 import { selectCanvasOverview, setCanvasPanningClass } from "@/utils/canvasPerformance";
 import { SplitGridTemplateModal } from "./splitgrid/SplitGridTemplateModal";
 import { createPortal } from "react-dom";
@@ -125,18 +124,42 @@ const rawNodeTypes: NodeTypes = {
   comfyApp: ComfyAppNode,
 };
 
+// React Flow hands every node its absolute position as props and applies
+// that position to the wrapper itself; no node component reads them, so
+// they are left out of the comparison, or the dragged node would re-render
+// on every frame of its own drag.
+const nodePropsEqual = (a: Record<string, unknown>, b: Record<string, unknown>): boolean => {
+  const keys = Object.keys(b);
+  if (keys.length !== Object.keys(a).length) return false;
+  for (const key of keys) {
+    if (key === "positionAbsoluteX" || key === "positionAbsoluteY") continue;
+    if (!Object.is(a[key], b[key])) return false;
+  }
+  return true;
+};
+
 // Wrap every node component in a per-node error boundary so a single
 // throwing node (e.g. malformed data from a loaded workflow) renders a small
 // fallback card instead of unmounting the entire canvas/app.
+// Memoised on the node's props, which React Flow keeps stable for a node
+// that did not change, so a drag frame renders nothing under the wrapper. A
+// node far off screen renders as a placeholder of its measured size instead
+// (see nodeCulling.ts for what keeps a node mounted).
 const withNodeErrorBoundary = (
   type: string,
   NodeComponent: ComponentType<Record<string, unknown>>
 ): ComponentType<Record<string, unknown>> => {
-  const Wrapped = (props: Record<string, unknown>) => (
-    <ErrorBoundary label={type}>
-      <NodeComponent {...props} />
-    </ErrorBoundary>
-  );
+  const Wrapped = memo((props: Record<string, unknown>) => {
+    const mounted = useNodeMounted(props.id as string, type, !!props.selected, !!props.dragging);
+    if (!mounted) {
+      return <NodePlaceholder id={props.id as string} width={props.width as number} height={props.height as number} />;
+    }
+    return (
+      <ErrorBoundary label={type}>
+        <NodeComponent {...props} />
+      </ErrorBoundary>
+    );
+  }, nodePropsEqual);
   Wrapped.displayName = `NodeErrorBoundary(${type})`;
   return Wrapped;
 };
@@ -311,6 +334,54 @@ const isMacOS = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(
 export const isPanningRef = { current: false };
 /** Shared ref so child components (NodeShell) can skip hover updates during node drags */
 export const isDraggingNodeRef = { current: false };
+
+// Node title mapping for FloatingNodeHeaders
+const NODE_TITLES: Record<string, string> = {
+  imageInput: 'Image Input',
+  audioInput: 'Audio Input',
+  videoInput: 'Video Input',
+  annotation: 'Annotation',
+  prompt: 'Prompt',
+  array: 'Array',
+  promptConstructor: 'Prompt Constructor',
+  nanoBanana: 'Generate Image',
+  generateVideo: 'Generate Video',
+  generate3d: 'Generate 3D',
+  generateAudio: 'Generate Audio',
+  llmGenerate: 'LLM Generate',
+  splitGrid: 'Split Grid',
+  output: 'Output',
+  outputGallery: 'Output Gallery',
+  imageCompare: 'Image Compare',
+  videoStitch: 'Video Stitch',
+  easeCurve: 'Ease Curve',
+  videoTrim: 'Video Trim',
+  videoFrameGrab: 'Frame Grab',
+  removeBackground: 'Remove Background',
+  imageResize: 'Image Resize',
+  gifEncoder: 'GIF Encoder',
+  router: 'Router',
+  switch: 'Switch',
+  conditionalSwitch: 'Conditional Switch',
+  glbViewer: '3D Viewer',
+  comfyApp: 'ComfyUI App',
+};
+
+/** The fallback-model capability a generation node type picks from. */
+function capabilityForNodeType(type: string): "image" | "video" | "3d" | "audio" | null {
+  if (type === "nanoBanana") return "image";
+  if (type === "generateVideo") return "video";
+  if (type === "generate3d") return "3d";
+  if (type === "generateAudio") return "audio";
+  return null;
+}
+
+// Passed to React Flow, which writes any prop whose reference changed into
+// its own store on every render; literals here would do that on every frame
+// of a drag.
+const DEFAULT_EDGE_OPTIONS = { type: "editable", animated: false };
+const PRO_OPTIONS = { hideAttribution: true };
+const DELETE_KEYS = ["Backspace", "Delete"];
 
 export function WorkflowCanvas() {
   const { nodes, edges, groups, isModalOpen, showQuickstart, navigationTarget, canvasNavigationSettings, dimmedNodeIds, skippedNodeIds } =
@@ -490,8 +561,11 @@ export function WorkflowCanvas() {
       const baseClass = (node.className || "").replace(/\bswitch-dimmed\b/g, "").replace(/\bnode-skipped\b/g, "").trim();
       const newClass = extraClasses ? `${baseClass} ${extraClasses}`.trim() : baseClass;
 
-      // Only create new node object if className changed
-      if (node.className === newClass) return node;
+      // Only create a new node object if the classes changed. React Flow
+      // rebuilds a node, and everything under it re-renders, whenever the
+      // object handed to it is new, so a node without a className must keep
+      // its identity rather than gain an empty one on every drag frame.
+      if ((node.className || "") === newClass) return node;
       return { ...node, className: newClass };
     });
   }, [nodes, dimmedNodeIds, skippedNodeIds]);
@@ -512,37 +586,6 @@ export function WorkflowCanvas() {
     return () => cancelAnimationFrame(frame);
   }, [workflowLoadCount, updateNodeInternals]);
 
-  // Node title mapping for FloatingNodeHeaders
-  const NODE_TITLES: Record<string, string> = {
-    imageInput: 'Image Input',
-    audioInput: 'Audio Input',
-    videoInput: 'Video Input',
-    annotation: 'Annotation',
-    prompt: 'Prompt',
-    array: 'Array',
-    promptConstructor: 'Prompt Constructor',
-    nanoBanana: 'Generate Image',
-    generateVideo: 'Generate Video',
-    generate3d: 'Generate 3D',
-    generateAudio: 'Generate Audio',
-    llmGenerate: 'LLM Generate',
-    splitGrid: 'Split Grid',
-    output: 'Output',
-    outputGallery: 'Output Gallery',
-    imageCompare: 'Image Compare',
-    videoStitch: 'Video Stitch',
-    easeCurve: 'Ease Curve',
-    videoTrim: 'Video Trim',
-    videoFrameGrab: 'Frame Grab',
-    removeBackground: 'Remove Background',
-    imageResize: 'Image Resize',
-    gifEncoder: 'GIF Encoder',
-    router: 'Router',
-    switch: 'Switch',
-    conditionalSwitch: 'Conditional Switch',
-    glbViewer: '3D Viewer',
-    comfyApp: 'ComfyUI App',
-  };
 
   // Helper to get node title (used for FloatingNodeHeader)
   const getNodeTitle = useCallback((node: Node) => {
@@ -598,10 +641,26 @@ export function WorkflowCanvas() {
     }
   }, [getNodeById, openAnnotationModal]);
 
+  // Header buttons: browse the model registry, mark an input optional, pick a fallback model
+  const handleBrowseNode = useCallback((nodeId: string) => {
+    browseRegistry.open(nodeId);
+  }, []);
+  const handleToggleOptional = useCallback((nodeId: string, isOptional: boolean) => {
+    updateNodeData(nodeId, { isOptional });
+  }, [updateNodeData]);
+  const handleOpenFallback = useCallback((nodeId: string, nodeType: string) => {
+    if (nodeType === "llmGenerate") {
+      setLlmFallbackState({ nodeId });
+    } else {
+      const capability = capabilityForNodeType(nodeType);
+      if (capability) setFallbackDialogState({ nodeId, capability });
+    }
+  }, []);
 
   // Check if a node was dropped into a group and add it to that group
   const handleNodeDragStop = useCallback(
     (_event: React.MouseEvent, node: Node) => {
+      const { groups, nodes } = useWorkflowStore.getState();
       // Skip if it's a group node
       if (node.id.startsWith("group-")) return;
 
@@ -631,13 +690,14 @@ export function WorkflowCanvas() {
         setNodeGroupId(node.id, targetGroupId);
       }
     },
-    [groups, nodes, setNodeGroupId]
+    [setNodeGroupId]
   );
 
   // Connection validation - checks if a connection is valid based on handle types and node types
   // Defined inside component to have access to nodes array for video validation
   const isValidConnection = useCallback(
     (connection: Connection | Edge): boolean => {
+      const { nodes } = useWorkflowStore.getState();
       // Switch input: accept any type (generic-input handle)
       const targetNode = nodes.find((n) => n.id === connection.target);
       const sourceNode = nodes.find((n) => n.id === connection.source);
@@ -733,7 +793,7 @@ export function WorkflowCanvas() {
       // Image handles connect to image handles, text handles connect to text handles
       return sourceType === targetType;
     },
-    [nodes]
+    []
   );
 
   // Drag an edge end onto another handle. Generic router/switch handles are
@@ -749,6 +809,7 @@ export function WorkflowCanvas() {
 
   const handleConnect = useCallback(
     (connection: Connection) => {
+      const { nodes, edges } = useWorkflowStore.getState();
       if (!isValidConnection(connection)) return;
 
       // For imageCompare nodes, redirect to the second handle if the first is occupied
@@ -910,7 +971,7 @@ export function WorkflowCanvas() {
         }
       }
     },
-    [onConnect, nodes, edges]
+    [isValidConnection, onConnect]
   );
 
   // Handle connection dropped on empty space or on a node
@@ -1332,8 +1393,9 @@ export function WorkflowCanvas() {
     },
   }), []);
 
-  // Compute selected node IDs for chat context scoping
-  const selectedNodeIds = useMemo(() => nodes.filter(n => n.selected).map(n => n.id), [nodes]);
+  // Compute selected node IDs for chat context scoping; shallow-compared so
+  // a drag frame hands the chat panel the same array
+  const selectedNodeIds = useWorkflowStore(useShallow((state) => state.nodes.filter((n) => n.selected).map((n) => n.id)));
 
   // Handle applying edit operations from chat
   const handleApplyEdits = useCallback((operations: EditOperation[]) => {
@@ -2030,6 +2092,47 @@ export function WorkflowCanvas() {
   }, [setHoveredHandle]);
 
 
+  // React Flow reports every viewport change as its own start/end pair, and a
+  // wheel pan sets the viewport once per frame, so the classes that switch
+  // off hover and pointer events would flip on and off each frame and restyle
+  // the whole document twice. Hold them until the moves stop.
+  const interactionClasses = useMemo(
+    () =>
+      createPanActivityTracker({
+        setActive: (active) => {
+          if (reactFlowWrapper.current) setCanvasPanningClass(active, reactFlowWrapper.current);
+          // A node drag holds this class itself: a pan timer that runs out
+          // during the drag must not take it away
+          if (active || !isDraggingNodeRef.current) {
+            document.documentElement.classList.toggle("canvas-interacting", active);
+          }
+        },
+      }),
+    []
+  );
+  useEffect(() => () => interactionClasses.dispose(), [interactionClasses]);
+  const handleMoveStart = useCallback(() => {
+    isPanningRef.current = true;
+    setHoveredNodeId(null);
+    interactionClasses.signal();
+  }, [interactionClasses, setHoveredNodeId]);
+  const handleMove = useCallback(() => interactionClasses.signal(), [interactionClasses]);
+  const handleMoveEnd = useCallback(() => {
+    isPanningRef.current = false;
+  }, []);
+  const handleNodeDragBegin = useCallback(() => {
+    isDraggingNodeRef.current = true;
+    document.documentElement.classList.add("canvas-interacting");
+  }, []);
+  const handleNodeDragEnd = useCallback((event: React.MouseEvent, node: Node) => {
+    isDraggingNodeRef.current = false;
+    // A pan just before the drag may still hold the tracker active; resetting
+    // it drops its classes now and lets the next pan put them back
+    interactionClasses.dispose();
+    document.documentElement.classList.remove("canvas-interacting");
+    handleNodeDragStop(event, node);
+  }, [handleNodeDragStop, interactionClasses]);
+
   // Fix for React Flow selection bug where nodes with undefined bounds get incorrectly selected.
   // Uses statistical outlier detection to identify and deselect nodes that are clearly
   // outside the actual selection area.
@@ -2361,10 +2464,11 @@ export function WorkflowCanvas() {
         onConnectEnd={handleConnectEnd}
         onReconnect={handleReconnect}
         onPaneClick={() => setExpandedStubGroup?.(null)}
-        onMoveStart={() => { isPanningRef.current = true; setHoveredNodeId(null); document.documentElement.classList.add("canvas-interacting"); if (reactFlowWrapper.current) setCanvasPanningClass(true, reactFlowWrapper.current); }}
-        onMoveEnd={() => { isPanningRef.current = false; document.documentElement.classList.remove("canvas-interacting"); if (reactFlowWrapper.current) setCanvasPanningClass(false, reactFlowWrapper.current); }}
-        onNodeDragStart={() => { isDraggingNodeRef.current = true; document.documentElement.classList.add("canvas-interacting"); }}
-        onNodeDragStop={(event, node) => { isDraggingNodeRef.current = false; document.documentElement.classList.remove("canvas-interacting"); handleNodeDragStop(event, node); }}
+        onMoveStart={handleMoveStart}
+        onMove={handleMove}
+        onMoveEnd={handleMoveEnd}
+        onNodeDragStart={handleNodeDragBegin}
+        onNodeDragStop={handleNodeDragEnd}
         onSelectionChange={handleSelectionChange}
         onDoubleClick={handlePaneDoubleClick}
         onPaneContextMenu={handlePaneContextMenu}
@@ -2373,7 +2477,7 @@ export function WorkflowCanvas() {
         isValidConnection={isValidConnection}
         connectOnClick={false}
         fitView
-        deleteKeyCode={isModalOpen ? null : ["Backspace", "Delete"]}
+        deleteKeyCode={isModalOpen ? null : DELETE_KEYS}
         multiSelectionKeyCode="Shift"
         selectionOnDrag={
           canvasNavigationSettings.selectionMode === "altDrag" || canvasNavigationSettings.selectionMode === "shiftDrag"
@@ -2421,11 +2525,8 @@ export function WorkflowCanvas() {
         nodesConnectable={!isModalOpen}
         elementsSelectable={!isModalOpen}
         className="bg-neutral-900"
-        proOptions={{ hideAttribution: true }}
-        defaultEdgeOptions={{
-          type: "editable",
-          animated: false,
-        }}
+        proOptions={PRO_OPTIONS}
+        defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
       >
         <SharedEdgeGradients />
         <GroupBackgroundsPortal />
@@ -2437,125 +2538,17 @@ export function WorkflowCanvas() {
           className={tutorialActive && lockedFeatures ? "opacity-30 pointer-events-none" : ""}
         />
         <CanvasMinimap disabled={tutorialActive && lockedFeatures} />
-        <ViewportPortal>
-          {allNodes.map((node) => {
-            // Groups don't get floating headers
-            if (node.type === "group" as any) return null;
-
-            const defaultWidth = defaultNodeDimensions[node.type as NodeType]?.width ?? 250;
-            const headerWidth = node.measured?.width || (node.style?.width as number) || defaultWidth;
-
-            // Browse button for generate nodes
-            const showBrowse =
-              node.type === "nanoBanana" || node.type === "generateVideo" ||
-              node.type === "generate3d" || node.type === "generateAudio";
-            const browseAction = showBrowse ? (
-              <button
-                onClick={() => browseRegistry.open(node.id)}
-                className="nodrag nopan text-[10px] py-0.5 px-1.5 bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 rounded text-neutral-300 transition-colors"
-              >
-                Browse
-              </button>
-            ) : undefined;
-
-            // Optional toggle for input nodes
-            const isInputNode = node.type === "imageInput" || node.type === "audioInput" || node.type === "prompt";
-            const isOptional = !!(node.data as any)?.isOptional;
-            const optionalToggle = isInputNode ? (
-              <button
-                onClick={() => updateNodeData(node.id, { isOptional: !isOptional })}
-                className={`nodrag nopan text-[10px] py-0.5 px-1.5 rounded transition-colors ${
-                  isOptional
-                    ? "bg-amber-600/80 hover:bg-amber-500/80 text-white border border-amber-500/50"
-                    : "bg-neutral-700 hover:bg-neutral-600 border border-neutral-600 text-neutral-400"
-                }`}
-                title={isOptional ? "This input is optional — empty inputs will be skipped" : "Mark as optional — empty inputs will skip this branch"}
-              >
-                {isOptional ? "Optional" : "Required"}
-              </button>
-            ) : undefined;
-
-            // Fallback shield button for generation nodes
-            const isGenerationNode =
-              node.type === "nanoBanana" ||
-              node.type === "generateVideo" ||
-              node.type === "generate3d" ||
-              node.type === "generateAudio" ||
-              node.type === "llmGenerate";
-            const fbData = node.data as any;
-            const hasFallback = !!fbData?.fallbackModel;
-            const fallbackName = fbData?.fallbackModel?.displayName;
-            const capabilityForNodeType = (t: string | undefined) => {
-              if (t === "nanoBanana") return "image" as const;
-              if (t === "generateVideo") return "video" as const;
-              if (t === "generate3d") return "3d" as const;
-              if (t === "generateAudio") return "audio" as const;
-              return null;
-            };
-            const fallbackButton = isGenerationNode ? (
-              <div className="relative shrink-0">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (node.type === "llmGenerate") {
-                      setLlmFallbackState({ nodeId: node.id });
-                    } else {
-                      const cap = capabilityForNodeType(node.type);
-                      if (cap) setFallbackDialogState({ nodeId: node.id, capability: cap });
-                    }
-                  }}
-                  className={`nodrag nopan p-0.5 rounded transition-colors border flex items-center ${
-                    hasFallback
-                      ? "text-blue-400 border-blue-600/60 hover:text-blue-200"
-                      : "text-neutral-500 border-neutral-600 hover:text-neutral-200"
-                  }`}
-                  title={hasFallback ? `Fallback: ${fallbackName}` : "Set fallback model (runs if primary fails)"}
-                >
-                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 12a8 8 0 0 1 16 0M12 4v8M8 12Q9 7 12 4M16 12Q15 7 12 4M4 12l8 8M20 12l-8 8M11 20h2" />
-                  </svg>
-                </button>
-                {hasFallback && (
-                  <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-blue-400 ring-1 ring-neutral-900 pointer-events-none" />
-                )}
-              </div>
-            ) : undefined;
-
-            return (
-              <FloatingNodeHeader
-                key={`header-${node.id}`}
-                id={node.id}
-                type={node.type as NodeType}
-                isInLockedGroup={!!(node.data as any)?.isInLockedGroup}
-                isExecuting={!!(node.data as any)?.isExecuting}
-                focusedCommentNodeId={(node.data as any)?.focusedCommentNodeId}
-                position={node.position}
-                width={headerWidth}
-                selected={!!node.selected}
-                title={getNodeTitle(node)}
-                titleLogo={
-                  node.type === "comfyApp" ? (
-                    <ComfyWordmark className="h-3 w-auto shrink-0" />
-                  ) : undefined
-                }
-                customTitle={node.data?.customTitle}
-                comment={node.data?.comment}
-                provider={(node.data as any)?.selectedModel?.provider}
-                headerAction={(browseAction || fallbackButton) ? (
-                  <>
-                    {browseAction}
-                    {fallbackButton}
-                  </>
-                ) : undefined}
-                headerButtons={optionalToggle}
-                onCustomTitleChange={handleCustomTitleChange}
-                onCommentChange={handleCommentChange}
-                onRunNode={handleRunNode}
-                onExpandNode={handleExpandNode}
-              />
-            );
-          })}
-        </ViewportPortal>
+        <FloatingNodeHeaders
+          nodes={allNodes}
+          getNodeTitle={getNodeTitle}
+          onCustomTitleChange={handleCustomTitleChange}
+          onCommentChange={handleCommentChange}
+          onRunNode={handleRunNode}
+          onExpandNode={handleExpandNode}
+          onBrowse={handleBrowseNode}
+          onToggleOptional={handleToggleOptional}
+          onOpenFallback={handleOpenFallback}
+        />
       </ReactFlow>
 
       {/* Connection drop menu */}

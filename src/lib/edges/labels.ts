@@ -1,5 +1,8 @@
-import type { WorkflowEdge, WorkflowEdgeData } from "@/types";
+import type { WorkflowEdge } from "@/types";
 import { normalizeHandleType } from "./colors";
+import { edgeGraphIndex, hiddenStubSideKey, stubGroupKey, type BundleEnd, type HiddenStubGroup } from "./graphIndex";
+
+export { stubGroupKey, type HiddenStubGroup };
 
 /** Human name for a handle's data type. */
 export function edgeTypeLabel(handleId: string | null | undefined): string {
@@ -21,25 +24,7 @@ export function edgeTypeLabel(handleId: string | null | undefined): string {
  * the connection is alone or not an image.
  */
 export function getImageSequenceNumber(edge: WorkflowEdge, edges: WorkflowEdge[]): number | null {
-  const sourceHandle = edge.sourceHandle;
-  const targetHandle = edge.targetHandle;
-  const isImageConnection =
-    sourceHandle === "image" || sourceHandle?.startsWith("image-") ||
-    targetHandle === "image" || targetHandle?.startsWith("image-");
-  if (!isImageConnection) return null;
-
-  const siblings = edges.filter((e) => e.target === edge.target && e.targetHandle === edge.targetHandle);
-  if (siblings.length <= 1) return null;
-
-  // Sort by creation time (fallback to edge id for legacy edges without a timestamp)
-  const sorted = [...siblings].sort((a, b) => {
-    const timeA = (a.data as WorkflowEdgeData)?.createdAt || 0;
-    const timeB = (b.data as WorkflowEdgeData)?.createdAt || 0;
-    if (timeA !== timeB) return timeA - timeB;
-    return a.id.localeCompare(b.id);
-  });
-  const index = sorted.findIndex((e) => e.id === edge.id);
-  return index >= 0 ? index + 1 : null;
+  return edgeGraphIndex(edges).imageSequence.get(edge.id) ?? null;
 }
 
 /**
@@ -60,7 +45,7 @@ export function edgeDisplayLabel(edge: WorkflowEdge, edges: WorkflowEdge[]): str
 
 /** Display label for an edge id, or an empty string when the edge is gone. */
 export function edgeDisplayLabelById(edgeId: string, edges: WorkflowEdge[]): string {
-  const edge = edges.find((e) => e.id === edgeId);
+  const edge = edgeGraphIndex(edges).byId.get(edgeId);
   return edge ? edgeDisplayLabel(edge, edges) : "";
 }
 
@@ -70,18 +55,7 @@ export function edgeDisplayLabelById(edgeId: string, edges: WorkflowEdge[]): str
  * Returns the index and how many share the pair.
  */
 export function parallelEdgePosition(edgeId: string, edges: WorkflowEdge[]): { index: number; count: number } {
-  const edge = edges.find((e) => e.id === edgeId);
-  if (!edge) return { index: 0, count: 1 };
-  const parallel = edges
-    .filter((e) => !e.data?.hidden && e.source === edge.source && e.target === edge.target)
-    .sort((a, b) => {
-      const timeA = a.data?.createdAt || 0;
-      const timeB = b.data?.createdAt || 0;
-      if (timeA !== timeB) return timeA - timeB;
-      return a.id.localeCompare(b.id);
-    });
-  const index = parallel.findIndex((e) => e.id === edgeId);
-  return { index: index < 0 ? 0 : index, count: Math.max(1, parallel.length) };
+  return edgeGraphIndex(edges).parallel.get(edgeId) ?? { index: 0, count: 1 };
 }
 
 /**
@@ -98,45 +72,23 @@ export function pluralTypeLabel(handleId: string | null | undefined): string {
   return label === "Audio" || label === "3D" ? label : `${label}s`;
 }
 
-/** Identifies the hidden connections on one handle, which collapse into a single pill. */
-export function stubGroupKey(nodeId: string, side: "source" | "target", handleId: string | null | undefined): string {
-  return `${nodeId}:${side}:${handleId ?? ""}`;
-}
-
-export interface HiddenStubGroup {
-  key: string;
-  /** Member edge ids in stack order. */
-  members: string[];
-  /** True for a connection the user has named, which stands outside its handle's group. */
-  named?: boolean;
-}
-
-const hasOwnLabel = (e: WorkflowEdge) => Boolean(e.data?.label?.trim());
-
 /**
  * The hidden connections on each handle of a node's side. Unnamed ones share
  * a group per handle (collapsed into one plural pill); a connection the user
  * has named keeps its own pill, listed after its handle's group.
  */
-function hiddenStubGroups(edges: WorkflowEdge[], nodeId: string, side: "source" | "target"): HiddenStubGroup[] {
-  const handleOf = (e: WorkflowEdge) => (side === "source" ? e.sourceHandle : e.targetHandle) ?? null;
-  const nodeOf = (e: WorkflowEdge) => (side === "source" ? e.source : e.target);
-  const order = (a: WorkflowEdge, b: WorkflowEdge) =>
-    (a.data?.createdAt || 0) - (b.data?.createdAt || 0) || a.id.localeCompare(b.id);
-  const onSide = edges.filter((e) => e.data?.hidden && nodeOf(e) === nodeId).sort(order);
-  const shared = new Map<string, string[]>();
-  const named: HiddenStubGroup[] = [];
-  for (const e of onSide) {
-    const key = stubGroupKey(nodeId, side, handleOf(e));
-    if (hasOwnLabel(e)) named.push({ key: `${key}#${e.id}`, members: [e.id], named: true });
-    else shared.set(key, [...(shared.get(key) ?? []), e.id]);
-  }
-  return [...[...shared.entries()].map(([key, members]) => ({ key, members })), ...named];
+function hiddenStubGroups(edges: WorkflowEdge[], nodeId: string, side: BundleEnd): HiddenStubGroup[] {
+  return edgeGraphIndex(edges).hiddenStubGroups.get(hiddenStubSideKey(nodeId, side)) ?? [];
+}
+
+/** True when a hidden connection leaves, or arrives at, this side of the node. */
+export function hasHiddenStubs(edges: WorkflowEdge[] | undefined, nodeId: string | null, side: BundleEnd): boolean {
+  return nodeId !== null && edgeGraphIndex(edges).hiddenStubGroups.has(hiddenStubSideKey(nodeId, side));
 }
 
 /** The group of hidden connections sharing this edge's handle on the given side. */
-export function hiddenStubGroup(edgeId: string, edges: WorkflowEdge[], side: "source" | "target"): HiddenStubGroup | null {
-  const edge = edges.find((e) => e.id === edgeId);
+export function hiddenStubGroup(edgeId: string, edges: WorkflowEdge[], side: BundleEnd): HiddenStubGroup | null {
+  const edge = edgeGraphIndex(edges).byId.get(edgeId);
   if (!edge || !edge.data?.hidden) return null;
   const nodeId = side === "source" ? edge.source : edge.target;
   return hiddenStubGroups(edges, nodeId, side).find((g) => g.members.includes(edgeId)) ?? null;
@@ -151,7 +103,7 @@ export type HiddenStubRole = "single" | "expanded" | "collapsed-leader" | "colla
 export function hiddenStubRole(
   edgeId: string,
   edges: WorkflowEdge[],
-  side: "source" | "target",
+  side: BundleEnd,
   expandedGroup: string | null,
 ): HiddenStubRole {
   const group = hiddenStubGroup(edgeId, edges, side);
@@ -172,14 +124,14 @@ export function hiddenStubRole(
 export function stackHiddenStubs(
   edges: WorkflowEdge[],
   nodeId: string,
-  side: "source" | "target",
+  side: BundleEnd,
   handleY: (handleId: string | null) => number | undefined,
   fallbackY = 0,
   expandedGroup: string | null = null,
   spacing = HIDDEN_STUB_SPACING,
 ): Map<string, number> {
   const handleOf = (e: WorkflowEdge) => (side === "source" ? e.sourceHandle : e.targetHandle) ?? null;
-  const byId = new Map(edges.map((e) => [e.id, e]));
+  const { byId } = edgeGraphIndex(edges);
   // Rows are keyed by handle so stubs of one handle stay together; a named
   // connection ranks after its handle's shared group
   const rows: { ids: string[]; key: string; y: number; rank: number; createdAt: number }[] = [];
@@ -224,12 +176,12 @@ export function stackHiddenStubs(
 export function hiddenStubOffset(
   edgeId: string,
   edges: WorkflowEdge[],
-  side: "source" | "target",
+  side: BundleEnd,
   handleY: (handleId: string | null) => number | undefined,
   ownY: number,
   expandedGroup: string | null = null,
 ): number {
-  const edge = edges.find((e) => e.id === edgeId);
+  const edge = edgeGraphIndex(edges).byId.get(edgeId);
   if (!edge) return 0;
   const nodeId = side === "source" ? edge.source : edge.target;
   const y = stackHiddenStubs(edges, nodeId, side, handleY, ownY, expandedGroup).get(edgeId);

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { EdgeLabelRenderer, useViewport } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { getImageSequenceNumber } from "@/lib/edges/labels";
+import { edgeGraphIndex } from "@/lib/edges/graphIndex";
 import { bundleIdAt, bundleMembership, sharedEnd } from "@/lib/edges/bundles";
 
 export { getImageSequenceNumber };
@@ -26,7 +27,7 @@ interface EdgeToolbarProps {
 
 /** True for the edge that should carry the toolbar: the first selected one. */
 export function useIsToolbarEdge(edgeId: string): boolean {
-  return useWorkflowStore((state) => state.edges.find((e) => e.selected)?.id === edgeId);
+  return useWorkflowStore((state) => edgeGraphIndex(state.edges).toolbarEdgeId === edgeId);
 }
 
 const iconButton =

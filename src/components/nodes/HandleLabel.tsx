@@ -1,5 +1,6 @@
 import { useConnection, useNodeId } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
+import { hasHiddenStubs } from "@/lib/edges/labels";
 
 interface HandleLabelProps {
   label: string;
@@ -26,10 +27,8 @@ export function HandleLabel({
   // handle labels stay out of their way until a connection drag replaces them
   const nodeId = useNodeId();
   const isConnecting = useConnection((c) => c.inProgress);
-  const hasHiddenStubs = useWorkflowStore(
-    (state) => state.edges?.some((e) => e.data?.hidden && (side === "source" ? e.source : e.target) === nodeId) ?? false
-  );
-  const shown = visible && (isConnecting || !hasHiddenStubs);
+  const hiddenStubs = useWorkflowStore((state) => hasHiddenStubs(state.edges, nodeId, side));
+  const shown = visible && (isConnecting || !hiddenStubs);
   const positionStyle = side === "target"
     ? { right: `calc(100% + ${offset})` }
     : { left: `calc(100% + ${offset})` };

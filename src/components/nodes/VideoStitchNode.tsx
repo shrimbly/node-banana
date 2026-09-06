@@ -16,7 +16,9 @@ import {
   type SocketSpec,
 } from "./ui";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { VideoStitchNodeData } from "@/types";
+import { useShallow } from "zustand/shallow";
+import { nodeGraphIndex } from "@/lib/edges/graphIndex";
+import { VideoStitchNodeData, WorkflowNode } from "@/types";
 import { checkEncoderSupport } from "@/hooks/useStitchVideos";
 import { useVideoBlobUrl } from "@/hooks/useVideoBlobUrl";
 import { useVideoAutoplay } from "@/hooks/useVideoAutoplay";
@@ -35,7 +37,6 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const edges = useWorkflowStore((state) => state.edges);
-  const nodes = useWorkflowStore((state) => state.nodes);
   const [thumbnails, setThumbnails] = useState<Map<string, string>>(new Map());
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
@@ -60,6 +61,14 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
       (e) => e.target === id && e.targetHandle?.startsWith("video-")
     );
   }, [edges, id]);
+  // The clips' source nodes, as the store's own objects, so the list only
+  // changes when one of them does and not on every drag frame
+  const sourceNodes = useWorkflowStore(
+    useShallow((state) => {
+      const { byId } = nodeGraphIndex(state.nodes);
+      return videoEdges.map((e) => byId.get(e.source)).filter((n): n is WorkflowNode => n !== undefined);
+    })
+  );
 
   // Sync clipOrder with connected edges (side effect, must be in useEffect)
   const lastWrittenClipOrderRef = useRef<string[]>([]);
@@ -94,7 +103,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
     const clipMap = new Map<string, { edge: any; sourceNode: any; videoData: string | null; duration: number | null }>();
 
     videoEdges.forEach((edge) => {
-      const sourceNode = nodes.find((n) => n.id === edge.source);
+      const sourceNode = sourceNodes.find((n) => n.id === edge.source);
       if (!sourceNode) return;
 
       let videoData: string | null = null;
@@ -143,7 +152,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
     }
 
     return ordered;
-  }, [videoEdges, nodes, nodeData.clipOrder]);
+  }, [videoEdges, sourceNodes, nodeData.clipOrder]);
 
   // Stable key that only changes when clip edges or video data actually change
   const clipKey = useMemo(

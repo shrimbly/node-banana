@@ -10,9 +10,11 @@ import {
   getBezierPath,
   getStraightPath,
   useReactFlow,
-  useInternalNode,
+  useStore,
   useConnection,
+  type ReactFlowState,
 } from "@xyflow/react";
+import { shallow, useShallow } from "zustand/shallow";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { NanoBananaNodeData, WorkflowEdgeData } from "@/types";
 import { getSharedGradientId } from "./SharedEdgeGradients";
@@ -30,15 +32,23 @@ import {
 } from "@/lib/edges/labels";
 import { EdgeLabel } from "./EdgeLabel";
 import { edgeBundles, bundleReach, bundleClampKey, type BundleMembership } from "@/lib/edges/bundles";
+import { edgeGraphIndex, nodeGraphIndex } from "@/lib/edges/graphIndex";
 
 interface EdgeData extends WorkflowEdgeData {
   offsetX?: number;
   offsetY?: number;
 }
 
-/** Absolute y of the centre of each handle on one side of a node, by handle id. */
-function useHandleY(nodeId: string, side: "source" | "target") {
-  const node = useInternalNode(nodeId);
+/**
+ * Absolute y of the centre of each handle on one side of a node, by handle id.
+ * Only a hidden edge needs it, and every edge subscribes, so the subscription
+ * selects nothing until then rather than comparing the node on every update.
+ */
+function useHandleY(nodeId: string, side: "source" | "target", enabled: boolean) {
+  const node = useStore(
+    useCallback((s: ReactFlowState) => (enabled ? s.nodeLookup.get(nodeId) : undefined), [nodeId, enabled]),
+    shallow
+  );
   const bounds = node?.internals.handleBounds?.[side];
   const top = node?.internals.positionAbsolute.y ?? 0;
   return useCallback(
@@ -82,15 +92,6 @@ export function EditableEdge({
   const [toolbarSide, setToolbarSide] = useState<"source" | "target">("source");
   const measureSource = useCallback((w: number) => setStubWidths((prev) => (prev.source === w ? prev : { ...prev, source: w })), []);
   const measureTarget = useCallback((w: number) => setStubWidths((prev) => (prev.target === w ? prev : { ...prev, target: w })), []);
-  const handleHovered = useWorkflowStore((state) => {
-    if (!isHidden) return false;
-    const h = state.hoveredHandle;
-    if (!h) return false;
-    return (
-      (h.type === "source" && h.nodeId === source && (h.handleId ?? null) === (sourceHandleId ?? null)) ||
-      (h.type === "target" && h.nodeId === target && (h.handleId ?? null) === (targetHandleId ?? null))
-    );
-  });
   const selectThisEdge = useCallback(
     (side: "source" | "target") => {
       setToolbarSide(side);
@@ -98,23 +99,79 @@ export function EditableEdge({
     },
     [id, setEdges]
   );
-  const displayLabel = useWorkflowStore((state) => edgeDisplayLabelById(id, state.edges));
   const hasOwnLabel = Boolean((data as EdgeData | undefined)?.label?.trim());
-  const stubLabel = displayLabel;
   const [hovered, setHovered] = useState(false);
-  const parallel = useWorkflowStore((state) => {
-    const { index, count } = parallelEdgePosition(id, state.edges);
-    return count > 1 ? index - (count - 1) / 2 : 0;
-  });
+  // A collapsed pill is drawn by one member but every member's ghost must
+  // leave from its outer edge, so its measured width goes through the store
+  const sourceGroupKey = stubGroupKey(source, "source", sourceHandleId ?? null);
+  const targetGroupKey = stubGroupKey(target, "target", targetHandleId ?? null);
+
+  // Everything this edge needs from the other edges, in one subscription.
+  // The helpers read an index built once per edges array, so each is a
+  // lookup, and the shallow compare keeps a store update that left this
+  // slice alone from re-rendering the edge. Bundles are packed as a string
+  // for the same reason.
+  const {
+    displayLabel,
+    parallel,
+    bundleKey,
+    bundleExpanded,
+    sourceRole,
+    targetRole,
+    sourceGroupWidth,
+    targetGroupWidth,
+    handleHovered,
+  } = useWorkflowStore(
+    useShallow((state) => {
+      const { source: sb, target: tb } = edgeBundles(id, state.edges);
+      const pack = (m: BundleMembership | null) => (m ? `${m.index}|${m.count}|${m.members.join(",")}` : "");
+      const members = [...(sb?.members ?? []), ...(tb?.members ?? [])];
+      const { selectedIds } = edgeGraphIndex(state.edges);
+      const { index, count } = parallelEdgePosition(id, state.edges);
+      const h = isHidden ? state.hoveredHandle : null;
+      return {
+        displayLabel: edgeDisplayLabelById(id, state.edges),
+        parallel: count > 1 ? index - (count - 1) / 2 : 0,
+        bundleKey: `${pack(sb)}\u0002${pack(tb)}`,
+        // Bundles split apart while one of their members is selected
+        bundleExpanded: members.some((m) => selectedIds.has(m)),
+        sourceRole: isHidden ? hiddenStubRole(id, state.edges, "source", state.expandedStubGroup) : "single",
+        targetRole: isHidden ? hiddenStubRole(id, state.edges, "target", state.expandedStubGroup) : "single",
+        sourceGroupWidth: isHidden ? state.stubGroupWidths?.[sourceGroupKey] ?? 0 : 0,
+        targetGroupWidth: isHidden ? state.stubGroupWidths?.[targetGroupKey] ?? 0 : 0,
+        handleHovered:
+          Boolean(h) &&
+          ((h!.type === "source" && h!.nodeId === source && (h!.handleId ?? null) === (sourceHandleId ?? null)) ||
+            (h!.type === "target" && h!.nodeId === target && (h!.handleId ?? null) === (targetHandleId ?? null))),
+      };
+    })
+  );
+  // And from the nodes: the clamp position for each end lives on the node
+  // that owns the handle, and selection and loading state drive the stroke
+  const { sourceReach, targetReach, isConnectedToSelection, isTargetLoading } = useWorkflowStore(
+    useShallow((state) => {
+      const { byId, selectedIds } = nodeGraphIndex(state.nodes);
+      const targetNode = byId.get(target);
+      return {
+        sourceReach: bundleReach(state.nodes, source, "source", sourceHandleId),
+        targetReach: bundleReach(state.nodes, target, "target", targetHandleId),
+        isConnectedToSelection: selectedIds.has(source) || selectedIds.has(target),
+        isTargetLoading: targetNode?.type === "nanoBanana" && (targetNode.data as NanoBananaNodeData).status === "loading",
+      };
+    })
+  );
+  const { setBundleClamp, setExpandedStubGroup, setHoveredHandle, setStubGroupWidth } = useWorkflowStore(
+    useShallow((state) => ({
+      setBundleClamp: state.setBundleClamp,
+      setExpandedStubGroup: state.setExpandedStubGroup,
+      setHoveredHandle: state.setHoveredHandle,
+      setStubGroupWidth: state.setStubGroupWidth,
+    }))
+  );
+  const stubLabel = displayLabel;
 
   // Bundles: the noodles sharing a handle leave it as one short stem and
-  // split further out, until one of them is selected. Selected as a string
-  // so the selector stays referentially stable.
-  const bundleKey = useWorkflowStore((state) => {
-    const { source: sb, target: tb } = edgeBundles(id, state.edges);
-    const pack = (m: BundleMembership | null) => (m ? `${m.index}|${m.count}|${m.members.join(",")}` : "");
-    return `${pack(sb)}\u0002${pack(tb)}`;
-  });
+  // split further out, until one of them is selected.
   const bundles = useMemo(() => {
     const unpack = (packed: string, end: "source" | "target"): BundleMembership | null => {
       if (!packed) return null;
@@ -124,16 +181,8 @@ export function EditableEdge({
     const [sb, tb] = bundleKey.split("\u0002");
     return { source: unpack(sb, "source"), target: unpack(tb, "target") };
   }, [bundleKey]);
-  const bundleExpanded = useWorkflowStore((state) => {
-    const members = [...(bundles.source?.members ?? []), ...(bundles.target?.members ?? [])];
-    return members.length > 0 && state.edges.some((e) => e.selected && members.includes(e.id));
-  });
   const sourceBundle = bundleExpanded ? null : bundles.source;
   const targetBundle = bundleExpanded ? null : bundles.target;
-  // The clamp position for each end lives on the node that owns the handle
-  const sourceReach = useWorkflowStore((state) => bundleReach(state.nodes, source, "source", sourceHandleId));
-  const targetReach = useWorkflowStore((state) => bundleReach(state.nodes, target, "target", targetHandleId));
-  const setBundleClamp = useWorkflowStore((state) => state.setBundleClamp);
   const sDir: 1 | -1 = sourcePosition === "left" ? -1 : 1;
   const tDir: 1 | -1 = targetPosition === "right" ? 1 : -1;
   // Where this noodle starts and ends: the stem's far end when bundled
@@ -141,46 +190,21 @@ export function EditableEdge({
   const endX = targetBundle ? targetX + tDir * targetReach : targetX;
   // Hidden stubs stack down the side of the node without overlapping, which
   // needs the y of every handle on that side, not just this edge's own
-  const sourceHandleY = useHandleY(source, "source");
-  const targetHandleY = useHandleY(target, "target");
+  const sourceHandleY = useHandleY(source, "source", isHidden);
+  const targetHandleY = useHandleY(target, "target", isHidden);
   const sourceStack = useWorkflowStore((state) =>
     isHidden ? hiddenStubOffset(id, state.edges, "source", sourceHandleY, sourceY, state.expandedStubGroup) : 0
   );
   const targetStack = useWorkflowStore((state) =>
     isHidden ? hiddenStubOffset(id, state.edges, "target", targetHandleY, targetY, state.expandedStubGroup) : 0
   );
-  // Several hidden connections on one handle collapse into a single plural
-  // pill, drawn by the first of them; clicking it expands the group
-  const sourceRole = useWorkflowStore((state) => (isHidden ? hiddenStubRole(id, state.edges, "source", state.expandedStubGroup) : "single"));
-  const targetRole = useWorkflowStore((state) => (isHidden ? hiddenStubRole(id, state.edges, "target", state.expandedStubGroup) : "single"));
-  const setExpandedStubGroup = useWorkflowStore((state) => state.setExpandedStubGroup);
-  const setHoveredHandle = useWorkflowStore((state) => state.setHoveredHandle);
-  // A collapsed pill is drawn by one member but every member's ghost must
-  // leave from its outer edge, so its measured width goes through the store
-  const sourceGroupKey = stubGroupKey(source, "source", sourceHandleId ?? null);
-  const targetGroupKey = stubGroupKey(target, "target", targetHandleId ?? null);
-  const setStubGroupWidth = useWorkflowStore((state) => state.setStubGroupWidth);
-  const sourceGroupWidth = useWorkflowStore((state) => (isHidden ? state.stubGroupWidths?.[sourceGroupKey] ?? 0 : 0));
-  const targetGroupWidth = useWorkflowStore((state) => (isHidden ? state.stubGroupWidths?.[targetGroupKey] ?? 0 : 0));
   const measureSourceGroup = useCallback((w: number) => setStubGroupWidth?.(sourceGroupKey, w), [setStubGroupWidth, sourceGroupKey]);
   const measureTargetGroup = useCallback((w: number) => setStubGroupWidth?.(targetGroupKey, w), [setStubGroupWidth, targetGroupKey]);
-
-  // Narrow selector: returns boolean, only re-renders when selection relevance changes
-  const isConnectedToSelection = useWorkflowStore((state) =>
-    state.nodes.some((n) => n.selected && (n.id === source || n.id === target))
-  );
 
   const edgeData = data as EdgeData | undefined;
   const offsetX = edgeData?.offsetX ?? 0;
   const offsetY = edgeData?.offsetY ?? 0;
   const hasPause = edgeData?.hasPause ?? false;
-
-  // Narrow selector: only re-renders when target loading status changes
-  const isTargetLoading = useWorkflowStore((state) => {
-    const targetNode = state.nodes.find((n) => n.id === target);
-    if (targetNode?.type !== "nanoBanana") return false;
-    return (targetNode.data as NanoBananaNodeData).status === "loading";
-  });
 
   // Colour key: magenta for loop edges, orange if paused, else the data type
   const colorKey = useMemo(() => {

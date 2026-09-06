@@ -25,14 +25,17 @@ const mockReactFlowProps = vi.hoisted(() => ({
   current: null as Record<string, unknown> | null,
 }));
 
-vi.mock("@/store/workflowStore", () => ({
-  useWorkflowStore: (selector?: (state: unknown) => unknown) => {
+vi.mock("@/store/workflowStore", () => {
+  const useWorkflowStore = (selector?: (state: unknown) => unknown) => {
     if (selector) {
       return mockUseWorkflowStore(selector);
     }
     return mockUseWorkflowStore((s: unknown) => s);
-  },
-}));
+  };
+  // Handlers that run outside render read the store directly
+  useWorkflowStore.getState = () => mockUseWorkflowStore((s: unknown) => s);
+  return { useWorkflowStore };
+});
 
 // Mock useReactFlow
 const mockUpdateNodeInternals = vi.fn();
@@ -324,32 +327,89 @@ describe("WorkflowCanvas", () => {
       expect(navigator).toContainElement(screen.getByRole("button", { name: "Hide minimap" }));
     });
 
-    it("keeps edges visible and scopes native pan state to this canvas", () => {
-      const edge = { id: "edge-1", source: "source", target: "target" };
-      mockViewport.zoom = 0.2;
-      mockUseWorkflowStore.mockImplementation((selector) =>
-        selector(createDefaultState({ edges: [edge] }))
-      );
+    it("keeps edges visible and holds native pan state on this canvas until the moves stop", () => {
+      vi.useFakeTimers();
+      try {
+        const edge = { id: "edge-1", source: "source", target: "target" };
+        mockViewport.zoom = 0.2;
+        mockUseWorkflowStore.mockImplementation((selector) =>
+          selector(createDefaultState({ edges: [edge] }))
+        );
 
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
+        render(
+          <TestWrapper>
+            <WorkflowCanvas />
+          </TestWrapper>
+        );
 
-      const canvas = document.querySelector(".bg-canvas-bg") as HTMLElement;
-      act(() => {
-        (mockReactFlowProps.current?.onMoveStart as (() => void) | undefined)?.();
-      });
+        const canvas = document.querySelector(".bg-canvas-bg") as HTMLElement;
+        const move = (handler: "onMoveStart" | "onMoveEnd") =>
+          act(() => {
+            (mockReactFlowProps.current?.[handler] as (() => void) | undefined)?.();
+          });
+        move("onMoveStart");
 
-      expect(mockReactFlowProps.current?.edges).toEqual([edge]);
-      expect(canvas).toHaveClass("canvas-native-navigation-active");
-      expect(document.documentElement).not.toHaveClass("canvas-native-navigation-active");
+        expect(mockReactFlowProps.current?.edges).toEqual([edge]);
+        expect(canvas).toHaveClass("canvas-native-navigation-active");
+        expect(document.documentElement).toHaveClass("canvas-interacting");
+        expect(document.documentElement).not.toHaveClass("canvas-native-navigation-active");
 
-      act(() => {
-        (mockReactFlowProps.current?.onMoveEnd as (() => void) | undefined)?.();
-      });
-      expect(canvas).not.toHaveClass("canvas-native-navigation-active");
+        // A wheel pan reports a start/end pair every frame; the classes must
+        // not flip off between them, since each flip restyles the document
+        move("onMoveEnd");
+        move("onMoveStart");
+        move("onMoveEnd");
+        expect(canvas).toHaveClass("canvas-native-navigation-active");
+        expect(document.documentElement).toHaveClass("canvas-interacting");
+
+        act(() => {
+          vi.advanceTimersByTime(200);
+        });
+        expect(canvas).not.toHaveClass("canvas-native-navigation-active");
+        expect(document.documentElement).not.toHaveClass("canvas-interacting");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("keeps pointer events off for the whole of a node drag that follows a pan", () => {
+      vi.useFakeTimers();
+      try {
+        mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState()));
+        render(
+          <TestWrapper>
+            <WorkflowCanvas />
+          </TestWrapper>
+        );
+        const props = () => mockReactFlowProps.current as Record<string, (...args: unknown[]) => void>;
+        const node = { id: "node-1", position: { x: 0, y: 0 }, data: {} };
+
+        // The pan's idle timer runs out during the drag and must not clear the drag's class
+        act(() => props().onMoveStart());
+        act(() => props().onMoveEnd());
+        act(() => props().onNodeDragStart({}, node));
+        act(() => {
+          vi.advanceTimersByTime(200);
+        });
+        expect(document.documentElement).toHaveClass("canvas-interacting");
+        act(() => props().onNodeDragStop({}, node));
+        expect(document.documentElement).not.toHaveClass("canvas-interacting");
+
+        // A drag that ends inside the pan's window leaves the next pan able to switch the classes back on
+        act(() => props().onMoveStart());
+        act(() => props().onMoveEnd());
+        act(() => props().onNodeDragStart({}, node));
+        act(() => props().onNodeDragStop({}, node));
+        expect(document.documentElement).not.toHaveClass("canvas-interacting");
+        act(() => props().onMoveStart());
+        expect(document.documentElement).toHaveClass("canvas-interacting");
+        act(() => {
+          vi.advanceTimersByTime(200);
+        });
+        expect(document.documentElement).not.toHaveClass("canvas-interacting");
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("should render MultiSelectToolbar component", () => {
