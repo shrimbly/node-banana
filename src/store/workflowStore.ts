@@ -54,6 +54,15 @@ import {
   getEdgeDefaults,
 } from "./utils/localStorage";
 import { normalizeEdgeAppearance } from "@/lib/edges/appearance";
+import {
+  captureWorkflowTabSnapshot,
+  createTabId,
+  emptyWorkflowTabSnapshot,
+  isWorkflowTabPristine,
+  tabToActivateAfterClose,
+  type WorkflowTab,
+  type WorkflowTabSnapshot,
+} from "./utils/workflowTabs";
 import { shareHandleAt, sharedEnd, bundleIdAt, type BundleEnd, MIN_BUNDLE_REACH, MAX_BUNDLE_REACH } from "@/lib/edges/bundles";
 import {
   createDefaultNodeData,
@@ -259,7 +268,7 @@ interface ClipboardData {
   edges: WorkflowEdge[];
 }
 
-interface WorkflowStore {
+export interface WorkflowStore {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   edgeStyle: EdgeStyle;
@@ -381,6 +390,25 @@ interface WorkflowStore {
   loadWorkflow: (workflow: WorkflowFile, workflowPath?: string, options?: { preserveSnapshot?: boolean }) => Promise<void>;
   clearWorkflow: () => void;
 
+  // Workflow tabs: several workflows open, one live in the canvas
+  tabs: WorkflowTab[];
+  activeTabId: string;
+  /** Last known pan/zoom of the live workflow, parked with its tab. */
+  canvasViewport: { x: number; y: number; zoom: number } | null;
+  setCanvasViewport: (viewport: { x: number; y: number; zoom: number }) => void;
+  /** Media saves still writing to disk after a run; they update nodes by id when they land. */
+  pendingMediaSaves: number;
+  /** Why tab changes are refused right now, or null when they are allowed. */
+  tabsBusyReason: () => string | null;
+  /** Park the live workflow and open an empty tab. Returns the new tab id, or null while a run or save is in flight. */
+  newTab: () => string | null;
+  /** Park the live workflow and bring `tabId` into the canvas. False when nothing changed. */
+  switchTab: (tabId: string) => boolean;
+  /** Close a tab. Closing the only tab leaves an empty one. False when nothing changed. */
+  closeTab: (tabId: string) => boolean;
+  /** Load a workflow into a new tab, or into the current one when it is untouched. */
+  openWorkflowInNewTab: (workflow: WorkflowFile, workflowPath?: string) => Promise<void>;
+
   // Helpers
   getNodeById: (id: string) => WorkflowNode | undefined;
   getConnectedInputs: (nodeId: string) => ConnectedInputs;
@@ -500,6 +528,17 @@ interface WorkflowStore {
 
 let nodeIdCounter = 0;
 let groupIdCounter = 0;
+
+/** Keep generated ids clear of the ids already present in a graph. */
+function syncIdCounters(nodes: WorkflowNode[], groups: Record<string, NodeGroup> | undefined): void {
+  const maxSuffix = (ids: string[]) =>
+    ids.reduce((max, id) => {
+      const match = id.match(/-(\d+)$/);
+      return match ? Math.max(max, parseInt(match[1], 10)) : max;
+    }, 0);
+  nodeIdCounter = maxSuffix(nodes.map((node) => node.id));
+  groupIdCounter = maxSuffix(Object.keys(groups || {}));
+}
 let autoSaveIntervalId: ReturnType<typeof setInterval> | null = null;
 
 // Undo/redo state (module-level, not in Zustand to avoid serialization)
@@ -684,6 +723,43 @@ function revokeNodeBlobUrls(nodes: WorkflowNode[]): void {
   }
 }
 
+/**
+ * Make `snapshot` the live workflow. Mirrors what loadWorkflow does around a
+ * graph swap (abort a run, reset id counters, drop stub UI state, clear undo),
+ * without touching disk: a parked tab's media stays as it was in memory.
+ */
+function applyTabSnapshot(
+  set: (partial: Partial<WorkflowStore>) => void,
+  get: () => WorkflowStore,
+  snapshot: WorkflowTabSnapshot
+): void {
+  const inflight = get()._abortController;
+  if (inflight) inflight.abort("workflow-switched");
+  syncIdCounters(snapshot.nodes, snapshot.groups);
+  set({
+    ...snapshot,
+    hoveredHandle: null,
+    expandedStubGroup: null,
+    stubGroupWidths: {},
+    isRunning: false,
+    currentNodeIds: [],
+    _abortController: null,
+    workflowLoadCount: get().workflowLoadCount + 1,
+    showQuickstart: false,
+  });
+  // Undo history belongs to the outgoing graph; a switch starts fresh
+  pendingDataSnapshot = null;
+  if (dataChangeTimer) {
+    clearTimeout(dataChangeTimer);
+    dataChangeTimer = null;
+  }
+  undoManager.clear();
+  syncUndoFlags(set);
+  get().recomputeDimmedNodes();
+}
+
+const initialTabId = createTabId();
+
 const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   nodes: [],
   edges: [],
@@ -730,6 +806,20 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   hasUnsavedChanges: false,
   autoSaveEnabled: true,
   isSaving: false,
+
+  // Workflow tabs initial state: one live tab
+  tabs: [{ id: initialTabId, snapshot: null }],
+  activeTabId: initialTabId,
+  canvasViewport: null,
+  setCanvasViewport: (viewport) => set({ canvasViewport: viewport }),
+  pendingMediaSaves: 0,
+  tabsBusyReason: () => {
+    const { isRunning, isSaving, pendingMediaSaves } = get();
+    if (isRunning) return "Wait for the run to finish";
+    if (isSaving) return "Wait for the save to finish";
+    if (pendingMediaSaves > 0) return "Wait for the media to finish saving";
+    return null;
+  },
   useExternalImageStorage: true,  // Default: store images as separate files
   imageRefBasePath: null,  // Directory from which current imageRefs are valid
 
@@ -1804,7 +1894,11 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     saveDirectoryPath: get().saveDirectoryPath,
     trackSaveGeneration: (key: string, promise: Promise<void>) => {
       pendingImageSyncs.set(key, promise);
-      promise.finally(() => pendingImageSyncs.delete(key));
+      set({ pendingMediaSaves: pendingImageSyncs.size });
+      promise.finally(() => {
+        pendingImageSyncs.delete(key);
+        set({ pendingMediaSaves: pendingImageSyncs.size });
+      });
     },
     appendOutputGalleryImage: (targetId: string, image: string) => {
       set((state) => ({
@@ -2766,25 +2860,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     if (inflight) inflight.abort("workflow-replaced");
     set({ isRunning: false, pausedAtNodeId: null, currentNodeIds: [], _abortController: null });
 
-    // Update nodeIdCounter to avoid ID collisions
-    const maxNodeId = workflow.nodes.reduce((max, node) => {
-      const match = node.id.match(/-(\d+)$/);
-      if (match) {
-        return Math.max(max, parseInt(match[1], 10));
-      }
-      return max;
-    }, 0);
-    nodeIdCounter = maxNodeId;
-
-    // Update groupIdCounter to avoid ID collisions
-    const maxGroupId = Object.keys(workflow.groups || {}).reduce((max, id) => {
-      const match = id.match(/-(\d+)$/);
-      if (match) {
-        return Math.max(max, parseInt(match[1], 10));
-      }
-      return max;
-    }, 0);
-    groupIdCounter = maxGroupId;
+    // Keep generated ids clear of the loaded graph's ids
+    syncIdCounters(workflow.nodes, workflow.groups);
 
     // Migrate legacy nanoBanana nodes: derive selectedModel from model field if missing
     workflow.nodes = workflow.nodes.map((node) => {
@@ -2930,6 +3007,80 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     // Recompute dimming after loading workflow
     get().recomputeDimmedNodes();
+  },
+
+  newTab: () => {
+    if (get().tabsBusyReason()) return null;
+    const { tabs, activeTabId, edgeStyle, edgeAppearance, useExternalImageStorage } = get();
+    const parked = captureWorkflowTabSnapshot(get());
+    const id = createTabId();
+    set({
+      tabs: [
+        ...tabs.map((tab) => (tab.id === activeTabId ? { ...tab, snapshot: parked } : tab)),
+        { id, snapshot: null },
+      ],
+      activeTabId: id,
+    });
+    applyTabSnapshot(set, get, emptyWorkflowTabSnapshot({ edgeStyle, edgeAppearance, useExternalImageStorage }));
+    return id;
+  },
+
+  switchTab: (tabId: string) => {
+    const { tabs, activeTabId } = get();
+    const target = tabs.find((tab) => tab.id === tabId);
+    if (!target || tabId === activeTabId || !target.snapshot) return false;
+    if (get().tabsBusyReason()) return false;
+    const parked = captureWorkflowTabSnapshot(get());
+    set({
+      tabs: tabs.map((tab) =>
+        tab.id === activeTabId ? { ...tab, snapshot: parked } : tab.id === tabId ? { ...tab, snapshot: null } : tab
+      ),
+      activeTabId: tabId,
+    });
+    applyTabSnapshot(set, get, target.snapshot);
+    return true;
+  },
+
+  closeTab: (tabId: string) => {
+    const { tabs, activeTabId, edgeStyle, edgeAppearance, useExternalImageStorage } = get();
+    const closing = tabs.find((tab) => tab.id === tabId);
+    if (!closing) return false;
+    if (get().tabsBusyReason()) return false;
+
+    const empty = () => emptyWorkflowTabSnapshot({ edgeStyle, edgeAppearance, useExternalImageStorage });
+
+    if (tabs.length === 1) {
+      // The last tab never goes away; it just becomes a fresh one
+      revokeNodeBlobUrls(get().nodes);
+      const id = createTabId();
+      set({ tabs: [{ id, snapshot: null }], activeTabId: id });
+      applyTabSnapshot(set, get, empty());
+      return true;
+    }
+
+    if (tabId !== activeTabId) {
+      // A parked tab: drop it, and the media object URLs only it referenced
+      if (closing.snapshot) revokeNodeBlobUrls(closing.snapshot.nodes);
+      set({ tabs: tabs.filter((tab) => tab.id !== tabId) });
+      return true;
+    }
+
+    const nextId = tabToActivateAfterClose(tabs, tabId);
+    const next = tabs.find((tab) => tab.id === nextId);
+    if (!nextId || !next) return false;
+    // The live graph is being discarded, so its media object URLs go with it
+    revokeNodeBlobUrls(get().nodes);
+    const remaining = tabs.filter((tab) => tab.id !== tabId).map((tab) => (tab.id === nextId ? { ...tab, snapshot: null } : tab));
+    set({ tabs: remaining, activeTabId: nextId });
+    applyTabSnapshot(set, get, next.snapshot ?? empty());
+    return true;
+  },
+
+  openWorkflowInNewTab: async (workflow: WorkflowFile, workflowPath?: string) => {
+    if (!isWorkflowTabPristine(get())) {
+      if (get().newTab() === null) return;
+    }
+    await get().loadWorkflow(workflow, workflowPath);
   },
 
   clearWorkflow: () => {

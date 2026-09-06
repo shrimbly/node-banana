@@ -271,15 +271,17 @@ describe("WorkflowCanvas", () => {
       expect(document.querySelector(".react-flow__background")).toBeInTheDocument();
     });
 
-    it("should render Controls component", () => {
+    it("mounts the navigator with its canvas controls", () => {
       render(
         <TestWrapper>
           <WorkflowCanvas />
         </TestWrapper>
       );
 
-      // Controls panel should be rendered
-      expect(document.querySelector(".react-flow__controls")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Zoom in" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Zoom out" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Fit view" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /lock canvas/i })).toBeInTheDocument();
     });
 
     it("should render MiniMap component", () => {
@@ -309,7 +311,7 @@ describe("WorkflowCanvas", () => {
       expect(document.querySelector(".react-flow__minimap")).toBeInTheDocument();
     });
 
-    it("uses shared explicit geometry for the minimap and close toggle", () => {
+    it("keeps the minimap inside the navigator card at its explicit size", () => {
       render(
         <TestWrapper>
           <WorkflowCanvas />
@@ -317,11 +319,12 @@ describe("WorkflowCanvas", () => {
       );
 
       const minimap = document.querySelector(".react-flow__minimap");
-      const closeButton = screen.getByRole("button", { name: "Hide minimap" });
+      const navigator = screen.getByTestId("canvas-navigator");
 
-      expect(minimap).toHaveStyle({ width: "200px", height: "150px", margin: "15px" });
-      expect(minimap?.parentElement).toHaveClass("react-flow");
-      expect(closeButton).toHaveStyle({ right: "23px", bottom: "129px" });
+      // Static, so it flows inside the card instead of pinning itself to the pane corner.
+      expect(minimap).toHaveStyle({ width: "266px", height: "150px", margin: "0px", position: "static" });
+      expect(navigator).toHaveStyle({ margin: "16px" });
+      expect(navigator).toContainElement(screen.getByRole("button", { name: "Hide minimap" }));
     });
 
     it("keeps edges visible and holds native pan state on this canvas until the moves stop", () => {

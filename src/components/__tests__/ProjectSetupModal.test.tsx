@@ -149,8 +149,8 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      expect(screen.getByText("Project")).toBeInTheDocument();
-      expect(screen.getByText("Providers")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Project" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Providers" })).toBeInTheDocument();
     });
 
     it("should start on Project tab in new mode", () => {
@@ -177,7 +177,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("Providers"));
+      fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
       // Should show provider names
       expect(screen.getByText("Google Gemini")).toBeInTheDocument();
@@ -897,8 +897,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      const modalDiv = container.querySelector(".bg-neutral-800");
-      fireEvent.keyDown(modalDiv!, { key: "Escape" });
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
 
       expect(onClose).toHaveBeenCalled();
     });
@@ -939,8 +938,7 @@ describe("ProjectSetupModal", () => {
         target: { value: "/path/to/project" },
       });
 
-      const modalDiv = container.querySelector(".bg-neutral-800");
-      fireEvent.keyDown(modalDiv!, { key: "Enter" });
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Enter" });
 
       await waitFor(() => {
         expect(onSave).toHaveBeenCalled();
@@ -961,7 +959,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("Providers"));
+      fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
       await waitFor(() => {
         expect(screen.getByText("Google Gemini")).toBeInTheDocument();
@@ -981,7 +979,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("Providers"));
+      fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
       await waitFor(() => {
         // Check for placeholder texts
@@ -1011,7 +1009,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("Providers"));
+      fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
       await waitFor(() => {
         expect(screen.getByText("Configured via .env")).toBeInTheDocument();
@@ -1038,7 +1036,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("Providers"));
+      fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
       await waitFor(() => {
         expect(screen.getByText("Override")).toBeInTheDocument();
@@ -1055,7 +1053,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("Providers"));
+      fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
       await waitFor(() => {
         const showButtons = screen.getAllByText("Show");
@@ -1082,7 +1080,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("Providers"));
+      fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
       await waitFor(() => {
         expect(screen.getByText("Google Gemini")).toBeInTheDocument();
@@ -1106,11 +1104,11 @@ describe("Noodles tab", () => {
     );
     mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     render(<ProjectSetupModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} mode="settings" />);
-    fireEvent.click(screen.getByText("Noodles"));
+    fireEvent.click(screen.getByRole("button", { name: "Noodles" }));
     expect(screen.getByText("Connections")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Curved" })).toHaveAttribute("aria-checked", "true");
     // The Canvas tab no longer carries them
-    fireEvent.click(screen.getByText("Canvas"));
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
     expect(screen.queryByText("Connections")).toBeNull();
   });
 });

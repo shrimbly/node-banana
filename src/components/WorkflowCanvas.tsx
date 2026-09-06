@@ -4,8 +4,6 @@ import { memo, useCallback, useRef, useState, useEffect, DragEvent, useMemo, typ
 import {
   ReactFlow,
   Background,
-  Controls,
-  MiniMap,
   NodeTypes,
   EdgeTypes,
   Connection,
@@ -61,6 +59,7 @@ import { HandleMenu, type HandleMenuTarget } from "./HandleMenu";
 import { NodeSearchMenu } from "./NodeSearchMenu";
 import { MultiSelectToolbar } from "./MultiSelectToolbar";
 import { GlobalImageHistory } from "./GlobalImageHistory";
+import { CanvasMinimap } from "./CanvasMinimap";
 import { GroupBackgroundsPortal, GroupControlsOverlay } from "./GroupsOverlay";
 import { NodeType, NanoBananaNodeData, HandleType, PromptNodeData, LLMGenerateNodeData, PromptConstructorNodeData, AvailableVariable, WorkflowNodeData } from "@/types";
 import { isComfyWorkflow, isNodeBananaWorkflow } from "@/lib/comfy/detect";
@@ -183,23 +182,6 @@ const edgeTypes: EdgeTypes = {
 const OVERVIEW_EDGES: Edge[] = [];
 /** Pointer travel (px) under which a handle press counts as a click, not a drag. */
 const HANDLE_CLICK_SLOP = 4;
-const MINIMAP_GEOMETRY = {
-  width: 200,
-  height: 150,
-  margin: 15,
-  controlInset: 8,
-  controlSize: 28,
-} as const;
-
-const MINIMAP_CLOSE_POSITION = {
-  right: MINIMAP_GEOMETRY.margin + MINIMAP_GEOMETRY.controlInset,
-  bottom:
-    MINIMAP_GEOMETRY.margin +
-    MINIMAP_GEOMETRY.height -
-    MINIMAP_GEOMETRY.controlInset -
-    MINIMAP_GEOMETRY.controlSize,
-} as const;
-
 /** Height is content-derived; a stored one must not reach React Flow's wrapper. */
 function stripNodeHeight<T extends Node>(node: T): T {
   const styleHeight = node.style && "height" in node.style;
@@ -209,40 +191,6 @@ function stripNodeHeight<T extends Node>(node: T): T {
   const { height: _styleHeight, ...style } = (node.style ?? {}) as Record<string, unknown>;
   void _styleHeight;
   return { ...rest, style } as unknown as T;
-}
-
-function getMiniMapNodeColor(node: Node): string {
-  switch (node.type) {
-    case "imageInput": return "#3b82f6";
-    case "audioInput": return "#a78bfa";
-    case "videoInput": return "#c084fc";
-    case "annotation": return "#8b5cf6";
-    case "prompt": return "#f97316";
-    case "array": return "#a3e635";
-    case "promptConstructor": return "#f472b6";
-    case "nanoBanana": return "#22c55e";
-    case "generateVideo": return "#9333ea";
-    case "generate3d": return "#fb923c";
-    case "generateAudio": return "#d946ef";
-    case "llmGenerate": return "#06b6d4";
-    case "splitGrid": return "#f59e0b";
-    case "output": return "#ef4444";
-    case "outputGallery": return "#ec4899";
-    case "imageCompare": return "#14b8a6";
-    case "videoStitch": return "#f97316";
-    case "easeCurve": return "#bef264";
-    case "videoTrim": return "#60a5fa";
-    case "videoFrameGrab": return "#38bdf8";
-    case "removeBackground": return "#2dd4bf";
-    case "imageResize": return "#0d9488";
-    case "gifEncoder": return "#f472b6";
-    case "router": return "#6b7280";
-    case "switch": return "#8b5cf6";
-    case "conditionalSwitch": return "#06b6d4";
-    case "glbViewer": return "#0ea5e9";
-    case "comfyApp": return "#7dd3fc";
-    default: return "#94a3b8";
-  }
 }
 
 // Connection validation rules
@@ -481,7 +429,6 @@ export function WorkflowCanvas() {
   >(null);
   const [isSplitting, setIsSplitting] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [isMinimapVisible, setIsMinimapVisible] = useState(true);
   const [isBuildingWorkflow, setIsBuildingWorkflow] = useState(false);
   const [showNewProjectSetup, setShowNewProjectSetup] = useState(false);
   const [expandingNode, setExpandingNode] = useState<{ id: string; type: string } | null>(null);
@@ -2480,7 +2427,7 @@ export function WorkflowCanvas() {
       {showQuickstart && (
         <WelcomeModal
           onWorkflowGenerated={async (workflow, directoryPath) => {
-            await loadWorkflow(workflow, directoryPath);
+            await useWorkflowStore.getState().openWorkflowInNewTab(workflow, directoryPath);
             setShowQuickstart(false);
           }}
           onClose={() => setShowQuickstart(false)}
@@ -2590,51 +2537,7 @@ export function WorkflowCanvas() {
           size={1}
           className={tutorialActive && lockedFeatures ? "opacity-30 pointer-events-none" : ""}
         />
-        <Controls className={`bg-neutral-800 border border-neutral-700 rounded-lg shadow-lg [&>button]:bg-neutral-800 [&>button]:border-neutral-700 [&>button]:fill-neutral-300 [&>button:hover]:bg-neutral-700 [&>button:hover]:fill-neutral-100 ${tutorialActive && lockedFeatures ? "opacity-30 pointer-events-none" : ""}`} />
-        {isMinimapVisible ? (
-          <>
-            <MiniMap
-              className={`bg-neutral-800 border border-neutral-700 rounded-lg shadow-lg ${tutorialActive && lockedFeatures ? "opacity-30 pointer-events-none" : ""}`}
-              style={{
-                width: MINIMAP_GEOMETRY.width,
-                height: MINIMAP_GEOMETRY.height,
-                margin: MINIMAP_GEOMETRY.margin,
-              }}
-              maskColor="rgba(0, 0, 0, 0.6)"
-              pannable
-              zoomable
-              nodeColor={getMiniMapNodeColor}
-            />
-            <button
-              type="button"
-              aria-label="Hide minimap"
-              title="Hide minimap"
-              disabled={tutorialActive && lockedFeatures}
-              onClick={() => setIsMinimapVisible(false)}
-              style={MINIMAP_CLOSE_POSITION}
-              className="nodrag nopan nowheel absolute z-[6] flex h-7 w-7 items-center justify-center rounded-md border border-neutral-600/80 bg-neutral-950/85 text-neutral-400 shadow-sm backdrop-blur-sm transition-colors hover:border-neutral-500 hover:bg-neutral-800 hover:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed"
-            >
-              <svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none">
-                <path d="M6 6l8 8M14 6l-8 8" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
-              </svg>
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            aria-label="Show minimap"
-            title="Show minimap"
-            disabled={tutorialActive && lockedFeatures}
-            onClick={() => setIsMinimapVisible(true)}
-            style={{ right: MINIMAP_GEOMETRY.margin, bottom: MINIMAP_GEOMETRY.margin }}
-            className={`nodrag nopan nowheel absolute z-[5] flex h-10 w-10 items-center justify-center rounded-lg border border-neutral-700 bg-neutral-800 text-neutral-400 shadow-lg transition-colors hover:border-neutral-600 hover:bg-neutral-700 hover:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed ${tutorialActive && lockedFeatures ? "opacity-30 pointer-events-none" : ""}`}
-          >
-            <svg aria-hidden="true" viewBox="0 0 20 20" className="h-[18px] w-[18px]" fill="none">
-              <rect x="2.5" y="3.5" width="15" height="13" rx="2" stroke="currentColor" strokeWidth="1.5" />
-              <path d="M5.5 7h2v2h-2zM9 7h2v2H9zM12.5 7h2v2h-2zM5.5 10.5h2v2h-2zM9 10.5h5.5v2H9z" fill="currentColor" />
-            </svg>
-          </button>
-        )}
+        <CanvasMinimap disabled={tutorialActive && lockedFeatures} />
         <FloatingNodeHeaders
           nodes={allNodes}
           getNodeTitle={getNodeTitle}

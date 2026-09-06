@@ -2,6 +2,7 @@
 
 import { useCallback, useState, useMemo, useEffect, useRef } from "react";
 import { NodeProps, Node } from "@xyflow/react";
+import { Dialog } from "@/components/ui/Dialog";
 import { NodeShell } from "./NodeShell";
 import { useCommentNavigation } from "@/hooks/useCommentNavigation";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -176,11 +177,7 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
 
       {/* Lightbox Modal (skip for audio) */}
       {showLightbox && contentSrc && !isAudio && (
-        <div
-          className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-8"
-          onClick={() => setShowLightbox(false)}
-        >
-          <div className="relative max-w-full max-h-full">
+        <Dialog open onClose={() => setShowLightbox(false)} variant="lightbox" portal label="Output full size">
             {isVideo ? (
               <video
                 src={videoBlobUrl ?? undefined}
@@ -196,6 +193,8 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
                 src={contentSrc}
                 alt="Output full size"
                 className="max-w-full max-h-[90vh] object-contain rounded"
+                // A click on the image closes, as it always has; the video keeps its controls
+                onClick={() => setShowLightbox(false)}
               />
             )}
             <button
@@ -206,8 +205,7 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-          </div>
-        </div>
+        </Dialog>
       )}
     </>
   );

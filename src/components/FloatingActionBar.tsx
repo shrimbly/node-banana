@@ -1,6 +1,8 @@
 "use client";
 
-import { useRef, useState, useEffect, useMemo, useCallback } from "react";
+import { MenuItem, MenuSectionLabel, MenuSurface } from "@/components/ui/Menu";
+import { useRef, useState, useEffect, useMemo, useCallback, type ReactNode } from "react";
+import { ChromeIconButton, type ChromeIconButtonProps } from "./ChromeIconButton";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { useShallow } from "zustand/shallow";
 import { NodeType } from "@/types";
@@ -8,6 +10,11 @@ import { useReactFlow } from "@xyflow/react";
 import { ModelSearchDialog } from "./modals/ModelSearchDialog";
 import { useFTUXStore, TutorialStep } from "@/store/ftuxStore";
 import type { EdgeStyle } from "@/types";
+import {
+  CHROME_DIVIDER,
+  CHROME_MENU_HINT,
+  CHROME_SURFACE,
+} from "./chromeStyles";
 
 /** The action-bar button cycles curved → angular → straight → curved. */
 const NEXT_EDGE_STYLE: Record<EdgeStyle, EdgeStyle> = { curved: "angular", angular: "straight", straight: "curved" };
@@ -84,237 +91,288 @@ function getPaneCenter() {
   return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 }
 
+// ---- Icons: 16px, 1.5 stroke, one style throughout ------------------------------
+
+const ICON = "h-5 w-5";
+const iconProps = { fill: "none", stroke: "currentColor", strokeWidth: 1.5, strokeLinecap: "round", strokeLinejoin: "round", viewBox: "0 0 24 24", "aria-hidden": true } as const;
+
+const ImageIcon = () => (
+  <svg className={ICON} {...iconProps}>
+    <rect x="3" y="5" width="18" height="14" rx="2.5" />
+    <path d="M3 16l5-5 4 4 3-3 6 6" />
+    <circle cx="16" cy="9" r="1.25" fill="currentColor" stroke="none" />
+  </svg>
+);
+const VideoIcon = () => (
+  <svg className={ICON} {...iconProps}>
+    <rect x="3" y="7" width="13" height="10" rx="2.5" />
+    <path d="M16 11l5-3v8l-5-3" />
+  </svg>
+);
+const PromptIcon = () => (
+  <svg className={ICON} {...iconProps}>
+    <path d="M4 6h16M4 12h10M4 18h7" />
+  </svg>
+);
+const SparkleIcon = () => (
+  <svg className={ICON} {...iconProps}>
+    <path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
+    <path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z" />
+  </svg>
+);
+const OutputIcon = () => (
+  <svg className={ICON} {...iconProps}>
+    <path d="M14 4h6v6M20 4l-8 8M11 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-5" />
+  </svg>
+);
+const GridIcon = () => (
+  <svg className={ICON} {...iconProps}>
+    <rect x="4" y="4" width="6" height="6" rx="1.5" />
+    <rect x="14" y="4" width="6" height="6" rx="1.5" />
+    <rect x="4" y="14" width="6" height="6" rx="1.5" />
+    <rect x="14" y="14" width="6" height="6" rx="1.5" />
+  </svg>
+);
+const CubeIcon = () => (
+  <svg className={ICON} {...iconProps}>
+    <path d="M21 7.5l-9-5.25L3 7.5m18 0l-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
+  </svg>
+);
+const LlmIcon = () => (
+  <svg className={ICON} {...iconProps}>
+    <path d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+  </svg>
+);
+const CaretUpIcon = ({ open = false }: { open?: boolean }) => (
+  <svg className={`h-3 w-3 transition-transform duration-[120ms] ${open ? "rotate-180" : ""}`} {...iconProps} strokeWidth={2.25}>
+    <path d="M5 15l7-7 7 7" />
+  </svg>
+);
+const PlayIcon = () => (
+  <svg className="h-[18px] w-[18px]" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+    <path d="M8 5v14l11-7z" />
+  </svg>
+);
+const SpinnerIcon = () => (
+  <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="3" opacity="0.25" />
+    <path d="M12 3a9 9 0 019 9" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+  </svg>
+);
+
+// ---- Primitives -------------------------------------------------------------------
+
+/** The bar runs one size up from the navigator. */
+function IconButton(props: ChromeIconButtonProps) {
+  return <ChromeIconButton size="lg" {...props} />;
+}
+
+function Divider() {
+  return <div className={CHROME_DIVIDER} />;
+}
+
+/** Closes a popover on outside mousedown while it is open. */
+function useClickOutside(ref: React.RefObject<HTMLElement | null>, isOpen: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) onClose();
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [ref, isOpen, onClose]);
+}
+
+/** Adds a node at the pane centre (jittered when `scatter`), or via drag onto the canvas. */
+function useAddNode(scatter = false) {
+  const addNode = useWorkflowStore((state) => state.addNode);
+  const { screenToFlowPosition } = useReactFlow();
+
+  const add = useCallback((type: NodeType) => {
+    const center = getPaneCenter();
+    const jitter = () => (scatter ? Math.random() * 100 - 50 : 0);
+    // Nodes are created empty - tutorial will populate after connection
+    addNode(type, screenToFlowPosition({ x: center.x + jitter(), y: center.y + jitter() }));
+  }, [addNode, screenToFlowPosition, scatter]);
+
+  const dragStart = useCallback((event: React.DragEvent, type: NodeType) => {
+    event.dataTransfer.setData("application/node-type", type);
+    event.dataTransfer.effectAllowed = "copy";
+  }, []);
+
+  return { add, dragStart };
+}
+
 interface NodeButtonProps {
   type: NodeType;
   label: string;
+  shortcut?: string;
   dataTutorial?: string;
+  children: ReactNode;
 }
 
-function NodeButton({ type, label, dataTutorial }: NodeButtonProps) {
-  const addNode = useWorkflowStore((state) => state.addNode);
-  const { screenToFlowPosition } = useReactFlow();
-
-  const handleClick = () => {
-    const center = getPaneCenter();
-    const position = screenToFlowPosition({
-      x: center.x,
-      y: center.y,
-    });
-
-    // Nodes are created empty - tutorial will populate after connection
-    addNode(type, position);
-  };
-
-  const handleDragStart = (event: React.DragEvent) => {
-    event.dataTransfer.setData("application/node-type", type);
-    event.dataTransfer.effectAllowed = "copy";
-  };
-
+function NodeButton({ type, label, shortcut, dataTutorial, children }: NodeButtonProps) {
+  const { add, dragStart } = useAddNode();
   return (
-    <button
-      onClick={handleClick}
+    <IconButton
+      label={label}
+      shortcut={shortcut}
+      onClick={() => add(type)}
       draggable
-      onDragStart={handleDragStart}
+      onDragStart={(e) => dragStart(e, type)}
       data-tutorial={dataTutorial}
-      className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors cursor-grab active:cursor-grabbing"
+      className="cursor-grab active:cursor-grabbing"
     >
-      {label}
-    </button>
+      {children}
+    </IconButton>
   );
 }
 
-function GenerateComboButton() {
+const GENERATORS: { type: NodeType; label: string; shortcut?: string; icon: ReactNode }[] = [
+  { type: "nanoBanana", label: "Image", shortcut: "⇧G", icon: <ImageIcon /> },
+  { type: "generateVideo", label: "Video", shortcut: "⇧V", icon: <VideoIcon /> },
+  { type: "generate3d", label: "3D", icon: <CubeIcon /> },
+  { type: "llmGenerate", label: "Text (LLM)", shortcut: "⇧L", icon: <LlmIcon /> },
+];
+
+/** One trigger; the menu lists the generators. Clicking the trigger never adds a node. */
+function GenerateMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const addNode = useWorkflowStore((state) => state.addNode);
-  const { screenToFlowPosition } = useReactFlow();
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isOpen]);
+  const { add, dragStart } = useAddNode(true);
+  const close = useCallback(() => setIsOpen(false), []);
+  useClickOutside(menuRef, isOpen, close);
 
   const handleAddNode = (type: NodeType) => {
-    const center = getPaneCenter();
-    const position = screenToFlowPosition({
-      x: center.x + Math.random() * 100 - 50,
-      y: center.y + Math.random() * 100 - 50,
-    });
-
-    addNode(type, position);
-    setIsOpen(false);
-  };
-
-  const handleDragStart = (event: React.DragEvent, type: NodeType) => {
-    event.dataTransfer.setData("application/node-type", type);
-    event.dataTransfer.effectAllowed = "copy";
+    add(type);
     setIsOpen(false);
   };
 
   return (
-    <div className="relative" ref={menuRef}>
-      <button
+    <div className="relative flex" ref={menuRef}>
+      <IconButton
+        label="Generate"
+        open={isOpen}
+        silent={isOpen}
+        aria-expanded={isOpen}
         onClick={() => setIsOpen(!isOpen)}
-        className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors flex items-center gap-1"
+        className="w-auto gap-0.5 pl-1.5 pr-1"
       >
-        Generate
-        <svg
-          className={`w-3 h-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-        </svg>
-      </button>
+        <SparkleIcon />
+        <CaretUpIcon open={isOpen} />
+      </IconButton>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-2 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-[140px]">
-          <button
-            onClick={() => handleAddNode("nanoBanana")}
-            draggable
-            onDragStart={(e) => handleDragStart(e, "nanoBanana")}
-            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
-            </svg>
-            Image
-          </button>
-          <button
-            onClick={() => handleAddNode("generateVideo")}
-            draggable
-            onDragStart={(e) => handleDragStart(e, "generateVideo")}
-            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
-            </svg>
-            Video
-          </button>
-          <button
-            onClick={() => handleAddNode("generate3d")}
-            draggable
-            onDragStart={(e) => handleDragStart(e, "generate3d")}
-            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9" />
-            </svg>
-            3D
-          </button>
-          <button
-            onClick={() => handleAddNode("llmGenerate")}
-            draggable
-            onDragStart={(e) => handleDragStart(e, "llmGenerate")}
-            className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-            </svg>
-            Text (LLM)
-          </button>
-        </div>
+        <MenuSurface floating={false} role="menu" className="absolute bottom-full left-0 z-20 mb-2 min-w-[168px] py-1">
+          {GENERATORS.map((g) => (
+            <MenuItem
+              key={g.type}
+              role="menuitem"
+              onClick={() => handleAddNode(g.type)}
+              draggable
+              onDragStart={(e) => { dragStart(e, g.type); setIsOpen(false); }}
+              className="cursor-grab active:cursor-grabbing"
+            >
+              <span className="text-neutral-300">{g.icon}</span>
+              {g.label}
+              {g.shortcut && <span className={CHROME_MENU_HINT}>{g.shortcut}</span>}
+            </MenuItem>
+          ))}
+        </MenuSurface>
       )}
     </div>
   );
 }
-
 
 function AllNodesMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const addNode = useWorkflowStore((state) => state.addNode);
-  const { screenToFlowPosition } = useReactFlow();
-
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
-
-    if (isOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [isOpen]);
+  const { add, dragStart } = useAddNode(true);
+  const close = useCallback(() => setIsOpen(false), []);
+  useClickOutside(menuRef, isOpen, close);
 
   const handleAddNode = useCallback((type: NodeType) => {
-    const center = getPaneCenter();
-    const position = screenToFlowPosition({
-      x: center.x + Math.random() * 100 - 50,
-      y: center.y + Math.random() * 100 - 50,
-    });
-
-    addNode(type, position);
+    add(type);
     setIsOpen(false);
-  }, [addNode, screenToFlowPosition]);
-
-  const handleDragStart = useCallback((event: React.DragEvent, type: NodeType) => {
-    event.dataTransfer.setData("application/node-type", type);
-    event.dataTransfer.effectAllowed = "copy";
-    setIsOpen(false);
-  }, []);
+  }, [add]);
 
   return (
-    <div className="relative" ref={menuRef}>
-      <button
+    <div className="relative flex" ref={menuRef}>
+      <IconButton
+        label="All nodes"
+        open={isOpen}
+        silent={isOpen}
+        aria-expanded={isOpen}
         onClick={() => setIsOpen(!isOpen)}
-        className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors flex items-center gap-1"
       >
-        All nodes
-        <svg
-          className={`w-3 h-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-        </svg>
-      </button>
+        <GridIcon />
+      </IconButton>
 
       {isOpen && (
-        <div className="absolute bottom-full left-0 mb-2 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl overflow-hidden min-w-[180px] max-h-[400px] overflow-y-auto">
+        <MenuSurface
+          floating={false}
+          role="menu"
+          className="absolute bottom-full left-0 z-20 mb-2 max-h-[400px] min-w-[188px] overflow-y-auto"
+        >
           {ALL_NODES_CATEGORIES.map((category, catIndex) => (
             <div key={category.label}>
-              <div className={`px-3 py-1 text-[10px] text-neutral-500 uppercase tracking-wide${catIndex > 0 ? " border-t border-neutral-700" : ""}`}>
+              <MenuSectionLabel className={`px-3 py-1${catIndex > 0 ? " border-t border-chrome-border" : ""}`}>
                 {category.label}
-              </div>
+              </MenuSectionLabel>
               {category.nodes.map((node) => (
-                <button
+                <MenuItem
                   key={node.type}
+                  type="button"
+                  role="menuitem"
                   onClick={() => handleAddNode(node.type)}
                   draggable
-                  onDragStart={(e) => handleDragStart(e, node.type)}
-                  className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2 cursor-grab active:cursor-grabbing"
+                  onDragStart={(e) => { dragStart(e, node.type); setIsOpen(false); }}
+                  className="cursor-grab active:cursor-grabbing"
                 >
                   {node.label}
-                </button>
+                </MenuItem>
               ))}
             </div>
           ))}
-        </div>
+        </MenuSurface>
       )}
     </div>
   );
 }
+
+function EdgeStyleIcon({ style }: { style: EdgeStyle }) {
+  if (style === "angular") {
+    return (
+      <svg className={ICON} {...iconProps} strokeWidth={1.75}>
+        <path d="M4 12h4l4-8 4 8h4" />
+      </svg>
+    );
+  }
+  if (style === "straight") {
+    return (
+      <svg className={ICON} {...iconProps} strokeWidth={1.75}>
+        <path d="M4 16L20 8" />
+      </svg>
+    );
+  }
+  return (
+    <svg className={ICON} {...iconProps} strokeWidth={1.75}>
+      <path d="M4 17c0 0 4-10 8-10s8 10 8 10" />
+    </svg>
+  );
+}
+
+const EyeIcon = ({ off = false }: { off?: boolean }) =>
+  off ? (
+    <svg className={ICON} {...iconProps} strokeWidth={1.75}>
+      <path d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 5.1A9.8 9.8 0 0112 5c4.5 0 8.3 2.9 9.6 7a10 10 0 01-2.2 3.6M6.6 6.6A10 10 0 002.4 12c1.3 4.1 5.1 7 9.6 7 1.4 0 2.8-.3 4-.8" />
+    </svg>
+  ) : (
+    <svg className={ICON} {...iconProps} strokeWidth={1.75}>
+      <path d="M2.4 12C3.7 7.9 7.5 5 12 5s8.3 2.9 9.6 7c-1.3 4.1-5.1 7-9.6 7s-8.3-2.9-9.6-7z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
 
 export function FloatingActionBar() {
   const {
@@ -353,15 +411,15 @@ export function FloatingActionBar() {
 
   // FTUX tutorial state (client-side only to avoid SSR hydration issues)
   const [tutorialActive, setTutorialActive] = useState(false);
-  const [lockedFeatures, setLockedFeatures] = useState(false);
   const [currentTutorialStep, setCurrentTutorialStep] = useState(0);
   const [tutorialSteps, setTutorialSteps] = useState<TutorialStep[]>([]);
+  // Run shortcut hint; resolved after mount so the server and client markup agree.
+  const [modKey, setModKey] = useState("Ctrl");
 
   useEffect(() => {
     // Subscribe to FTUX store on client-side only
     const unsubscribe = useFTUXStore.subscribe((state) => {
       setTutorialActive(state.tutorialActive);
-      setLockedFeatures(state.lockedFeatures);
       setCurrentTutorialStep(state.currentTutorialStep);
       setTutorialSteps(state.tutorialSteps);
     });
@@ -369,9 +427,10 @@ export function FloatingActionBar() {
     // Initialize with current state
     const currentState = useFTUXStore.getState();
     setTutorialActive(currentState.tutorialActive);
-    setLockedFeatures(currentState.lockedFeatures);
     setCurrentTutorialStep(currentState.currentTutorialStep);
     setTutorialSteps(currentState.tutorialSteps);
+
+    if (/Mac|iPod|iPhone|iPad/.test(navigator.userAgent)) setModKey("⌘");
 
     return unsubscribe;
   }, []);
@@ -409,24 +468,10 @@ export function FloatingActionBar() {
   }, [tutorialActive, currentTutorialStep, tutorialSteps]);
 
   // Close run menu when clicking outside (but not during tutorial step)
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (runMenuRef.current && !runMenuRef.current.contains(event.target as Node)) {
-        // Don't close menu during the run options tutorial step
-        if (!isRunOptionsTutorialStep) {
-          setRunMenuOpen(false);
-        }
-      }
-    };
-
-    if (runMenuOpen) {
-      document.addEventListener("mousedown", handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener("mousedown", handleClickOutside);
-    };
-  }, [runMenuOpen, isRunOptionsTutorialStep]);
+  const closeRunMenu = useCallback(() => {
+    if (!isRunOptionsTutorialStep) setRunMenuOpen(false);
+  }, [isRunOptionsTutorialStep]);
+  useClickOutside(runMenuRef, runMenuOpen, closeRunMenu);
 
   // Open run menu when tutorial step is "explain-run-options"
   useEffect(() => {
@@ -495,213 +540,149 @@ export function FloatingActionBar() {
     }
   };
 
+  const hiddenEdgesLabel = hiddenEdgeCount > 0
+    ? `Show ${hiddenEdgeCount} hidden connection${hiddenEdgeCount === 1 ? "" : "s"}`
+    : "Hide all connections";
+  const edgeStyleLabel = `Switch to ${NEXT_EDGE_STYLE[edgeStyle]} connectors`;
+  const runTitle = !valid ? errors.join("\n") : isRunning ? getRunningLabel() : "Run";
+
   return (
-    <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50">
-      <div className="flex items-center gap-0.5 bg-neutral-800/95 rounded-lg shadow-lg border border-neutral-700/80 px-1.5 py-1">
-        <NodeButton type="imageInput" label="Image" dataTutorial="image-button" />
-        <NodeButton type="videoInput" label="Video" />
-        <NodeButton type="prompt" label="Prompt" dataTutorial="prompt-button" />
-        <GenerateComboButton />
-        <NodeButton type="output" label="Output" dataTutorial="output-button" />
+    <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
+      {/* w-max: a fixed element anchored at left-1/2 otherwise shrinks to half the viewport and wraps. */}
+      <div className={`${CHROME_SURFACE} flex h-12 w-max items-center gap-0.5 rounded-xl px-1.5`}>
+        <NodeButton type="imageInput" label="Image" shortcut="⇧I" dataTutorial="image-button"><ImageIcon /></NodeButton>
+        <NodeButton type="videoInput" label="Video" shortcut="⇧Y"><VideoIcon /></NodeButton>
+        <NodeButton type="prompt" label="Prompt" shortcut="⇧P" dataTutorial="prompt-button"><PromptIcon /></NodeButton>
+        <GenerateMenu />
+        <NodeButton type="output" label="Output" dataTutorial="output-button"><OutputIcon /></NodeButton>
+
+        <Divider />
+
         <AllNodesMenu />
+        <IconButton label="All models" onClick={() => setModelSearchOpen(true)}>
+          <CubeIcon />
+        </IconButton>
 
-        {/* All models button */}
-        <div className="w-px h-5 bg-neutral-600 mx-1.5" />
-        <button
-          onClick={() => setModelSearchOpen(true)}
-          title="Browse models"
-          className="px-2.5 py-1.5 text-[11px] font-medium text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors"
-        >
-          All models
-        </button>
+        <Divider />
 
-        <div className="w-px h-5 bg-neutral-600 mx-1.5" />
-
-        <button
-          onClick={toggleEdgeStyle}
-          title={`Switch to ${NEXT_EDGE_STYLE[edgeStyle]} connectors`}
-          className="p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors"
-        >
-          {edgeStyle === "angular" ? (
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 12h4l4-8 4 8h4" />
-            </svg>
-          ) : edgeStyle === "straight" ? (
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16L20 8" />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M4 12c0 0 4-8 8-8s8 8 8 8" />
-            </svg>
-          )}
-        </button>
-
-        <button
-          onClick={toggleHiddenEdges}
+        <IconButton label={edgeStyleLabel} onClick={toggleEdgeStyle}>
+          <EdgeStyleIcon style={edgeStyle} />
+        </IconButton>
+        <IconButton
+          label={hiddenEdgesLabel}
+          open={hiddenEdgeCount > 0}
           disabled={totalEdgeCount === 0}
-          title={hiddenEdgeCount > 0 ? `Show ${hiddenEdgeCount} hidden connection${hiddenEdgeCount === 1 ? "" : "s"}` : "Hide all connections"}
-          className="relative p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-        >
-          {hiddenEdgeCount > 0 ? (
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 5.1A9.8 9.8 0 0112 5c4.5 0 8.3 2.9 9.6 7a10 10 0 01-2.2 3.6M6.6 6.6A10 10 0 002.4 12c1.3 4.1 5.1 7 9.6 7 1.4 0 2.8-.3 4-.8" />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.4 12C3.7 7.9 7.5 5 12 5s8.3 2.9 9.6 7c-1.3 4.1-5.1 7-9.6 7s-8.3-2.9-9.6-7z" />
-              <circle cx="12" cy="12" r="3" />
-            </svg>
-          )}
-          {hiddenEdgeCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-3.5 px-1 rounded-full bg-neutral-600 text-[9px] leading-[14px] font-semibold text-neutral-100 text-center">
+          onClick={toggleHiddenEdges}
+          badge={hiddenEdgeCount > 0 && (
+            <span className="pointer-events-none absolute -right-0.5 -top-0.5 min-w-[14px] rounded-full bg-neutral-200 px-1 text-center text-[9px] font-semibold leading-[14px] text-neutral-900 ring-2 ring-neutral-800">
               {hiddenEdgeCount}
             </span>
           )}
-        </button>
+        >
+          <EyeIcon off={hiddenEdgeCount > 0} />
+        </IconButton>
 
-        <div className="w-px h-5 bg-neutral-600 mx-1.5" />
+        <Divider />
 
-        <div className="relative flex items-center" ref={runMenuRef}>
-          <button
-            onClick={handleRunClick}
-            disabled={!valid && !isRunning}
-            title={!valid ? errors.join("\n") : isRunning ? "Stop" : "Run"}
-            data-tutorial="floating-run-button"
-            className={`flex items-center gap-1.5 px-3 py-1.5 text-[11px] font-medium transition-colors ${
-              isRunning
-                ? "bg-white text-neutral-900 hover:bg-neutral-200 rounded"
-                : valid
-                ? "bg-white text-neutral-900 hover:bg-neutral-200 rounded-l"
-                : "bg-neutral-700 text-neutral-500 cursor-not-allowed rounded"
+        <div className="relative ml-0.5 flex items-center" ref={runMenuRef}>
+          <div
+            className={`flex h-9 items-stretch overflow-hidden rounded-lg squircle transition-[background-color,box-shadow,transform] duration-[120ms] ease-out ${
+              !valid && !isRunning
+                ? "bg-white/8 text-neutral-500"
+                : "bg-neutral-50 text-neutral-900 hover:bg-white hover:shadow-[0_0_0_1px_rgba(255,255,255,0.35),0_1px_2px_rgba(0,0,0,0.3)] active:scale-[0.97] active:bg-neutral-200"
             }`}
           >
-            {isRunning ? (
-              <>
-                <svg
-                  className="w-3 h-3 animate-spin"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
-                <span className="max-w-[150px] truncate" title={getRunningLabel()}>
-                  {runningNodeCount > 1 ? `${runningNodeCount} nodes` : "Stop"}
-                </span>
-              </>
-            ) : (
-              <>
-                <svg
-                  className="w-3 h-3"
-                  fill="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-                <span>Run</span>
-              </>
-            )}
-          </button>
-
-          {/* Dropdown chevron button */}
-          {!isRunning && valid && (
             <button
-              onClick={() => setRunMenuOpen(!runMenuOpen)}
-              data-tutorial="floating-run-dropdown"
-              className="flex items-center self-stretch px-1.5 rounded-r bg-white text-neutral-900 hover:bg-neutral-200 border-l border-neutral-200 transition-colors"
-              title="Run options"
+              type="button"
+              onClick={handleRunClick}
+              disabled={!valid && !isRunning}
+              title={runTitle}
+              data-tutorial="floating-run-button"
+              className="flex items-center gap-1.5 whitespace-nowrap pl-3 pr-3.5 text-[13px] font-semibold focus-visible:outline-none disabled:cursor-not-allowed"
             >
-              <svg
-                className={`w-2.5 h-2.5 transition-transform ${runMenuOpen ? "rotate-180" : ""}`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2.5}
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-              </svg>
+              {isRunning ? (
+                <>
+                  <SpinnerIcon />
+                  <span className="max-w-[150px] truncate">
+                    {runningNodeCount > 1 ? `${runningNodeCount} nodes` : "Stop"}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <PlayIcon />
+                  <span>Run</span>
+                </>
+              )}
             </button>
-          )}
+
+            {/* Dropdown chevron button */}
+            {!isRunning && valid && (
+              <button
+                type="button"
+                onClick={() => setRunMenuOpen(!runMenuOpen)}
+                data-tutorial="floating-run-dropdown"
+                aria-expanded={runMenuOpen}
+                title="Run options"
+                className={`flex w-7 items-center justify-center border-l border-black/10 transition-colors duration-[120ms] focus-visible:outline-none ${runMenuOpen ? "bg-neutral-200" : ""}`}
+              >
+                <svg className={`h-3 w-3 transition-transform duration-[120ms] ${runMenuOpen ? "rotate-180" : ""}`} {...iconProps} strokeWidth={2.5}>
+                  <path d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+            )}
+          </div>
 
           {/* Dropdown menu */}
           {runMenuOpen && !isRunning && (
-            <div
-              data-tutorial="floating-run-menu"
-              className="absolute bottom-full right-0 mb-2 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl overflow-hidden min-w-[180px]"
-            >
-              <button
+            <MenuSurface floating={false} role="menu" data-tutorial="floating-run-menu" className="absolute bottom-full right-0 z-20 mb-2 min-w-[196px] py-1">
+              <MenuItem
+                role="menuitem"
                 onClick={() => {
                   executeWorkflow();
                   setRunMenuOpen(false);
                 }}
-                className="w-full px-3 py-2 text-left text-[11px] font-medium text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 transition-colors flex items-center gap-2"
               >
-                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
+                <PlayIcon />
                 Run entire workflow
-              </button>
-              <button
+                <span className={CHROME_MENU_HINT}>{modKey}↵</span>
+              </MenuItem>
+              <MenuItem
+                role="menuitem"
                 onClick={handleRunFromSelected}
                 disabled={!selectedNode}
-                className={`w-full px-3 py-2 text-left text-[11px] font-medium transition-colors flex items-center gap-2 ${
-                  selectedNode
-                    ? "text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100"
-                    : "text-neutral-500 cursor-not-allowed"
-                }`}
                 title={!selectedNode ? "Select a single node first" : undefined}
               >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                <svg className="h-3.5 w-3.5" {...iconProps} strokeWidth={2}>
+                  <path d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                 </svg>
                 Run from selected node
-              </button>
-              <button
+              </MenuItem>
+              <MenuItem
+                role="menuitem"
                 onClick={handleRunSelectedOnly}
                 disabled={!selectedNode}
-                className={`w-full px-3 py-2 text-left text-[11px] font-medium transition-colors flex items-center gap-2 ${
-                  selectedNode
-                    ? "text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100"
-                    : "text-neutral-500 cursor-not-allowed"
-                }`}
                 title={!selectedNode ? "Select a single node first" : undefined}
               >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
+                <svg className="h-3.5 w-3.5" {...iconProps} strokeWidth={2}>
+                  <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
                 </svg>
                 Run selected node only
-              </button>
-              <button
+              </MenuItem>
+              <MenuItem
+                role="menuitem"
                 onClick={handleRunSelectedNodes}
                 disabled={selectedNodes.length === 0}
-                className={`w-full px-3 py-2 text-left text-[11px] font-medium transition-colors flex items-center gap-2 ${
-                  selectedNodes.length > 0
-                    ? "text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100"
-                    : "text-neutral-500 cursor-not-allowed"
-                }`}
                 title={selectedNodes.length === 0 ? "Select one or more nodes first" : `Run ${selectedNodes.length} selected node${selectedNodes.length > 1 ? 's' : ''}`}
               >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V9.653z" />
+                <svg className="h-3.5 w-3.5" {...iconProps} strokeWidth={2}>
+                  <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
+                  <path d="M9.75 9.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V9.653z" />
                 </svg>
                 {selectedNodes.length > 0
                   ? `Run ${selectedNodes.length} selected node${selectedNodes.length !== 1 ? 's' : ''}`
                   : 'Run selected nodes'}
-              </button>
-            </div>
+              </MenuItem>
+            </MenuSurface>
           )}
         </div>
       </div>

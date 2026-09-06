@@ -29,6 +29,15 @@
   /* Faint recess for input wells on the settings panel */
   --shadow-well: inset 0 1px 1.5px rgb(0 0 0 / 0.3), inset 0 0 0 1px rgb(0 0 0 / 0.12), 0 1px 0 rgb(255 255 255 / 0.025);
 
+  /* Floating chrome — dialogs and menus (src/components/ui). Same surface as
+     a node card, one tier up: a solid border where the card's is 60%, and a
+     shadow that reads as height. Menus are controls cards, dialogs are cards. */
+  --color-chrome-border: #404040;
+  --color-scrim: rgb(0 0 0 / 0.6);
+  --color-scrim-heavy: rgb(0 0 0 / 0.9);
+  --shadow-menu: 0 8px 24px -4px rgb(0 0 0 / 0.5), 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-dialog: 0 24px 64px -12px rgb(0 0 0 / 0.65);
+
   --text-node: 10px;
   --text-node--line-height: 14px;
 }
@@ -273,40 +282,6 @@ body {
 .react-flow__resize-control.top.right,
 .react-flow__resize-control.bottom.left {
   cursor: nesw-resize !important;
-}
-
-/* React Flow Controls dark theme */
-.react-flow__controls {
-  background: #262626 !important;
-  border: 1px solid #404040 !important;
-  border-radius: 8px !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
-}
-
-.react-flow__controls-button {
-  background: #262626 !important;
-  border-bottom: 1px solid #404040 !important;
-}
-
-.react-flow__controls-button svg {
-  fill: #d4d4d4 !important;
-}
-
-.react-flow__controls-button svg path {
-  fill: #d4d4d4 !important;
-}
-
-.react-flow__controls-button:hover {
-  background: #404040 !important;
-}
-
-.react-flow__controls-button:hover svg,
-.react-flow__controls-button:hover svg path {
-  fill: #fafafa !important;
-}
-
-.react-flow__controls-button:last-child {
-  border-bottom: none !important;
 }
 
 /* Scrollbars.

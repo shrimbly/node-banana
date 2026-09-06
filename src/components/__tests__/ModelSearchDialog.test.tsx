@@ -564,8 +564,7 @@ describe("ModelSearchDialog", () => {
       );
 
       // Find close button in the header (first button after title)
-      const headerCloseButton = container.querySelector("button.p-1\\.5");
-      fireEvent.click(headerCloseButton!);
+      fireEvent.click(screen.getByLabelText("Close"));
 
       expect(onClose).toHaveBeenCalled();
     });
@@ -593,9 +592,8 @@ describe("ModelSearchDialog", () => {
         </TestWrapper>
       );
 
-      // Click on the backdrop (the outer div with bg-black/60)
-      const backdrop = container.querySelector(".bg-black\\/60");
-      fireEvent.click(backdrop!);
+      // Click on the backdrop (the dialog's overlay, in a body portal)
+      fireEvent.click(document.querySelector("[data-dialog-overlay]")!);
 
       expect(onClose).toHaveBeenCalled();
     });
