@@ -85,14 +85,14 @@ describe("hold-H edge selection", () => {
     expect(useWorkflowStore.getState().edges[0].data?.hookBundles?.[0]).toMatchObject({ x: 140, y: 90 });
   });
 
-  it("changes the fork and counts the catch beside it while carrying", () => {
+  it("tightens the fork while it is carrying noodles", () => {
     setup();
     const overlay = startSweep();
-    const rest = HOOK_CURSOR;
-    expect(overlay.style.cursor).not.toBe(rest);
-    expect(screen.getByTestId("edge-hook-count")).toHaveTextContent("2");
+    expect(overlay.style.cursor).not.toBe(HOOK_CURSOR);
+    expect(overlay.style.cursor).toContain("scale(0.95)");
     fireEvent.pointerUp(overlay, { pointerId: 1, clientX: 100, clientY: 50 });
-    expect(screen.queryByTestId("edge-hook-count")).toBeNull();
+    fireEvent.keyDown(window, { key: "h" });
+    expect(screen.getByTestId("edge-hook-selection").style.cursor).toBe(HOOK_CURSOR);
   });
 
   it("drops the carried noodles back when the sweep is cancelled", () => {
