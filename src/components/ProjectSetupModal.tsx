@@ -1150,7 +1150,6 @@ export function ProjectSetupModal({
         {/* Canvas Tab Content */}
         {activeTab === "canvas" && (
           <div className="space-y-3">
-            <p className="text-xs text-neutral-400">Configure how you navigate and interact with the canvas.</p>
             {/* Pan Mode */}
             <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
               <div className="flex flex-col gap-3">
@@ -1258,7 +1257,6 @@ export function ProjectSetupModal({
         {/* Noodles Tab Content */}
         {activeTab === "noodles" && (
           <div className="space-y-3">
-            <p className="text-xs text-neutral-400">How the connections between nodes are drawn.</p>
             <ConnectionSettings
               edgeStyle={localEdgeStyle}
               appearance={localEdgeAppearance}
