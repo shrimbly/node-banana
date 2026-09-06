@@ -6,7 +6,7 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { MenuSurface, MenuIconButton, MenuBarLabel } from "@/components/ui/Menu";
 import { bundleClampStyle } from "./BundleClamp";
 
-export function HookBundleClamp({ bundle, members, selected, color }: {
+export function HookBundleClamp({ bundle, members, selected }: {
   bundle: { id: string; x: number; y: number }; members: string[]; selected: boolean; color: string;
 }) {
   const { screenToFlowPosition } = useReactFlow();
@@ -41,7 +41,7 @@ export function HookBundleClamp({ bundle, members, selected, color }: {
         )}
         <button type="button" title={`${members.length} connections · drag bundle`} aria-label={`Bundle of ${members.length} connections`}
           data-testid="hook-bundle-clamp"
-          style={{ ...bundleClampStyle, position: "absolute", transform: "translate(-50%, -50%)", cursor: "move", boxShadow: `inset 0 0 0 1px ${color}55, 0 1px 4px rgba(0,0,0,0.45)`, touchAction: "none" }}
+          style={{ ...bundleClampStyle, position: "absolute", transform: "translate(-50%, -50%)", cursor: "move", touchAction: "none" }}
           onClick={select}
           onPointerDown={(e) => {
             if (e.button !== 0) return;

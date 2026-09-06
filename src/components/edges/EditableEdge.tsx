@@ -647,7 +647,7 @@ interface BundleStemProps {
  * and a clamp, a cable tie, at the split point that drags along the stem to
  * tie the noodles closer to or further from the handle.
  */
-function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, color, activeStroke, screenToFlowPosition, onReachChange }: BundleStemProps) {
+function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, activeStroke, screenToFlowPosition, onReachChange }: BundleStemProps) {
   const stemWidth = width * (1 + Math.min(count - 1, 4) * 0.5);
   const splitX = x + dir * reach;
   const path = `M${x},${y} L${splitX},${y}`;
@@ -686,7 +686,7 @@ function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, col
       />
       <path d={path} fill="none" strokeWidth={stemWidth + 12} stroke="transparent" className="react-flow__edge-interaction" />
       <EdgeLabelRenderer>
-        {/* The clamp: a glassy vertical pill over the split point. A selected
+        {/* The clamp: an outline pill over the split point. A selected
             node or edge lifts the edge's SVG (and so the stem's hit area) above
             the label layer, so the clamp keeps a z-index above any elevated
             edge or it would lose the press to the stem. */}
@@ -703,7 +703,6 @@ function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, col
             pointerEvents: "all",
             zIndex: 2001,
             cursor: "ew-resize",
-            boxShadow: `inset 0 0 0 1px ${color}55, 0 1px 4px rgba(0,0,0,0.45)`,
           }}
         />
       </EdgeLabelRenderer>
