@@ -83,7 +83,7 @@ export function Toast() {
   if (!message) return null;
 
   return (
-    <div className="fixed top-6 right-6 z-[200] animate-in fade-in slide-in-from-top-4 duration-300 max-w-md">
+    <div className="fixed top-14 right-6 z-[200] animate-in fade-in slide-in-from-top-4 duration-300 max-w-md">
       <div
         className={`flex flex-col rounded-lg border shadow-xl ${typeStyles[type]}`}
       >

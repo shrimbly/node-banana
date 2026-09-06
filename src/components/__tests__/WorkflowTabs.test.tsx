@@ -49,10 +49,20 @@ describe("WorkflowTabs", () => {
     vi.restoreAllMocks();
   });
 
-  it("renders nothing with a single tab", () => {
+  it("shows the bar with a single tab, so the name always has a home", () => {
     useState({ tabs: [{ id: "tab-1", snapshot: null }], activeTabId: "tab-1" });
-    const { container } = render(<WorkflowTabs />);
-    expect(container).toBeEmptyDOMElement();
+    render(<WorkflowTabs />);
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs).toHaveLength(1);
+    expect(tabs[0]).toHaveAttribute("aria-selected", "true");
+    expect(tabs[0]).toHaveTextContent("Product shots");
+    expect(screen.getByRole("button", { name: "New tab" })).toBeInTheDocument();
+  });
+
+  it("closes on middle-click, like a browser", () => {
+    render(<WorkflowTabs />);
+    fireEvent(screen.getAllByRole("tab")[1], new MouseEvent("auxclick", { bubbles: true, button: 1 }));
+    expect(mockCloseTab).toHaveBeenCalledWith("tab-2");
   });
 
   it("lists every open workflow, marking the active one", () => {

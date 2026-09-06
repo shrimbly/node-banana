@@ -35,6 +35,18 @@ function SaveIcon() {
   );
 }
 
+function OpenIcon() {
+  return (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
+      />
+    </svg>
+  );
+}
+
 function CommentIcon() {
   return (
     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
@@ -125,10 +137,10 @@ function useCommentNavigation() {
 }
 
 /**
- * The app's top chrome: a compact pill anchored top-left over the canvas, with
- * a menu holding everything the old header offered. The pill keeps the
- * time-sensitive controls in view (save state, comments, revert); the rest
- * lives one click away behind the logo.
+ * The app's corner chrome: a compact pill anchored top-left over the canvas,
+ * under the tab bar, with a menu holding everything the old header offered.
+ * The pill is three buttons (menu, open, save) plus the time-sensitive extras
+ * (comments, revert) while they apply; the workflow name lives in its tab.
  */
 export function FloatingMenu() {
   const {
@@ -145,7 +157,6 @@ export function FloatingMenu() {
     shortcutsDialogOpen,
     setShortcutsDialogOpen,
     setShowQuickstart,
-    tabCount,
     activeTabId,
     newTab,
     closeTab,
@@ -165,7 +176,6 @@ export function FloatingMenu() {
       shortcutsDialogOpen: state.shortcutsDialogOpen,
       setShortcutsDialogOpen: state.setShortcutsDialogOpen,
       setShowQuickstart: state.setShowQuickstart,
-      tabCount: state.tabs.length,
       activeTabId: state.activeTabId,
       newTab: state.newTab,
       closeTab: state.closeTab,
@@ -186,17 +196,25 @@ export function FloatingMenu() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   const isProjectConfigured = !!workflowName;
-  const showTabStrip = tabCount > 1;
   const canSave = !!(workflowId && workflowName && saveDirectoryPath);
   const showUnsavedDot = isProjectConfigured ? hasUnsavedChanges && !isSaving : true;
 
+  const lastSavedText = lastSavedAt
+    ? new Date(lastSavedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : null;
+  // The pill shows no status text; the tab carries the name and this string goes
+  // into the Save tooltip and the menu's Save row.
   const saveStatus = !isProjectConfigured
     ? "Not saved"
     : isSaving
       ? "Saving..."
-      : lastSavedAt
-        ? `Saved ${new Date(lastSavedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
-        : "Not saved";
+      : hasUnsavedChanges
+        ? lastSavedText
+          ? `Unsaved · last saved ${lastSavedText}`
+          : "Unsaved"
+        : lastSavedText
+          ? `Saved ${lastSavedText}`
+          : "Not saved";
 
   const closeMenu = useCallback((restoreFocus = false) => {
     setIsOpen(false);
@@ -326,13 +344,14 @@ export function FloatingMenu() {
     }
   }, [revertToSnapshot]);
 
-  const saveTitle = !isProjectConfigured
+  const saveAction = !isProjectConfigured
     ? "Save project"
     : isSaving
       ? "Saving..."
       : canSave
         ? "Save project"
         : "Configure save location";
+  const saveTitle = saveAction === saveStatus ? saveAction : `${saveAction} · ${saveStatus}`;
 
   const commentTitle = `${unviewedCount} unviewed comment${unviewedCount !== 1 ? "s" : ""} (${commentCount} total)`;
   const commentBadge = unviewedCount > 9 ? "9+" : unviewedCount.toString();
@@ -380,24 +399,22 @@ export function FloatingMenu() {
 
           <div className="mx-1 h-5 w-px bg-neutral-600" />
 
-          <div className="flex max-w-[260px] items-baseline gap-2 overflow-hidden px-1">
-            {/* With the tab strip showing, the active tab already carries the name */}
-            {!showTabStrip &&
-              (isProjectConfigured ? (
-                <span className="truncate text-xs font-medium text-neutral-200">{workflowName}</span>
-              ) : (
-                <span className="text-xs font-medium italic text-neutral-500">Untitled</span>
-              ))}
-            <span className="whitespace-nowrap text-[11px] text-neutral-500">{saveStatus}</span>
-          </div>
-
-          <div className="mx-1 h-5 w-px bg-neutral-600" />
+          <button
+            type="button"
+            onClick={() => setShowWorkflowBrowser(true)}
+            className={ICON_BUTTON}
+            aria-label="Open project"
+            title="Open project…"
+          >
+            <OpenIcon />
+          </button>
 
           <button
             type="button"
             onClick={handleSave}
             disabled={isSaving}
             className={ICON_BUTTON}
+            aria-label={saveAction}
             title={saveTitle}
             data-tutorial="save-button"
           >
@@ -406,6 +423,8 @@ export function FloatingMenu() {
               <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-red-500 ring-2 ring-neutral-800" />
             )}
           </button>
+
+          {(commentCount > 0 || previousWorkflowSnapshot) && <div className="mx-1 h-5 w-px bg-neutral-600" />}
 
           {commentCount > 0 && (
             <button type="button" onClick={goToNextComment} className={ICON_BUTTON} title={commentTitle}>
@@ -443,18 +462,10 @@ export function FloatingMenu() {
               label="Save project"
               hint={saveStatus}
               onClick={choose(handleSave)}
-              title={saveTitle}
+              title={saveAction}
             />
             <MenuRow
-              icon={
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
-                  />
-                </svg>
-              }
+              icon={<OpenIcon />}
               label="Open project…"
               onClick={choose(() => setShowWorkflowBrowser(true))}
               title="Opens in a new tab unless this one is untouched"
@@ -499,16 +510,14 @@ export function FloatingMenu() {
               label="New tab"
               onClick={choose(() => newTab())}
             />
-            {showTabStrip && (
-              <MenuRow
-                icon={<span className="h-4 w-4" />}
-                label="Close tab"
-                onClick={choose(() => {
-                  if (hasUnsavedChanges && !window.confirm("Close this tab and discard its unsaved changes?")) return;
-                  closeTab(activeTabId);
-                })}
-              />
-            )}
+            <MenuRow
+              icon={<span className="h-4 w-4" />}
+              label="Close tab"
+              onClick={choose(() => {
+                if (hasUnsavedChanges && !window.confirm("Close this tab and discard its unsaved changes?")) return;
+                closeTab(activeTabId);
+              })}
+            />
 
             {(previousWorkflowSnapshot || commentCount > 0) && (
               <div role="separator" className="my-1 h-px bg-neutral-700/60" />

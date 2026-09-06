@@ -114,33 +114,43 @@ describe("FloatingMenu", () => {
   });
 
   describe("collapsed pill", () => {
-    it("shows the logo, Untitled and 'Not saved' before a project exists", () => {
+    it("is three buttons at rest: menu, open, save; no name and no status text", () => {
       render(<FloatingMenu />);
       expect(screen.getByRole("button", { name: "Menu" })).toBeInTheDocument();
-      expect(screen.getByText("Untitled")).toBeInTheDocument();
-      expect(screen.getByText("Not saved")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Open project" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Save project" })).toHaveAttribute("title", "Save project · Not saved");
+      expect(screen.queryByText("Untitled")).not.toBeInTheDocument();
+      expect(screen.queryByText("Not saved")).not.toBeInTheDocument();
       expect(screen.queryByRole("menu")).not.toBeInTheDocument();
     });
 
     it("keeps the save button visible and tutorial-addressable", () => {
       render(<FloatingMenu />);
-      const save = screen.getByTitle("Save project");
+      const save = screen.getByRole("button", { name: "Save project" });
       expect(save).toHaveAttribute("data-tutorial", "save-button");
       expect(save.querySelector(".bg-red-500")).toBeInTheDocument();
     });
 
-    it("shows the project name and last save time when configured", () => {
+    it("keeps the project name off the pill and puts the save time in the Save tooltip", () => {
       useState(configuredState({ lastSavedAt: new Date(2024, 0, 1, 15, 42).getTime() }));
       render(<FloatingMenu />);
-      expect(screen.getByText("Summer campaign")).toBeInTheDocument();
-      expect(screen.getByText(/^Saved /)).toBeInTheDocument();
+      expect(screen.queryByText("Summer campaign")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Save project" }).getAttribute("title")).toMatch(/^Save project · Saved /);
+    });
+
+    it("says unsaved with the last save time once there are edits", () => {
+      useState(configuredState({ lastSavedAt: new Date(2024, 0, 1, 15, 42).getTime(), hasUnsavedChanges: true }));
+      render(<FloatingMenu />);
+      expect(screen.getByRole("button", { name: "Save project" }).getAttribute("title")).toMatch(
+        /^Save project · Unsaved · last saved /
+      );
     });
 
     it("shows 'Saving...' and disables save while a save runs", () => {
       useState(configuredState({ isSaving: true, hasUnsavedChanges: true }));
       render(<FloatingMenu />);
-      expect(screen.getByText("Saving...")).toBeInTheDocument();
-      const save = screen.getByTitle("Saving...");
+      const save = screen.getByRole("button", { name: "Saving..." });
+      expect(save).toHaveAttribute("title", "Saving...");
       expect(save).toBeDisabled();
       expect(save.querySelector(".bg-red-500")).not.toBeInTheDocument();
     });
@@ -148,11 +158,11 @@ describe("FloatingMenu", () => {
     it("shows the unsaved dot only when a configured project has changes", () => {
       useState(configuredState({ hasUnsavedChanges: false }));
       const { rerender } = render(<FloatingMenu />);
-      expect(screen.getByTitle("Save project").querySelector(".bg-red-500")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Save project" }).querySelector(".bg-red-500")).not.toBeInTheDocument();
 
       useState(configuredState({ hasUnsavedChanges: true }));
       rerender(<FloatingMenu />);
-      expect(screen.getByTitle("Save project").querySelector(".bg-red-500")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Save project" }).querySelector(".bg-red-500")).toBeInTheDocument();
     });
 
     it("hides comments and revert until they apply", () => {
@@ -165,7 +175,7 @@ describe("FloatingMenu", () => {
   describe("save button", () => {
     it("opens the project setup modal in 'new' mode for an unconfigured project", () => {
       render(<FloatingMenu />);
-      fireEvent.click(screen.getByTitle("Save project"));
+      fireEvent.click(screen.getByRole("button", { name: "Save project" }));
       expect(screen.getByTestId("project-setup-modal")).toHaveAttribute("data-mode", "new");
       expect(mockSaveToFile).not.toHaveBeenCalled();
     });
@@ -173,14 +183,14 @@ describe("FloatingMenu", () => {
     it("saves straight to file for a configured project", () => {
       useState(configuredState());
       render(<FloatingMenu />);
-      fireEvent.click(screen.getByTitle("Save project"));
+      fireEvent.click(screen.getByRole("button", { name: "Save project" }));
       expect(mockSaveToFile).toHaveBeenCalledTimes(1);
     });
 
     it("opens settings when the project has a name but no save location", () => {
       useState(configuredState({ saveDirectoryPath: "" }));
       render(<FloatingMenu />);
-      fireEvent.click(screen.getByTitle("Configure save location"));
+      fireEvent.click(screen.getByRole("button", { name: "Configure save location" }));
       expect(screen.getByTestId("project-setup-modal")).toHaveAttribute("data-mode", "settings");
       expect(mockSaveToFile).not.toHaveBeenCalled();
     });
@@ -204,13 +214,14 @@ describe("FloatingMenu", () => {
       openMenu();
       const names = within(screen.getByRole("menu"))
         .getAllByRole("menuitem")
-        .map((item) => item.querySelector("span")?.textContent);
+        .map((item) => [...item.querySelectorAll("span")].find((span) => !span.className)?.textContent);
       expect(names).toEqual([
         "Save project",
         "Open project…",
         "Open project folder",
         "Project settings",
         "New tab",
+        "Close tab",
         "Welcome screen",
         "Keyboard shortcuts",
         "Discord",
@@ -317,10 +328,11 @@ describe("FloatingMenu", () => {
       expect(mockNewTab).toHaveBeenCalledTimes(1);
     });
 
-    it("offers Close tab only once a second tab exists", () => {
+    it("offers Close tab even with one tab, since closing the last one leaves a fresh tab", () => {
       render(<FloatingMenu />);
       openMenu();
-      expect(within(screen.getByRole("menu")).queryByText("Close tab")).not.toBeInTheDocument();
+      fireEvent.click(menuItem("Close tab"));
+      expect(mockCloseTab).toHaveBeenCalledWith("tab-1");
     });
 
     it("closes the active tab from the menu, asking first when it is unsaved", () => {
@@ -338,11 +350,10 @@ describe("FloatingMenu", () => {
       expect(mockCloseTab).toHaveBeenCalledWith("tab-2");
     });
 
-    it("drops the project name from the pill once the tab strip shows it", () => {
-      useState(configuredState(twoTabs));
+    it("opens the project browser from the pill's Open button", () => {
       render(<FloatingMenu />);
-      expect(screen.queryByText("Summer campaign")).not.toBeInTheDocument();
-      expect(screen.getByText("Not saved")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Open project" }));
+      expect(screen.getByTestId("workflow-browser-modal")).toBeInTheDocument();
     });
   });
 
