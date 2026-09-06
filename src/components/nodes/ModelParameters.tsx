@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { ProviderType, ModelInputDef } from "@/types";
 import { ModelParameter } from "@/lib/providers/types";
 import { useProviderApiKeys } from "@/store/workflowStore";
 import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
+import { CheckboxField, FieldList, NumberField, SelectField, TextField } from "./ui/Field";
 
 // localStorage cache for model schemas (persists across dev server restarts)
 const SCHEMA_CACHE_KEY = "node-banana-schema-cache";
@@ -38,20 +39,6 @@ function setCachedSchema(modelId: string, provider: string, parameters: ModelPar
   } catch {
     // Ignore cache errors
   }
-}
-
-/** Reorder items so they read column-first in a row-based CSS grid.
- *  e.g. [1,2,3,4,5,6,7,8] with 2 cols → [1,5,2,6,3,7,4,8] */
-function reorderColumnFirst<T>(items: T[], cols: number): T[] {
-  const rows = Math.ceil(items.length / cols);
-  const result: T[] = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const idx = c * rows + r;
-      if (idx < items.length) result.push(items[idx]);
-    }
-  }
-  return result;
 }
 
 interface ModelParametersProps {
@@ -234,34 +221,6 @@ function ModelParametersInner({
     });
   }, [schema]);
 
-  const useGrid = sortedSchema.length > 4;
-  const gridRef = useRef<HTMLDivElement>(null);
-  const [colCount, setColCount] = useState(1);
-
-  useEffect(() => {
-    const el = gridRef.current;
-    if (!el || !useGrid) { setColCount(1); return; }
-    let rafId: number;
-    const observer = new ResizeObserver(() => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        const cols = getComputedStyle(el).gridTemplateColumns.split(" ").length;
-        setColCount(prev => prev === cols ? prev : cols);
-      });
-    });
-    observer.observe(el);
-    return () => {
-      cancelAnimationFrame(rafId);
-      observer.disconnect();
-    };
-  }, [useGrid]);
-
-  const displaySchema = useMemo(() => {
-    return useGrid && colCount > 1
-      ? reorderColumnFirst(sortedSchema, colCount)
-      : sortedSchema;
-  }, [sortedSchema, useGrid, colCount]);
-
   // Don't render if no model selected
   if (!modelId) {
     return null;
@@ -281,14 +240,8 @@ function ModelParametersInner({
       ) : schema.length === 0 ? (
         <span className="text-[9px] text-neutral-500">No parameters available</span>
       ) : (
-        <div
-          ref={gridRef}
-          className={useGrid
-            ? "grid grid-cols-[repeat(auto-fill,minmax(min(180px,100%),1fr))] max-w-[420px] gap-x-6 gap-y-1.5"
-            : "space-y-1.5 max-w-[280px]"
-          }
-        >
-          {displaySchema.map((param) => (
+        <FieldList>
+          {sortedSchema.map((param) => (
             <ParameterInput
               key={param.name}
               param={param}
@@ -297,7 +250,7 @@ function ModelParametersInner({
               onChange={handleParameterChange}
             />
           ))}
-        </div>
+        </FieldList>
       )}
     </div>
   );
@@ -311,156 +264,59 @@ interface ParameterInputProps {
 }
 
 /**
- * Individual parameter input based on type.
- * Text and number inputs use local state during editing to prevent
- * cursor-jump issues caused by React Flow re-renders on store updates.
+ * One parameter, as the field its type calls for. Text and number fields
+ * keep local state while focused (see Field.tsx) so React Flow re-renders
+ * never move the caret.
  */
 function ParameterInputInner({ param, name, value, onChange }: ParameterInputProps) {
-  // Stable callback that passes name along with value
   const handleChange = useCallback((value: unknown) => {
     onChange(name, value);
   }, [name, onChange]);
   const displayName = param.name
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
+  const description = param.description || undefined;
 
-  // Local state for text/number inputs to prevent cursor jumping
-  const [localValue, setLocalValue] = useState<string>(() => {
-    if (value === undefined || value === null) return "";
-    return String(value);
-  });
-  const isFocusedRef = useRef(false);
-
-  // Sync from store when not focused (external changes)
-  useEffect(() => {
-    if (!isFocusedRef.current) {
-      setLocalValue(value === undefined || value === null ? "" : String(value));
-    }
-  }, [value]);
-
-  // Determine input type and render accordingly
   if (param.enum && param.enum.length > 0) {
-    // Enum: render as select
     return (
-      <div className="flex items-center gap-2">
-        <label
-          className="text-[11px] text-neutral-400 shrink-0"
-          title={param.description || undefined}
-        >
-          {displayName}
-        </label>
-        <select
-          value={(value as string) ?? ""}
-          onChange={(e) => {
-            const val = e.target.value;
-            if (val === "") {
-              handleChange(undefined);
-            } else if (param.type === "integer") {
-              handleChange(parseInt(val, 10));
-            } else if (param.type === "number") {
-              handleChange(parseFloat(val));
-            } else if (param.type === "boolean") {
-              handleChange(val === "true");
-            } else {
-              handleChange(val);
-            }
-          }}
-          className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 rounded-md bg-[#1a1a1a] focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
-        >
-          <option value="">Default</option>
-          {param.enum.map((opt) => (
-            <option key={String(opt)} value={String(opt)}>
-              {String(opt)}
-            </option>
-          ))}
-        </select>
-      </div>
+      <SelectField
+        label={displayName}
+        hint={description}
+        value={value === undefined || value === null ? "" : String(value)}
+        options={param.enum.map((opt) => String(opt))}
+        emptyLabel="Default"
+        onChange={(val) => {
+          if (val === "") handleChange(undefined);
+          else if (param.type === "integer") handleChange(parseInt(val, 10));
+          else if (param.type === "number") handleChange(parseFloat(val));
+          else if (param.type === "boolean") handleChange(val === "true");
+          else handleChange(val);
+        }}
+      />
     );
   }
 
   if (param.type === "boolean") {
-    // Use schema default when value not explicitly set
     const effectiveValue = value !== undefined ? Boolean(value) : Boolean(param.default);
-
-    // Boolean: render as checkbox
-    return (
-      <label
-        className="flex items-center gap-1.5 text-[11px] text-neutral-300 cursor-pointer"
-        title={param.description || undefined}
-      >
-        <input
-          type="checkbox"
-          checked={effectiveValue}
-          onChange={(e) => handleChange(e.target.checked)}
-          className="nodrag nopan w-3 h-3 rounded bg-[#1a1a1a] text-neutral-600 focus:ring-1 focus:ring-neutral-600 focus:ring-offset-0"
-        />
-        <span>{displayName}</span>
-      </label>
-    );
+    return <CheckboxField label={displayName} hint={description} checked={effectiveValue} onChange={handleChange} />;
   }
 
   if (param.type === "number" || param.type === "integer") {
-    const hasMin = param.minimum !== undefined;
-    const hasMax = param.maximum !== undefined;
-
-    // Validate current value against constraints
-    let validationError: string | null = null;
-    if (localValue !== "" && !isNaN(Number(localValue))) {
-      const num = Number(localValue);
-      if (hasMin && num < param.minimum!) {
-        validationError = `Min: ${param.minimum}`;
-      } else if (hasMax && num > param.maximum!) {
-        validationError = `Max: ${param.maximum}`;
-      } else if (param.type === "integer" && !Number.isInteger(num)) {
-        validationError = "Must be integer";
-      }
-    }
-
+    const hasRange = param.minimum !== undefined && param.maximum !== undefined;
+    const hint = hasRange
+      ? `${description ? `${description} ` : ""}(${param.minimum}-${param.maximum})`
+      : description;
     return (
-      <div className="flex flex-col gap-0.5">
-        <div className="flex items-center gap-2">
-          <label
-            className="text-[11px] text-neutral-400 shrink-0 flex items-center gap-1"
-            title={param.description || undefined}
-          >
-            {displayName}
-            {hasMin && hasMax && (
-              <span className="text-neutral-500 text-[9px]">
-                ({param.minimum}-{param.maximum})
-              </span>
-            )}
-          </label>
-          <input
-            type="number"
-            value={localValue}
-            min={param.minimum}
-            max={param.maximum}
-            step={param.type === "integer" ? 1 : 0.1}
-            onFocus={() => { isFocusedRef.current = true; }}
-            onChange={(e) => {
-              setLocalValue(e.target.value);
-            }}
-            onBlur={() => {
-              isFocusedRef.current = false;
-              if (localValue === "") {
-                handleChange(undefined);
-              } else {
-                const num = param.type === "integer" ? parseInt(localValue, 10) : parseFloat(localValue);
-                handleChange(isNaN(num) ? undefined : num);
-              }
-            }}
-            placeholder={param.default !== undefined ? `${param.default}` : undefined}
-            className={`nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 rounded-md bg-[#1a1a1a] focus:outline-none focus:ring-1 text-white placeholder:text-neutral-500 ${
-              validationError
-                ? "ring-1 ring-red-500"
-                : "focus:ring-neutral-600"
-            }`}
-          />
-        </div>
-        {validationError && (
-          <span className="text-[9px] text-red-400">{validationError}</span>
-        )}
-      </div>
+      <NumberField
+        label={displayName}
+        hint={hint}
+        value={typeof value === "number" ? value : value === undefined || value === null ? undefined : Number(value)}
+        min={param.minimum}
+        max={param.maximum}
+        integer={param.type === "integer"}
+        placeholder={param.default !== undefined ? `${param.default}` : undefined}
+        onChange={handleChange}
+      />
     );
   }
 
@@ -469,30 +325,14 @@ function ParameterInputInner({ param, name, value, onChange }: ParameterInputPro
     return null;
   }
 
-  // Default: string input — uses local state, syncs to store on blur
   return (
-    <div className="flex items-center gap-2">
-      <label
-        className="text-[11px] text-neutral-400 shrink-0"
-        title={param.description || undefined}
-      >
-        {displayName}
-      </label>
-      <input
-        type="text"
-        value={localValue}
-        onFocus={() => { isFocusedRef.current = true; }}
-        onChange={(e) => {
-          setLocalValue(e.target.value);
-        }}
-        onBlur={() => {
-          isFocusedRef.current = false;
-          handleChange(localValue || undefined);
-        }}
-        placeholder={param.default !== undefined ? `${param.default}` : undefined}
-        className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 rounded-md bg-[#1a1a1a] focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white placeholder:text-neutral-500"
-      />
-    </div>
+    <TextField
+      label={displayName}
+      hint={description}
+      value={value === undefined || value === null ? "" : String(value)}
+      placeholder={param.default !== undefined ? `${param.default}` : undefined}
+      onChange={handleChange}
+    />
   );
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getConnectedInputsPure, validateWorkflowPure } from "../connectedInputs";
+import { getConnectedInputsPure, validateWorkflowPure, nodeReadinessPure } from "../connectedInputs";
 import type { WorkflowNode, WorkflowEdge } from "@/types";
 
 function makeNode(id: string, type: string, data: Record<string, unknown> = {}): WorkflowNode {
@@ -447,5 +447,27 @@ describe("validateWorkflowPure", () => {
     const edges = [makeEdge("p", "gen", "text-0")];
     const result = validateWorkflowPure(nodes, edges);
     expect(result.valid).toBe(true);
+  });
+});
+
+describe("nodeReadinessPure", () => {
+  it("names each node that cannot run as wired, with a short hint", () => {
+    const nodes = [
+      { id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} },
+      { id: "out", type: "output", position: { x: 0, y: 0 }, data: {} },
+      { id: "p", type: "prompt", position: { x: 0, y: 0 }, data: { prompt: "hi" } },
+    ] as never[];
+    const readiness = nodeReadinessPure(nodes, []);
+    expect(readiness.gen).toEqual({ hint: "needs a prompt", message: 'Generate node "gen" missing text input' });
+    expect(readiness.out?.hint).toBe("needs an image");
+    expect(readiness.p).toBeUndefined();
+  });
+
+  it("clears once the input is connected, ignoring loop edges", () => {
+    const nodes = [{ id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} }] as never[];
+    const loop = [{ id: "e", source: "x", target: "gen", targetHandle: "text", data: { isLoop: true } }] as never[];
+    const real = [{ id: "e", source: "x", target: "gen", targetHandle: "text", data: {} }] as never[];
+    expect(nodeReadinessPure(nodes, loop).gen).toBeDefined();
+    expect(nodeReadinessPure(nodes, real)).toEqual({});
   });
 });

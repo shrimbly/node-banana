@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { Header } from "@/components/Header";
+import { FloatingMenu } from "@/components/FloatingMenu";
+import { WorkflowTabs } from "@/components/WorkflowTabs";
 import { WorkflowCanvas } from "@/components/WorkflowCanvas";
 import { FloatingActionBar } from "@/components/FloatingActionBar";
 import { AnnotationModal } from "@/components/AnnotationModal";
@@ -11,6 +12,7 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { FTUXModal } from "@/components/onboarding/FTUXModal";
 import { getFTUXCompleted, setFTUXCompleted } from "@/store/utils/localStorage";
 import { useFTUXStore } from "@/store/ftuxStore";
+import { anyWorkflowTabUnsaved } from "@/store/utils/workflowTabs";
 
 export default function Home() {
   const initializeAutoSave = useWorkflowStore(
@@ -27,7 +29,8 @@ export default function Home() {
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (useWorkflowStore.getState().hasUnsavedChanges) {
+      const { tabs, hasUnsavedChanges } = useWorkflowStore.getState();
+      if (anyWorkflowTabUnsaved(tabs, { hasUnsavedChanges })) {
         e.preventDefault();
       }
     };
@@ -56,8 +59,13 @@ export default function Home() {
 
   return (
     <ReactFlowProvider>
-      <div className="h-screen flex flex-col">
-        <Header />
+      <div className="h-screen flex flex-col bg-[#0f0f0f]">
+        <WorkflowTabs />
+        {/* The floating menu is positioned against this box, so it clears the tab
+            strip. The box is the canvas frame: rounded top corners the active tab
+            flows into. It must not isolate its stacking: modals and menus inside
+            it are fixed and have to cover the strip too. */}
+        <div className="relative flex-1 min-h-0 flex flex-col overflow-hidden rounded-t-md border border-card-border bg-canvas-bg">
         <ErrorBoundary
           label="Canvas"
           onError={(error, info) =>
@@ -96,6 +104,8 @@ export default function Home() {
         >
           <WorkflowCanvas />
         </ErrorBoundary>
+        <FloatingMenu />
+        </div>
         <FloatingActionBar />
         <AnnotationModal />
         {showFTUX && (

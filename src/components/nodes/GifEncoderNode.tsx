@@ -1,12 +1,20 @@
 "use client";
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
-import { BaseNode } from "./BaseNode";
+import { NodeProps, Node } from "@xyflow/react";
+import { NodeShell } from "./NodeShell";
 import { useWorkflowStore } from "@/store/workflowStore";
 import type { GifEncoderNodeData, WorkflowNode } from "@/types";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
-import { HandleLabel } from "./HandleLabel";
+import {
+  CheckboxField,
+  ControlsCard,
+  EmptyState,
+  FieldRow,
+  NumberField,
+  PanelButton,
+  SummaryValues,
+  type SocketSpec,
+} from "./ui";
 import { generateThumbnail } from "@/utils/imageThumbnail";
 import {
   getThumbnail,
@@ -17,6 +25,9 @@ import {
 } from "@/store/thumbnailCache";
 
 type GifEncoderNodeType = Node<GifEncoderNodeData, "gifEncoder">;
+
+const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "image", type: "image", label: "GIF Out" }];
+const EMPTY_HEIGHT = 120;
 
 /**
  * Filmstrip tiles are tiny (~70px squares) but the source frames may be full
@@ -76,7 +87,7 @@ function useThumbnailSrc(fullSrc: string | null): string | null {
 function FrameThumbnail({ src, alt }: { src: string; alt: string }) {
   const thumbSrc = useThumbnailSrc(src);
   return (
-    <img src={thumbSrc ?? src} alt={alt} className="w-full h-full object-contain rounded" />
+    <img src={thumbSrc ?? src} alt={alt} className="w-full h-full object-cover rounded" />
   );
 }
 
@@ -107,7 +118,8 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const edges = useWorkflowStore((state) => state.edges);
   const nodes = useWorkflowStore((state) => state.nodes);
-  const showLabels = useShowHandleLabels(selected);
+  const [expanded, setExpanded] = useState(true);
+  const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
   // Dynamic image input edges
   const imageEdges = useMemo(() => {
@@ -204,12 +216,9 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
     setHoverId(null);
   }, [draggedId, hoverId, nodeData.clipOrder, id, updateNodeData]);
 
-  // Dynamic image handles: render up to the highest referenced handle index
-  // (parsed from "image-N" targetHandles) plus one free slot for a new
-  // connection. Using the max index rather than the edge count ensures a
-  // high-index edge (e.g. "image-3") still gets a rendered handle after an
-  // earlier edge is removed, instead of being orphaned.
-  const imageHandles = useMemo(() => {
+  // Dynamic image sockets: up to the highest referenced "image-N" plus one
+  // free slot, so a high-index edge keeps its socket after an earlier one goes.
+  const inputSockets = useMemo<SocketSpec[]>(() => {
     let maxIndex = -1;
     for (const e of imageEdges) {
       const match = e.targetHandle?.match(/^image-(\d+)$/);
@@ -219,195 +228,172 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
       }
     }
     const count = Math.max(maxIndex + 2, 2);
-    return Array.from({ length: count }, (_, i) => ({ id: `image-${i}` }));
+    return Array.from({ length: count }, (_, i) => ({ id: `image-${i}`, type: "image", label: `Frame ${i + 1}` }));
   }, [imageEdges]);
 
   const targetKB = nodeData.targetMaxBytes !== null
     ? Math.round(nodeData.targetMaxBytes / 1024)
     : 0;
+  const frameCount = orderedFrames.filter((f) => f.src).length;
+
+  const media = nodeData.outputGif
+    ? { kind: "aspect" as const, aspect: loadedAspect?.src === nodeData.outputGif ? loadedAspect.aspect : 1 }
+    : { kind: "fixed" as const, height: EMPTY_HEIGHT };
+
+  const filmstrip = (
+    <div className="overflow-y-auto nowheel grid grid-cols-6 content-start gap-1 p-1.5 bg-well rounded-well squircle shadow-well max-h-[110px]">
+      {orderedFrames.map((frame, i) => (
+        <div
+          key={frame.edgeId}
+          data-frame-id={frame.edgeId}
+          onPointerDown={(e) => handlePointerDown(e, frame.edgeId)}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          className={`nodrag relative aspect-square bg-neutral-800 border rounded cursor-move transition-colors group ${
+            draggedId === frame.edgeId
+              ? "opacity-50 border-blue-500"
+              : hoverId === frame.edgeId && draggedId
+                ? "border-blue-400 ring-1 ring-blue-400/50"
+                : "border-neutral-600 hover:border-neutral-500"
+          }`}
+        >
+          {frame.src ? (
+            <FrameThumbnail src={frame.src} alt={`Frame ${i + 1}`} />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-[8px] text-neutral-500">—</div>
+          )}
+          <div className="absolute bottom-0 left-0 bg-black/70 px-0.5 text-[8px] text-white rounded-tr">{i + 1}</div>
+          <button
+            onClick={() => removeEdge(frame.edgeId)}
+            className="absolute top-0 right-0 w-3.5 h-3.5 bg-red-600/80 hover:bg-red-500 rounded text-white opacity-0 group-hover:opacity-100 flex items-center justify-center"
+            title="Disconnect"
+          >
+            <svg className="w-2 h-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      ))}
+    </div>
+  );
 
   return (
-    <BaseNode
+    <NodeShell
       id={id}
       selected={selected}
       isExecuting={isRunning}
       hasError={nodeData.status === "error"}
-      minWidth={460}
-      minHeight={340}
-    >
-      {imageHandles.map((handle, index) => {
-        const topPercent = ((index + 1) / (imageHandles.length + 1)) * 100;
-        return (
-          <React.Fragment key={handle.id}>
-            <Handle
-              type="target"
-              position={Position.Left}
-              id={handle.id}
-              data-handletype="image"
-              isConnectable={true}
-              style={{ top: `${topPercent}%` }}
-            />
-            <HandleLabel label={`Frame ${index + 1}`} side="target" color="var(--handle-color-image)" top={`calc(${topPercent}% - 7px)`} visible={showLabels} />
-          </React.Fragment>
-        );
-      })}
-
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="image"
-        data-handletype="image"
-        isConnectable={true}
-        style={{ top: "50%" }}
-      />
-      <HandleLabel label="GIF Out" side="source" color="var(--handle-color-image)" top="calc(50% - 7px)" visible={showLabels} />
-
-      <div className="flex-1 flex flex-col min-h-0 gap-2">
-        {/* Filmstrip */}
-        {orderedFrames.length === 0 ? (
-          <div className="h-16 flex items-center justify-center border border-dashed border-neutral-600 rounded">
-            <span className="text-[10px] text-neutral-500">Connect image frames</span>
-          </div>
-        ) : (
-          <div className="overflow-y-auto nowheel grid grid-cols-6 content-start gap-1.5 p-1.5 bg-neutral-900/50 rounded shrink-0 max-h-[120px]">
-            {orderedFrames.map((frame, i) => (
-              <div
-                key={frame.edgeId}
-                data-frame-id={frame.edgeId}
-                onPointerDown={(e) => handlePointerDown(e, frame.edgeId)}
-                onPointerMove={handlePointerMove}
-                onPointerUp={handlePointerUp}
-                className={`nodrag relative aspect-square bg-neutral-800 border rounded cursor-move transition-colors group ${
-                  draggedId === frame.edgeId
-                    ? "opacity-50 border-blue-500"
-                    : hoverId === frame.edgeId && draggedId
-                      ? "border-blue-400 ring-1 ring-blue-400/50"
-                      : "border-neutral-600 hover:border-neutral-500"
-                }`}
-              >
-                {frame.src ? (
-                  <FrameThumbnail src={frame.src} alt={`Frame ${i + 1}`} />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-[8px] text-neutral-500">—</div>
-                )}
-                <div className="absolute bottom-0 left-0 bg-black/70 px-0.5 text-[8px] text-white rounded-tr">{i + 1}</div>
-                <button
-                  onClick={() => removeEdge(frame.edgeId)}
-                  className="absolute top-0 right-0 w-3.5 h-3.5 bg-red-600/80 hover:bg-red-500 rounded text-white opacity-0 group-hover:opacity-100 flex items-center justify-center"
-                  title="Disconnect"
-                >
-                  <svg className="w-2 h-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Output preview */}
-        <div className="relative flex-1 min-h-0 bg-neutral-900/40 rounded">
-          {nodeData.outputGif ? (
-            <>
-              <img src={nodeData.outputGif} alt="GIF preview" className="absolute inset-0 w-full h-full object-contain rounded" />
-              <button
-                onClick={() => updateNodeData(id, { outputGif: null, status: "idle", outputBytes: null, outputDimensions: null })}
-                className="absolute top-1 right-1 w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white"
-                title="Clear GIF"
-              >
-                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </>
+      media={media}
+      inputs={inputSockets}
+      outputs={OUTPUT_SOCKETS}
+      minWidth={300}
+      mediaClassName="group"
+      controls={
+        <ControlsCard
+          id={id}
+          summary={{
+            title: `${frameCount} frame${frameCount === 1 ? "" : "s"}`,
+            values: (
+              <SummaryValues
+                items={[
+                  `${nodeData.fps} fps`,
+                  `${nodeData.colorCount} colors`,
+                  nodeData.outputDimensions
+                    ? `${nodeData.outputDimensions.width}×${nodeData.outputDimensions.height} · ${formatBytes(nodeData.outputBytes)}`
+                    : null,
+                ]}
+              />
+            ),
+          }}
+          expanded={expanded}
+          onToggle={() => setExpanded((v) => !v)}
+        >
+          {orderedFrames.length > 0 ? (
+            <FieldRow className="h-auto">
+              <div className="w-full">{filmstrip}</div>
+            </FieldRow>
           ) : (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-[10px] text-neutral-500">{nodeData.status === "loading" ? `Encoding... ${Math.round(nodeData.progress)}%` : "No GIF yet"}</span>
-            </div>
+            <span className="text-node text-neutral-500 py-1">Connect image frames</span>
           )}
-        </div>
-
-        {/* Settings row */}
-        <div className="nodrag nowheel shrink-0 flex flex-col gap-1.5 text-[10px] text-neutral-300">
-          <div className="flex items-center gap-2">
-            <label className="text-neutral-400">FPS</label>
-            <input
-              type="number"
-              min={1}
-              max={30}
-              value={nodeData.fps}
-              onChange={(e) => updateNodeData(id, { fps: Math.max(1, Math.min(30, Number(e.target.value) || 1)) })}
-              className="w-12 px-1.5 py-0.5 bg-neutral-800 rounded text-neutral-200"
-            />
-            <label className="text-neutral-400">Colors</label>
-            <input
-              type="number"
-              min={2}
-              max={256}
-              value={nodeData.colorCount}
-              onChange={(e) => updateNodeData(id, { colorCount: Math.max(2, Math.min(256, Number(e.target.value) || 2)) })}
-              className="w-14 px-1.5 py-0.5 bg-neutral-800 rounded text-neutral-200"
-            />
-            <label className="flex items-center gap-1 text-neutral-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={nodeData.dither}
-                onChange={(e) => updateNodeData(id, { dither: e.target.checked })}
-              />
-              Dither
-            </label>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1 text-neutral-400 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={nodeData.targetMaxBytes !== null}
-                onChange={(e) =>
-                  updateNodeData(id, {
-                    targetMaxBytes: e.target.checked ? 128 * 1024 : null,
-                  })
-                }
-              />
-              Target ≤
-            </label>
-            <input
-              type="number"
-              min={1}
-              disabled={nodeData.targetMaxBytes === null}
+          <NumberField
+            label="FPS"
+            value={nodeData.fps}
+            min={1}
+            max={30}
+            integer
+            allowEmpty={false}
+            onChange={(v) => updateNodeData(id, { fps: Math.max(1, Math.min(30, v || 1)) })}
+          />
+          <NumberField
+            label="Colors"
+            value={nodeData.colorCount}
+            min={2}
+            max={256}
+            integer
+            allowEmpty={false}
+            onChange={(v) => updateNodeData(id, { colorCount: Math.max(2, Math.min(256, v || 2)) })}
+          />
+          <CheckboxField label="Dither" checked={nodeData.dither} onChange={(dither) => updateNodeData(id, { dither })} />
+          <CheckboxField
+            label="Target size"
+            checked={nodeData.targetMaxBytes !== null}
+            onChange={(on) => updateNodeData(id, { targetMaxBytes: on ? 128 * 1024 : null })}
+          />
+          {nodeData.targetMaxBytes !== null && (
+            <NumberField
+              label="Max size"
+              unit="KB"
               value={targetKB || 128}
-              onChange={(e) => {
-                const kb = Math.max(1, Number(e.target.value) || 1);
-                updateNodeData(id, { targetMaxBytes: kb * 1024 });
-              }}
-              className="w-16 px-1.5 py-0.5 bg-neutral-800 rounded text-neutral-200 disabled:opacity-40"
+              min={1}
+              integer
+              allowEmpty={false}
+              onChange={(v) => updateNodeData(id, { targetMaxBytes: Math.max(1, v || 1) * 1024 })}
             />
-            <span className="text-neutral-500">KB</span>
-          </div>
-        </div>
-
-        {/* Output info + run */}
-        <div className="shrink-0 flex items-center justify-between gap-2">
-          <div className="text-[10px] text-neutral-500">
-            {nodeData.outputDimensions
-              ? `${nodeData.outputDimensions.width}×${nodeData.outputDimensions.height} · ${formatBytes(nodeData.outputBytes)}`
-              : ""}
-          </div>
+          )}
+          <FieldRow className="justify-end">
+            <PanelButton
+              primary
+              onClick={() => regenerateNode(id)}
+              disabled={frameCount < 2 || nodeData.status === "loading" || isRunning}
+            >
+              {nodeData.status === "loading" ? "Encoding..." : "Encode GIF"}
+            </PanelButton>
+          </FieldRow>
+        </ControlsCard>
+      }
+    >
+      {nodeData.outputGif ? (
+        <>
+          <img
+            src={nodeData.outputGif}
+            alt="GIF preview"
+            className="absolute inset-0 w-full h-full object-cover"
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              if (img.naturalWidth > 0 && img.naturalHeight > 0 && nodeData.outputGif) {
+                setLoadedAspect({ src: nodeData.outputGif, aspect: img.naturalWidth / img.naturalHeight });
+              }
+            }}
+          />
           <button
-            onClick={() => regenerateNode(id)}
-            disabled={orderedFrames.filter((f) => f.src).length < 2 || nodeData.status === "loading" || isRunning}
-            className="px-3 py-1 bg-blue-600 hover:bg-blue-500 disabled:bg-neutral-700 disabled:text-neutral-500 disabled:cursor-not-allowed rounded text-white text-xs font-medium transition-colors"
+            onClick={() => updateNodeData(id, { outputGif: null, status: "idle", outputBytes: null, outputDimensions: null })}
+            className="absolute top-1 right-1 w-5 h-5 bg-neutral-900/80 hover:bg-red-600/80 rounded flex items-center justify-center text-neutral-400 hover:text-white opacity-0 group-hover:opacity-100 focus:opacity-100"
+            title="Clear GIF"
           >
-            {nodeData.status === "loading" ? "Encoding..." : "Encode GIF"}
+            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
-        </div>
+        </>
+      ) : (
+        <EmptyState message={nodeData.status === "loading" ? `Encoding... ${Math.round(nodeData.progress)}%` : "No GIF yet"} />
+      )}
 
-        {nodeData.status === "error" && nodeData.error && (
-          <div className="shrink-0 px-2 py-1.5 bg-red-900/30 border border-red-700/50 rounded">
-            <p className="text-[10px] text-red-400 break-words">{nodeData.error}</p>
-          </div>
-        )}
-      </div>
-    </BaseNode>
+      {nodeData.status === "error" && nodeData.error && (
+        <div className="absolute bottom-2 left-2 right-2 px-2 py-1.5 bg-red-900/30 border border-red-700/50 rounded">
+          <p className="text-[10px] text-red-400 break-words">{nodeData.error}</p>
+        </div>
+      )}
+    </NodeShell>
   );
 }

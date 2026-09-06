@@ -286,8 +286,8 @@ describe("GenerateAudioNode", () => {
         </TestWrapper>
       );
 
-      expect(screen.getByTitle("Previous")).toBeInTheDocument();
-      expect(screen.getByTitle("Next")).toBeInTheDocument();
+      expect(screen.getByTitle("Previous audio")).toBeInTheDocument();
+      expect(screen.getByTitle("Next audio")).toBeInTheDocument();
     });
 
     it("should show current position in carousel", () => {
@@ -305,7 +305,7 @@ describe("GenerateAudioNode", () => {
         </TestWrapper>
       );
 
-      expect(screen.getByText("2/3")).toBeInTheDocument();
+      expect(screen.getByText("2 / 3")).toBeInTheDocument();
     });
   });
 

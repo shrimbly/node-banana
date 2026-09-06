@@ -11,6 +11,7 @@ const mockRegenerateNode = vi.fn();
 const mockStopWorkflow = vi.fn();
 const mockValidateWorkflow = vi.fn();
 const mockSetEdgeStyle = vi.fn();
+const mockSetAllEdgesHidden = vi.fn();
 const mockSetModelSearchOpen = vi.fn();
 const mockUseWorkflowStore = vi.fn();
 
@@ -73,7 +74,12 @@ const defaultProviderSettings: ProviderSettings = {
 
 // Default store state factory
 const createDefaultState = (overrides = {}) => ({
-  nodes: [],
+  // Two connected nodes, so Run has something to run; a node missing a
+  // connection never disables it, only a graph with no connections at all
+  nodes: [
+    { id: "p", type: "prompt", position: { x: 0, y: 0 }, data: { prompt: "hi" } },
+    { id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} },
+  ],
   isRunning: false,
   currentNodeIds: [],
   executeWorkflow: mockExecuteWorkflow,
@@ -81,7 +87,10 @@ const createDefaultState = (overrides = {}) => ({
   stopWorkflow: mockStopWorkflow,
   validateWorkflow: mockValidateWorkflow,
   edgeStyle: "angular" as const,
+  edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true },
   setEdgeStyle: mockSetEdgeStyle,
+  setAllEdgesHidden: mockSetAllEdgesHidden,
+  edges: [{ id: "e", source: "p", target: "gen", sourceHandle: "text", targetHandle: "text" }],
   setModelSearchOpen: mockSetModelSearchOpen,
   modelSearchOpen: false,
   modelSearchProvider: null,
@@ -117,14 +126,14 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("Image")).toBeInTheDocument();
-        expect(screen.getByText("Prompt")).toBeInTheDocument();
-        expect(screen.getByText("Output")).toBeInTheDocument();
-        expect(screen.getByText("All nodes")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Image" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Prompt" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Output" })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "All nodes" })).toBeInTheDocument();
       });
     });
 
-    it("should render Generate combo button", async () => {
+    it("should render the Generate menu button", async () => {
       render(
         <TestWrapper>
           <FloatingActionBar />
@@ -132,8 +141,19 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("Generate")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Generate" })).toBeInTheDocument();
       });
+    });
+
+    it("shows the keyboard shortcut in the hover label", async () => {
+      render(
+        <TestWrapper>
+          <FloatingActionBar />
+        </TestWrapper>
+      );
+
+      const imageButton = await screen.findByRole("button", { name: "Image" });
+      expect(imageButton.parentElement).toHaveTextContent("⇧I");
     });
 
     it("should render Run button", async () => {
@@ -156,7 +176,7 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTitle("Switch to curved connectors")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Switch to straight connectors" })).toBeInTheDocument();
       });
     });
   });
@@ -170,10 +190,10 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("Image")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Image" })).toBeInTheDocument();
       });
 
-      const imageButton = screen.getByText("Image");
+      const imageButton = screen.getByRole("button", { name: "Image" });
       fireEvent.click(imageButton);
 
       expect(mockAddNode).toHaveBeenCalledWith("imageInput", expect.any(Object));
@@ -187,10 +207,10 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("Prompt")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Prompt" })).toBeInTheDocument();
       });
 
-      const promptButton = screen.getByText("Prompt");
+      const promptButton = screen.getByRole("button", { name: "Prompt" });
       fireEvent.click(promptButton);
 
       expect(mockAddNode).toHaveBeenCalledWith("prompt", expect.any(Object));
@@ -204,10 +224,10 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("Output")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Output" })).toBeInTheDocument();
       });
 
-      const outputButton = screen.getByText("Output");
+      const outputButton = screen.getByRole("button", { name: "Output" });
       fireEvent.click(outputButton);
 
       expect(mockAddNode).toHaveBeenCalledWith("output", expect.any(Object));
@@ -223,10 +243,10 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("Image")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Image" })).toBeInTheDocument();
       });
 
-      const imageButton = screen.getByText("Image");
+      const imageButton = screen.getByRole("button", { name: "Image" });
 
       const mockDataTransfer = {
         setData: vi.fn(),
@@ -249,10 +269,10 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("Prompt")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Prompt" })).toBeInTheDocument();
       });
 
-      const promptButton = screen.getByText("Prompt");
+      const promptButton = screen.getByRole("button", { name: "Prompt" });
 
       const mockDataTransfer = {
         setData: vi.fn(),
@@ -276,16 +296,29 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("Generate")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Generate" })).toBeInTheDocument();
       });
 
-      const generateButton = screen.getByText("Generate");
+      const generateButton = screen.getByRole("button", { name: "Generate" });
       fireEvent.click(generateButton);
 
       // Dropdown menu items should appear
-      expect(screen.getByText("Image", { selector: "button.w-full" })).toBeInTheDocument();
-      expect(screen.getByText("Video", { selector: "button.w-full" })).toBeInTheDocument();
-      expect(screen.getByText("Text (LLM)")).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: /^Image/ })).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: /^Video/ })).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: /Text \(LLM\)/ })).toBeInTheDocument();
+    });
+
+    it("opens the menu without adding a node", async () => {
+      render(
+        <TestWrapper>
+          <FloatingActionBar />
+        </TestWrapper>
+      );
+
+      fireEvent.click(await screen.findByRole("button", { name: "Generate" }));
+
+      expect(screen.getByRole("menu")).toBeInTheDocument();
+      expect(mockAddNode).not.toHaveBeenCalled();
     });
 
     it("should add nanoBanana node when Image option is clicked", async () => {
@@ -296,14 +329,14 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("Generate")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Generate" })).toBeInTheDocument();
       });
 
       // Open dropdown
-      fireEvent.click(screen.getByText("Generate"));
+      fireEvent.click(screen.getByRole("button", { name: "Generate" }));
 
       // Click Image option in dropdown
-      const imageOption = screen.getByText("Image", { selector: "button.w-full" });
+      const imageOption = screen.getByRole("menuitem", { name: /^Image/ });
       fireEvent.click(imageOption);
 
       expect(mockAddNode).toHaveBeenCalledWith("nanoBanana", expect.any(Object));
@@ -317,11 +350,11 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("Generate")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Generate" })).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByText("Generate"));
-      fireEvent.click(screen.getByText("Video", { selector: "button.w-full" }));
+      fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: /^Video/ }));
 
       expect(mockAddNode).toHaveBeenCalledWith("generateVideo", expect.any(Object));
     });
@@ -334,11 +367,11 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("Generate")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Generate" })).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByText("Generate"));
-      fireEvent.click(screen.getByText("Text (LLM)"));
+      fireEvent.click(screen.getByRole("button", { name: "Generate" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: /Text \(LLM\)/ }));
 
       expect(mockAddNode).toHaveBeenCalledWith("llmGenerate", expect.any(Object));
     });
@@ -351,24 +384,24 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("Generate")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Generate" })).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByText("Generate"));
+      fireEvent.click(screen.getByRole("button", { name: "Generate" }));
 
       // Verify dropdown is open
-      expect(screen.getByText("Video", { selector: "button.w-full" })).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: /^Video/ })).toBeInTheDocument();
 
       // Click an option
-      fireEvent.click(screen.getByText("Video", { selector: "button.w-full" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: /^Video/ }));
 
       // Dropdown should close
-      expect(screen.queryByText("Video", { selector: "button.w-full" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("menuitem", { name: /^Video/ })).not.toBeInTheDocument();
     });
   });
 
   describe("Browse Models Button", () => {
-    it("should render All models button with Browse models title", async () => {
+    it("should render All models button", async () => {
       render(
         <TestWrapper>
           <FloatingActionBar />
@@ -376,8 +409,7 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTitle("Browse models")).toBeInTheDocument();
-        expect(screen.getByText("All models")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "All models" })).toBeInTheDocument();
       });
     });
 
@@ -389,10 +421,10 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("All models")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "All models" })).toBeInTheDocument();
       });
 
-      const browseButton = screen.getByText("All models");
+      const browseButton = screen.getByRole("button", { name: "All models" });
       fireEvent.click(browseButton);
 
       expect(mockSetModelSearchOpen).toHaveBeenCalledWith(true);
@@ -408,7 +440,7 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("All nodes")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "All nodes" })).toBeInTheDocument();
       });
     });
 
@@ -420,17 +452,17 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("All nodes")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "All nodes" })).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByText("All nodes"));
+      fireEvent.click(screen.getByRole("button", { name: "All nodes" }));
 
       // Check representative items from different categories
-      expect(screen.getByText("Image Input")).toBeInTheDocument();
-      expect(screen.getByText("Generate Image")).toBeInTheDocument();
-      expect(screen.getByText("Router")).toBeInTheDocument();
-      expect(screen.getByText("Output Gallery")).toBeInTheDocument();
-      expect(screen.getByText("Annotate")).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Image Input" })).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Generate Image" })).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Router" })).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Output Gallery" })).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Annotate" })).toBeInTheDocument();
     });
 
     it("should call addNode when a node is selected from All nodes menu", async () => {
@@ -441,11 +473,11 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("All nodes")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "All nodes" })).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByText("All nodes"));
-      fireEvent.click(screen.getByText("Annotate"));
+      fireEvent.click(screen.getByRole("button", { name: "All nodes" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Annotate" }));
 
       expect(mockAddNode).toHaveBeenCalledWith("annotation", expect.any(Object));
     });
@@ -458,24 +490,24 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("All nodes")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "All nodes" })).toBeInTheDocument();
       });
 
-      fireEvent.click(screen.getByText("All nodes"));
+      fireEvent.click(screen.getByRole("button", { name: "All nodes" }));
 
       // Verify dropdown is open
-      expect(screen.getByText("Image Input")).toBeInTheDocument();
+      expect(screen.getByRole("menuitem", { name: "Image Input" })).toBeInTheDocument();
 
       // Click an item
-      fireEvent.click(screen.getByText("Image Input"));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Image Input" }));
 
       // Dropdown should close - "Image Input" should no longer be visible
-      expect(screen.queryByText("Image Input")).not.toBeInTheDocument();
+      expect(screen.queryByRole("menuitem", { name: "Image Input" })).not.toBeInTheDocument();
     });
   });
 
   describe("Edge Style Toggle", () => {
-    it("should call setEdgeStyle with curved when currently angular", async () => {
+    it("should call setEdgeStyle with straight when currently angular", async () => {
       render(
         <TestWrapper>
           <FloatingActionBar />
@@ -483,11 +515,33 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTitle("Switch to curved connectors")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Switch to straight connectors" })).toBeInTheDocument();
       });
 
-      const toggleButton = screen.getByTitle("Switch to curved connectors");
+      const toggleButton = screen.getByRole("button", { name: "Switch to straight connectors" });
       fireEvent.click(toggleButton);
+
+      expect(mockSetEdgeStyle).toHaveBeenCalledWith("straight");
+    });
+
+    it("should call setEdgeStyle with curved when currently straight", async () => {
+      mockUseWorkflowStore.mockImplementation((selector) => {
+        return selector(createDefaultState({
+          edgeStyle: "straight",
+        }));
+      });
+
+      render(
+        <TestWrapper>
+          <FloatingActionBar />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole("button", { name: "Switch to curved connectors" })).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByRole("button", { name: "Switch to curved connectors" }));
 
       expect(mockSetEdgeStyle).toHaveBeenCalledWith("curved");
     });
@@ -506,10 +560,10 @@ describe("FloatingActionBar", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTitle("Switch to angular connectors")).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: "Switch to angular connectors" })).toBeInTheDocument();
       });
 
-      const toggleButton = screen.getByTitle("Switch to angular connectors");
+      const toggleButton = screen.getByRole("button", { name: "Switch to angular connectors" });
       fireEvent.click(toggleButton);
 
       expect(mockSetEdgeStyle).toHaveBeenCalledWith("angular");
@@ -575,8 +629,72 @@ describe("FloatingActionBar", () => {
       expect(mockStopWorkflow).toHaveBeenCalled();
     });
 
-    it("should disable Run button when workflow is invalid", async () => {
-      mockValidateWorkflow.mockReturnValue({ valid: false, errors: ["No nodes"] });
+    it("keeps Run enabled when some nodes are missing connections", async () => {
+      mockUseWorkflowStore.mockImplementation((selector) =>
+        selector(createDefaultState({
+          nodes: [
+            { id: "p", type: "prompt", position: { x: 0, y: 0 }, data: { prompt: "hi" } },
+            { id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} },
+            { id: "lonely", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} },
+          ],
+          edges: [{ id: "e", source: "p", target: "gen", sourceHandle: "text", targetHandle: "text" }],
+        })));
+
+      render(
+        <TestWrapper>
+          <FloatingActionBar />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Run")).toBeInTheDocument();
+      });
+
+      expect(screen.getByText("Run").closest("button")).not.toBeDisabled();
+      expect(screen.getByTitle("Run options")).toBeInTheDocument();
+    });
+
+    it("keeps Run enabled for a self-contained node with no edges", async () => {
+      // A ComfyUI app whose values are baked in has no inputs to wire, and it
+      // runs from Cmd/Ctrl+Enter — the Run button must offer the same.
+      mockUseWorkflowStore.mockImplementation((selector) =>
+        selector(createDefaultState({ nodes: [{ id: "app", type: "comfyApp", position: { x: 0, y: 0 }, data: {} }], edges: [] })));
+
+      render(
+        <TestWrapper>
+          <FloatingActionBar />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText("Run")).toBeInTheDocument();
+      });
+
+      const runButton = screen.getByText("Run").closest("button");
+      expect(runButton).not.toBeDisabled();
+      expect(runButton).toHaveAttribute("title", "Run");
+      expect(screen.getByTitle("Run options")).toBeInTheDocument();
+    });
+
+    it("disables Run when nothing is connected and nothing runs on its own", async () => {
+      mockUseWorkflowStore.mockImplementation((selector) =>
+        selector(createDefaultState({ nodes: [{ id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} }], edges: [] })));
+
+      render(
+        <TestWrapper>
+          <FloatingActionBar />
+        </TestWrapper>
+      );
+
+      await waitFor(() => {
+        const runButton = screen.getByText("Run").closest("button");
+        expect(runButton).toBeDisabled();
+        expect(runButton).toHaveAttribute("title", "Connect some nodes to run");
+      });
+    });
+
+    it("should disable Run button when the workflow is empty", async () => {
+      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes: [], edges: [] })));
 
       render(
         <TestWrapper>
@@ -592,8 +710,8 @@ describe("FloatingActionBar", () => {
       expect(runButton).toBeDisabled();
     });
 
-    it("should show error message in title when workflow is invalid", async () => {
-      mockValidateWorkflow.mockReturnValue({ valid: false, errors: ["Missing required nodes"] });
+    it("says why in the title when the workflow is empty", async () => {
+      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes: [], edges: [] })));
 
       render(
         <TestWrapper>
@@ -603,7 +721,7 @@ describe("FloatingActionBar", () => {
 
       await waitFor(() => {
         const runButton = screen.getByText("Run").closest("button");
-        expect(runButton).toHaveAttribute("title", "Missing required nodes");
+        expect(runButton).toHaveAttribute("title", "Workflow is empty");
       });
     });
   });
@@ -621,8 +739,8 @@ describe("FloatingActionBar", () => {
       });
     });
 
-    it("should not show dropdown chevron when workflow is invalid", async () => {
-      mockValidateWorkflow.mockReturnValue({ valid: false, errors: ["No nodes"] });
+    it("should not show dropdown chevron when the workflow is empty", async () => {
+      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes: [], edges: [] })));
 
       render(
         <TestWrapper>
@@ -702,7 +820,7 @@ describe("FloatingActionBar", () => {
       fireEvent.click(screen.getByTitle("Run options"));
 
       const runFromSelectedButton = screen.getByText("Run from selected node").closest("button");
-      expect(runFromSelectedButton).toHaveClass("cursor-not-allowed");
+      expect(runFromSelectedButton).toBeDisabled();
     });
 
     it("should enable 'Run from selected node' when a single node is selected", async () => {
@@ -773,5 +891,53 @@ describe("FloatingActionBar", () => {
 
       expect(mockRegenerateNode).toHaveBeenCalledWith("node-1");
     });
+  });
+});
+
+describe("Hidden connections toggle", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockValidateWorkflow.mockReturnValue({ valid: true, errors: [] });
+    mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({ gemini: true }) });
+  });
+
+  it("is disabled when there are no connections", async () => {
+    mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ edges: [] })));
+    render(
+      <TestWrapper>
+        <FloatingActionBar />
+      </TestWrapper>
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Hide all connections" })).toBeDisabled());
+  });
+
+  it("hides every connection when none are hidden", async () => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edges: [{ id: "e1", data: {} }, { id: "e2", data: {} }] }))
+    );
+    render(
+      <TestWrapper>
+        <FloatingActionBar />
+      </TestWrapper>
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: "Hide all connections" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Hide all connections" }));
+    expect(mockSetAllEdgesHidden).toHaveBeenCalledWith(true);
+  });
+
+  it("counts the hidden connections and shows them all", async () => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ edges: [{ id: "e1", data: { hidden: true } }, { id: "e2", data: { hidden: true } }, { id: "e3", data: {} }] }))
+    );
+    render(
+      <TestWrapper>
+        <FloatingActionBar />
+      </TestWrapper>
+    );
+    const button = await screen.findByRole("button", { name: "Show 2 hidden connections" });
+    // The count badge sits beside the button, inside the same group.
+    expect(button.parentElement).toHaveTextContent("2");
+    fireEvent.click(button);
+    expect(mockSetAllEdgesHidden).toHaveBeenCalledWith(false);
   });
 });

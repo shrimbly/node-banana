@@ -13,10 +13,46 @@ export interface WorkflowEdgeData extends Record<string, unknown> {
   createdAt?: number;
   isLoop?: boolean;
   loopCount?: number;
+  /** Drawn as labelled stubs at its handles instead of a line; still executes. */
+  hidden?: boolean;
+  /** The user's own label; empty means show the automatic one. */
+  label?: string;
+  /** Bundle this edge belongs to at its output handle, shared with the other members. */
+  sourceBundleId?: string;
+  /** Bundle this edge belongs to at its input handle. Independent of the source end. */
+  targetBundleId?: string;
+  /** A freely positioned cable clamp gathering edges crossed in hook mode. */
+  hookBundle?: { id: string; x: number; y: number };
+  /** Ordered hook handles along this edge. Supersedes the legacy single handle. */
+  hookBundles?: { id: string; x: number; y: number }[];
 }
 
 // Workflow Edge
 export type WorkflowEdge = Edge<WorkflowEdgeData>;
+
+// How the line of a connection is routed. Saved per workflow as `edgeStyle`.
+export type EdgeStyle = "angular" | "curved" | "straight";
+
+// How connections are drawn, beyond the line style. Saved per workflow as
+// `edgeAppearance`, with the user's default kept in localStorage.
+export type EdgeThickness = "thin" | "regular" | "thick";
+
+export interface EdgeAppearance {
+  thickness: EdgeThickness;
+  /** Opacity of connections not attached to a selected node, 0 to 1. */
+  fadedOpacity: number;
+  /** Fade the middle of each connection so the ends stay readable. */
+  gradient: boolean;
+  /** Animate connections into a node while it generates. */
+  loadingPulse: boolean;
+}
+
+export const defaultEdgeAppearance: EdgeAppearance = {
+  thickness: "regular",
+  fadedOpacity: 0.25,
+  gradient: true,
+  loadingPulse: true,
+};
 
 // Auto-save configuration stored in localStorage
 export interface WorkflowSaveConfig {

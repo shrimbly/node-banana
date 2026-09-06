@@ -89,7 +89,7 @@ describe("executeLlmGenerate", () => {
     await expect(executeLlmGenerate(ctx)).rejects.toThrow("Missing text input");
 
     expect(ctx.updateNodeData).toHaveBeenCalledWith("llm-1", expect.objectContaining({
-      status: "error",
+      status: "skipped",
       error: expect.stringContaining("Missing text input"),
     }));
   });

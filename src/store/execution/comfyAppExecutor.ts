@@ -14,6 +14,7 @@ import type { ComfyAppNodeData } from "@/types";
 import type { ComfyAppInput, ComfyResolvedOutput } from "@/lib/comfy/types";
 import { buildComfyHeaders, comfyConfigError, getComfySettings } from "@/lib/comfy/settings";
 import type { NodeExecutionContext } from "./types";
+import { MissingInputError } from "./missingInput";
 
 /** Polling cadence — starts responsive, then backs off for long renders. */
 const INITIAL_INTERVAL = 1500;
@@ -177,8 +178,8 @@ export async function executeComfyApp(ctx: NodeExecutionContext): Promise<void> 
 
   if (!app) {
     const message = "No ComfyUI workflow attached to this node";
-    updateNodeData(node.id, { status: "error", error: message });
-    throw new Error(message);
+    updateNodeData(node.id, { status: "skipped", error: message });
+    throw new MissingInputError(message);
   }
 
   const settings = getComfySettings();
@@ -227,8 +228,8 @@ export async function executeComfyApp(ctx: NodeExecutionContext): Promise<void> 
     .map((input) => input.label);
   if (missing.length > 0) {
     const message = `Missing required input: ${missing.join(", ")}`;
-    updateNodeData(node.id, { status: "error", error: message });
-    throw new Error(message);
+    updateNodeData(node.id, { status: "skipped", error: message });
+    throw new MissingInputError(message);
   }
 
   updateNodeData(node.id, {

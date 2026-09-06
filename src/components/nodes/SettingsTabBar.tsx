@@ -14,10 +14,10 @@ export function SettingsTabBar({
   fallbackLabel,
 }: SettingsTabBarProps) {
   return (
-    <div className="flex gap-1 mb-2">
+    <div className="flex gap-1 mb-1">
       <button
         type="button"
-        className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
+        className={`nodrag nopan h-[22px] px-2 rounded-well squircle text-node transition-colors ${
           activeTab === "primary"
             ? "bg-neutral-700 text-neutral-200"
             : "bg-transparent text-neutral-500 hover:text-neutral-400"
@@ -30,7 +30,7 @@ export function SettingsTabBar({
       </button>
       <button
         type="button"
-        className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
+        className={`nodrag nopan h-[22px] px-2 rounded-well squircle text-node transition-colors ${
           activeTab === "fallback"
             ? "bg-neutral-700 text-neutral-200"
             : "bg-transparent text-neutral-500 hover:text-neutral-400"

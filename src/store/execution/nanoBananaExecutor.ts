@@ -14,6 +14,7 @@ import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
 import type { NodeExecutionContext } from "./types";
+import { MissingInputError } from "./missingInput";
 
 export interface NanoBananaOptions {
   /** When true, falls back to stored inputImages/inputPrompt if no connections provide them. */
@@ -74,10 +75,10 @@ export async function executeNanoBanana(
 
   if (!promptText) {
     updateNodeData(node.id, {
-      status: "error",
+      status: "skipped",
       error: "Missing text input",
     });
-    throw new Error("Missing text input");
+    throw new MissingInputError("Missing text input");
   }
 
   // Capture promptText as a definitely-non-null string for use inside the closure.

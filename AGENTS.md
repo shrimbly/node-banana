@@ -131,7 +131,7 @@ Returns `{ images: string[], text: string | null }`.
 - `Shift + L` - Add LLM node
 - `Shift + A` - Add annotation node
 - `Shift + T` - Add audio (generateAudio) node
-- `H` - Stack selected nodes horizontally
+- Hold `H` and drag - Hook edges into one movable bundle
 - `V` - Stack selected nodes vertically
 - `G` - Arrange selected nodes in grid
 - `?` - Show keyboard shortcuts
@@ -230,4 +230,3 @@ All routes in `src/app/api/`:
 - Commit after each logical task or unit of work is complete. When implementing a multi-task plan, commit after finishing each task — do NOT batch all tasks into a single commit at the end.
 - Each commit should be atomic and self-contained: one task = one commit.
 - The .planning directory is untracked, do not attempt to commit any changes to the files in this directory.
-

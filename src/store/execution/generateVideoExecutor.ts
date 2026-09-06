@@ -10,6 +10,7 @@ import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
 import type { NodeExecutionContext } from "./types";
+import { MissingInputError } from "./missingInput";
 
 export interface GenerateVideoOptions {
   /** When true, falls back to stored inputImages/inputPrompt if no connections provide them. */
@@ -56,10 +57,10 @@ export async function executeGenerateVideo(
     const hasVideo = connectedVideos.length > 0;
     if (!hasPrompt && images.length === 0 && !hasAudio && !hasVideo) {
       updateNodeData(node.id, {
-        status: "error",
+        status: "skipped",
         error: "Missing required inputs",
       });
-      throw new Error("Missing required inputs");
+      throw new MissingInputError("Missing required inputs");
     }
   } else {
     images = connectedImages;
@@ -69,10 +70,10 @@ export async function executeGenerateVideo(
     const hasVideo = connectedVideos.length > 0;
     if (!hasPrompt && images.length === 0 && !hasAudio && !hasVideo) {
       updateNodeData(node.id, {
-        status: "error",
+        status: "skipped",
         error: "Missing required inputs",
       });
-      throw new Error("Missing required inputs");
+      throw new MissingInputError("Missing required inputs");
     }
   }
 

@@ -1,17 +1,23 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
-import { Handle, Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
-import { BaseNode } from "./BaseNode";
+import { NodeProps, Node, useReactFlow } from "@xyflow/react";
+import { Dialog } from "@/components/ui/Dialog";
+import { NodeShell } from "./NodeShell";
+import { ControlsCard, EmptyState, type SocketSpec } from "./ui";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { OutputGalleryNodeData } from "@/types";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
 import { useVideoBlobUrl } from "@/hooks/useVideoBlobUrl";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import { downloadMedia as downloadMediaUtil } from "@/utils/downloadMedia";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
-import { HandleLabel } from "./HandleLabel";
+
+const INPUT_SOCKETS: SocketSpec[] = [
+  { id: "image", type: "image", label: "Image" },
+  { id: "video", type: "video", label: "Video" },
+];
+const EMPTY_HEIGHT = 150;
+const GRID_HEIGHT = 240;
 
 type MediaItem = { type: "image" | "video"; src: string };
 
@@ -47,7 +53,6 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
   const addNode = useWorkflowStore((state) => state.addNode);
   const { getNodes, setNodes } = useReactFlow();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const showLabels = useShowHandleLabels(selected);
 
   // Display stored media only — items are accumulated during workflow execution
   const displayMedia = useMemo(() => {
@@ -312,62 +317,46 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
 
   return (
     <>
-      <BaseNode
+      <NodeShell
         id={id}
         selected={selected}
-        className="min-w-[200px]"
+        media={{ kind: "fixed", height: displayMedia.length === 0 ? EMPTY_HEIGHT : GRID_HEIGHT }}
+        inputs={INPUT_SOCKETS}
+        minWidth={240}
+        controls={
+          displayMedia.length > 0 ? (
+            <ControlsCard
+              id={id}
+              summary={{
+                title: `${displayMedia.length} ${displayMedia.length === 1 ? "item" : "items"}`,
+                values: (
+                  <button
+                    onClick={handleExtractToInputNodes}
+                    className="nodrag nopan flex items-center gap-1 h-5 px-1.5 text-node text-neutral-400 hover:text-white hover:bg-neutral-700 rounded-[6px] squircle transition-colors"
+                    title="Extract each item as an input node"
+                  >
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+                    </svg>
+                    Extract
+                  </button>
+                ),
+              }}
+            />
+          ) : undefined
+        }
       >
-        <Handle
-          type="target"
-          position={Position.Left}
-          id="image"
-          data-handletype="image"
-          style={{ top: "40%" }}
-        />
-        <HandleLabel label="Image" side="target" color="rgb(59, 130, 246)" top="calc(40% - 18px)" visible={showLabels} />
-
-        <Handle
-          type="target"
-          position={Position.Left}
-          id="video"
-          data-handletype="video"
-          style={{ top: "60%" }}
-        />
-        <HandleLabel label="Video" side="target" color="var(--handle-color-video)" top="calc(60% - 18px)" visible={showLabels} />
-
-        {displayMedia.length > 0 && (
-          <div className="flex items-center justify-between px-2 py-1">
-            <span className="text-neutral-400 text-[10px]">
-              {displayMedia.length} {displayMedia.length === 1 ? "item" : "items"}
-            </span>
-            <button
-              onClick={handleExtractToInputNodes}
-              className="nodrag nopan flex items-center gap-1 px-1.5 py-0.5 text-[10px] text-neutral-400 hover:text-white hover:bg-neutral-700 rounded transition-colors"
-              title="Extract each item as an input node"
-            >
-              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16" />
-              </svg>
-              Extract
-            </button>
-          </div>
-        )}
-
         {displayMedia.length === 0 ? (
-          <div className="w-full flex-1 min-h-[200px] border border-dashed border-neutral-600 rounded flex items-center justify-center">
-            <span className="text-neutral-500 text-[10px] text-center px-4">
-              Connect image or video nodes to view gallery
-            </span>
-          </div>
+          <EmptyState message="Connect image or video nodes to view gallery" />
         ) : (
-          <div className="flex-1 overflow-y-auto nodrag nopan nowheel">
-            <div className="grid grid-cols-3 gap-1.5 p-1">
+          <div className="absolute inset-0 overflow-y-auto nodrag nopan nowheel bg-neutral-900/40">
+            <div className="grid grid-cols-3 gap-1 p-1">
               {displayMedia.map((item, idx) => (
                 <button
                   key={idx}
                   onClick={() => openLightbox(idx)}
                   aria-label={item.type === "video" ? `Open video ${idx + 1}` : `Open image ${idx + 1}`}
-                  className="aspect-square rounded border border-neutral-700 hover:border-neutral-500 overflow-hidden transition-colors relative"
+                  className="aspect-square rounded-[6px] squircle border border-neutral-700 hover:border-neutral-500 overflow-hidden transition-colors relative"
                 >
                   {item.type === "video" ? (
                     <>
@@ -382,7 +371,7 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
                       )}
                       {/* Video play icon overlay */}
                       <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                        <svg className="w-5 h-5 text-white drop-shadow" fill="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-5 h-5 text-white drop-shadow" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
                           <path d="M8 5v14l11-7z" />
                         </svg>
                       </div>
@@ -395,16 +384,11 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
             </div>
           </div>
         )}
-      </BaseNode>
+      </NodeShell>
 
-      {/* Lightbox Portal */}
-      {lightboxIndex !== null && currentItem && typeof document !== "undefined" &&
-        createPortal(
-          <div
-            className="fixed inset-0 bg-black/90 z-[100] flex items-center justify-center p-8"
-            onClick={closeLightbox}
-          >
-            <div className="relative max-w-full max-h-full" onClick={(e) => e.stopPropagation()}>
+      {/* Lightbox */}
+      {lightboxIndex !== null && currentItem && (
+        <Dialog open onClose={closeLightbox} variant="lightbox" portal label={`Gallery image ${lightboxIndex + 1}`}>
               {currentItem.type === "video" ? (
                 <LightboxVideo src={currentItem.src} />
               ) : (
@@ -475,10 +459,8 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-black/50 rounded text-white text-xs font-medium">
                 {lightboxIndex + 1} / {displayMedia.length}
               </div>
-            </div>
-          </div>,
-          document.body
-        )}
+        </Dialog>
+      )}
     </>
   );
 }
