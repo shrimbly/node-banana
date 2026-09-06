@@ -466,7 +466,7 @@ export function ProjectSetupModal({
               onClick={() => setActiveTab(p.id)}
               aria-current={activeTab === p.id ? "page" : undefined}
               className={cn(
-                "h-[30px] px-2.5 rounded-md text-left text-[13px] whitespace-nowrap transition-colors",
+                "h-8 px-2.5 rounded-md text-left text-sm whitespace-nowrap transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
                 activeTab === p.id
                   ? "bg-neutral-700 text-neutral-100 font-medium"
