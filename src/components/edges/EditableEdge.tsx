@@ -33,6 +33,8 @@ import {
 import { EdgeLabel } from "./EdgeLabel";
 import { edgeBundles, bundleReach, bundleClampKey, type BundleMembership } from "@/lib/edges/bundles";
 import { edgeGraphIndex, nodeGraphIndex } from "@/lib/edges/graphIndex";
+import { bundleClampStyle } from "./BundleClamp";
+import { HookBundleClamp } from "./HookBundleClamp";
 
 interface EdgeData extends WorkflowEdgeData {
   offsetX?: number;
@@ -82,6 +84,11 @@ export function EditableEdge({
   const appearance = useWorkflowStore((state) => state.edgeAppearance);
   const [isDragging, setIsDragging] = useState(false);
   const carriesToolbar = useIsToolbarEdge(id);
+  const hookData = (data as EdgeData | undefined)?.hookBundle;
+  const hookMembers = useWorkflowStore(useShallow((state) => hookData
+    ? edgeGraphIndex(state.edges).hookBundles.get(hookData.id) ?? []
+    : []));
+  const hookBundle = hookMembers.length > 1 ? hookData : undefined;
 
   // Hidden connections: labelled stubs at the handles; hover ghosts the line back
   const isHidden = Boolean((data as EdgeData | undefined)?.hidden);
@@ -181,8 +188,8 @@ export function EditableEdge({
     const [sb, tb] = bundleKey.split("\u0002");
     return { source: unpack(sb, "source"), target: unpack(tb, "target") };
   }, [bundleKey]);
-  const sourceBundle = bundleExpanded ? null : bundles.source;
-  const targetBundle = bundleExpanded ? null : bundles.target;
+  const sourceBundle = bundleExpanded || hookBundle ? null : bundles.source;
+  const targetBundle = bundleExpanded || hookBundle ? null : bundles.target;
   const sDir: 1 | -1 = sourcePosition === "left" ? -1 : 1;
   const tDir: 1 | -1 = targetPosition === "right" ? 1 : -1;
   // Where this noodle starts and ends: the stem's far end when bundled
@@ -221,6 +228,17 @@ export function EditableEdge({
 
   // Calculate the path based on edge style
   const [edgePath, labelX, labelY] = useMemo(() => {
+    if (hookBundle) {
+      const { x, y } = hookBundle;
+      const direction = targetX >= sourceX ? 1 : -1;
+      const reach = 16 * direction;
+      const left = { sourceX: startX, sourceY, sourcePosition, targetX: x - reach, targetY: y, targetPosition: direction > 0 ? Position.Left : Position.Right };
+      const right = { sourceX: x + reach, sourceY: y, sourcePosition: direction > 0 ? Position.Right : Position.Left, targetX: endX, targetY, targetPosition };
+      const route = edgeStyle === "straight" ? getStraightPath : edgeStyle === "curved" ? getBezierPath : getSmoothStepPath;
+      const [first] = route(left);
+      const [last] = route(right);
+      return [`${first} L${x + reach},${y} ${last.replace(/^M[^A-Za-z]*/, "")}`, x, y] as [string, number, number];
+    }
     // Loop edges: smooth arc that exits/enters along handle directions, bowed below nodes
     if (edgeData?.isLoop) {
       const dist = Math.sqrt((targetX - sourceX) ** 2 + (targetY - sourceY) ** 2);
@@ -273,11 +291,11 @@ export function EditableEdge({
         offset: offsetX,
       });
     }
-  }, [edgeStyle, edgeData?.isLoop, startX, endX, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, offsetX]);
+  }, [hookBundle, edgeStyle, edgeData?.isLoop, startX, endX, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, offsetX]);
 
   // Calculate handle positions on the path segments (only for angular mode)
   const handlePositions = useMemo(() => {
-    if (edgeStyle !== "angular") return [];
+    if (edgeStyle !== "angular" || hookBundle) return [];
 
     const handles: { x: number; y: number; direction: "horizontal" | "vertical" }[] = [];
 
@@ -294,7 +312,7 @@ export function EditableEdge({
     }
 
     return handles;
-  }, [edgeStyle, sourceX, sourceY, targetX, targetY, offsetX, offsetY]);
+  }, [hookBundle, edgeStyle, sourceX, sourceY, targetX, targetY, offsetX, offsetY]);
 
   const handleMouseDown = useCallback(
     (e: React.MouseEvent, direction: "horizontal" | "vertical") => {
@@ -459,7 +477,10 @@ export function EditableEdge({
         } as React.CSSProperties}
       />
 
-      {selected && carriesToolbar && <EdgeToolbar edgeId={id} x={labelX} y={labelY} />}
+      {selected && carriesToolbar && !hookBundle && <EdgeToolbar edgeId={id} x={labelX} y={labelY} />}
+      {hookBundle && hookMembers[0]?.id === id && (
+        <HookBundleClamp bundle={hookBundle} members={hookMembers.map((e) => e.id)} selected={hookMembers.some((e) => e.selected)} color={edgeColor} />
+      )}
 
       {/* Bundle stems: the first member of each bundle draws the shared stem and its count */}
       {sourceBundle?.index === 0 && (
@@ -543,7 +564,7 @@ export function EditableEdge({
         className="react-flow__edge-interaction"
       />
 
-      {showLabel && (
+      {showLabel && !hookBundle && (
         <EdgeLabel
           x={labelX}
           y={labelY + parallel * 18}
@@ -665,19 +686,13 @@ function BundleStem({ x, y, dir, reach, count, stroke, strokeOpacity, width, col
           onMouseDown={startClampDrag}
           onClick={(e) => e.stopPropagation()}
           style={{
+            ...bundleClampStyle,
             position: "absolute",
             transform: `translate(${splitX}px, ${y}px) translate(-50%, -50%)`,
             pointerEvents: "all",
             zIndex: 2001,
-            width: 10,
-            height: 26,
-            borderRadius: 9999,
             cursor: "ew-resize",
-            background: "linear-gradient(180deg, rgba(255,255,255,0.28), rgba(255,255,255,0.08))",
-            border: "1px solid rgba(255,255,255,0.45)",
             boxShadow: `inset 0 0 0 1px ${color}55, 0 1px 4px rgba(0,0,0,0.45)`,
-            backdropFilter: "blur(4px)",
-            WebkitBackdropFilter: "blur(4px)",
           }}
         />
       </EdgeLabelRenderer>

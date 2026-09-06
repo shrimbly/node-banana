@@ -87,6 +87,26 @@ describe("EditableEdge", () => {
   });
 
   describe("Basic Rendering", () => {
+    it.each(["angular", "curved", "straight"])("routes %s hook bundles through exactly one shared clamp", (edgeStyle) => {
+      const hookBundle = { id: "hook-test", x: 200, y: 80 };
+      const edges = [
+        { id: "edge-1", source: "a", target: "b", selected: true, data: { hookBundle } },
+        { id: "edge-2", source: "c", target: "d", selected: true, data: { hookBundle } },
+      ];
+      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ edges, edgeStyle })));
+      const { container } = render(<TestWrapper>
+        <EditableEdge {...createDefaultProps({ data: { hookBundle }, selected: true })} />
+        <EditableEdge {...createDefaultProps({ id: "edge-2", data: { hookBundle }, selected: true, sourceY: 150 })} />
+      </TestWrapper>);
+      expect(screen.getAllByTestId("hook-bundle-clamp")).toHaveLength(1);
+      expect(screen.getByTitle("Remove bundle")).toBeInTheDocument();
+      expect(screen.getByTitle("Delete 2 connections")).toBeInTheDocument();
+      expect(screen.queryByTestId("edge-toolbar")).not.toBeInTheDocument();
+      const paths = container.querySelectorAll(".react-flow__edge-path");
+      expect(paths).toHaveLength(2);
+      paths.forEach((path) => expect(path.getAttribute("d")).toContain("L216,80"));
+    });
+
     it("should render the edge path", () => {
       const { container } = render(
         <TestWrapper>

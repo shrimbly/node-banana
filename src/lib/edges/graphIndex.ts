@@ -43,6 +43,7 @@ export interface EdgeGraphIndex {
   /** Position among the visible edges between the same two nodes. */
   parallel: Map<string, { index: number; count: number }>;
   bundles: Map<string, EdgeBundles>;
+  hookBundles: Map<string, WorkflowEdge[]>;
   /** Hidden stub groups per node side, keyed by `hiddenStubSideKey`. */
   hiddenStubGroups: Map<string, HiddenStubGroup[]>;
   selectedIds: Set<string>;
@@ -125,8 +126,10 @@ function buildEdgeGraphIndex(edges: WorkflowEdge[]): EdgeGraphIndex {
 
   // Bundles: members share a bundle id and a handle at that end
   const byBundle = { source: new Map<string, string[]>(), target: new Map<string, string[]>() };
+  const hookBundles = new Map<string, WorkflowEdge[]>();
   for (const e of sorted) {
     if (!bundleable(e)) continue;
+    if (e.data?.hookBundle && !e.hidden) push(hookBundles, e.data.hookBundle.id, e);
     for (const end of ENDS) {
       const bundleId = bundleIdAt(e, end);
       if (bundleId) push(byBundle[end], `${bundleId}\u0000${nodeAt(e, end)}\u0000${handleAt(e, end) ?? ""}`, e.id);
@@ -173,7 +176,7 @@ function buildEdgeGraphIndex(edges: WorkflowEdge[]): EdgeGraphIndex {
   const selectedIds = new Set(edges.filter((e) => e.selected).map((e) => e.id));
   const toolbarEdgeId = edges.find((e) => e.selected)?.id ?? null;
 
-  return { byId, imageSequence, parallel, bundles, hiddenStubGroups, selectedIds, toolbarEdgeId };
+  return { byId, imageSequence, parallel, bundles, hookBundles, hiddenStubGroups, selectedIds, toolbarEdgeId };
 }
 
 const EMPTY_EDGE_INDEX = buildEdgeGraphIndex([]);

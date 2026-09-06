@@ -317,6 +317,9 @@ export interface WorkflowStore {
   setEdgeLabel: (edgeId: string, label: string) => void;
   /** Bundle edges that share an output handle or an input handle. Returns false otherwise. */
   bundleEdges: (edgeIds: string[], end?: BundleEnd) => boolean;
+  hookEdges: (edgeIds: string[], position: { x: number; y: number }) => void;
+  moveHookBundle: (bundleId: string, position: { x: number; y: number }, checkpoint?: boolean) => void;
+  removeHookBundle: (bundleId: string) => void;
   /** Dissolve the manual bundles the given edges belong to. */
   unbundleEdges: (edgeIds: string[], end?: BundleEnd) => void;
   /** Set where the bundle on a node's handle splits (px from the handle). */
@@ -1345,6 +1348,50 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     return true;
   },
 
+  hookEdges: (edgeIds, position) => {
+    if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return;
+    const requested = new Set(edgeIds);
+    const eligible = get().edges.filter((e) => !e.hidden && !e.data?.hidden && e.type !== "reference");
+    // Sweeping an existing clamp gathers its whole bundle.
+    const existing = new Set(eligible.filter((e) => requested.has(e.id)).map((e) => e.data?.hookBundle?.id).filter(Boolean));
+    const members = eligible.filter((e) => requested.has(e.id) || (e.data?.hookBundle && existing.has(e.data.hookBundle.id)));
+    if (members.length < 2) return;
+    const ids = new Set(members.map((e) => e.id));
+    const hookBundle = { id: `hook-${crypto.randomUUID()}`, ...position };
+    pushUndoCheckpoint(get, set);
+    set((state) => ({
+      edges: state.edges.map((e) => ids.has(e.id)
+        ? { ...e, selected: true, data: { ...e.data, hookBundle } }
+        : { ...e, selected: false }),
+      hasUnsavedChanges: true,
+    }));
+  },
+
+  moveHookBundle: (bundleId, position, checkpoint = false) => {
+    if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return;
+    if (!get().edges.some((e) => e.data?.hookBundle?.id === bundleId)) return;
+    if (checkpoint) pushUndoCheckpoint(get, set);
+    set((state) => ({
+      edges: state.edges.map((e) => e.data?.hookBundle?.id === bundleId
+        ? { ...e, data: { ...e.data, hookBundle: { id: bundleId, ...position } } } : e),
+      hasUnsavedChanges: true,
+    }));
+  },
+
+  removeHookBundle: (bundleId) => {
+    if (!get().edges.some((e) => e.data?.hookBundle?.id === bundleId)) return;
+    pushUndoCheckpoint(get, set);
+    set((state) => ({
+      edges: state.edges.map((e) => {
+        if (e.data?.hookBundle?.id !== bundleId) return e;
+        const { hookBundle: _removed, ...data } = e.data;
+        void _removed;
+        return { ...e, selected: false, data };
+      }),
+      hasUnsavedChanges: true,
+    }));
+  },
+
   unbundleEdges: (edgeIds: string[], end?: BundleEnd) => {
     const ids = new Set(edgeIds);
     const ends: BundleEnd[] = end ? [end] : ["source", "target"];
@@ -1510,11 +1557,23 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       : newNodes;
 
     // Create new edges with updated source/target IDs
+    const pastedHookIds = new Map<string, string>();
+    for (const edge of clipboard.edges) {
+      const bundle = edge.data?.hookBundle;
+      if (bundle && !pastedHookIds.has(bundle.id)) pastedHookIds.set(bundle.id, `hook-${crypto.randomUUID()}`);
+    }
     const newEdges: WorkflowEdge[] = clipboard.edges.map((edge) => ({
       ...edge,
       id: `edge-${idMapping.get(edge.source)}-${idMapping.get(edge.target)}-${edge.sourceHandle || "default"}-${edge.targetHandle || "default"}`,
       source: idMapping.get(edge.source)!,
       target: idMapping.get(edge.target)!,
+      ...(edge.data?.hookBundle && {
+        data: { ...edge.data, hookBundle: {
+          id: pastedHookIds.get(edge.data.hookBundle.id)!,
+          x: edge.data.hookBundle.x + offset.x,
+          y: edge.data.hookBundle.y + offset.y,
+        } },
+      }),
     }));
 
     // Deselect existing nodes and add new ones

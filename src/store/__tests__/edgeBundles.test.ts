@@ -63,6 +63,68 @@ describe("bundleEdges / unbundleEdges", () => {
   });
 });
 
+describe("hook bundles", () => {
+  beforeEach(() => {
+    useWorkflowStore.setState({ ...initial, nodes: [], edges: [edge("e1"), edge("e2", { source: "other", target: "different" }), edge("e3")], groups: {} });
+  });
+
+  it("gathers different endpoints into one clamp without rewiring, and supports undo", () => {
+    const before = useWorkflowStore.getState().edges;
+    useWorkflowStore.getState().hookEdges(["e1", "e2"], { x: 80, y: 90 });
+    const [a, b, c] = useWorkflowStore.getState().edges;
+    expect(a.data?.hookBundle).toEqual(b.data?.hookBundle);
+    expect(a.data?.hookBundle).toMatchObject({ x: 80, y: 90 });
+    expect([a, b].map((e) => [e.source, e.target])).toEqual(before.slice(0, 2).map((e) => [e.source, e.target]));
+    expect(c.data?.hookBundle).toBeUndefined();
+    useWorkflowStore.getState().undo();
+    expect(useWorkflowStore.getState().edges.every((e) => !e.data?.hookBundle)).toBe(true);
+  });
+
+  it("moves all members together and removes only the bundle", () => {
+    useWorkflowStore.getState().hookEdges(["e1", "e2"], { x: 80, y: 90 });
+    const id = useWorkflowStore.getState().edges[0].data!.hookBundle!.id;
+    useWorkflowStore.getState().moveHookBundle(id, { x: 150, y: 120 }, true);
+    expect(useWorkflowStore.getState().edges.slice(0, 2).every((e) => e.data?.hookBundle?.x === 150)).toBe(true);
+    useWorkflowStore.getState().removeHookBundle(id);
+    expect(useWorkflowStore.getState().edges).toHaveLength(3);
+    expect(useWorkflowStore.getState().edges.every((e) => !e.data?.hookBundle)).toBe(true);
+    useWorkflowStore.getState().undo();
+    expect(useWorkflowStore.getState().edges[0].data?.hookBundle?.x).toBe(150);
+  });
+
+  it("merges an existing bundle when one of its members is hooked", () => {
+    useWorkflowStore.getState().hookEdges(["e1", "e2"], { x: 80, y: 90 });
+    useWorkflowStore.getState().hookEdges(["e2", "e3"], { x: 120, y: 90 });
+    expect(new Set(useWorkflowStore.getState().edges.map((e) => e.data?.hookBundle?.id)).size).toBe(1);
+    expect(useWorkflowStore.getState().edges.every((e) => e.selected)).toBe(true);
+  });
+
+  it("ignores hidden and reference edges, single edges and invalid coordinates", () => {
+    const edges = [edge("e1"), edge("e2", { data: { hidden: true } }), edge("e3", { type: "reference" })];
+    useWorkflowStore.setState({ edges });
+    useWorkflowStore.getState().hookEdges(["e1", "e2", "e3"], { x: 0, y: 0 });
+    expect(useWorkflowStore.getState().edges).toBe(edges);
+    useWorkflowStore.getState().hookEdges(["e1", "e2"], { x: NaN, y: 0 });
+    expect(useWorkflowStore.getState().edges).toBe(edges);
+  });
+
+  it("gives a pasted bundle its own clamp and offsets it with the copied nodes", () => {
+    useWorkflowStore.setState({
+      nodes: ["a", "t-e1", "t-e2"].map((id) => ({ id, type: "prompt", position: { x: 0, y: 0 }, selected: true, data: { prompt: "" } })),
+      edges: [edge("e1"), edge("e2")],
+    });
+    useWorkflowStore.getState().hookEdges(["e1", "e2"], { x: 80, y: 90 });
+    const original = useWorkflowStore.getState().edges[0].data!.hookBundle!;
+    useWorkflowStore.getState().copySelectedNodes();
+    useWorkflowStore.getState().pasteNodes({ x: 100, y: 200 });
+    const pasted = useWorkflowStore.getState().edges.slice(2);
+    expect(pasted).toHaveLength(2);
+    expect(pasted[0].data?.hookBundle).toEqual(pasted[1].data?.hookBundle);
+    expect(pasted[0].data?.hookBundle).toMatchObject({ x: 180, y: 290 });
+    expect(pasted[0].data?.hookBundle?.id).not.toBe(original.id);
+  });
+});
+
 describe("setBundleClamp", () => {
   beforeEach(() => {
     useWorkflowStore.setState({

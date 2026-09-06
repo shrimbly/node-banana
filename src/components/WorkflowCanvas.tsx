@@ -82,6 +82,7 @@ import { resolveTextSourcesThroughRouters } from "@/store/utils/connectedInputs"
 import { wouldCreateCycle } from "@/store/utils/executionUtils";
 import { parseVarTags } from "@/utils/parseVarTags";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { EdgeHookSelection } from "./edges/EdgeHookSelection";
 import { ModelSearchDialog } from "./modals/ModelSearchDialog";
 import { LLMFallbackPopover } from "./nodes/LLMFallbackPopover";
 import { browseRegistry } from "@/utils/browseRegistry";
@@ -440,6 +441,7 @@ export function WorkflowCanvas() {
   >(null);
   const [llmFallbackState, setLlmFallbackState] = useState<{ nodeId: string } | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const selectingNodes = useRef(false);
   const handlePointerDownRef = useRef<{ x: number; y: number } | null>(null);
   const tutorialViewportSet = useRef(false);
 
@@ -1954,29 +1956,6 @@ export function WorkflowCanvas() {
         });
 
         onNodesChange(changes);
-      } else if (event.key === "h" || event.key === "H") {
-        // Stack horizontally - sort by current x position to maintain relative order
-        const sortedNodes = [...selectedNodes].sort((a, b) => a.position.x - b.position.x);
-
-        // Use the topmost y position as the alignment point
-        const alignY = Math.min(...sortedNodes.map((n) => n.position.y));
-
-        let currentX = sortedNodes[0].position.x;
-
-        const changes = sortedNodes.map((node) => {
-          const nodeWidth = getNodeSize(node).width;
-
-          const change = {
-            type: "position" as const,
-            id: node.id,
-            position: { x: currentX, y: alignY },
-          };
-
-          currentX += nodeWidth + STACK_GAP;
-          return change;
-        });
-
-        onNodesChange(changes);
       } else if (event.key === "g" || event.key === "G") {
         // Arrange as grid
         const count = selectedNodes.length;
@@ -2137,6 +2116,11 @@ export function WorkflowCanvas() {
   // Uses statistical outlier detection to identify and deselect nodes that are clearly
   // outside the actual selection area.
   const handleSelectionChange = useCallback(({ nodes: selectedNodes }: OnSelectionChangeParams) => {
+    // Shift-clicking nodes must not retain a previous edge selection either.
+    if (selectedNodes.length > 0) {
+      const selectedEdges = useWorkflowStore.getState().edges.filter((edge) => edge.selected);
+      if (selectedEdges.length) onEdgesChange(selectedEdges.map((edge) => ({ type: "select", id: edge.id, selected: false })));
+    }
     if (selectedNodes.length <= 1) return;
 
     // Get positions of all selected nodes
@@ -2177,7 +2161,7 @@ export function WorkflowCanvas() {
         }))
       );
     }
-  }, [onNodesChange]);
+  }, [onNodesChange, onEdgesChange]);
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -2459,7 +2443,14 @@ export function WorkflowCanvas() {
         nodes={allNodes}
         edges={isCanvasOverview ? OVERVIEW_EDGES : edges}
         onNodesChange={onNodesChange}
-        onEdgesChange={onEdgesChange}
+        onEdgesChange={(changes) => onEdgesChange(selectingNodes.current
+          ? changes.filter((change) => change.type !== "select" || !change.selected)
+          : changes)}
+        onSelectionStart={() => {
+          selectingNodes.current = true;
+          onEdgesChange(useWorkflowStore.getState().edges.filter((edge) => edge.selected).map((edge) => ({ type: "select", id: edge.id, selected: false })));
+        }}
+        onSelectionEnd={() => { selectingNodes.current = false; }}
         onConnect={handleConnect}
         onConnectEnd={handleConnectEnd}
         onReconnect={handleReconnect}
@@ -2550,6 +2541,7 @@ export function WorkflowCanvas() {
           onOpenFallback={handleOpenFallback}
         />
       </ReactFlow>
+      <EdgeHookSelection canvas={reactFlowWrapper} disabled={isModalOpen || isCanvasOverview} />
 
       {/* Connection drop menu */}
       {connectionDrop && connectionDrop.handleType && (

@@ -262,7 +262,7 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
       <MenuIconButton
         onClick={() => chooseArrangement("horizontal")}
         aria-pressed={activeArrangement?.mode === "horizontal"}
-        title="Stack horizontally (H)"
+        title="Stack horizontally"
       >
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M6 4h4v16H6zM14 4h4v16h-4z" />

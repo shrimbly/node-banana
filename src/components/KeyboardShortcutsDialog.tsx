@@ -46,13 +46,13 @@ const shortcutGroups: ShortcutGroup[] = [
     title: "Layout (select 2+ nodes first)",
     shortcuts: [
       { keys: ["V"], description: "Stack selected vertically" },
-      { keys: ["H"], description: "Stack selected horizontally" },
       { keys: ["G"], description: "Arrange selected as grid" },
     ],
   },
   {
     title: "Canvas",
     shortcuts: [
+      { keys: ["Hold H", "Drag"], description: "Hook connections into one bundle" },
       { keys: ["Scroll"], description: "Zoom in / out" },
       { keys: ["Trackpad"], description: "Pan (macOS)" },
       { keys: ["Delete"], description: "Delete selected nodes" },
@@ -112,4 +112,3 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
     </Dialog>
   );
 }
-

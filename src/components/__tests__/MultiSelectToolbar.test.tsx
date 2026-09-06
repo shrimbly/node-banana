@@ -116,7 +116,7 @@ describe("MultiSelectToolbar", () => {
         </TestWrapper>
       );
 
-      expect(screen.getByTitle("Stack horizontally (H)")).toBeInTheDocument();
+      expect(screen.getByTitle("Stack horizontally")).toBeInTheDocument();
     });
 
     it("should not render when nodes are selected but less than 2", () => {
@@ -158,7 +158,7 @@ describe("MultiSelectToolbar", () => {
         </TestWrapper>
       );
 
-      expect(screen.getByTitle("Stack horizontally (H)")).toBeInTheDocument();
+      expect(screen.getByTitle("Stack horizontally")).toBeInTheDocument();
     });
 
     it("should render stack vertically button", () => {
@@ -219,7 +219,7 @@ describe("MultiSelectToolbar", () => {
         </TestWrapper>
       );
 
-      const stackHorizontalButton = screen.getByTitle("Stack horizontally (H)");
+      const stackHorizontalButton = screen.getByTitle("Stack horizontally");
       fireEvent.click(stackHorizontalButton);
 
       // Should be called for each node
@@ -242,7 +242,7 @@ describe("MultiSelectToolbar", () => {
         </TestWrapper>
       );
 
-      fireEvent.click(screen.getByTitle("Stack horizontally (H)"));
+      fireEvent.click(screen.getByTitle("Stack horizontally"));
 
       // A single batched call positions all nodes; node-2 (x=100) comes first
       expect(mockOnNodesChange).toHaveBeenCalledWith([
@@ -369,7 +369,7 @@ describe("MultiSelectToolbar", () => {
 
   describe("Spacing control", () => {
     it.each([
-      ["Stack horizontally (H)", { x: 300, y: 0 }, { x: 600, y: 0 }],
+      ["Stack horizontally", { x: 300, y: 0 }, { x: 600, y: 0 }],
       ["Stack vertically (V)", { x: 0, y: 280 }, { x: 0, y: 560 }],
       ["Arrange as grid (G)", { x: 300, y: 0 }, { x: 0, y: 280 }],
     ])("adjusts spacing live for %s", (title, secondPosition, thirdPosition) => {
@@ -404,7 +404,7 @@ describe("MultiSelectToolbar", () => {
       ];
       mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes })));
       const { container, rerender } = render(<TestWrapper><Toolbar /></TestWrapper>);
-      fireEvent.click(screen.getByTitle("Stack horizontally (H)"));
+      fireEvent.click(screen.getByTitle("Stack horizontally"));
       const originalLeft = (container.firstChild as HTMLElement).style.left;
       nodes = nodes.map((node, index) => ({ ...node, position: { x: index * 240, y: 0 } }));
       rerender(<TestWrapper><Toolbar /></TestWrapper>);

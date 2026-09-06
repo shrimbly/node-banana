@@ -168,6 +168,20 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe("WorkflowCanvas", () => {
+  it("keeps automatic edge selection out of node marquee selection", () => {
+    mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState()));
+    render(<TestWrapper><WorkflowCanvas /></TestWrapper>);
+    const props = mockReactFlowProps.current!;
+    act(() => (props.onSelectionStart as () => void)());
+    mockOnEdgesChange.mockClear();
+    const select = [{ type: "select", id: "edge-1", selected: true }];
+    act(() => (props.onEdgesChange as (changes: unknown[]) => void)(select));
+    expect(mockOnEdgesChange).toHaveBeenLastCalledWith([]);
+    act(() => (props.onSelectionEnd as () => void)());
+    act(() => (props.onEdgesChange as (changes: unknown[]) => void)(select));
+    expect(mockOnEdgesChange).toHaveBeenLastCalledWith(select);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockViewport.zoom = 1;

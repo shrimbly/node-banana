@@ -21,6 +21,8 @@ export interface WorkflowEdgeData extends Record<string, unknown> {
   sourceBundleId?: string;
   /** Bundle this edge belongs to at its input handle. Independent of the source end. */
   targetBundleId?: string;
+  /** A freely positioned cable clamp gathering edges crossed in hook mode. */
+  hookBundle?: { id: string; x: number; y: number };
 }
 
 // Workflow Edge
