@@ -1,4 +1,5 @@
 import type { WorkflowEdge } from "@/types";
+import { hookHandles } from "./hook";
 
 /**
  * What an edge needs to know about the other edges, computed once per edges
@@ -129,7 +130,7 @@ function buildEdgeGraphIndex(edges: WorkflowEdge[]): EdgeGraphIndex {
   const hookBundles = new Map<string, WorkflowEdge[]>();
   for (const e of sorted) {
     if (!bundleable(e)) continue;
-    if (e.data?.hookBundle && !e.hidden) push(hookBundles, e.data.hookBundle.id, e);
+    if (!e.hidden) for (const handle of hookHandles(e.data)) push(hookBundles, handle.id, e);
     for (const end of ENDS) {
       const bundleId = bundleIdAt(e, end);
       if (bundleId) push(byBundle[end], `${bundleId}\u0000${nodeAt(e, end)}\u0000${handleAt(e, end) ?? ""}`, e.id);

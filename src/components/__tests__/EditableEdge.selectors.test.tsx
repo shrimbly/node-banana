@@ -54,7 +54,7 @@ function makeGraph() {
         createdAt: 1_000 + i,
         hidden: i % 7 === 0,
         sourceBundleId: i % 5 === 0 ? `bundle-${i % 20}` : undefined,
-        hookBundle: i % 3 === 0 ? { id: `hook-${i % 6}`, x: 50, y: 20 } : undefined,
+        hookBundles: i % 3 === 0 ? [{ id: `hook-${i % 6}`, x: 30, y: 20 }, { id: `second-${i % 6}`, x: 70, y: 20 }] : undefined,
       },
     });
   }

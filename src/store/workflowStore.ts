@@ -37,6 +37,7 @@ import { externalizeWorkflowMedia, hydrateWorkflowMedia } from "@/utils/mediaSto
 import { EditOperation, applyEditOperations as executeEditOps } from "@/lib/chat/editOperations";
 import { findNearestFreePosition } from "@/utils/spatialLayout";
 import { getNodeSize } from "@/utils/nodeDimensions";
+import { hookHandles, insertHookHandle, withHookHandles } from "@/lib/edges/hook";
 import {
   loadSaveConfigs,
   saveSaveConfig,
@@ -361,6 +362,7 @@ export interface WorkflowStore {
   setHoveredHandle: (handle: { nodeId: string; handleId: string | null; type: "source" | "target" } | null) => void;
   /** The handle whose hidden connections are shown one per row instead of as a single pill. */
   expandedStubGroup: string | null;
+  activeHookBundleId: string | null;
   setExpandedStubGroup: (key: string | null) => void;
   /** Measured width of each collapsed stub pill, by group key, so every member's ghost can start at its outer edge. */
   stubGroupWidths: Record<string, number>;
@@ -780,6 +782,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     set({ hoveredHandle: handle });
   },
   expandedStubGroup: null,
+  activeHookBundleId: null,
   setExpandedStubGroup: (key) => {
     if (get().expandedStubGroup !== key) set({ expandedStubGroup: key });
   },
@@ -1353,39 +1356,46 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     const requested = new Set(edgeIds);
     const eligible = get().edges.filter((e) => !e.hidden && !e.data?.hidden && e.type !== "reference");
     // Sweeping an existing clamp gathers its whole bundle.
-    const existing = new Set(eligible.filter((e) => requested.has(e.id)).map((e) => e.data?.hookBundle?.id).filter(Boolean));
-    const members = eligible.filter((e) => requested.has(e.id) || (e.data?.hookBundle && existing.has(e.data.hookBundle.id)));
+    const existing = new Set(eligible.filter((e) => requested.has(e.id)).flatMap((e) => hookHandles(e.data).map((handle) => handle.id)));
+    const members = eligible.filter((e) => requested.has(e.id) || hookHandles(e.data).some((handle) => existing.has(handle.id)));
     if (members.length < 2) return;
     const ids = new Set(members.map((e) => e.id));
     const hookBundle = { id: `hook-${crypto.randomUUID()}`, ...position };
     pushUndoCheckpoint(get, set);
     set((state) => ({
-      edges: state.edges.map((e) => ids.has(e.id)
-        ? { ...e, selected: true, data: { ...e.data, hookBundle } }
-        : { ...e, selected: false }),
+      activeHookBundleId: hookBundle.id,
+      edges: state.edges.map((e) => {
+        if (!ids.has(e.id)) return { ...e, selected: false };
+        const source = state.nodes.find((node) => node.id === e.source);
+        const target = state.nodes.find((node) => node.id === e.target);
+        const handles = hookHandles(e.data);
+        const start = source ? { x: source.position.x + getNodeSize(source).width, y: source.position.y + getNodeSize(source).height / 2 } : { x: 0, y: position.y };
+        const end = target ? { x: target.position.x, y: target.position.y + getNodeSize(target).height / 2 } : { x: Math.max(position.x, ...handles.map((h) => h.x)) + 1, y: position.y };
+        return { ...e, selected: true, data: withHookHandles(e.data, insertHookHandle(handles, hookBundle, start, end)) };
+      }),
       hasUnsavedChanges: true,
     }));
   },
 
   moveHookBundle: (bundleId, position, checkpoint = false) => {
     if (!Number.isFinite(position.x) || !Number.isFinite(position.y)) return;
-    if (!get().edges.some((e) => e.data?.hookBundle?.id === bundleId)) return;
+    if (!get().edges.some((e) => hookHandles(e.data).some((handle) => handle.id === bundleId))) return;
     if (checkpoint) pushUndoCheckpoint(get, set);
     set((state) => ({
-      edges: state.edges.map((e) => e.data?.hookBundle?.id === bundleId
-        ? { ...e, data: { ...e.data, hookBundle: { id: bundleId, ...position } } } : e),
+      edges: state.edges.map((e) => hookHandles(e.data).some((handle) => handle.id === bundleId)
+        ? { ...e, data: withHookHandles(e.data, hookHandles(e.data).map((handle) => handle.id === bundleId ? { id: bundleId, ...position } : handle)) } : e),
       hasUnsavedChanges: true,
     }));
   },
 
   removeHookBundle: (bundleId) => {
-    if (!get().edges.some((e) => e.data?.hookBundle?.id === bundleId)) return;
+    if (!get().edges.some((e) => hookHandles(e.data).some((handle) => handle.id === bundleId))) return;
     pushUndoCheckpoint(get, set);
     set((state) => ({
       edges: state.edges.map((e) => {
-        if (e.data?.hookBundle?.id !== bundleId) return e;
-        const { hookBundle: _removed, ...data } = e.data;
-        void _removed;
+        const handles = hookHandles(e.data);
+        if (!handles.some((handle) => handle.id === bundleId)) return e;
+        const data = withHookHandles(e.data, handles.filter((handle) => handle.id !== bundleId));
         return { ...e, selected: false, data };
       }),
       hasUnsavedChanges: true,
@@ -1559,20 +1569,21 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     // Create new edges with updated source/target IDs
     const pastedHookIds = new Map<string, string>();
     for (const edge of clipboard.edges) {
-      const bundle = edge.data?.hookBundle;
-      if (bundle && !pastedHookIds.has(bundle.id)) pastedHookIds.set(bundle.id, `hook-${crypto.randomUUID()}`);
+      for (const bundle of hookHandles(edge.data)) {
+        if (!pastedHookIds.has(bundle.id)) pastedHookIds.set(bundle.id, `hook-${crypto.randomUUID()}`);
+      }
     }
     const newEdges: WorkflowEdge[] = clipboard.edges.map((edge) => ({
       ...edge,
       id: `edge-${idMapping.get(edge.source)}-${idMapping.get(edge.target)}-${edge.sourceHandle || "default"}-${edge.targetHandle || "default"}`,
       source: idMapping.get(edge.source)!,
       target: idMapping.get(edge.target)!,
-      ...(edge.data?.hookBundle && {
-        data: { ...edge.data, hookBundle: {
-          id: pastedHookIds.get(edge.data.hookBundle.id)!,
-          x: edge.data.hookBundle.x + offset.x,
-          y: edge.data.hookBundle.y + offset.y,
-        } },
+      ...(hookHandles(edge.data).length > 0 && {
+        data: withHookHandles(edge.data, hookHandles(edge.data).map((handle) => ({
+          id: pastedHookIds.get(handle.id)!,
+          x: handle.x + offset.x,
+          y: handle.y + offset.y,
+        }))),
       }),
     }));
 

@@ -1,4 +1,31 @@
+import type { WorkflowEdgeData } from "@/types";
+
 export type Point = { x: number; y: number };
+export type HookHandle = Point & { id: string };
+const EMPTY_HANDLES: HookHandle[] = [];
+
+export function hookHandles(data?: WorkflowEdgeData): HookHandle[] {
+  return data?.hookBundles ?? (data?.hookBundle ? [data.hookBundle] : EMPTY_HANDLES);
+}
+
+export function withHookHandles(data: WorkflowEdgeData | undefined, handles: HookHandle[]): WorkflowEdgeData {
+  const { hookBundle: _legacy, hookBundles: _handles, ...rest } = data ?? {};
+  void _legacy;
+  void _handles;
+  return handles.length ? { ...rest, hookBundles: handles } : rest;
+}
+
+/** Insert at the nearest part of the route, preserving existing handle order. */
+export function insertHookHandle(handles: HookHandle[], handle: HookHandle, source: Point, target: Point) {
+  const points = [source, ...handles, target];
+  let index = 0;
+  let nearest = Infinity;
+  for (let i = 0; i < points.length - 1; i++) {
+    const distance = distanceToSegment(handle, points[i], points[i + 1]);
+    if (distance < nearest) { nearest = distance; index = i; }
+  }
+  return [...handles.slice(0, index), handle, ...handles.slice(index)];
+}
 
 function distanceToSegment(p: Point, a: Point, b: Point) {
   const dx = b.x - a.x;
@@ -23,5 +50,6 @@ export function crossesEdge(from: Point, to: Point, points: Point[], tolerance =
   return false;
 }
 
-const crook = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><path d="M12 29V9a6 6 0 1 1 12 0v3a3 3 0 0 1-6 0" fill="none" stroke="#171717" stroke-width="5" stroke-linecap="round"/><path d="M12 29V9a6 6 0 1 1 12 0v3a3 3 0 0 1-6 0" fill="none" stroke="#fafafa" stroke-width="2.5" stroke-linecap="round"/></svg>';
-export const HOOK_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(crook)}") 20 12, crosshair`;
+// A compact, tilted crook with an open bowl; the hook tip is the hotspot.
+const crook = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><defs><linearGradient id="metal" x1="9" y1="4" x2="22" y2="28" gradientUnits="userSpaceOnUse"><stop stop-color="#fff"/><stop offset="1" stop-color="#b8c4d0"/></linearGradient></defs><path d="M10 28 18.5 10.5C21.5 4.5 16 1.5 12.5 4.5 10.5 6.2 10.3 8.5 12 10" fill="none" stroke="#101820" stroke-opacity=".9" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/><path d="M10 28 18.5 10.5C21.5 4.5 16 1.5 12.5 4.5 10.5 6.2 10.3 8.5 12 10" fill="none" stroke="url(#metal)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="10" r="1.3" fill="#fff"/></svg>';
+export const HOOK_CURSOR = `url("data:image/svg+xml,${encodeURIComponent(crook)}") 12 10, crosshair`;

@@ -87,6 +87,27 @@ describe("EditableEdge", () => {
   });
 
   describe("Basic Rendering", () => {
+    it.each(["angular", "curved", "straight"])("routes %s edges through multiple handles with one active menu", (edgeStyle) => {
+      const hookBundles = [{ id: "first", x: 180, y: 80 }, { id: "second", x: 260, y: 120 }];
+      const edges = [
+        { id: "edge-1", source: "a", target: "b", selected: true, data: { hookBundles } },
+        { id: "edge-2", source: "c", target: "d", selected: true, data: { hookBundles } },
+      ];
+      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ edges, edgeStyle, activeHookBundleId: "second" })));
+      const { container } = render(<TestWrapper>
+        <EditableEdge {...createDefaultProps({ data: { hookBundles }, selected: true })} />
+        <EditableEdge {...createDefaultProps({ id: "edge-2", data: { hookBundles }, selected: true, sourceY: 150 })} />
+      </TestWrapper>);
+      expect(screen.getAllByTestId("hook-bundle-clamp")).toHaveLength(2);
+      expect(screen.getAllByTitle("Remove bundle")).toHaveLength(1);
+      container.querySelectorAll(".react-flow__edge-path").forEach((path) => {
+        const d = path.getAttribute("d")!;
+        expect(d).toContain("L196,80");
+        expect(d).toContain("L276,120");
+        expect(d.indexOf("L196,80")).toBeLessThan(d.indexOf("L276,120"));
+      });
+    });
+
     it.each(["angular", "curved", "straight"])("routes %s hook bundles through exactly one shared clamp", (edgeStyle) => {
       const hookBundle = { id: "hook-test", x: 200, y: 80 };
       const edges = [

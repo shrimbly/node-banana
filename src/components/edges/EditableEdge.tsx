@@ -35,6 +35,7 @@ import { edgeBundles, bundleReach, bundleClampKey, type BundleMembership } from 
 import { edgeGraphIndex, nodeGraphIndex } from "@/lib/edges/graphIndex";
 import { bundleClampStyle } from "./BundleClamp";
 import { HookBundleClamp } from "./HookBundleClamp";
+import { hookHandles } from "@/lib/edges/hook";
 
 interface EdgeData extends WorkflowEdgeData {
   offsetX?: number;
@@ -84,11 +85,12 @@ export function EditableEdge({
   const appearance = useWorkflowStore((state) => state.edgeAppearance);
   const [isDragging, setIsDragging] = useState(false);
   const carriesToolbar = useIsToolbarEdge(id);
-  const hookData = (data as EdgeData | undefined)?.hookBundle;
-  const hookMembers = useWorkflowStore(useShallow((state) => hookData
-    ? edgeGraphIndex(state.edges).hookBundles.get(hookData.id) ?? []
-    : []));
-  const hookBundle = hookMembers.length > 1 ? hookData : undefined;
+  const hookData = useMemo(() => hookHandles(data as EdgeData | undefined), [data]);
+  const hookGroups = useWorkflowStore(useShallow((state) => hookData.map((handle) =>
+    edgeGraphIndex(state.edges).hookBundles.get(handle.id))));
+  const hookBundles = useMemo(() => hookData.filter((_, index) => (hookGroups[index]?.length ?? 0) > 1), [hookData, hookGroups]);
+  const hookBundle = hookBundles.length > 0;
+  const activeHookBundleId = useWorkflowStore((state) => state.activeHookBundleId);
 
   // Hidden connections: labelled stubs at the handles; hover ghosts the line back
   const isHidden = Boolean((data as EdgeData | undefined)?.hidden);
@@ -229,15 +231,20 @@ export function EditableEdge({
   // Calculate the path based on edge style
   const [edgePath, labelX, labelY] = useMemo(() => {
     if (hookBundle) {
-      const { x, y } = hookBundle;
       const direction = targetX >= sourceX ? 1 : -1;
       const reach = 16 * direction;
-      const left = { sourceX: startX, sourceY, sourcePosition, targetX: x - reach, targetY: y, targetPosition: direction > 0 ? Position.Left : Position.Right };
-      const right = { sourceX: x + reach, sourceY: y, sourcePosition: direction > 0 ? Position.Right : Position.Left, targetX: endX, targetY, targetPosition };
       const route = edgeStyle === "straight" ? getStraightPath : edgeStyle === "curved" ? getBezierPath : getSmoothStepPath;
-      const [first] = route(left);
-      const [last] = route(right);
-      return [`${first} L${x + reach},${y} ${last.replace(/^M[^A-Za-z]*/, "")}`, x, y] as [string, number, number];
+      let from = { sourceX: startX, sourceY, sourcePosition };
+      let path = "";
+      const append = (segment: string) => { path += path ? ` ${segment.replace(/^M[^A-Za-z]*/, "")}` : segment; };
+      for (const { x, y } of hookBundles) {
+        const [segment] = route({ ...from, targetX: x - reach, targetY: y, targetPosition: direction > 0 ? Position.Left : Position.Right });
+        append(segment);
+        path += ` L${x + reach},${y}`;
+        from = { sourceX: x + reach, sourceY: y, sourcePosition: direction > 0 ? Position.Right : Position.Left };
+      }
+      append(route({ ...from, targetX: endX, targetY, targetPosition })[0]);
+      return [path, hookBundles[0].x, hookBundles[0].y] as [string, number, number];
     }
     // Loop edges: smooth arc that exits/enters along handle directions, bowed below nodes
     if (edgeData?.isLoop) {
@@ -291,7 +298,7 @@ export function EditableEdge({
         offset: offsetX,
       });
     }
-  }, [hookBundle, edgeStyle, edgeData?.isLoop, startX, endX, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, offsetX]);
+  }, [hookBundle, hookBundles, edgeStyle, edgeData?.isLoop, startX, endX, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, offsetX]);
 
   // Calculate handle positions on the path segments (only for angular mode)
   const handlePositions = useMemo(() => {
@@ -478,9 +485,13 @@ export function EditableEdge({
       />
 
       {selected && carriesToolbar && !hookBundle && <EdgeToolbar edgeId={id} x={labelX} y={labelY} />}
-      {hookBundle && hookMembers[0]?.id === id && (
-        <HookBundleClamp bundle={hookBundle} members={hookMembers.map((e) => e.id)} selected={hookMembers.some((e) => e.selected)} color={edgeColor} />
-      )}
+      {hookData.map((handle, index) => {
+        const members = hookGroups[index];
+        if (!members || members.length < 2 || members[0].id !== id) return null;
+        const active = hookBundles.some((handle) => handle.id === activeHookBundleId)
+          ? activeHookBundleId : hookBundles[hookBundles.length - 1]?.id;
+        return <HookBundleClamp key={handle.id} bundle={handle} members={members.map((e) => e.id)} selected={active === handle.id && members.some((e) => e.selected)} color={edgeColor} />;
+      })}
 
       {/* Bundle stems: the first member of each bundle draws the shared stem and its count */}
       {sourceBundle?.index === 0 && (

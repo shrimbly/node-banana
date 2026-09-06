@@ -14,6 +14,7 @@ export function HookBundleClamp({ bundle, members, selected, color }: {
   const drag = useRef<{ x: number; y: number; moved: boolean; start: { x: number; y: number } } | null>(null);
   const select = () => {
     const store = useWorkflowStore.getState();
+    useWorkflowStore.setState({ activeHookBundleId: bundle.id });
     store.onNodesChange(store.nodes.filter((n) => n.selected).map((n) => ({ type: "select", id: n.id, selected: false })));
     store.onEdgesChange(store.edges.map((e) => ({ type: "select", id: e.id, selected: members.includes(e.id) })));
   };

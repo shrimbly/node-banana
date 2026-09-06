@@ -66,9 +66,9 @@ describe("hold-H edge selection", () => {
     expect(useWorkflowStore.getState().edges.filter((e) => e.selected).map((e) => e.id)).toEqual(["e1", "e2"]);
     fireEvent.pointerUp(overlay, { pointerId: 1, clientX: 100, clientY: 50 });
     const [a, b, c] = useWorkflowStore.getState().edges;
-    expect(a.data?.hookBundle).toEqual(b.data?.hookBundle);
-    expect(a.data?.hookBundle).toMatchObject({ x: 100, y: 50 });
-    expect(c.data?.hookBundle).toBeUndefined();
+    expect(a.data?.hookBundles?.[0]).toEqual(b.data?.hookBundles?.[0]);
+    expect(a.data?.hookBundles?.[0]).toMatchObject({ x: 100, y: 50 });
+    expect(c.data?.hookBundles?.[0]).toBeUndefined();
     fireEvent.keyUp(window, { key: "h" });
     expect(screen.queryByTestId("edge-hook-selection")).not.toBeInTheDocument();
   });
@@ -77,7 +77,7 @@ describe("hold-H edge selection", () => {
     setup();
     startSweep();
     fireEvent.keyUp(window, { key: "H" });
-    expect(useWorkflowStore.getState().edges[0].data?.hookBundle).toBeDefined();
+    expect(useWorkflowStore.getState().edges[0].data?.hookBundles?.[0]).toBeDefined();
     expect(screen.queryByTestId("edge-hook-selection")).not.toBeInTheDocument();
   });
 
@@ -86,7 +86,7 @@ describe("hold-H edge selection", () => {
     startSweep();
     if (reason === "escape") fireEvent.keyDown(window, { key: "Escape" });
     else fireEvent.blur(window);
-    expect(useWorkflowStore.getState().edges.every((e) => !e.selected && !e.data?.hookBundle)).toBe(true);
+    expect(useWorkflowStore.getState().edges.every((e) => !e.selected && !e.data?.hookBundles?.[0])).toBe(true);
     expect(screen.queryByTestId("edge-hook-selection")).not.toBeInTheDocument();
   });
 
@@ -101,14 +101,14 @@ describe("hold-H edge selection", () => {
 describe("hook bundle menu", () => {
   function showBundle() {
     act(() => useWorkflowStore.getState().hookEdges(["e1", "e2"], { x: 100, y: 50 }));
-    const bundle = useWorkflowStore.getState().edges[0].data!.hookBundle!;
+    const bundle = useWorkflowStore.getState().edges[0].data!.hookBundles![0];
     render(<HookBundleClamp bundle={bundle} members={["e1", "e2"]} selected color="#ffffff" />);
   }
   it("removes the bundle while keeping its edges", () => {
     showBundle();
     fireEvent.click(screen.getByTitle("Remove bundle"));
     expect(useWorkflowStore.getState().edges).toHaveLength(3);
-    expect(useWorkflowStore.getState().edges.every((e) => !e.data?.hookBundle)).toBe(true);
+    expect(useWorkflowStore.getState().edges.every((e) => !e.data?.hookBundles?.[0])).toBe(true);
   });
   it("deletes all bundled edges and leaves other edges alone", () => {
     showBundle();
