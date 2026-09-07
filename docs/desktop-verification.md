@@ -1,11 +1,12 @@
 # Mac preview verification — 8 September 2026
 
-Verified on macOS 26.2 / Apple Silicon with Electron 44.2.0 and Next.js 16.1.6. The release runtime is `1.9.0-dc9296ee-2e42-4294-8fbc-69bbdb8d00af`.
+Verified on macOS 26.2 / Apple Silicon with Electron 44.2.0 and Next.js 16.1.6. The release runtime is `1.9.0-ebfaa7f8-2137-4570-924a-60a761577aed`.
 
 | Check | Result |
 | --- | --- |
 | Isolated production build and electron-builder app/DMG/ZIP | Passed |
 | Packaged icon and import layout | Passed: ten ICNS representations have dark opaque edges; onboarding and Project Settings place import action to the right; cancelled picker re-enables the action |
+| Reve 2.1 regression | 81 targeted tests passed; packaged schema endpoint verified against live Replicate metadata; packaged desktop smoke checks passed |
 | Source Electron development and authenticated HMR | Passed |
 | Foundation full Vitest suite | 155 files, 2,961 tests passed |
 | Main-process persistence/lifecycle/import tests | 12 tests passed |
@@ -43,11 +44,19 @@ The first preview crashed in the main process when loading a 471-node workflow w
 
 Recovery now externalises both data URLs and blobs, deduplicates media across references/checkpoints, transfers bytes in 1 MiB chunks, and hydrates assets in the renderer. Checkpoint metadata is limited before IPC. The packaged regression loaded the original workflow read-only, checkpointed its media and a prompt edit, killed/restarted the app, restored all 471 nodes and the edit, and verified no generation submissions or changes to the input file. This tests the reported `Cars.json`; the older 253 MiB `Cars_new.json` is a separate file and was not used for acceptance.
 
+## Reve 2.1 reference-image regression
+
+Replicate's live model version `b80beec96b7c28035d1ed3e169ebf3e9a47cf50cd88296665f852ed9b18ec139` declares `reference_images` as an optional array of URI strings, with `default: null` and `nullable: true`. Its prediction API nevertheless rejected the user's null value. The [model documentation](https://replicate.com/reve/reve-2.1/readme) describes an ordered list of up to eight reference images.
+
+The app misclassified the plural field as a setting and persisted its null default. In the user's saved workflow, that setting overwrote the connected image during fallback request construction. The fix recognises the image-array handle, applies saved settings before connected inputs, and omits null array settings from Replicate requests. It covers existing workflows without editing their saved files.
+
+Five regression cases failed before the fix. All 81 targeted provider, schema and image-executor tests passed afterward, covering connected images, order, stale defaults, dynamic inputs, and prompt-only requests. The isolated production build and packaged smoke tests passed, including a read-only check against Replicate's live schema. No paid Reve prediction was submitted; successful generation with the fixed request remains a user check.
+
 ## Release checksums (SHA-256)
 
 ```text
-b74bb384ff65028053d67dfefe45082e3c92e43b513dc1a6962a595666d3a114  Node Banana-1.9.0-arm64.dmg
-9379eb76528eb918bc165a342a6d10eae2b4d000b5581cc87b56ff52512d7338  Node Banana-1.9.0-arm64.zip
+67019d7a7445d248bb4f1c0a990638d13e3f3d5d80ebfeb3f4a4f4347fea3ec4  Node Banana-1.9.0-arm64.dmg
+fa1672dc7939f03516a053cb3078aa51eb76d691dd1ba897e7c8135d1a3e8cf9  Node Banana-1.9.0-arm64.zip
 ```
 
 The app remains unsigned and unnotarised. Installation and tester steps are in [desktop-preview.md](desktop-preview.md).

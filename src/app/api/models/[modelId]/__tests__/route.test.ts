@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
+import reveSchema from "@/lib/providers/__fixtures__/reve-2.1-schema.json";
 
 // Mock the route module to test internal functions
 // We'll test via the GET endpoint behavior
@@ -101,6 +102,16 @@ describe("/api/models/[modelId] schema endpoint", () => {
   });
 
   describe("isImageInput classification", () => {
+    it("exposes Reve 2.1 reference_images as an image handle instead of a null setting", async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ latest_version: { openapi_schema: reveSchema } }) });
+      const modelId = `reve/reve-2.1-${testCounter}`;
+      const response = await GET(createMockSchemaRequest(modelId, "replicate"), { params: Promise.resolve({ modelId }) });
+      const data = await response.json();
+      expect(response.status).toBe(200);
+      expect(data.inputs).toContainEqual(expect.objectContaining({ name: "reference_images", type: "image", isArray: true, required: false }));
+      expect(data.parameters.map((param: { name: string }) => param.name)).not.toContain("reference_images");
+    });
+
     it("should NOT classify boolean params with 'image' in name as image inputs", async () => {
       // This was the original bug: sequential_image_generation (boolean) was misclassified
       mockFetch.mockResolvedValueOnce(
