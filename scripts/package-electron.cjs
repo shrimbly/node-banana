@@ -44,6 +44,8 @@ async function main() {
     await fs.writeFile(path.join(runtime, 'next.config.js'), `module.exports = ${JSON.stringify(config)};\n`);
     await fs.writeFile(path.join(runtime, 'package.json'), JSON.stringify({ name: pkg.name, version: pkg.version, private: true, dependencies: pkg.dependencies }));
     await fs.cp(path.join(root, 'electron/server.cjs'), path.join(runtime, 'server.cjs'));
+    await fs.mkdir(path.join(runtime, 'lib'));
+    await fs.cp(path.join(root, 'electron/lib/diagnostics.cjs'), path.join(runtime, 'lib/diagnostics.cjs'));
     await fs.writeFile(path.join(runtime, 'runtime.json'), JSON.stringify({ version: 1, buildId: `${pkg.version}-${randomUUID()}`, arch: 'arm64' }));
     await fs.mkdir(app);
     await fs.cp(path.join(root, 'electron'), path.join(app, 'electron'), { recursive: true, filter });
@@ -51,7 +53,16 @@ async function main() {
     await build({ projectDir: app, config: {
       appId: 'com.nodebanana.desktop', productName: 'Node Banana', electronVersion: require('electron/package.json').version,
       directories: { output }, files: ['package.json', 'electron/**/*.cjs'],
-      extraResources: [{ from: runtime, to: 'runtime', filter: ['**/*', '**/.*', '!**/.env*'] }],
+      // electron-builder deliberately excludes a root node_modules from each FileSet.
+      // Copy its contents with their own explicit FileSet.
+      extraResources: [
+        { from: runtime, to: 'runtime', filter: ['**/*', '**/.*', '!**/.env*'] },
+        { from: path.join(runtime, 'node_modules'), to: 'runtime/node_modules', filter: ['**/*', '!**/.env*'] },
+      ],
+      afterPack: async context => {
+        const bundled = path.join(context.appOutDir, 'Node Banana.app/Contents/Resources/runtime');
+        for (const file of ['.next/BUILD_ID', 'node_modules/next/package.json', 'node_modules/sharp/package.json', 'public/banana_icon.png', 'server.cjs']) await fs.access(path.join(bundled, file));
+      },
       npmRebuild: false, asar: true,
       mac: { target: [{ target: 'dir', arch: ['arm64'] }, { target: 'dmg', arch: ['arm64'] }, { target: 'zip', arch: ['arm64'] }],
         icon: path.join(root, 'public/banana_icon.png'), identity: null, category: 'public.app-category.graphics-design' },

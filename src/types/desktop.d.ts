@@ -5,6 +5,12 @@ export type DesktopResult<T> = { ok: true; value: T } | { ok: false; error: stri
 declare global {
   interface Window {
     readonly nodeBananaDesktop?: {
+      backend: {
+        state: () => Promise<boolean>;
+        restart: () => Promise<boolean>;
+        onStatus: (callback: (online: boolean) => void) => () => void;
+      };
+      openLogs: () => Promise<void>;
       recovery: {
         read: () => Promise<DesktopResult<{ snapshot: unknown; warnings: string[] }>>;
         write: (snapshot: unknown) => Promise<DesktopResult<boolean>>;

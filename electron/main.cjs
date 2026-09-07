@@ -1,226 +1,212 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, utilityProcess, safeStorage } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, utilityProcess, safeStorage, screen } = require('electron');
 const { randomBytes } = require('node:crypto');
+const fs = require('node:fs');
 const path = require('node:path');
-
 const { createRecoveryStore } = require('./lib/recovery.cjs');
 const { createCredentialStore } = require('./lib/credentials.cjs');
 const { provisionRuntime } = require('./lib/runtime.cjs');
+const { createDiagnostics, createRedactor } = require('./lib/diagnostics.cjs');
+const { createBackend } = require('./lib/backend.cjs');
+const { atomicWrite } = require('./lib/files.cjs');
+const { visibleBounds } = require('./lib/window-state.cjs');
 let root = path.resolve(__dirname, '..');
-let runtime;
-const dev = process.argv.includes('--dev');
+let runtime, backend, window, credentialStore, recoveryStore, diagnostics;
+let quitting = false, rendererCrashed = false, starting;
+const dev = !app.isPackaged && process.argv.includes('--dev');
 const port = Number(process.env.NODE_BANANA_ELECTRON_PORT || 47831);
+const origin = `http://127.0.0.1:${port}`;
 const token = randomBytes(32).toString('hex');
-let backend;
-let window;
-let origin;
-let quitting = false;
-let credentialStore;
-let recoveryStore;
+const redactor = createRedactor();
+redactor.add([token]);
 
+app.setName('Node Banana');
+app.setPath('userData', process.env.NODE_BANANA_ELECTRON_USER_DATA || path.join(app.getPath('appData'), 'Node Banana'));
+// Test profiles must not pollute the normal application's diagnostics.
+app.setAppLogsPath(process.env.NODE_BANANA_ELECTRON_USER_DATA ? path.join(app.getPath('userData'), 'logs') : undefined);
 function validCaller(event) {
   if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) return false;
   try { return new URL(event.senderFrame.url).origin === origin; } catch { return false; }
 }
-
-app.setName('Node Banana');
-app.setPath('userData', process.env.NODE_BANANA_ELECTRON_USER_DATA || path.join(app.getPath('appData'), 'Node Banana'));
-
-function fail(error) {
+function log(error) { diagnostics?.write('main', error?.stack || error?.message || String(error)); }
+async function openLogs() { await shell.openPath(app.getPath('logs')); }
+function message(options) { return window ? dialog.showMessageBox(window, options) : dialog.showMessageBox(options); }
+async function fail(error) {
   if (quitting) return;
-  console.error('[electron]', error);
-  dialog.showErrorBox('Node Banana could not start', String(error.message || error));
+  log(error);
+  const { response } = await message({ type: 'error', title: 'Node Banana could not start', message: redactor.redact(error.message || error), detail: 'Open the application logs for details.', buttons: ['Open Logs', 'Quit'], cancelId: 1 });
+  if (response === 0) await openLogs();
   app.quit();
 }
-
-function openExternal(url) {
-  if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(console.error);
-}
-
+function openExternal(url) { if (/^https?:\/\//i.test(url)) shell.openExternal(url).catch(log); }
 function allowedPermission(contents, permission, requestingURL) {
   if (!contents || contents !== window?.webContents) return false;
-  try {
-    if (new URL(requestingURL).origin !== origin) return false;
-  } catch {
-    return false;
-  }
+  try { if (new URL(requestingURL).origin !== origin) return false; } catch { return false; }
   return ['clipboard-read', 'clipboard-sanitized-write', 'deprecated-sync-clipboard-read', 'fullscreen'].includes(permission);
 }
-
+function sendStatus() { window?.webContents.send('desktop:backend-status', !!backend?.online()); }
+async function startWithRetry() {
+  if (starting) return starting;
+  starting = (async () => {
+    while (!quitting) {
+      try {
+        await backend.start();
+        backend.post({ type: 'secrets', values: redactor.values() });
+        await runtime?.markSuccessful();
+        sendStatus();
+        return true;
+      } catch (error) {
+        log(error); sendStatus();
+        const occupied = error.code === 'EADDRINUSE';
+        const { response } = await message({ type: 'error', title: 'Node Banana local server',
+          message: occupied ? `Port ${port} is occupied by another process.` : 'The local server could not start.',
+          detail: occupied ? 'Close the other app using this port, then choose Retry. Node Banana keeps the same address so your preferences remain available.' : redactor.redact(error.message),
+          buttons: ['Retry', 'Open Logs', 'Quit'], defaultId: 0, cancelId: 2 });
+        if (response === 1) { await openLogs(); continue; }
+        if (response === 2) { app.quit(); return false; }
+      }
+    }
+    return false;
+  })().finally(() => { starting = undefined; });
+  return starting;
+}
+async function disconnected(code) {
+  sendStatus(); log(`Backend exited ${code}`);
+  if (quitting || !window) return;
+  const { response } = await message({ type: 'warning', title: 'Node Banana server stopped',
+    message: 'The local server stopped. Your editor is still open.',
+    detail: 'New executions are disabled. Restart the server to continue. Remote jobs may still be running; restarting does not resubmit requests.',
+    buttons: ['Restart Server', 'Open Logs', 'Keep Editing'], defaultId: 0, cancelId: 2 });
+  if (response === 0) await startWithRetry();
+  if (response === 1) await openLogs();
+}
 async function createWindow() {
-  window = new BrowserWindow({
-    title: 'Node Banana',
-    width: 1440,
-    height: 960,
-    minWidth: 900,
-    minHeight: 600,
-    backgroundColor: '#0f0f0f',
-    show: false,
-    ...(process.platform === 'darwin' ? {
-      titleBarStyle: 'hidden',
-    } : {}),
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      preload: path.join(__dirname, 'preload.cjs'),
-    },
+  if (window) return;
+  rendererCrashed = false;
+  const stateFile = path.join(app.getPath('userData'), 'window-v1.json');
+  let saved;
+  try { saved = JSON.parse(fs.readFileSync(stateFile, 'utf8')); } catch {}
+  const bounds = visibleBounds(saved?.bounds, screen.getAllDisplays(), screen.getPrimaryDisplay());
+  window = new BrowserWindow({ title: 'Node Banana', ...bounds,
+    minWidth: Math.min(900, bounds.width), minHeight: Math.min(600, bounds.height), backgroundColor: '#0f0f0f', show: false,
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' } : {}),
+    webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.cjs') },
   });
+  const current = window;
+  let saveTimer;
+  const saveBounds = () => {
+    clearTimeout(saveTimer);
+    if (current.isDestroyed() || current.isFullScreen()) return;
+    try { atomicWrite(stateFile, JSON.stringify({ version: 1, bounds: current.getNormalBounds(), maximized: current.isMaximized() })); } catch (error) { log(error); }
+  };
+  for (const event of ['resize', 'move', 'maximize', 'unmaximize']) current.on(event, () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveBounds, 300); });
+  current.on('close', saveBounds);
+  if (saved?.maximized) current.maximize();
   if (process.platform === 'darwin') {
-    // The tab bar renders controls with predictable per-button hover styling.
-    window.setWindowButtonVisibility(false);
-    window.on('enter-full-screen', () => window?.setWindowButtonVisibility(false));
-    window.on('leave-full-screen', () => window?.setWindowButtonVisibility(false));
+    current.setWindowButtonVisibility(false);
+    current.on('enter-full-screen', () => current.setWindowButtonVisibility(false));
+    current.on('leave-full-screen', () => current.setWindowButtonVisibility(false));
   }
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    openExternal(url);
-    return { action: 'deny' };
+  current.webContents.setWindowOpenHandler(({ url }) => { openExternal(url); return { action: 'deny' }; });
+  current.webContents.on('will-navigate', (event, url) => {
+    try { if (new URL(url).origin === origin) return; } catch {}
+    event.preventDefault(); openExternal(url);
   });
-  window.webContents.on('will-navigate', (event, url) => {
-    if (new URL(url).origin !== origin) {
-      event.preventDefault();
-      openExternal(url);
+  current.webContents.on('will-attach-webview', event => event.preventDefault());
+  current.webContents.on('will-prevent-unload', event => {
+    const choice = dialog.showMessageBoxSync(current, { type: 'question', buttons: ['Keep editing', 'Discard and close'], defaultId: 0, cancelId: 0, message: 'Close without saving your workflows?' });
+    if (choice === 1) {
+      try { recoveryStore.markClean(); event.preventDefault(); } catch (error) { log(error); quitting = false; }
+    } else quitting = false;
+  });
+  current.webContents.on('render-process-gone', async (_event, details) => {
+    rendererCrashed = true;
+    log(`Renderer stopped: ${details.reason}`);
+    if (quitting) return;
+    const { response } = await message({ type: 'error', title: 'Node Banana editor stopped', message: 'The editor stopped unexpectedly.', detail: 'Recover the editor to restore the latest checkpoint. Remote jobs are not resubmitted.', buttons: ['Recover Editor', 'Open Logs', 'Quit'], cancelId: 2 });
+    if (response === 1) { await openLogs(); return; }
+    if (response === 2) { app.quit(); return; }
+    if (!backend.online() && !await startWithRetry()) return;
+    rendererCrashed = false;
+    current.reload();
+  });
+  current.once('ready-to-show', () => current.show());
+  current.webContents.on('did-finish-load', sendStatus);
+  current.on('closed', () => {
+    clearTimeout(saveTimer);
+    if (!rendererCrashed) { try { recoveryStore.markClean(); } catch (error) { log(error); } }
+    window = undefined;
+  });
+  await current.loadURL(origin);
+  log('Desktop window ready');
+}
+function registerBridge() {
+  for (const [category, operations, getStore] of [
+    ['recovery', ['read', 'write', 'putAsset', 'hydrate', 'discardTab', 'discard'], () => recoveryStore],
+    ['credentials', ['read', 'write', 'delete'], () => credentialStore],
+  ]) for (const operation of operations) ipcMain.handle(`desktop:${category}:${operation}`, (event, value) => {
+    if (!validCaller(event)) throw new Error('Unauthorized desktop request');
+    try { return { ok: true, value: getStore()[operation](value) }; }
+    catch (error) {
+      log(error);
+      return { ok: false, error: category === 'credentials' ? error.message : 'Recovery could not be read or saved. Check disk space and permissions, and save your workflows to disk.' };
     }
   });
-  window.webContents.on('will-attach-webview', (event) => event.preventDefault());
-  window.webContents.on('will-prevent-unload', (event) => {
-    const choice = dialog.showMessageBoxSync(window, {
-      type: 'question',
-      buttons: ['Keep editing', 'Discard and close'],
-      defaultId: 0,
-      cancelId: 0,
-      message: 'Close without saving your workflow?',
-    });
-    if (choice === 1) { recoveryStore.markClean(); event.preventDefault(); }
-    else quitting = false;
-  });
-  window.once('ready-to-show', () => window.show());
-  window.on('closed', () => { recoveryStore.markClean(); window = undefined; });
-  await window.loadURL(origin);
-  console.log('[electron] Desktop window ready');
-}
-
-function startBackend() {
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => reject(new Error('The local server did not start within 120 seconds. Check the terminal for details.')), 120_000);
-    backend = utilityProcess.fork(app.isPackaged ? path.join(root, 'server.cjs') : path.join(__dirname, 'server.cjs'), [], {
-      cwd: root,
-      serviceName: 'Node Banana Server',
-      env: {
-        ...process.env,
-        NODE_ENV: dev ? 'development' : 'production',
-        NODE_BANANA_ELECTRON: '1',
-        NODE_BANANA_LOGS_DIR: app.getPath('logs'),
-        NODE_BANANA_ELECTRON_PORT: String(port),
-        NODE_BANANA_ELECTRON_TOKEN: token,
-      },
-    });
-    backend.on('message', async (message) => {
-      if (message.type === 'ready') {
-        clearTimeout(timeout);
-        resolve(message.origin);
-      } else if (message.type === 'error') {
-        clearTimeout(timeout);
-        reject(new Error(message.message));
-      } else if (message.type === 'choose-directory') {
-        try {
-          const result = await dialog.showOpenDialog(window, {
-            title: 'Select a folder to save workflows',
-            properties: ['openDirectory', 'createDirectory'],
-          });
-          backend?.postMessage({ id: message.id, result: {
-            success: true, cancelled: result.canceled, path: result.filePaths[0] || null,
-          } });
-        } catch (error) {
-          backend?.postMessage({ id: message.id, result: { success: false, error: error.message } });
-        }
-      }
-    });
-    backend.on('exit', (code) => {
-      clearTimeout(timeout);
-      backend = undefined;
-      if (!quitting) {
-        const error = new Error(`The local server stopped (exit ${code}). Restart Node Banana; see the terminal for details.`);
-        if (origin) fail(error);
-        else reject(error);
-      }
-    });
-  });
-}
-
-if (!app.requestSingleInstanceLock()) {
-  app.quit();
-} else {
-  for (const operation of ['read', 'write', 'putAsset', 'hydrate', 'discardTab', 'discard']) {
-    ipcMain.handle(`desktop:recovery:${operation}`, (event, value) => {
-      if (!validCaller(event)) throw new Error('Unauthorized desktop request');
-      try { return { ok: true, value: recoveryStore[operation](value) }; }
-      catch { return { ok: false, error: 'Recovery could not be read or saved. Check disk space and permissions, and save your workflows to disk.' }; }
-    });
-  }
-  for (const operation of ['read', 'write', 'delete']) {
-    ipcMain.handle(`desktop:credentials:${operation}`, (event, value) => {
-      if (!validCaller(event)) throw new Error('Unauthorized desktop request');
-      try { return { ok: true, value: credentialStore[operation](value) }; }
-      catch (error) { return { ok: false, error: error.message }; }
-    });
-  }
+  ipcMain.handle('desktop:backend-state', event => { if (!validCaller(event)) throw new Error('Unauthorized desktop request'); return backend.online(); });
+  ipcMain.handle('desktop:restart-backend', event => { if (!validCaller(event)) throw new Error('Unauthorized desktop request'); return startWithRetry(); });
+  ipcMain.handle('desktop:open-logs', event => { if (!validCaller(event)) throw new Error('Unauthorized desktop request'); return openLogs(); });
   ipcMain.on('desktop:window-action', (event, action) => {
-    if (process.platform !== 'darwin' || !window || event.sender !== window.webContents) return;
-    if (!event.senderFrame || event.senderFrame !== window.webContents.mainFrame) return;
-    if (new URL(event.senderFrame.url).origin !== origin) return;
+    if (!validCaller(event)) return;
     switch (action) {
       case 'close': window.close(); break;
       case 'minimize': window.minimize(); break;
       case 'toggle-fullscreen': window.setFullScreen(!window.isFullScreen()); break;
-      case 'toggle-maximize':
-        if (window.isMaximized()) window.unmaximize();
-        else window.maximize();
-        break;
+      case 'toggle-maximize': window.isMaximized() ? window.unmaximize() : window.maximize(); break;
     }
   });
-  app.on('second-instance', () => {
-    if (window?.isMinimized()) window.restore();
-    window?.show();
-    window?.focus();
-  });
+}
+if (!app.requestSingleInstanceLock()) app.quit();
+else {
+  registerBridge();
+  app.on('second-instance', () => { if (window?.isMinimized()) window.restore(); window?.show(); window?.focus(); });
   app.on('before-quit', () => { quitting = true; });
-  // will-quit runs only after windows have accepted closing (including unsaved work).
-  app.on('will-quit', () => { backend?.kill(); });
-  app.on('window-all-closed', () => {
-    if (process.platform !== 'darwin') app.quit();
-  });
-  app.on('activate', () => {
-    if (!window && origin) createWindow().catch(fail);
-  });
+  app.on('will-quit', () => backend?.kill());
+  app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+  app.on('activate', () => { if (!window && backend?.online()) createWindow().catch(fail); });
+  process.on('uncaughtException', error => { void fail(error); });
+  process.on('unhandledRejection', log);
   app.whenReady().then(async () => {
-    credentialStore = createCredentialStore(app.getPath('userData'), safeStorage);
+    diagnostics = createDiagnostics(app.getPath('logs'), redactor);
+    credentialStore = createCredentialStore(app.getPath('userData'), safeStorage, values => {
+      redactor.add(values); backend?.post({ type: 'secrets', values });
+    });
     recoveryStore = createRecoveryStore(app.getPath('userData'));
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      throw new Error('NODE_BANANA_ELECTRON_PORT must be a port number between 1 and 65535.');
-    }
-    if (app.isPackaged) {
-      runtime = await provisionRuntime(path.join(process.resourcesPath, 'runtime'), app.getPath('userData'));
-      root = runtime.directory;
-    }
-    origin = await startBackend();
-    await runtime?.markSuccessful();
+    if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('NODE_BANANA_ELECTRON_PORT must be a port number between 1 and 65535.');
+    if (app.isPackaged) { runtime = await provisionRuntime(path.join(process.resourcesPath, 'runtime'), app.getPath('userData')); root = runtime.directory; }
+    backend = createBackend({ fork: (...args) => utilityProcess.fork(...args),
+      entry: app.isPackaged ? path.join(root, 'server.cjs') : path.join(__dirname, 'server.cjs'), diagnostics, onDisconnected: disconnected,
+      options: () => ({ cwd: root, serviceName: 'Node Banana Server', stdio: 'pipe', env: {
+        ...(app.isPackaged ? Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'LANG'].filter(key => process.env[key]).map(key => [key, process.env[key]])) : process.env),
+        NODE_ENV: dev ? 'development' : 'production', NODE_BANANA_ELECTRON: '1', NODE_BANANA_LOGS_DIR: app.getPath('logs'),
+        NODE_BANANA_ELECTRON_PORT: String(port), NODE_BANANA_ELECTRON_TOKEN: token,
+      } }),
+      onMessage: async (message, child) => {
+        if (message.type !== 'choose-directory') return;
+        try {
+          const result = await dialog.showOpenDialog(window, { title: 'Select a folder to save workflows', properties: ['openDirectory', 'createDirectory'] });
+          child.postMessage({ id: message.id, result: { success: true, cancelled: result.canceled, path: result.filePaths[0] || null } });
+        } catch { child.postMessage({ id: message.id, result: { success: false, error: 'The folder picker could not open.' } }); }
+      },
+    });
     const localURLs = [`${origin}/*`, `${origin.replace('http:', 'ws:')}/*`];
     session.defaultSession.webRequest.onBeforeSendHeaders({ urls: localURLs }, (details, callback) => {
       callback({ requestHeaders: { ...details.requestHeaders, 'X-Node-Banana-Desktop': token } });
     });
-    session.defaultSession.setPermissionCheckHandler((contents, permission, requestingOrigin) => {
-      return allowedPermission(contents, permission, requestingOrigin);
-    });
-    session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => {
-      callback(allowedPermission(contents, permission, details.requestingUrl));
-    });
+    session.defaultSession.setPermissionCheckHandler(allowedPermission);
+    session.defaultSession.setPermissionRequestHandler((contents, permission, callback, details) => callback(allowedPermission(contents, permission, details.requestingUrl)));
     Menu.setApplicationMenu(Menu.buildFromTemplate([
-      ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []),
-      { role: 'fileMenu' },
-      { role: 'editMenu' },
-      { role: 'viewMenu' },
-      { role: 'windowMenu' },
+      ...(process.platform === 'darwin' ? [{ role: 'appMenu' }] : []), { role: 'fileMenu' }, { role: 'editMenu' }, { role: 'viewMenu' }, { role: 'windowMenu' },
+      { label: 'Help', submenu: [{ label: 'Open Logs', click: openLogs }, { label: 'Restart Local Server', click: () => void startWithRetry() }, { label: 'Recover Editor', click: () => { if (rendererCrashed && window) { rendererCrashed = false; window.reload(); } } }] },
     ]));
-    await createWindow();
+    if (await startWithRetry()) await createWindow();
   }).catch(fail);
 }

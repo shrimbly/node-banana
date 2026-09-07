@@ -26,6 +26,9 @@ test('recovers previous checkpoint, durable assets and discards across interrupt
     assert.throws(() => store.write(snapshot('missing asset', asset)));
     assert.equal(store.hydrate(store.read().snapshot).warnings.length, 1);
     store.markClean();
+    assert.ok(createRecoveryStore(temp).read().snapshot, 'Closing an unanswered recovery prompt preserves it');
+    store.write(snapshot('restored and acknowledged'));
+    store.markClean();
     assert.equal(store.write(snapshot('late write')), false);
     assert.equal(createRecoveryStore(temp).read().snapshot, null);
     store.discard();

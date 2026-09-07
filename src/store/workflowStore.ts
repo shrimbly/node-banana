@@ -402,6 +402,7 @@ export interface WorkflowStore {
   clearWorkflow: () => void;
 
   // Workflow tabs: several workflows open, one live in the canvas
+  desktopConnected: boolean;
   restoreDesktopSession: (tabs: { id: string; snapshot: WorkflowTabSnapshot }[], activeTabId: string) => void;
   tabs: WorkflowTab[];
   activeTabId: string;
@@ -775,6 +776,7 @@ function applyTabSnapshot(
 const initialTabId = createTabId();
 
 const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
+  desktopConnected: typeof window === "undefined" || !window.nodeBananaDesktop,
   nodes: [],
   edges: [],
   edgeStyle: getEdgeDefaults().edgeStyle,
@@ -2015,7 +2017,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   }),
 
   executeWorkflow: async (startFromNodeId?: string) => {
-    if (!desktopCredentialsReady()) return;
+    if (!desktopCredentialsReady() || !get().desktopConnected) return;
     // Resume support: if Run is pressed with no explicit start node while the
     // workflow is paused at a node (pause edge), resume from that node instead
     // of restarting the whole graph (which would re-run/re-bill upstream nodes
@@ -2558,7 +2560,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   regenerateNode: async (nodeId: string) => {
-    if (!desktopCredentialsReady()) return;
+    if (!desktopCredentialsReady() || !get().desktopConnected) return;
     const { nodes, updateNodeData, isRunning } = get();
 
     if (isRunning) {
@@ -2701,7 +2703,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   executeSelectedNodes: async (nodeIds: string[]) => {
-    if (!desktopCredentialsReady()) return;
+    if (!desktopCredentialsReady() || !get().desktopConnected) return;
     if (get().isRunning) {
       logger.warn('node.execution', 'Cannot execute nodes, workflow already running');
       return;

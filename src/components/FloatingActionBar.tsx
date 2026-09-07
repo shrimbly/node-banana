@@ -548,7 +548,8 @@ export function FloatingActionBar() {
     ? `Show ${hiddenEdgeCount} hidden connection${hiddenEdgeCount === 1 ? "" : "s"}`
     : "Hide all connections";
   const edgeStyleLabel = `Switch to ${NEXT_EDGE_STYLE[edgeStyle]} connectors`;
-  const runTitle = !valid ? errors.join("\n") : isRunning ? getRunningLabel() : "Run";
+  const desktopConnected = useWorkflowStore(state => state.desktopConnected);
+  const runTitle = !desktopConnected ? "Local server disconnected" : !valid ? errors.join("\n") : isRunning ? getRunningLabel() : "Run";
 
   return (
     <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
@@ -599,7 +600,7 @@ export function FloatingActionBar() {
             <button
               type="button"
               onClick={handleRunClick}
-              disabled={!valid && !isRunning}
+              disabled={!desktopConnected || (!valid && !isRunning)}
               title={runTitle}
               data-tutorial="floating-run-button"
               className="flex items-center gap-1.5 whitespace-nowrap pl-3 pr-3.5 text-[13px] font-semibold focus-visible:outline-none disabled:cursor-not-allowed"

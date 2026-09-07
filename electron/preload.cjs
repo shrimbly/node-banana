@@ -2,6 +2,16 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // Narrow capabilities on every desktop platform; never expose the IPC transport.
 contextBridge.exposeInMainWorld('nodeBananaDesktop', {
+  backend: {
+    state: () => ipcRenderer.invoke('desktop:backend-state'),
+    restart: () => ipcRenderer.invoke('desktop:restart-backend'),
+    onStatus: (callback) => {
+      const listener = (_event, online) => callback(online);
+      ipcRenderer.on('desktop:backend-status', listener);
+      return () => ipcRenderer.removeListener('desktop:backend-status', listener);
+    },
+  },
+  openLogs: () => ipcRenderer.invoke('desktop:open-logs'),
   recovery: {
     read: () => ipcRenderer.invoke('desktop:recovery:read'),
     write: (value) => ipcRenderer.invoke('desktop:recovery:write', value),

@@ -3,6 +3,9 @@ const { createServer } = require('node:http');
 const { existsSync } = require('node:fs');
 const path = require('node:path');
 const next = require('next');
+const { createRedactor } = require('./lib/diagnostics.cjs');
+const redactor = createRedactor();
+globalThis.__nodeBananaRedact = value => redactor.redact(value);
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = '127.0.0.1';
@@ -14,6 +17,7 @@ const directoryRequests = new Map();
 let requestId = 0;
 
 process.parentPort.on('message', ({ data }) => {
+  if (data.type === 'secrets') { redactor.add(data.values); return; }
   const resolve = directoryRequests.get(data.id);
   if (resolve) {
     directoryRequests.delete(data.id);
@@ -83,8 +87,8 @@ async function start() {
 
 start().catch((error) => {
   console.error(error);
-  process.parentPort.postMessage({ type: 'error', message: error.code === 'EADDRINUSE'
-    ? `Port ${port} is already in use. Close the other process or set NODE_BANANA_ELECTRON_PORT to another port.`
+  process.parentPort.postMessage({ type: 'error', code: error.code, message: error.code === 'EADDRINUSE'
+    ? `Port ${port} is already in use. Close the app using this port, then choose Retry.`
     : error.message });
   process.exitCode = 1;
 });

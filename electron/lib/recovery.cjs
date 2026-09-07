@@ -25,6 +25,7 @@ function createRecoveryStore(userData) {
   const previous = path.join(directory, 'checkpoint-v1.previous.json');
   const marker = path.join(directory, 'session-v1.json');
   let closed = false;
+  let acknowledged = false;
   function session() {
     try { return JSON.parse(fs.readFileSync(marker, 'utf8')); } catch { return { clean: false, discarded: [] }; }
   }
@@ -66,6 +67,7 @@ function createRecoveryStore(userData) {
         fs.rmSync(path.join(directory, 'assets'), { recursive: true, force: true });
       }
       closed = false;
+      acknowledged = !snapshot;
       atomicWrite(marker, JSON.stringify({ clean: false, discarded: state.clean ? [] : (state.discarded || []) }));
       return { snapshot, warnings };
     },
@@ -82,6 +84,7 @@ function createRecoveryStore(userData) {
       try { readCheckpoint(current); validCurrent = true; } catch { /* Keep previous when current is corrupt. */ }
       if (validCurrent) atomicWrite(previous, fs.readFileSync(current));
       atomicWrite(current, JSON.stringify({ sha256: createHash('sha256').update(payload).digest('hex'), payload }));
+      acknowledged = true;
       return true;
     },
     putAsset({ bytes, mime }) {
@@ -132,6 +135,7 @@ function createRecoveryStore(userData) {
       atomicWrite(marker, JSON.stringify({ ...state, discarded: [...new Set([...(state.discarded || []), id])] }));
     },
     discard() {
+      acknowledged = true;
       // The durable tombstone takes effect before deletion, even if removal fails.
       atomicWrite(marker, JSON.stringify({ clean: true, discarded: [] }));
       for (const file of [current, previous]) fs.rmSync(file, { force: true });
@@ -139,6 +143,8 @@ function createRecoveryStore(userData) {
       atomicWrite(marker, JSON.stringify({ clean: false, discarded: [] }));
     },
     markClean() {
+      // Closing the recovery prompt is not consent to discard the offered work.
+      if (!acknowledged && !session().clean && [current, previous].some(file => fs.existsSync(file))) return;
       closed = true;
       atomicWrite(marker, JSON.stringify({ clean: true, discarded: [] }));
     },
