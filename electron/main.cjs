@@ -2,6 +2,7 @@ const { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, utilityProces
 const { randomBytes } = require('node:crypto');
 const path = require('node:path');
 
+const { createRecoveryStore } = require('./lib/recovery.cjs');
 const { createCredentialStore } = require('./lib/credentials.cjs');
 const { provisionRuntime } = require('./lib/runtime.cjs');
 let root = path.resolve(__dirname, '..');
@@ -14,6 +15,7 @@ let window;
 let origin;
 let quitting = false;
 let credentialStore;
+let recoveryStore;
 
 function validCaller(event) {
   if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) return false;
@@ -88,11 +90,11 @@ async function createWindow() {
       cancelId: 0,
       message: 'Close without saving your workflow?',
     });
-    if (choice === 1) event.preventDefault();
+    if (choice === 1) { recoveryStore.markClean(); event.preventDefault(); }
     else quitting = false;
   });
   window.once('ready-to-show', () => window.show());
-  window.on('closed', () => { window = undefined; });
+  window.on('closed', () => { recoveryStore.markClean(); window = undefined; });
   await window.loadURL(origin);
   console.log('[electron] Desktop window ready');
 }
@@ -148,6 +150,13 @@ function startBackend() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  for (const operation of ['read', 'write', 'putAsset', 'hydrate', 'discardTab', 'discard']) {
+    ipcMain.handle(`desktop:recovery:${operation}`, (event, value) => {
+      if (!validCaller(event)) throw new Error('Unauthorized desktop request');
+      try { return { ok: true, value: recoveryStore[operation](value) }; }
+      catch { return { ok: false, error: 'Recovery could not be read or saved. Check disk space and permissions, and save your workflows to disk.' }; }
+    });
+  }
   for (const operation of ['read', 'write', 'delete']) {
     ipcMain.handle(`desktop:credentials:${operation}`, (event, value) => {
       if (!validCaller(event)) throw new Error('Unauthorized desktop request');
@@ -185,6 +194,7 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.whenReady().then(async () => {
     credentialStore = createCredentialStore(app.getPath('userData'), safeStorage);
+    recoveryStore = createRecoveryStore(app.getPath('userData'));
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
       throw new Error('NODE_BANANA_ELECTRON_PORT must be a port number between 1 and 65535.');
     }

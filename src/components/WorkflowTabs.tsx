@@ -64,9 +64,13 @@ export function WorkflowTabs() {
       ? "Wait for the save to finish"
       : "Wait for the media to finish saving";
 
-  const handleClose = (id: string, name: string | null, unsaved: boolean) => {
+  const handleClose = async (id: string, name: string | null, unsaved: boolean) => {
     if (busy) return;
     if (unsaved && !window.confirm(`Close ${name ?? "Untitled"} and discard its unsaved changes?`)) return;
+    if (window.nodeBananaDesktop) {
+      const result = await window.nodeBananaDesktop.recovery.discardTab(id);
+      if (!result.ok) { window.alert(result.error); return; }
+    }
     closeTab(id);
   };
 

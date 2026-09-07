@@ -402,6 +402,7 @@ export interface WorkflowStore {
   clearWorkflow: () => void;
 
   // Workflow tabs: several workflows open, one live in the canvas
+  restoreDesktopSession: (tabs: { id: string; snapshot: WorkflowTabSnapshot }[], activeTabId: string) => void;
   tabs: WorkflowTab[];
   activeTabId: string;
   /** Last known pan/zoom of the live workflow, parked with its tab. */
@@ -3128,6 +3129,13 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     // Recompute dimming after loading workflow
     get().recomputeDimmedNodes();
+  },
+
+  restoreDesktopSession: (tabs, activeTabId) => {
+    const active = tabs.find(tab => tab.id === activeTabId);
+    if (!active) return;
+    set({ tabs: tabs.map(tab => ({ ...tab, snapshot: tab.id === activeTabId ? null : tab.snapshot })), activeTabId });
+    applyTabSnapshot(set, get, active.snapshot);
   },
 
   newTab: () => {

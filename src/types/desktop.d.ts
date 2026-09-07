@@ -5,6 +5,14 @@ export type DesktopResult<T> = { ok: true; value: T } | { ok: false; error: stri
 declare global {
   interface Window {
     readonly nodeBananaDesktop?: {
+      recovery: {
+        read: () => Promise<DesktopResult<{ snapshot: unknown; warnings: string[] }>>;
+        write: (snapshot: unknown) => Promise<DesktopResult<boolean>>;
+        putAsset: (asset: { bytes: Uint8Array; mime: string }) => Promise<DesktopResult<{ $recoveryAsset: string; mime: string }>>;
+        hydrate: (snapshot: unknown) => Promise<DesktopResult<{ snapshot: unknown; warnings: string[] }>>;
+        discardTab: (id: string) => Promise<DesktopResult<void>>;
+        discard: () => Promise<DesktopResult<void>>;
+      };
       credentials: {
         read: () => Promise<DesktopResult<DesktopCredentials>>;
         write: (patch: DesktopCredentials) => Promise<DesktopResult<DesktopCredentials>>;
