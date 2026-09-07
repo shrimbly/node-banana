@@ -88,3 +88,72 @@ describe("save media snapshots", () => {
     expect(store().hasUnsavedChanges).toBe(true);
   });
 });
+
+describe("workflow replacement during persistence", () => {
+  const file = (name: string): WorkflowFile => ({
+    version: 1, name, nodes: [node(`${name}-node`, { image: name })], edges: [],
+  });
+
+  it("does not replace a different tab when slow media hydration finishes", async () => {
+    useWorkflowStore.setState({ nodes: [node("keep-me", { image: "unsaved" })], hasUnsavedChanges: true });
+    const originalTab = store().activeTabId;
+    store().newTab();
+    const pending = deferred<WorkflowFile>();
+    vi.mocked(hydrateWorkflowMedia).mockReturnValueOnce(pending.promise);
+    const loading = store().loadWorkflow(file("Slow"), "/slow");
+
+    expect(store().switchTab(originalTab)).toBe(true);
+    pending.resolve(file("Slow"));
+    await loading;
+    expect(store().nodes[0].id).toBe("keep-me");
+    expect(store().hasUnsavedChanges).toBe(true);
+  });
+
+  it("keeps the newest load when hydration resolves out of order", async () => {
+    const pending = deferred<WorkflowFile>();
+    vi.mocked(hydrateWorkflowMedia).mockReturnValueOnce(pending.promise);
+    const oldLoad = store().loadWorkflow(file("Old"), "/old");
+    await store().loadWorkflow(file("New"), "/new");
+    pending.resolve(file("Old"));
+    await oldLoad;
+    expect(store().workflowName).toBe("New");
+    expect(store().nodes[0].id).toBe("New-node");
+  });
+
+  it("does not resurrect a workflow cleared during hydration", async () => {
+    const pending = deferred<WorkflowFile>();
+    vi.mocked(hydrateWorkflowMedia).mockReturnValueOnce(pending.promise);
+    const loading = store().loadWorkflow(file("Old"), "/old");
+    store().clearWorkflow();
+    pending.resolve(file("Old"));
+    await loading;
+    expect(store().nodes).toEqual([]);
+    expect(store().workflowName).toBeNull();
+  });
+
+  it("never merges a completed save's refs or metadata into a replacement graph", async () => {
+    const pending = deferred<{ json: () => Promise<{ success: boolean }> }>();
+    vi.mocked(fetch).mockReturnValueOnce(pending.promise as Promise<Response>);
+    useWorkflowStore.setState({ nodes: [node("same-id", { image: "old" })] });
+    const saving = store().saveToFile();
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledOnce());
+    await store().loadWorkflow(file("Replacement"), "/replacement");
+    pending.resolve({ json: async () => ({ success: true }) });
+    expect(await saving).toBe(false);
+    expect(store().workflowName).toBe("Replacement");
+    expect(store().imageRefBasePath).toBe("/replacement");
+    expect(store().lastSavedAt).toBeNull();
+  });
+
+  it("refuses an overlapping save or Save As without changing workflow identity", async () => {
+    const pending = deferred<WorkflowFile>();
+    vi.mocked(externalizeWorkflowMedia).mockReturnValueOnce(pending.promise);
+    const saving = store().saveToFile();
+    await vi.waitFor(() => expect(externalizeWorkflowMedia).toHaveBeenCalledOnce());
+    expect(await store().saveToFile()).toBe(false);
+    expect(await store().saveAsFile("Different")).toBe(false);
+    expect(store().workflowName).toBe("Original");
+    pending.resolve(vi.mocked(externalizeWorkflowMedia).mock.calls[0][0]);
+    expect(await saving).toBe(true);
+  });
+});

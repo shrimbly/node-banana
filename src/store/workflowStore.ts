@@ -436,6 +436,8 @@ export interface WorkflowStore {
   workflowName: string | null;
   /** Bumped on every loadWorkflow, so the canvas can re-measure handles once the new nodes are in the DOM. */
   workflowLoadCount: number;
+  /** Changes as soon as a graph replacement starts, including tab switches and clears. */
+  workflowLifecycleId: number;
   saveDirectoryPath: string | null;
   generationsPath: string | null;
   lastSavedAt: number | null;
@@ -757,6 +759,7 @@ function applyTabSnapshot(
     currentNodeIds: [],
     _abortController: null,
     workflowLoadCount: get().workflowLoadCount + 1,
+    workflowLifecycleId: get().workflowLifecycleId + 1,
     showQuickstart: false,
   });
   // Undo history belongs to the outgoing graph; a switch starts fresh
@@ -819,6 +822,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   workflowId: null,
   workflowName: null,
   workflowLoadCount: 0,
+  workflowLifecycleId: 0,
   saveDirectoryPath: null,
   generationsPath: null,
   lastSavedAt: null,
@@ -2969,15 +2973,13 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   loadWorkflow: async (workflow: WorkflowFile, workflowPath?: string, options?: { preserveSnapshot?: boolean }) => {
+    const lifecycleId = get().workflowLifecycleId + 1;
     // Abort any in-flight workflow run before swapping the graph. Otherwise old
     // executors keep polling/spending and stamp stale results (by node id) onto
     // the freshly loaded nodes — especially when ids are reused across reloads.
     const inflight = get()._abortController;
     if (inflight) inflight.abort("workflow-replaced");
-    set({ isRunning: false, pausedAtNodeId: null, currentNodeIds: [], _abortController: null });
-
-    // Keep generated ids clear of the loaded graph's ids
-    syncIdCounters(workflow.nodes, workflow.groups);
+    set({ workflowLifecycleId: lifecycleId, isRunning: false, pausedAtNodeId: null, currentNodeIds: [], _abortController: null });
 
     // Migrate legacy nanoBanana nodes: derive selectedModel from model field if missing
     workflow.nodes = workflow.nodes.map((node) => {
@@ -3053,6 +3055,11 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         // Continue with original workflow if hydration fails
       }
     }
+
+    // A newer load, clear, or tab switch owns the canvas now. A slow hydration
+    // must never replace that graph (including unsaved work in another tab).
+    if (get().workflowLifecycleId !== lifecycleId) return;
+    syncIdCounters(hydratedWorkflow.nodes, hydratedWorkflow.groups);
 
     // Load cost data for this workflow
     const costData = workflow.id ? loadWorkflowCostData(workflow.id) : null;
@@ -3209,6 +3216,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     // is cleared below.
     revokeNodeBlobUrls(get().nodes);
     set({
+      workflowLifecycleId: get().workflowLifecycleId + 1,
       nodes: [],
       edges: [],
       groups: {},
@@ -3311,6 +3319,10 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   saveToFile: async () => {
+    // Manual saves can overlap auto-save; serialize them so an older response
+    // cannot replace a newer disk snapshot or release its saving lock.
+    if (get().isSaving) return false;
+    const lifecycleId = get().workflowLifecycleId;
     let {
       nodes,
       edges,
@@ -3334,6 +3346,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       // Wait for any pending image/video saves to complete so their IDs are synced
       // This prevents saving workflows with temporary IDs that don't match saved files
       await waitForPendingImageSyncs();
+      if (get().workflowLifecycleId !== lifecycleId) return false;
 
       // Re-fetch nodes after waiting, as imageHistory IDs may have been updated
       let currentNodes = get().nodes;
@@ -3397,6 +3410,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       if (useExternalImageStorage) {
         workflow = await externalizeWorkflowMedia(workflow, saveDirectoryPath);
       }
+      if (get().workflowLifecycleId !== lifecycleId) return false;
 
       const response = await fetch("/api/workflow", {
         method: "POST",
@@ -3409,6 +3423,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       });
 
       const result = await response.json();
+      if (get().workflowLifecycleId !== lifecycleId) return false;
 
       if (result.success) {
         const timestamp = Date.now();
@@ -3525,6 +3540,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   saveAsFile: async (name: string) => {
+    if (get().isSaving) return false;
+    const lifecycleId = get().workflowLifecycleId;
     const trimmedName = name.trim();
     if (!trimmedName) {
       return false;
@@ -3544,7 +3561,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     });
 
     const success = await get().saveToFile();
-    if (!success) {
+    if (!success && get().workflowLifecycleId === lifecycleId && get().workflowId === newWorkflowId) {
       // Rollback to previous identity on failure
       set({ workflowId: prevId, workflowName: prevName, hasUnsavedChanges: prevUnsaved });
     }
