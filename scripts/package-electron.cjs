@@ -22,6 +22,19 @@ async function main() {
     const source = path.join(work, 'source');
     const app = path.join(work, 'app');
     const runtime = path.join(work, 'runtime');
+    // Use Apple's ICNS encoder: the automatic PNG conversion can corrupt the
+    // legacy small representations. Generate every standard size from the artwork.
+    const iconset = path.join(work, 'NodeBanana.iconset');
+    const icon = path.join(work, 'NodeBanana.icns');
+    await fs.mkdir(iconset);
+    for (const size of [16, 32, 128, 256, 512]) {
+      for (const scale of [1, 2]) {
+        await require('sharp')(path.join(root, 'electron/icon.png'))
+          .resize(size * scale, size * scale)
+          .png().toFile(path.join(iconset, `icon_${size}x${size}${scale === 2 ? '@2x' : ''}.png`));
+      }
+    }
+    await run('/usr/bin/iconutil', ['--convert', 'icns', '--output', icon, iconset], work, env);
     await fs.mkdir(source);
     await fs.mkdir(runtime);
     for (const entry of ['src', 'public', 'package.json', 'package-lock.json', 'next.config.ts', 'next.config.shared.cjs', 'postcss.config.mjs', 'tsconfig.json']) {
@@ -61,7 +74,7 @@ async function main() {
       },
       npmRebuild: false, asar: true,
       mac: { target: process.argv.includes('--dir') ? [{ target: 'dir', arch: ['arm64'] }] : [{ target: 'dir', arch: ['arm64'] }, { target: 'dmg', arch: ['arm64'] }, { target: 'zip', arch: ['arm64'] }],
-        icon: path.join(root, 'electron/icon.png'), identity: null, category: 'public.app-category.graphics-design' },
+        icon, identity: null, category: 'public.app-category.graphics-design' },
       dmg: { sign: false, contents: [{ x: 130, y: 220 }, { x: 410, y: 220, type: 'link', path: '/Applications' }] },
       artifactName: '${productName}-${version}-${arch}.${ext}',
     } });
