@@ -78,6 +78,13 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+For a production build, run `npm run build` followed by `npm start`. Both dev
+and production listen on `127.0.0.1` by default. To make the app reachable on
+your network, set `HOST=0.0.0.0` when starting it (for example,
+`HOST=0.0.0.0 npm start` on macOS/Linux). Only do this on a trusted network or
+behind an authenticated proxy: the app's APIs can access local workflow files
+and use configured provider credits.
+
 ### Environment Variables
 
 Create a `.env.local` file in the root directory:

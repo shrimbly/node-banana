@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "node server.js",
     "build": "next build",
-    "start": "next start",
+    "start": "node server.js --production",
     "lint": "next lint",
     "test": "vitest",
     "test:run": "vitest run",

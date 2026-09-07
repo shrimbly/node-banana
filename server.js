@@ -3,12 +3,15 @@
 // We extend it to 10 minutes for long-running fal.ai video generation
 
 const { createServer } = require('http');
-const next = require('next');
 
+// Keep npm start cross-platform while sharing the same local-only boundary.
+if (process.argv.includes('--production')) process.env.NODE_ENV = 'production';
+const next = require('next');
 const dev = process.env.NODE_ENV !== 'production';
 // Local file APIs are unauthenticated: expose them to the network only when
 // the operator explicitly chooses a listening address.
 const hostname = process.env.HOST || '127.0.0.1';
+const localOnly = !process.env.HOST;
 const port = process.env.PORT || 3000;
 
 const app = next({ dev, hostname, port });
@@ -16,7 +19,7 @@ const handle = app.getRequestHandler();
 
 app.prepare().then(() => {
   const server = createServer(async (req, res) => {
-    if (!process.env.HOST) {
+    if (localOnly) {
       // Loopback binding alone does not prevent DNS rebinding: a hostile name
       // can resolve to 127.0.0.1 and carry a matching hostile Origin.
       let requestHost;
