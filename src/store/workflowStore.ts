@@ -1971,17 +1971,20 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     return nodeReadinessPure(nodes, edges);
   },
 
-  _buildExecutionContext: (node: WorkflowNode, signal?: AbortSignal): NodeExecutionContext => ({
+  _buildExecutionContext: (node: WorkflowNode, signal?: AbortSignal): NodeExecutionContext => {
+    const lifecycleId = get().workflowLifecycleId;
+    const isCurrent = () => !signal?.aborted && get().workflowLifecycleId === lifecycleId;
+    return {
     node,
     getConnectedInputs: get().getConnectedInputs,
-    updateNodeData: get().updateNodeData,
+    updateNodeData: (id, data) => { if (isCurrent()) get().updateNodeData(id, data); },
     getFreshNode: (id: string) => get().nodes.find((n) => n.id === id),
     getEdges: () => get().edges,
     getNodes: () => get().nodes,
     signal,
     providerSettings: get().providerSettings,
-    addIncurredCost: (cost: number) => get().addIncurredCost(cost),
-    addToGlobalHistory: (item) => get().addToGlobalHistory(item),
+    addIncurredCost: (cost: number) => { if (isCurrent()) get().addIncurredCost(cost); },
+    addToGlobalHistory: (item) => { if (isCurrent()) get().addToGlobalHistory(item); },
     generationsPath: get().generationsPath,
     saveDirectoryPath: get().saveDirectoryPath,
     trackSaveGeneration: (key: string, promise: Promise<void>) => {
@@ -1993,6 +1996,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       });
     },
     appendOutputGalleryImage: (targetId: string, image: string) => {
+      if (!isCurrent()) return;
       set((state) => ({
         nodes: state.nodes.map((n) =>
           n.id === targetId && n.type === "outputGallery"
@@ -2003,6 +2007,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       }));
     },
     appendOutputGalleryVideo: (targetId: string, video: string) => {
+      if (!isCurrent()) return;
       set((state) => ({
         nodes: state.nodes.map((n) =>
           n.id === targetId && n.type === "outputGallery"
@@ -2012,9 +2017,10 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         hasUnsavedChanges: true,
       }));
     },
-    materializeSplitGridCells: (nodeId: string) => get().materializeSplitGridCells(nodeId),
+    materializeSplitGridCells: (nodeId: string) => isCurrent() && get().materializeSplitGridCells(nodeId),
     get: get as () => unknown,
-  }),
+    };
+  },
 
   executeWorkflow: async (startFromNodeId?: string) => {
     // Resume support: if Run is pressed with no explicit start node while the
@@ -2058,6 +2064,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     // Start logging session
     await logger.startSession();
+    if (get()._abortController !== abortController) return;
 
     logger.info('workflow.start', 'Workflow execution started', {
       nodeCount: nodes.length,
@@ -2159,6 +2166,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       try {
         await runNode(node, executionCtx);
       } catch (error) {
+        if (get()._abortController !== abortController) throw error;
         // Nothing to work with is not a failure: the node and what depends on
         // it are skipped, and the rest of the graph keeps going
         if (!isMissingInputError(error)) throw error;
@@ -2177,6 +2185,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       if (await runBatchIfApplicable(executionCtx)) {
         return;
       }
+      abortController.signal.throwIfAborted();
 
       switch (node.type) {
           case "imageInput":
@@ -2291,9 +2300,11 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         edges: forwardDeps,
         maxConcurrent: maxConcurrentCalls,
         signal: abortController.signal,
-        isRunning: () => get().isRunning,
+        isRunning: () => get().isRunning && get()._abortController === abortController,
         getNode: (id) => get().nodes.find((n) => n.id === id),
-        setCurrentNodeIds: (ids) => set({ currentNodeIds: ids }),
+        setCurrentNodeIds: (ids) => {
+          if (get()._abortController === abortController) set({ currentNodeIds: ids });
+        },
         runNode: (node, signal) => executeSingleNode(node, signal),
         onNodeError: (node, err) => {
           logger.error('workflow.error', 'Node execution failed', {
@@ -2432,6 +2443,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         }
       }
 
+      if (get()._abortController !== abortController) return;
       // Reset skipped nodes' status back to idle
       resetSkippedNodes();
 
@@ -2440,6 +2452,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       saveLogSession();
       await logger.endSession();
     } catch (error) {
+      if (get()._abortController !== abortController) return;
       // Handle AbortError gracefully (user cancelled)
       if (error instanceof DOMException && error.name === 'AbortError') {
         logger.info('workflow.end', 'Workflow execution cancelled by user');
@@ -2470,6 +2483,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   mockTutorialExecution: async () => {
+    if (get().isRunning) return;
     const { nodes, updateNodeData } = get();
 
     // Find the Generate Image node
@@ -2502,6 +2516,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         }, { once: true });
       });
     } catch {
+      if (get()._abortController !== controller) return;
       // Aborted during wait — clean up and exit
       updateNodeData(nanoBananaNode.id, { status: "idle", error: null });
       set({ isRunning: false, currentNodeIds: [], _abortController: null });
@@ -2527,6 +2542,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       });
 
       // Set output (completes the tutorial step)
+      if (get()._abortController !== controller) return;
       updateNodeData(nanoBananaNode.id, {
         status: "complete",
         outputImage: base64Image,
@@ -2534,6 +2550,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         selectedHistoryIndex: 0,
       });
     } catch (error) {
+      if (get()._abortController !== controller) return;
       if (error instanceof DOMException && error.name === "AbortError") {
         updateNodeData(nanoBananaNode.id, { status: "idle", error: null });
       } else {
@@ -2545,6 +2562,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     }
 
     // Clear execution state
+    if (get()._abortController !== controller) return;
     set({
       isRunning: false,
       currentNodeIds: [],
@@ -2583,6 +2601,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     set({ isRunning: true, currentNodeIds: [nodeId], _abortController: abortController });
 
     await logger.startSession();
+    if (get()._abortController !== abortController) return;
     logger.info('node.execution', 'Regenerating node', {
       nodeId,
       nodeType: node.type,
@@ -2595,6 +2614,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
       // Try batch mode first (handles textItems from array nodes)
       const wasBatch = await runBatchIfApplicable(executionCtx, regenOptions);
+      abortController.signal.throwIfAborted();
 
       if (wasBatch) {
         // Batch handled — skip to downstream execution
@@ -2614,36 +2634,43 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         await executeSplitGrid(executionCtx);
       } else if (node.type === "videoStitch") {
         await executeVideoStitch(executionCtx);
+        if (get()._abortController !== abortController) return;
         set({ isRunning: false, currentNodeIds: [], _abortController: null });
         await logger.endSession();
         return;
       } else if (node.type === "easeCurve") {
         await executeEaseCurve(executionCtx);
+        if (get()._abortController !== abortController) return;
         set({ isRunning: false, currentNodeIds: [], _abortController: null });
         await logger.endSession();
         return;
       } else if (node.type === "videoTrim") {
         await executeVideoTrim(executionCtx);
+        if (get()._abortController !== abortController) return;
         set({ isRunning: false, currentNodeIds: [], _abortController: null });
         await logger.endSession();
         return;
       } else if (node.type === "videoFrameGrab") {
         await executeVideoFrameGrab(executionCtx);
+        if (get()._abortController !== abortController) return;
         set({ isRunning: false, currentNodeIds: [], _abortController: null });
         await logger.endSession();
         return;
       } else if (node.type === "removeBackground") {
         await executeRemoveBackground(executionCtx);
+        if (get()._abortController !== abortController) return;
         set({ isRunning: false, currentNodeIds: [], _abortController: null });
         await logger.endSession();
         return;
       } else if (node.type === "imageResize") {
         await executeImageResize(executionCtx);
+        if (get()._abortController !== abortController) return;
         set({ isRunning: false, currentNodeIds: [], _abortController: null });
         await logger.endSession();
         return;
       } else if (node.type === "gifEncoder") {
         await executeGifEncoder(executionCtx);
+        if (get()._abortController !== abortController) return;
         set({ isRunning: false, currentNodeIds: [], _abortController: null });
         await logger.endSession();
         return;
@@ -2651,6 +2678,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         await executeComfyApp(executionCtx);
       } else if (node.type === "output") {
         await executeOutput(executionCtx);
+        if (get()._abortController !== abortController) return;
         set({ isRunning: false, currentNodeIds: [], _abortController: null });
         await logger.endSession();
         return;
@@ -2661,9 +2689,10 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       const { edges: currentEdges } = get();
       const downstreamEdges = currentEdges.filter(e => e.source === nodeId);
       for (const edge of downstreamEdges) {
+        if (get()._abortController !== abortController || abortController.signal.aborted) return;
         const targetNode = get().nodes.find(n => n.id === edge.target);
         if (!targetNode) continue;
-        const targetCtx = get()._buildExecutionContext(targetNode);
+        const targetCtx = get()._buildExecutionContext(targetNode, abortController.signal);
         switch (targetNode.type) {
           case "glbViewer":
             await executeGlbViewer(targetCtx);
@@ -2680,12 +2709,14 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         }
       }
 
+      if (get()._abortController !== abortController) return;
       logger.info('node.execution', 'Node regeneration completed successfully', { nodeId });
       set({ isRunning: false, currentNodeIds: [], _abortController: null });
 
       saveLogSession();
       await logger.endSession();
     } catch (error) {
+      if (get()._abortController !== abortController) return;
       logger.error('node.error', 'Node regeneration failed', {
         nodeId,
       }, error instanceof Error ? error : undefined);
@@ -2737,6 +2768,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     set({ isRunning: true, currentNodeIds: nodeIds, _abortController: abortController });
 
     await logger.startSession();
+    if (get()._abortController !== abortController) return;
     logger.info('node.execution', 'Executing selected nodes', {
       nodeCount: nodesToExecute.length,
       nodeIds,
@@ -2760,6 +2792,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       if (await runBatchIfApplicable(executionCtx, regenOptions)) {
         return;
       }
+      abortController.signal.throwIfAborted();
 
       switch (node.type) {
         case "imageInput":
@@ -2877,9 +2910,11 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         edges: selectedEdges,
         maxConcurrent: maxConcurrentCalls,
         signal: abortController.signal,
-        isRunning: () => get().isRunning,
+        isRunning: () => get().isRunning && get()._abortController === abortController,
         getNode: (id) => nodesToExecute.find((n) => n.id === id),
-        setCurrentNodeIds: (ids) => set({ currentNodeIds: ids }),
+        setCurrentNodeIds: (ids) => {
+          if (get()._abortController === abortController) set({ currentNodeIds: ids });
+        },
         runNode: (node, signal) => executeNode(node, signal),
         onNodeError: (node, err) => {
           logger.error('node.error', 'Node execution failed in batch', {
@@ -2897,10 +2932,11 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         for (const nodeId of nodeIds) {
           const downstreamEdges = currentEdges.filter(e => e.source === nodeId);
           for (const edge of downstreamEdges) {
+            if (get()._abortController !== abortController || abortController.signal.aborted) return;
             if (selectedSet.has(edge.target) || propagated.has(edge.target)) continue;
             const targetNode = get().nodes.find(n => n.id === edge.target);
             if (!targetNode) continue;
-            const targetCtx = get()._buildExecutionContext(targetNode);
+            const targetCtx = get()._buildExecutionContext(targetNode, abortController.signal);
             switch (targetNode.type) {
               case "glbViewer":
                 await executeGlbViewer(targetCtx);
@@ -2923,12 +2959,14 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         }
       }
 
+      if (get()._abortController !== abortController) return;
       logger.info('node.execution', 'Selected nodes execution completed successfully');
       set({ isRunning: false, currentNodeIds: [], _abortController: null });
 
       saveLogSession();
       await logger.endSession();
     } catch (error) {
+      if (get()._abortController !== abortController) return;
       if (error instanceof DOMException && error.name === 'AbortError') {
         logger.info('node.execution', 'Selected nodes execution cancelled by user');
       } else {

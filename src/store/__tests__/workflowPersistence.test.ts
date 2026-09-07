@@ -91,7 +91,7 @@ describe("save media snapshots", () => {
 
 describe("workflow replacement during persistence", () => {
   const file = (name: string): WorkflowFile => ({
-    version: 1, name, nodes: [node(`${name}-node`, { image: name })], edges: [],
+    version: 1, name, nodes: [node(`${name}-node`, { image: name })], edges: [], edgeStyle: "angular",
   });
 
   it("does not replace a different tab when slow media hydration finishes", async () => {
