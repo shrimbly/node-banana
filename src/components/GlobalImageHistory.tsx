@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { memo, useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { ImageHistoryItem } from "@/types";
+import { MINIMAP_GEOMETRY, NAVIGATOR_WIDTH } from "./CanvasMinimap";
 
 // Helper function for relative time display
 /**
@@ -216,7 +217,8 @@ function HistorySidebar({
   );
 }
 
-export function GlobalImageHistory() {
+// Memoised: rendered by the canvas, which re-renders on every drag frame
+export const GlobalImageHistory = memo(function GlobalImageHistory() {
   const [isOpen, setIsOpen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
@@ -304,7 +306,11 @@ export function GlobalImageHistory() {
   if (history.length === 0) return null;
 
   return (
-    <div ref={drawerRef} className="absolute bottom-4 right-64 z-10">
+    <div
+      ref={drawerRef}
+      className="absolute z-10"
+      style={{ right: MINIMAP_GEOMETRY.margin + NAVIGATOR_WIDTH + 8, bottom: MINIMAP_GEOMETRY.margin }}
+    >
       {/* Trigger Button */}
       <button
         ref={triggerRef}
@@ -388,4 +394,4 @@ export function GlobalImageHistory() {
       )}
     </div>
   );
-}
+});

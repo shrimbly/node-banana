@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { getConnectedInputsPure, validateWorkflowPure } from "../connectedInputs";
+import { getConnectedInputsPure, validateWorkflowPure, nodeReadinessPure } from "../connectedInputs";
 import type { WorkflowNode, WorkflowEdge } from "@/types";
 
 function makeNode(id: string, type: string, data: Record<string, unknown> = {}): WorkflowNode {
@@ -250,6 +250,30 @@ describe("getConnectedInputsPure", () => {
     expect(result.dynamicInputs).toEqual({ image_url: "data:image/png;base64,a" });
   });
 
+  it.each([false, true])("keeps the named prompt authoritative when a negative prompt is connected (routed: %s)", (routed) => {
+    const nodes = [
+      makeNode("positive", "prompt", { prompt: "a mountain lake" }),
+      makeNode("negative", "prompt", { prompt: "blurry, low quality" }),
+      makeNode("router", "router"),
+      makeNode("gen", "nanoBanana", {
+        inputSchema: [{ name: "prompt", type: "text" }, { name: "negative_prompt", type: "text" }],
+      }),
+    ];
+    const textEdge = (source: string, target: string, handle: string): WorkflowEdge => ({
+      ...makeEdge(source, target, handle), sourceHandle: "text",
+    });
+    const edges = [
+      ...(routed ? [textEdge("positive", "router", "text")] : []),
+      textEdge(routed ? "router" : "positive", "gen", "text-0"),
+      textEdge("negative", "gen", "text-1"),
+    ];
+
+    const result = getConnectedInputsPure("gen", nodes, edges);
+
+    expect(result.text).toBe("a mountain lake");
+    expect(result.dynamicInputs).toEqual({ prompt: "a mountain lake", negative_prompt: "blurry, low quality" });
+  });
+
   it("should populate dynamicInputs through a router passthrough (regression: router bypassed dynamicInputs → 422)", () => {
     const nodes = [
       makeNode("img", "imageInput", { image: "data:image/png;base64,a" }),
@@ -292,6 +316,52 @@ describe("getConnectedInputsPure", () => {
 
     expect(result.dynamicInputs).toEqual({ image_url: "data:image/png;base64,a" });
     expect(result.images).toEqual(["data:image/png;base64,a"]);
+  });
+
+  it.each(["router", "switch"])("preserves both video frame slots through converging %s branches", (branchType) => {
+    const image = "data:image/png;base64,frame";
+    const branchData = branchType === "switch"
+      ? { inputType: "image", switches: [{ id: "on", enabled: true }] }
+      : {};
+    const nodes = [
+      makeNode("image", "imageInput", { image }),
+      makeNode("shared", "router"),
+      makeNode("left", branchType, branchData),
+      makeNode("right", branchType, branchData),
+      makeNode("video", "generateVideo", {
+        inputSchema: [{ name: "start_frame", type: "image" }, { name: "end_frame", type: "image" }],
+      }),
+    ];
+    const edges = [
+      makeEdge("image", "shared"),
+      makeEdge("shared", "left"),
+      makeEdge("shared", "right"),
+      { ...makeEdge("left", "video", "image-0"), sourceHandle: branchType === "switch" ? "on" : "image" },
+      { ...makeEdge("right", "video", "image-1"), sourceHandle: branchType === "switch" ? "on" : "image" },
+    ];
+
+    const result = getConnectedInputsPure("video", nodes, edges);
+
+    expect(result.dynamicInputs).toEqual({ start_frame: image, end_frame: image });
+    expect(result.images).toEqual([image, image]);
+  });
+
+  it("still terminates router cycles while preserving an independent input", () => {
+    const image = "data:image/png;base64,frame";
+    const nodes = [
+      makeNode("image", "imageInput", { image }),
+      makeNode("left", "router"),
+      makeNode("right", "router"),
+      makeNode("gen", "nanoBanana"),
+    ];
+    const edges = [
+      makeEdge("left", "right"),
+      makeEdge("right", "left"),
+      makeEdge("image", "left"),
+      makeEdge("right", "gen"),
+    ];
+
+    expect(getConnectedInputsPure("gen", nodes, edges).images).toEqual([image]);
   });
 
   it("should map a connected video into dynamicInputs and videos via schema", () => {
@@ -447,5 +517,27 @@ describe("validateWorkflowPure", () => {
     const edges = [makeEdge("p", "gen", "text-0")];
     const result = validateWorkflowPure(nodes, edges);
     expect(result.valid).toBe(true);
+  });
+});
+
+describe("nodeReadinessPure", () => {
+  it("names each node that cannot run as wired, with a short hint", () => {
+    const nodes = [
+      { id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} },
+      { id: "out", type: "output", position: { x: 0, y: 0 }, data: {} },
+      { id: "p", type: "prompt", position: { x: 0, y: 0 }, data: { prompt: "hi" } },
+    ] as never[];
+    const readiness = nodeReadinessPure(nodes, []);
+    expect(readiness.gen).toEqual({ hint: "needs a prompt", message: 'Generate node "gen" missing text input' });
+    expect(readiness.out?.hint).toBe("needs an image");
+    expect(readiness.p).toBeUndefined();
+  });
+
+  it("clears once the input is connected, ignoring loop edges", () => {
+    const nodes = [{ id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} }] as never[];
+    const loop = [{ id: "e", source: "x", target: "gen", targetHandle: "text", data: { isLoop: true } }] as never[];
+    const real = [{ id: "e", source: "x", target: "gen", targetHandle: "text", data: {} }] as never[];
+    expect(nodeReadinessPure(nodes, loop).gen).toBeDefined();
+    expect(nodeReadinessPure(nodes, real)).toEqual({});
   });
 });

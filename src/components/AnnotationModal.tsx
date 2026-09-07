@@ -1,5 +1,6 @@
 "use client";
 
+import { DialogButton } from "@/components/ui/Dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Stage, Layer, Image as KonvaImage, Rect, Ellipse, Arrow, Line, Text, Transformer } from "react-konva";
 import { useAnnotationStore } from "@/store/annotationStore";
@@ -419,46 +420,46 @@ export function AnnotationModal() {
   ];
 
   return (
-    <div className="fixed inset-0 z-[100] bg-neutral-950 flex flex-col">
-      {/* Top Bar */}
-      <div className="h-14 bg-neutral-900 flex items-center justify-between px-4 border-b border-neutral-800">
-        <div className="flex items-center gap-1.5">
+    <div role="dialog" aria-modal="true" aria-label="Annotate image" className="fixed inset-0 z-100 bg-canvas-bg flex flex-col">
+      {/* Top Bar — the dialog header, laid flat across the screen */}
+      <div className="h-12 bg-card flex items-center justify-between px-3 border-b border-chrome-border shrink-0">
+        <div className="flex items-center gap-1">
           {tools.map((tool) => (
             <button
               key={tool.type}
               onClick={() => setCurrentTool(tool.type)}
-              className={`px-3.5 py-1.5 text-xs font-medium rounded transition-colors ${
+              className={`h-7 px-3 text-xs font-medium rounded-md transition-colors ${
                 currentTool === tool.type
                   ? "bg-white text-neutral-900"
-                  : "text-neutral-400 hover:text-white"
+                  : "text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700/50"
               }`}
             >
               {tool.label}
             </button>
           ))}
 
-          <div className="w-px h-6 bg-neutral-700 mx-3" />
+          <div className="w-px h-4 bg-neutral-600 mx-2" />
 
-          <button onClick={undo} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white">Undo</button>
-          <button onClick={redo} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-white">Redo</button>
+          <button onClick={undo} className="h-7 px-2.5 text-xs text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700/50 rounded-md transition-colors">Undo</button>
+          <button onClick={redo} className="h-7 px-2.5 text-xs text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700/50 rounded-md transition-colors">Redo</button>
 
-          <div className="w-px h-6 bg-neutral-700 mx-3" />
+          <div className="w-px h-4 bg-neutral-600 mx-2" />
 
-          <button onClick={clearAnnotations} className="px-3 py-1.5 text-xs text-neutral-400 hover:text-red-400">Clear</button>
+          <button onClick={clearAnnotations} className="h-7 px-2.5 text-xs text-neutral-400 hover:text-red-400 hover:bg-red-500/10 rounded-md transition-colors">Clear</button>
         </div>
 
-        <div className="flex items-center gap-3">
-          <button onClick={closeModal} className="px-4 py-1.5 text-xs font-medium text-neutral-400 hover:text-white">
+        <div className="flex items-center gap-2">
+          <DialogButton variant="ghost" onClick={closeModal}>
             Cancel
-          </button>
-          <button onClick={handleDone} className="px-4 py-1.5 text-xs font-medium bg-white text-neutral-900 rounded hover:bg-neutral-200">
+          </DialogButton>
+          <DialogButton variant="primary" onClick={handleDone}>
             Done
-          </button>
+          </DialogButton>
         </div>
       </div>
 
       {/* Canvas Container */}
-      <div ref={containerRef} className="flex-1 overflow-hidden bg-neutral-900">
+      <div ref={containerRef} className="flex-1 overflow-hidden bg-canvas-bg">
         <Stage
           ref={stageRef}
           width={containerRef.current?.clientWidth || 800}

@@ -6,7 +6,6 @@
  */
 
 import type { VideoStitchNodeData, EaseCurveNodeData, VideoTrimNodeData, VideoFrameGrabNodeData } from "@/types";
-import { revokeBlobUrl } from "@/store/utils/executionUtils";
 import type { NodeExecutionContext } from "./types";
 
 /**
@@ -89,11 +88,12 @@ export async function executeVideoStitch(ctx: NodeExecutionContext): Promise<voi
       throw new DOMException("Aborted", "AbortError");
     }
 
-    // Revoke old blob URL before replacing
+    // Keep the previous URL alive until replacement succeeds. It may also be
+    // owned by another node, tab, clipboard entry, or undo snapshot.
     const oldData = getNodes().find((n) => n.id === node.id)?.data as
       | Record<string, unknown>
       | undefined;
-    revokeBlobUrl(oldData?.outputVideo as string | undefined);
+    const oldOutputVideo = oldData?.outputVideo as string | undefined;
 
     let outputVideo: string;
     if (outputBlob.size > 20 * 1024 * 1024) {
@@ -114,6 +114,7 @@ export async function executeVideoStitch(ctx: NodeExecutionContext): Promise<voi
       progress: 100,
       error: null,
     });
+    ctx.releaseMediaUrl?.(oldOutputVideo);
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       updateNodeData(node.id, { status: "idle", error: null, progress: 0 });
@@ -196,14 +197,11 @@ export async function executeVideoTrim(ctx: NodeExecutionContext): Promise<void>
       throw new DOMException("Aborted", "AbortError");
     }
 
-    // Revoke old blob URL before replacing
+    // The store checks all media owners after the replacement is committed.
     const oldData = getNodes().find((n) => n.id === node.id)?.data as
       | Record<string, unknown>
       | undefined;
     const oldOutputVideo = oldData?.outputVideo as string | undefined;
-    if (oldOutputVideo && oldOutputVideo.startsWith("blob:")) {
-      URL.revokeObjectURL(oldOutputVideo);
-    }
 
     let outputVideo: string;
     if (outputBlob.size > 20 * 1024 * 1024) {
@@ -224,6 +222,7 @@ export async function executeVideoTrim(ctx: NodeExecutionContext): Promise<void>
       progress: 100,
       error: null,
     });
+    ctx.releaseMediaUrl?.(oldOutputVideo);
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       updateNodeData(node.id, { status: "idle", error: null, progress: 0 });
@@ -352,11 +351,11 @@ export async function executeEaseCurve(ctx: NodeExecutionContext): Promise<void>
       throw new Error("Speed curve processing returned no output");
     }
 
-    // Revoke old blob URL before replacing
+    // The store checks all media owners after the replacement is committed.
     const oldData = getNodes().find((n) => n.id === node.id)?.data as
       | Record<string, unknown>
       | undefined;
-    revokeBlobUrl(oldData?.outputVideo as string | undefined);
+    const oldOutputVideo = oldData?.outputVideo as string | undefined;
 
     let outputVideo: string;
     if (outputBlob.size > 20 * 1024 * 1024) {
@@ -377,6 +376,7 @@ export async function executeEaseCurve(ctx: NodeExecutionContext): Promise<void>
       progress: 100,
       error: null,
     });
+    ctx.releaseMediaUrl?.(oldOutputVideo);
   } catch (err) {
     if (err instanceof DOMException && err.name === "AbortError") {
       updateNodeData(node.id, { status: "idle", error: null, progress: 0 });

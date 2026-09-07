@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { WorkflowCanvas } from "@/components/WorkflowCanvas";
 import { ReactFlowProvider } from "@xyflow/react";
+import { useToast } from "@/components/Toast";
 
 // Mock the workflow store
 const mockOnNodesChange = vi.fn();
@@ -24,17 +25,31 @@ const mockViewport = vi.hoisted(() => ({ zoom: 1 }));
 const mockReactFlowProps = vi.hoisted(() => ({
   current: null as Record<string, unknown> | null,
 }));
+const mockChatProps = vi.hoisted(() => ({
+  current: null as { onBuildWorkflow: (description: string) => Promise<void>; onApplyEdits: (operations: unknown[]) => unknown } | null,
+}));
 
-vi.mock("@/store/workflowStore", () => ({
-  useWorkflowStore: (selector?: (state: unknown) => unknown) => {
+vi.mock("@/components/ChatPanel", () => ({
+  ChatPanel: (props: NonNullable<typeof mockChatProps.current>) => {
+    mockChatProps.current = props;
+    return null;
+  },
+}));
+
+vi.mock("@/store/workflowStore", () => {
+  const useWorkflowStore = (selector?: (state: unknown) => unknown) => {
     if (selector) {
       return mockUseWorkflowStore(selector);
     }
     return mockUseWorkflowStore((s: unknown) => s);
-  },
-}));
+  };
+  // Handlers that run outside render read the store directly
+  useWorkflowStore.getState = () => mockUseWorkflowStore((s: unknown) => s);
+  return { useWorkflowStore };
+});
 
 // Mock useReactFlow
+const mockUpdateNodeInternals = vi.fn();
 const mockScreenToFlowPosition = vi.fn((pos) => pos);
 const mockGetViewport = vi.fn(() => ({ x: 0, y: 0, zoom: 1 }));
 const mockZoomIn = vi.fn();
@@ -52,6 +67,7 @@ vi.mock("@xyflow/react", async () => {
     },
     useStore: (selector: (state: { transform: [number, number, number]; nodeLookup: Map<string, unknown> }) => unknown) =>
       selector({ transform: [0, 0, mockViewport.zoom], nodeLookup: new Map() }),
+    useUpdateNodeInternals: () => mockUpdateNodeInternals,
     useReactFlow: () => ({
       screenToFlowPosition: mockScreenToFlowPosition,
       getViewport: mockGetViewport,
@@ -69,10 +85,6 @@ vi.mock("@/components/ConnectionDropMenu", () => ({
 
 vi.mock("@/components/MultiSelectToolbar", () => ({
   MultiSelectToolbar: () => <div data-testid="multi-select-toolbar" />,
-}));
-
-vi.mock("@/components/EdgeToolbar", () => ({
-  EdgeToolbar: () => <div data-testid="edge-toolbar" />,
 }));
 
 vi.mock("@/components/GlobalImageHistory", () => ({
@@ -123,6 +135,7 @@ const defaultProviderSettings = {
 
 // Default store state factory
 const createDefaultState = (overrides = {}) => ({
+  workflowLifecycleId: 0,
   nodes: [],
   edges: [],
   groups: {},
@@ -146,6 +159,7 @@ const createDefaultState = (overrides = {}) => ({
   clipboard: null,
   providerSettings: defaultProviderSettings,
   edgeStyle: "angular" as const,
+  edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true },
   currentNodeIds: [],
   navigationTarget: null,
   setNavigationTarget: vi.fn(),
@@ -166,6 +180,84 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe("WorkflowCanvas", () => {
+  it.each(["current", "superseded", "switched-after-load"])("handles generated-workflow hydration ownership (%s)", async (scenario) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      json: async () => ({ success: true, workflow: { nodes: [], edges: [] } }),
+    }));
+    const state = createDefaultState({ workflowLifecycleId: 1 });
+    mockUseWorkflowStore.mockImplementation((selector) => selector(state));
+    mockLoadWorkflow.mockImplementationOnce(async () => {
+      state.workflowLifecycleId = 2; // Begin hydration.
+      await Promise.resolve();
+      state.workflowLifecycleId = scenario === "switched-after-load" ? 4 : 3;
+      return scenario === "superseded" ? undefined : 3;
+    });
+    useToast.getState().hide();
+    try {
+      render(<TestWrapper><WorkflowCanvas /></TestWrapper>);
+      await act(async () => { await mockChatProps.current!.onBuildWorkflow("New graph"); });
+      expect(state.captureSnapshot).toHaveBeenCalledOnce();
+      expect(mockLoadWorkflow).toHaveBeenCalledOnce();
+      expect(useToast.getState().message).toBe(scenario === "current" ? "Workflow generated successfully" : null);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("discards a generated workflow when its originating workflow has changed", async () => {
+    let resolveResponse!: (value: unknown) => void;
+    const response = new Promise((resolve) => { resolveResponse = resolve; });
+    const fetchMock = vi.fn(() => response);
+    vi.stubGlobal("fetch", fetchMock);
+    const state = createDefaultState({ workflowLifecycleId: 1 });
+    mockUseWorkflowStore.mockImplementation((selector) => selector(state));
+    try {
+      const { rerender } = render(<TestWrapper><WorkflowCanvas /></TestWrapper>);
+      let pending!: Promise<void>;
+      act(() => { pending = mockChatProps.current!.onBuildWorkflow("A new workflow"); });
+      state.workflowLifecycleId = 2;
+      rerender(<TestWrapper><WorkflowCanvas /></TestWrapper>);
+      await act(async () => {
+        resolveResponse({ json: async () => ({ success: true, workflow: { nodes: [], edges: [] } }) });
+        await pending;
+      });
+      expect(state.captureSnapshot).not.toHaveBeenCalled();
+      expect(mockLoadWorkflow).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("rejects tool callbacks retained from the previous workflow", async () => {
+    const state = createDefaultState({ workflowLifecycleId: 1 });
+    mockUseWorkflowStore.mockImplementation((selector) => selector(state));
+    const { rerender } = render(<TestWrapper><WorkflowCanvas /></TestWrapper>);
+    const stale = mockChatProps.current!;
+    state.workflowLifecycleId = 2;
+    rerender(<TestWrapper><WorkflowCanvas /></TestWrapper>);
+    await act(async () => { await stale.onBuildWorkflow("Old request"); });
+    let result: unknown;
+    act(() => { result = stale.onApplyEdits([{ type: "removeNode", nodeId: "a" }]); });
+    expect(result).toMatchObject({ applied: 0 });
+    expect(state.applyEditOperations).not.toHaveBeenCalled();
+    expect(state.captureSnapshot).not.toHaveBeenCalled();
+    expect(mockLoadWorkflow).not.toHaveBeenCalled();
+  });
+
+  it("keeps automatic edge selection out of node marquee selection", () => {
+    mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState()));
+    render(<TestWrapper><WorkflowCanvas /></TestWrapper>);
+    const props = mockReactFlowProps.current!;
+    act(() => (props.onSelectionStart as () => void)());
+    mockOnEdgesChange.mockClear();
+    const select = [{ type: "select", id: "edge-1", selected: true }];
+    act(() => (props.onEdgesChange as (changes: unknown[]) => void)(select));
+    expect(mockOnEdgesChange).toHaveBeenLastCalledWith([]);
+    act(() => (props.onSelectionEnd as () => void)());
+    act(() => (props.onEdgesChange as (changes: unknown[]) => void)(select));
+    expect(mockOnEdgesChange).toHaveBeenLastCalledWith(select);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockViewport.zoom = 1;
@@ -186,6 +278,28 @@ describe("WorkflowCanvas", () => {
 
       // ReactFlow container should be present
       expect(document.querySelector(".react-flow")).toBeInTheDocument();
+    });
+
+    it("re-measures every node's handles after a workflow loads", async () => {
+      mockUseWorkflowStore.mockImplementation((selector) =>
+        selector(createDefaultState({ nodes: [createMockNode("a", "prompt"), createMockNode("b", "nanoBanana")], workflowLoadCount: 1 }))
+      );
+      render(
+        <TestWrapper>
+          <WorkflowCanvas />
+        </TestWrapper>
+      );
+      await waitFor(() => expect(mockUpdateNodeInternals).toHaveBeenCalledWith(["a", "b"]));
+    });
+
+    it("leaves handle measurement alone until a workflow has loaded", async () => {
+      render(
+        <TestWrapper>
+          <WorkflowCanvas />
+        </TestWrapper>
+      );
+      await new Promise((r) => setTimeout(r, 50));
+      expect(mockUpdateNodeInternals).not.toHaveBeenCalled();
     });
 
     it("marks the canvas as overview mode below the edge visibility threshold", () => {
@@ -247,15 +361,17 @@ describe("WorkflowCanvas", () => {
       expect(document.querySelector(".react-flow__background")).toBeInTheDocument();
     });
 
-    it("should render Controls component", () => {
+    it("mounts the navigator with its canvas controls", () => {
       render(
         <TestWrapper>
           <WorkflowCanvas />
         </TestWrapper>
       );
 
-      // Controls panel should be rendered
-      expect(document.querySelector(".react-flow__controls")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Zoom in" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Zoom out" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Fit view" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /lock canvas/i })).toBeInTheDocument();
     });
 
     it("should render MiniMap component", () => {
@@ -285,7 +401,7 @@ describe("WorkflowCanvas", () => {
       expect(document.querySelector(".react-flow__minimap")).toBeInTheDocument();
     });
 
-    it("uses shared explicit geometry for the minimap and close toggle", () => {
+    it("keeps the minimap inside the navigator card at its explicit size", () => {
       render(
         <TestWrapper>
           <WorkflowCanvas />
@@ -293,49 +409,97 @@ describe("WorkflowCanvas", () => {
       );
 
       const minimap = document.querySelector(".react-flow__minimap");
-      const closeButton = screen.getByRole("button", { name: "Hide minimap" });
+      const navigator = screen.getByTestId("canvas-navigator");
 
-      expect(minimap).toHaveStyle({ width: "200px", height: "150px", margin: "15px" });
-      expect(minimap?.parentElement).toHaveClass("react-flow");
-      expect(closeButton).toHaveStyle({ right: "23px", bottom: "129px" });
+      // Static, so it flows inside the card instead of pinning itself to the pane corner.
+      expect(minimap).toHaveStyle({ width: "266px", height: "150px", margin: "0px", position: "static" });
+      expect(navigator).toHaveStyle({ margin: "16px" });
+      expect(navigator).toContainElement(screen.getByRole("button", { name: "Hide minimap" }));
     });
 
-    it("keeps edges visible and scopes native pan state to this canvas", () => {
-      const edge = { id: "edge-1", source: "source", target: "target" };
-      mockViewport.zoom = 0.2;
-      mockUseWorkflowStore.mockImplementation((selector) =>
-        selector(createDefaultState({ edges: [edge] }))
-      );
+    it("keeps edges visible and holds native pan state on this canvas until the moves stop", () => {
+      vi.useFakeTimers();
+      try {
+        const edge = { id: "edge-1", source: "source", target: "target" };
+        mockViewport.zoom = 0.2;
+        mockUseWorkflowStore.mockImplementation((selector) =>
+          selector(createDefaultState({ edges: [edge] }))
+        );
 
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
+        render(
+          <TestWrapper>
+            <WorkflowCanvas />
+          </TestWrapper>
+        );
 
-      const canvas = document.querySelector(".bg-canvas-bg") as HTMLElement;
-      act(() => {
-        (mockReactFlowProps.current?.onMoveStart as (() => void) | undefined)?.();
-      });
+        const canvas = document.querySelector(".bg-canvas-bg") as HTMLElement;
+        const move = (handler: "onMoveStart" | "onMoveEnd") =>
+          act(() => {
+            (mockReactFlowProps.current?.[handler] as (() => void) | undefined)?.();
+          });
+        move("onMoveStart");
 
-      expect(mockReactFlowProps.current?.edges).toEqual([edge]);
-      expect(canvas).toHaveClass("canvas-native-navigation-active");
-      expect(document.documentElement).not.toHaveClass("canvas-native-navigation-active");
+        expect(mockReactFlowProps.current?.edges).toEqual([edge]);
+        expect(canvas).toHaveClass("canvas-native-navigation-active");
+        expect(document.documentElement).toHaveClass("canvas-interacting");
+        expect(document.documentElement).not.toHaveClass("canvas-native-navigation-active");
 
-      act(() => {
-        (mockReactFlowProps.current?.onMoveEnd as (() => void) | undefined)?.();
-      });
-      expect(canvas).not.toHaveClass("canvas-native-navigation-active");
+        // A wheel pan reports a start/end pair every frame; the classes must
+        // not flip off between them, since each flip restyles the document
+        move("onMoveEnd");
+        move("onMoveStart");
+        move("onMoveEnd");
+        expect(canvas).toHaveClass("canvas-native-navigation-active");
+        expect(document.documentElement).toHaveClass("canvas-interacting");
+
+        act(() => {
+          vi.advanceTimersByTime(200);
+        });
+        expect(canvas).not.toHaveClass("canvas-native-navigation-active");
+        expect(document.documentElement).not.toHaveClass("canvas-interacting");
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
-    it("should render EdgeToolbar component", () => {
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
+    it("keeps pointer events off for the whole of a node drag that follows a pan", () => {
+      vi.useFakeTimers();
+      try {
+        mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState()));
+        render(
+          <TestWrapper>
+            <WorkflowCanvas />
+          </TestWrapper>
+        );
+        const props = () => mockReactFlowProps.current as Record<string, (...args: unknown[]) => void>;
+        const node = { id: "node-1", position: { x: 0, y: 0 }, data: {} };
 
-      expect(screen.getByTestId("edge-toolbar")).toBeInTheDocument();
+        // The pan's idle timer runs out during the drag and must not clear the drag's class
+        act(() => props().onMoveStart());
+        act(() => props().onMoveEnd());
+        act(() => props().onNodeDragStart({}, node));
+        act(() => {
+          vi.advanceTimersByTime(200);
+        });
+        expect(document.documentElement).toHaveClass("canvas-interacting");
+        act(() => props().onNodeDragStop({}, node));
+        expect(document.documentElement).not.toHaveClass("canvas-interacting");
+
+        // A drag that ends inside the pan's window leaves the next pan able to switch the classes back on
+        act(() => props().onMoveStart());
+        act(() => props().onMoveEnd());
+        act(() => props().onNodeDragStart({}, node));
+        act(() => props().onNodeDragStop({}, node));
+        expect(document.documentElement).not.toHaveClass("canvas-interacting");
+        act(() => props().onMoveStart());
+        expect(document.documentElement).toHaveClass("canvas-interacting");
+        act(() => {
+          vi.advanceTimersByTime(200);
+        });
+        expect(document.documentElement).not.toHaveClass("canvas-interacting");
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("should render MultiSelectToolbar component", () => {

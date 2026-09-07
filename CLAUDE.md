@@ -39,7 +39,9 @@ Node Banana is a node-based visual workflow editor for AI image generation. User
 | Central workflow state & execution logic | `src/store/workflowStore.ts` |
 | All TypeScript type definitions | `src/types/index.ts` |
 | Main canvas component & connection validation | `src/components/WorkflowCanvas.tsx` |
-| Base node component (shared by all nodes) | `src/components/nodes/BaseNode.tsx` |
+| Node shell (media card, sockets, gap row, controls card — used by every node) | `src/components/nodes/NodeShell.tsx` |
+| Node UI primitives (fields, controls card, sockets, carousel, scrub row) | `src/components/nodes/ui/` |
+| Node anatomy and tokens | `docs/node-redesign.md`, `src/app/globals.css` (`@theme`) |
 | Image generation API route | `src/app/api/generate/route.ts` |
 | LLM text generation API route | `src/app/api/llm/route.ts` |
 | Cost calculations | `src/utils/costCalculator.ts` |
@@ -147,7 +149,7 @@ Returns `{ images: string[], text: string | null }`.
 5. Create the component in `src/components/nodes/`
 6. Export from `src/components/nodes/index.ts`
 7. Register in `nodeTypes` in `WorkflowCanvas.tsx`
-8. Add minimap color in `WorkflowCanvas.tsx`
+8. Add minimap color to `getMiniMapNodeColor()` in `src/components/CanvasMinimap.tsx`
 9. Update `getConnectedInputs()` if the node produces consumable output
 10. Add execution logic in `executeWorkflow()` if the node requires processing
 11. Update `ConnectionDropMenu.tsx` to include the node in source/target lists
@@ -330,6 +332,7 @@ All routes in `src/app/api/`:
 - `node-banana-workflow-costs` - Cost tracking per workflow
 - `node-banana-nanoBanana-defaults` - Sticky generation settings
 - `node-banana-comfy-settings` - ComfyUI backend (cloud/local/remote), keys, job timeout
+- `node-banana-edge-appearance` - User default for connection line style and appearance (thickness, faded opacity, gradient, loading pulse)
 - `node-banana-comfy-apps` - Saved Comfy nodes (workflow + contract + settings)
 
 ## Git Workflow

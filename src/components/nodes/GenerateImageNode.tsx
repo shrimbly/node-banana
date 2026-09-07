@@ -1,42 +1,44 @@
 "use client";
 
 import React, { useCallback, useState, useEffect, useMemo, useRef } from "react";
-import { Handle, Position, NodeProps, Node, useReactFlow } from "@xyflow/react";
-import { BaseNode } from "./BaseNode";
+import { NodeProps, Node } from "@xyflow/react";
+import { NodeShell } from "./NodeShell";
 import { ModelParameters } from "./ModelParameters";
 import { useWorkflowStore, saveNanoBananaDefaults, useProviderApiKeys } from "@/store/workflowStore";
 import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
 import { NanoBananaNodeData, AspectRatio, Resolution, MODEL_DISPLAY_NAMES, ProviderType, SelectedModel, ModelInputDef, GEMINI_IMAGE_MODELS, ModelType } from "@/types";
 import { ProviderModel, ModelCapability } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
-import { getImageDimensions } from "@/utils/nodeDimensions";
 import { ProviderBadge } from "./ProviderBadge";
-import { useInlineParameters } from "@/hooks/useInlineParameters";
-import { InlineParameterPanel } from "./InlineParameterPanel";
 import { SettingsTabBar } from "./SettingsTabBar";
 import { browseRegistry } from "@/utils/browseRegistry";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
 import { downloadMedia } from "@/utils/downloadMedia";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
-import { HandleLabel } from "./HandleLabel";
 import { useLoadGenerationById } from "@/hooks/useLoadGenerationById";
 import { useGenerationCarousel } from "@/hooks/useGenerationCarousel";
 import { useErrorToast } from "@/hooks/useErrorToast";
-import { useAutoResizeOnMedia } from "@/hooks/useAutoResizeOnMedia";
+import { parseAspectRatio } from "@/utils/nodeDimensions";
+import { calculateGenerationCost, formatCost } from "@/utils/costCalculator";
+import {
+  CarouselControls,
+  CheckboxField,
+  ControlsCard,
+  EmptyState,
+  ErrorMessage,
+  ErrorOverlay,
+  LoadingOverlay,
+  SelectField,
+  Spinner,
+  SummaryValues,
+  sameInputSchema,
+  type SocketSpec,
+} from "./ui";
 
-/** Reorder items so they read column-first in a row-based CSS grid.
- *  e.g. [1,2,3,4,5,6,7,8] with 2 cols → [1,5,2,6,3,7,4,8] */
-function reorderColumnFirst<T>(items: T[], cols: number): T[] {
-  const rows = Math.ceil(items.length / cols);
-  const result: T[] = [];
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      const idx = c * rows + r;
-      if (idx < items.length) result.push(items[idx]);
-    }
-  }
-  return result;
-}
+const INPUT_SOCKETS: SocketSpec[] = [
+  { id: "image", type: "image", label: "Image" },
+  { id: "text", type: "text", label: "Prompt", dataTutorial: "generate-text-input-handle" },
+];
+const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "image", type: "image", label: "Image" }];
 
 // Base 10 aspect ratios (all Gemini image models)
 const BASE_ASPECT_RATIOS: AspectRatio[] = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
@@ -71,9 +73,9 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
     }
   }, [nodeData.fallbackModel, settingsTab]);
 
-  // Inline parameters infrastructure
-  const { inlineParametersEnabled } = useInlineParameters();
-  const showLabels = useShowHandleLabels(selected);
+  // The clip follows the generated image's real proportions once it has
+  // loaded; until then (and with no image) it follows the configured ratio.
+  const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
   // Register browse callback for floating header button
   useEffect(() => {
@@ -179,56 +181,9 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
     updateNodeData(id, { parametersExpanded: !isParamsExpanded });
   }, [id, isParamsExpanded, updateNodeData]);
 
-  // Handle provider change
-  const handleProviderChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const provider = e.target.value as ProviderType;
-
-      if (provider === "gemini") {
-        // Reset to Gemini default
-        const newSelectedModel: SelectedModel = {
-          provider: "gemini",
-          modelId: nodeData.model || "nano-banana-pro",
-          displayName: GEMINI_IMAGE_MODELS.find(m => m.value === (nodeData.model || "nano-banana-pro"))?.label || "Nano Banana Pro",
-        };
-        // Clear parameters when switching providers (different providers have different schemas)
-        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
-      } else {
-        // Set placeholder for external provider
-        const newSelectedModel: SelectedModel = {
-          provider,
-          modelId: "",
-          displayName: "Select model...",
-        };
-        // Clear parameters when switching providers
-        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
-      }
-    },
-    [id, nodeData.model, updateNodeData]
-  );
-
-  // Handle model change for external providers
-  const handleExternalModelChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const modelId = e.target.value;
-      const model = externalModels.find(m => m.id === modelId);
-      if (model) {
-        const newSelectedModel: SelectedModel = {
-          provider: currentProvider,
-          modelId: model.id,
-          displayName: model.name,
-          capabilities: model.capabilities,
-        };
-        // Clear parameters when changing models (different models have different schemas)
-        updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
-      }
-    },
-    [id, currentProvider, externalModels, updateNodeData]
-  );
-
   const handleAspectRatioChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const aspectRatio = e.target.value as AspectRatio;
+    (value: string) => {
+      const aspectRatio = value as AspectRatio;
       updateNodeData(id, { aspectRatio });
       saveNanoBananaDefaults({ aspectRatio });
     },
@@ -236,8 +191,8 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   );
 
   const handleResolutionChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const resolution = e.target.value as Resolution;
+    (value: string) => {
+      const resolution = value as Resolution;
       updateNodeData(id, { resolution });
       saveNanoBananaDefaults({ resolution });
     },
@@ -245,8 +200,8 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   );
 
   const handleModelChange = useCallback(
-    (e: React.ChangeEvent<HTMLSelectElement>) => {
-      const model = e.target.value as ModelType;
+    (value: string) => {
+      const model = value as ModelType;
       updateNodeData(id, { model });
       saveNanoBananaDefaults({ model });
 
@@ -262,8 +217,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   );
 
   const handleGoogleSearchToggle = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const useGoogleSearch = e.target.checked;
+    (useGoogleSearch: boolean) => {
       updateNodeData(id, { useGoogleSearch });
       saveNanoBananaDefaults({ useGoogleSearch });
     },
@@ -271,8 +225,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   );
 
   const handleImageSearchToggle = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      const useImageSearch = e.target.checked;
+    (useImageSearch: boolean) => {
       updateNodeData(id, { useImageSearch });
       saveNanoBananaDefaults({ useImageSearch });
     },
@@ -287,31 +240,18 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   );
 
   // Handle inputs loaded from schema
+  // Read through a ref so the callback stays stable: it is a dependency of
+  // ModelParameters' schema effect, and a new identity would refetch.
+  const inputSchemaRef = useRef(nodeData.inputSchema);
+  inputSchemaRef.current = nodeData.inputSchema;
   const handleInputsLoaded = useCallback(
     (inputs: ModelInputDef[]) => {
+      // ModelParameters reports on every mount, and a culled node remounts on
+      // every pan; a schema the node already has must not dirty the workflow.
+      if (sameInputSchema(inputSchemaRef.current, inputs)) return;
       updateNodeData(id, { inputSchema: inputs });
     },
     [id, updateNodeData]
-  );
-
-  // Handle parameters expand/collapse - resize node height
-  const { setNodes } = useReactFlow();
-  const handleParametersExpandChange = useCallback(
-    (expanded: boolean, parameterCount: number) => {
-      // Each parameter row is ~24px, plus some padding
-      const parameterHeight = expanded ? Math.max(parameterCount * 28 + 16, 60) : 0;
-      const baseHeight = 300; // Default node height
-      const newHeight = baseHeight + parameterHeight;
-
-      setNodes((nodes) =>
-        nodes.map((node) =>
-          node.id === id
-            ? { ...node, style: { ...node.style, height: newHeight } }
-            : node
-        )
-      );
-    },
-    [id, setNodes]
   );
 
   const handleClearImage = useCallback(() => {
@@ -370,11 +310,6 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
     return "Select model...";
   }, [nodeData.selectedModel?.displayName, nodeData.selectedModel?.modelId, nodeData.model]);
 
-  // Provider badge as title prefix
-  const titlePrefix = useMemo(() => (
-    <ProviderBadge provider={currentProvider} />
-  ), [currentProvider]);
-
   // Use selectedModel.modelId for Gemini models, fallback to legacy model field
   const currentModelId = isGeminiProvider ? (nodeData.selectedModel?.modelId || nodeData.model) : null;
   const supportsResolution = currentModelId === "nano-banana-pro" || currentModelId === "nano-banana-2";
@@ -382,237 +317,149 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   const resolutions = currentModelId === "nano-banana-2" ? RESOLUTIONS_NB2 : RESOLUTIONS_PRO;
   const hasCarouselImages = (nodeData.imageHistory || []).length > 1;
 
-  // Count visible Gemini controls to match ModelParameters grid/max-width rules
-  const geminiControlCount = 2 // Model + Aspect Ratio (always)
-    + (supportsResolution ? 1 : 0)
-    + (currentModelId === "nano-banana-pro" || currentModelId === "nano-banana-2" ? 1 : 0)
-    + (currentModelId === "nano-banana-2" ? 1 : 0);
-  const useGeminiGrid = geminiControlCount > 4;
-  const geminiGridRef = useRef<HTMLDivElement>(null);
-  const [geminiColCount, setGeminiColCount] = useState(1);
-
-  useEffect(() => {
-    const el = geminiGridRef.current;
-    if (!el || !useGeminiGrid) { setGeminiColCount(1); return; }
-    let rafId: number;
-    const observer = new ResizeObserver(() => {
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
-        const cols = getComputedStyle(el).gridTemplateColumns.split(" ").length;
-        setGeminiColCount(prev => prev === cols ? prev : cols);
-      });
-    });
-    observer.observe(el);
-    return () => {
-      cancelAnimationFrame(rafId);
-      observer.disconnect();
-    };
-  }, [useGeminiGrid]);
-
   // Show toast when generation fails
   useErrorToast(nodeData.status, nodeData.error, "Generation failed");
 
-  // Auto-resize node when output image changes
-  useAutoResizeOnMedia(id, nodeData.outputImage, getImageDimensions);
+  const selectedHistoryItem = (nodeData.imageHistory || [])[nodeData.selectedHistoryIndex || 0];
+  const configuredAspect = parseAspectRatio(
+    (nodeData.outputImage && selectedHistoryItem?.aspectRatio) || nodeData.aspectRatio || "1:1"
+  );
+  const mediaAspect =
+    nodeData.outputImage && loadedAspect?.src === nodeData.outputImage ? loadedAspect.aspect : configuredAspect;
+
+  const estimatedCost = useMemo(() => {
+    if (!isGeminiProvider || !currentModelId) return null;
+    try {
+      return formatCost(calculateGenerationCost(currentModelId as ModelType, nodeData.resolution || "2K"));
+    } catch {
+      return null;
+    }
+  }, [isGeminiProvider, currentModelId, nodeData.resolution]);
+
+  const summaryValues = isGeminiProvider
+    ? [nodeData.aspectRatio || "1:1", supportsResolution ? nodeData.resolution || "2K" : null]
+    : [];
+
+  const hasSettings = Boolean(
+    (isGeminiProvider && currentModelId) || (!isGeminiProvider && nodeData.selectedModel?.modelId) || nodeData.fallbackModel
+  );
+
+  const settings = hasSettings ? (
+    <>
+      {nodeData.fallbackModel && (
+        <SettingsTabBar
+          activeTab={settingsTab}
+          onTabChange={setSettingsTab}
+          primaryLabel={nodeData.selectedModel?.displayName || "Primary"}
+          fallbackLabel={nodeData.fallbackModel.displayName}
+        />
+      )}
+
+      {settingsTab === "primary" && isGeminiProvider && currentModelId && (
+        <>
+          <SelectField
+            label="Model"
+            value={currentModelId}
+            options={GEMINI_IMAGE_MODELS.map((m) => ({ value: m.value, label: m.label }))}
+            onChange={handleModelChange}
+            data-tutorial="generate-model-selector"
+          />
+          <SelectField
+            label="Aspect ratio"
+            value={nodeData.aspectRatio || "1:1"}
+            options={aspectRatios}
+            onChange={handleAspectRatioChange}
+          />
+          {supportsResolution && (
+            <SelectField
+              label="Resolution"
+              value={nodeData.resolution || "2K"}
+              options={resolutions}
+              onChange={handleResolutionChange}
+            />
+          )}
+          {(currentModelId === "nano-banana-pro" || currentModelId === "nano-banana-2") && (
+            <CheckboxField label="Google Search" checked={nodeData.useGoogleSearch || false} onChange={handleGoogleSearchToggle} />
+          )}
+          {currentModelId === "nano-banana-2" && (
+            <CheckboxField label="Image Search" checked={nodeData.useImageSearch || false} onChange={handleImageSearchToggle} />
+          )}
+        </>
+      )}
+
+      {settingsTab === "primary" && !isGeminiProvider && nodeData.selectedModel?.modelId && (
+        <ModelParameters
+          modelId={nodeData.selectedModel.modelId}
+          provider={currentProvider}
+          parameters={nodeData.parameters || {}}
+          onParametersChange={handleParametersChange}
+          onInputsLoaded={handleInputsLoaded}
+        />
+      )}
+
+      {settingsTab === "fallback" && nodeData.fallbackModel && (
+        <ModelParameters
+          modelId={nodeData.fallbackModel.modelId}
+          provider={nodeData.fallbackModel.provider}
+          parameters={nodeData.fallbackParameters || {}}
+          onParametersChange={(p) => updateNodeData(id, { fallbackParameters: p })}
+        />
+      )}
+    </>
+  ) : undefined;
 
   return (
     <>
-    <BaseNode
+    <NodeShell
       id={id}
       selected={selected}
       isExecuting={isRunning}
       hasError={nodeData.status === "error"}
-      fullBleed
-      settingsExpanded={inlineParametersEnabled && isParamsExpanded}
-      aspectFitMedia={nodeData.outputImage}
       dataTutorial="generate-image-node"
-      settingsPanel={inlineParametersEnabled ? (
-        <InlineParameterPanel
+      media={{ kind: "aspect", aspect: mediaAspect }}
+      inputs={INPUT_SOCKETS}
+      outputs={OUTPUT_SOCKETS}
+      mediaClassName="group"
+      gap={
+        hasCarouselImages ? (
+          <CarouselControls
+            index={nodeData.selectedHistoryIndex || 0}
+            count={(nodeData.imageHistory || []).length}
+            onPrev={handleCarouselPrevious}
+            onNext={handleCarouselNext}
+            loading={isLoadingCarouselImage}
+            noun="image"
+          />
+        ) : undefined
+      }
+      controls={
+        <ControlsCard
+          id={id}
+          summary={{
+            icon: <ProviderBadge provider={currentProvider} />,
+            title: displayTitle,
+            values: <SummaryValues items={summaryValues} />,
+          }}
           expanded={isParamsExpanded}
           onToggle={handleToggleParams}
-          nodeId={id}
         >
-          {/* Tab bar for primary/fallback settings */}
-          {nodeData.fallbackModel && (
-            <SettingsTabBar
-              activeTab={settingsTab}
-              onTabChange={setSettingsTab}
-              primaryLabel={nodeData.selectedModel?.displayName || "Primary"}
-              fallbackLabel={nodeData.fallbackModel.displayName}
-            />
-          )}
-
-          {/* Primary tab content */}
-          {settingsTab === "primary" && (
-            <>
-              {/* Gemini-specific controls */}
-              {isGeminiProvider && currentModelId && (() => {
-                const controls: React.ReactNode[] = [
-                  <div key="model" className="flex items-center gap-2">
-                    <label className="text-[11px] text-neutral-400 shrink-0">Model</label>
-                    <select
-                      value={currentModelId}
-                      onChange={handleModelChange}
-                      data-tutorial="generate-model-selector"
-                      className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 bg-[#1a1a1a] rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
-                    >
-                      {GEMINI_IMAGE_MODELS.map((m) => (
-                        <option key={m.value} value={m.value}>
-                          {m.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>,
-                  <div key="aspect-ratio" className="flex items-center gap-2">
-                    <label className="text-[11px] text-neutral-400 shrink-0">Aspect Ratio</label>
-                    <select
-                      value={nodeData.aspectRatio || "1:1"}
-                      onChange={handleAspectRatioChange}
-                      className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 bg-[#1a1a1a] rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
-                    >
-                      {aspectRatios.map((ratio) => (
-                        <option key={ratio} value={ratio}>
-                          {ratio}
-                        </option>
-                      ))}
-                    </select>
-                  </div>,
-                ];
-
-                if (supportsResolution) {
-                  controls.push(
-                    <div key="resolution" className="flex items-center gap-2">
-                      <label className="text-[11px] text-neutral-400 shrink-0">Resolution</label>
-                      <select
-                        value={nodeData.resolution || "2K"}
-                        onChange={handleResolutionChange}
-                        className="nodrag nopan flex-1 min-w-0 text-[11px] py-1 px-2 bg-[#1a1a1a] rounded-md focus:outline-none focus:ring-1 focus:ring-neutral-600 text-white"
-                      >
-                        {resolutions.map((res) => (
-                          <option key={res} value={res}>
-                            {res}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  );
-                }
-
-                if (currentModelId === "nano-banana-pro" || currentModelId === "nano-banana-2") {
-                  controls.push(
-                    <label key="google-search" className="flex items-center gap-1.5 text-[11px] text-neutral-300 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={nodeData.useGoogleSearch || false}
-                        onChange={handleGoogleSearchToggle}
-                        className="nodrag nopan w-3 h-3 rounded bg-[#1a1a1a] text-neutral-600 focus:ring-1 focus:ring-neutral-600 focus:ring-offset-0"
-                      />
-                      Google Search
-                    </label>
-                  );
-                }
-
-                if (currentModelId === "nano-banana-2") {
-                  controls.push(
-                    <label key="image-search" className="flex items-center gap-1.5 text-[11px] text-neutral-300 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={nodeData.useImageSearch || false}
-                        onChange={handleImageSearchToggle}
-                        className="nodrag nopan w-3 h-3 rounded bg-[#1a1a1a] text-neutral-600 focus:ring-1 focus:ring-neutral-600 focus:ring-offset-0"
-                      />
-                      Image Search
-                    </label>
-                  );
-                }
-
-                const display = useGeminiGrid && geminiColCount > 1
-                  ? reorderColumnFirst(controls, geminiColCount)
-                  : controls;
-
-                return (
-                  <div
-                    ref={geminiGridRef}
-                    className={useGeminiGrid
-                      ? "grid grid-cols-[repeat(auto-fill,minmax(min(180px,100%),1fr))] max-w-[420px] gap-x-6 gap-y-1.5"
-                      : "space-y-1.5 max-w-[280px]"
-                    }
-                  >
-                    {display}
-                  </div>
-                );
-              })()}
-
-              {/* External provider parameters - reuse ModelParameters component */}
-              {!isGeminiProvider && nodeData.selectedModel?.modelId && (
-                <ModelParameters
-                  modelId={nodeData.selectedModel.modelId}
-                  provider={currentProvider}
-                  parameters={nodeData.parameters || {}}
-                  onParametersChange={handleParametersChange}
-                  onInputsLoaded={handleInputsLoaded}
-                />
-              )}
-            </>
-          )}
-
-          {/* Fallback tab content */}
-          {settingsTab === "fallback" && nodeData.fallbackModel && (
-            <ModelParameters
-              modelId={nodeData.fallbackModel.modelId}
-              provider={nodeData.fallbackModel.provider}
-              parameters={nodeData.fallbackParameters || {}}
-              onParametersChange={(p) => updateNodeData(id, { fallbackParameters: p })}
-            />
-          )}
-        </InlineParameterPanel>
-      ) : undefined}
+          {settings}
+        </ControlsCard>
+      }
     >
-      {/* Input handles - ALWAYS use same IDs and positions for connection stability */}
-      {/* Image input at 35%, Text input at 65% - never changes regardless of model */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="image"
-        style={{ top: "35%", zIndex: 10 }}
-        data-handletype="image"
-        isConnectable={true}
-      />
-      {/* Image label */}
-      <HandleLabel label="Image" side="target" color="var(--handle-color-image)" top="calc(35% - 18px)" visible={showLabels} />
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="text"
-        style={{ top: "65%", zIndex: 10 }}
-        data-handletype="text"
-        data-tutorial="generate-text-input-handle"
-        isConnectable={true}
-      />
-      {/* Prompt label */}
-      <HandleLabel label="Prompt" side="target" color="var(--handle-color-text)" top="calc(65% - 18px)" visible={showLabels} />
-      {/* Output handle */}
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="image"
-        style={{ top: "50%", zIndex: 10 }}
-        data-handletype="image"
-      />
-      {/* Output label */}
-      <HandleLabel label="Image" side="source" color="var(--handle-color-image)" visible={showLabels} />
-
-      <div
-        className="relative w-full h-full min-h-0 overflow-hidden rounded-lg"
-        data-tutorial="generate-output-area"
-      >
-        {/* Preview area */}
+      <div className="absolute inset-0" data-tutorial="generate-output-area">
         {nodeData.outputImage ? (
           <>
             <img
               src={adaptiveOutputImage ?? undefined}
               alt="Generated"
-              className="w-full h-full object-cover"
+              className="absolute inset-0 w-full h-full object-cover"
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                if (img.naturalWidth > 0 && img.naturalHeight > 0 && nodeData.outputImage) {
+                  setLoadedAspect({ src: nodeData.outputImage, aspect: img.naturalWidth / img.naturalHeight });
+                }
+              }}
             />
             {nodeData.__usedFallback && (
               <div
@@ -622,72 +469,10 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                 Fallback used
               </div>
             )}
-            {/* Loading overlay for generation */}
-            {nodeData.status === "loading" && (
-              <div className="absolute inset-0 bg-neutral-900/70 flex items-center justify-center">
-                <svg
-                  className="w-6 h-6 animate-spin text-white"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
-              </div>
-            )}
-            {/* Error overlay when generation failed */}
-            {nodeData.status === "error" && (
-              <div className="absolute inset-0 bg-red-900/40 flex flex-col items-center justify-center gap-1">
-                <svg
-                  className="w-6 h-6 text-white"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <span className="text-white text-xs font-medium">Generation failed</span>
-                <span className="text-white/70 text-[10px]">See toast for details</span>
-              </div>
-            )}
-            {/* Loading overlay for carousel navigation */}
-            {isLoadingCarouselImage && (
-              <div className="absolute inset-0 bg-neutral-900/50 flex items-center justify-center">
-                <svg
-                  className="w-4 h-4 animate-spin text-white"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                >
-                  <circle
-                    className="opacity-25"
-                    cx="12"
-                    cy="12"
-                    r="10"
-                    stroke="currentColor"
-                    strokeWidth="3"
-                  />
-                  <path
-                    className="opacity-75"
-                    fill="currentColor"
-                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                  />
-                </svg>
-              </div>
-            )}
-            {/* Download + Clear buttons */}
-            <div className="absolute top-1 right-1 flex items-center gap-0.5">
+            {nodeData.status === "loading" && <LoadingOverlay />}
+            {nodeData.status === "error" && <ErrorOverlay />}
+            {isLoadingCarouselImage && <LoadingOverlay size={16} dim="light" />}
+            <div className="absolute top-1 right-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
               <button
                 onClick={() => downloadMedia(nodeData.outputImage!, "image").catch(() => {})}
                 className="w-5 h-5 bg-neutral-900/80 hover:bg-neutral-700 rounded flex items-center justify-center text-neutral-400 hover:text-white transition-colors"
@@ -707,72 +492,18 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
                 </svg>
               </button>
             </div>
-
-            {/* Carousel controls - overlaid on image bottom */}
-            {hasCarouselImages && (
-              <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center gap-2 py-1.5 bg-neutral-900/80">
-                <button
-                  onClick={handleCarouselPrevious}
-                  disabled={isLoadingCarouselImage}
-                  className="w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
-                  title="Previous image"
-                >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-                <span className="text-[10px] text-white/70 min-w-[32px] text-center">
-                  {(nodeData.selectedHistoryIndex || 0) + 1} / {(nodeData.imageHistory || []).length}
-                </span>
-                <button
-                  onClick={handleCarouselNext}
-                  disabled={isLoadingCarouselImage}
-                  className="w-5 h-5 rounded hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center text-white/70 hover:text-white transition-colors"
-                  title="Next image"
-                >
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              </div>
-            )}
           </>
-        ) : (
-          <div className="w-full h-full min-h-[112px] bg-neutral-900/40 flex flex-col items-center justify-center">
-            {nodeData.status === "loading" ? (
-              <svg
-                className="w-4 h-4 animate-spin text-neutral-400"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
-                  stroke="currentColor"
-                  strokeWidth="3"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                />
-              </svg>
-            ) : nodeData.status === "error" ? (
-              <span className="text-[10px] text-red-400 text-center px-2">
-                {nodeData.error || "Failed"}
-              </span>
-            ) : (
-              <span className="text-neutral-500 text-[10px]">
-                Run to generate
-              </span>
-            )}
+        ) : nodeData.status === "loading" ? (
+          <div className="absolute inset-0 flex items-center justify-center bg-neutral-900/40">
+            <Spinner className="text-neutral-400" />
           </div>
+        ) : nodeData.status === "error" ? (
+          <ErrorMessage message={nodeData.error || "Failed"} />
+        ) : (
+          <EmptyState message="Run to generate" hint="Connect inputs and run" meta={estimatedCost ? `~${estimatedCost}` : undefined} />
         )}
       </div>
-
-    </BaseNode>
+    </NodeShell>
 
     {/* Model browse dialog */}
     {isBrowseDialogOpen && (

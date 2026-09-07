@@ -336,7 +336,7 @@ describe("ModelParameters", () => {
       });
     });
 
-    it("should show min/max range in label", async () => {
+    it("should show min/max range in the label tooltip", async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
         json: () =>
@@ -355,7 +355,7 @@ describe("ModelParameters", () => {
       render(<ModelParameters {...defaultProps} />);
 
       await waitFor(() => {
-        expect(screen.getByText("(1-20)")).toBeInTheDocument();
+        expect(screen.getByText("Guidance Scale")).toHaveAttribute("title", expect.stringContaining("(1-20)"));
       });
     });
 

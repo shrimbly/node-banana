@@ -10,8 +10,17 @@
  * group per cell.
  */
 
+import {
+  Dialog,
+  DialogButton,
+  DialogCloseButton,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/Dialog";
+import { MenuHeader, MenuIconButton, MenuItem, MenuList, MenuSectionLabel, MenuSurface } from "@/components/ui/Menu";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   ReactFlow,
   ReactFlowProvider,
@@ -62,6 +71,7 @@ import {
   SplitGridTemplateNode,
   TemplateEditableEdge,
   TemplateEditorContext,
+  templateHandleTop,
   type TemplateNodeData,
   type TemplateRFNode,
 } from "./TemplateNodes";
@@ -157,7 +167,8 @@ function templateToRfNodes(
       type: "splitGridTemplateNode",
       position: { ...templateNode.position },
       deletable: !isBase,
-      style: { width: dims.width, height: dims.height },
+      width: dims.width,
+      style: { width: dims.width },
       data: {
         nodeType: templateNode.type,
         overrides,
@@ -212,17 +223,13 @@ function serializeTemplate(
   return {
     baseNodeId,
     nodes: rfNodes.map((node) => {
-      // Persist the node's real size, minus the editor-only settings panel
-      // (real nodes grow their own panel at runtime, like the main canvas)
+      // Persist the node's width and its measured height. Real nodes derive
+      // their height from content at runtime, so the height is only a hint
+      // for laying the cells out.
       const width =
         (node.width as number | undefined) ?? (node.style?.width as number | undefined);
-      const rawHeight =
-        (node.height as number | undefined) ?? (node.style?.height as number | undefined);
-      const panelHeight = node.data._editorPanelHeight ?? 0;
-      const size =
-        width && rawHeight
-          ? { width, height: Math.max(80, rawHeight - panelHeight) }
-          : undefined;
+      const rawHeight = node.measured?.height ?? (node.height as number | undefined);
+      const size = width && rawHeight ? { width, height: Math.max(80, rawHeight) } : undefined;
       return {
         id: node.id,
         type: node.data.nodeType,
@@ -301,39 +308,35 @@ function TemplateConnectionMenu({
   if (options.length === 0) return null;
 
   return (
-    <div
+    <MenuSurface
       ref={menuRef}
       tabIndex={-1}
-      className="fixed z-[110] bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl overflow-hidden min-w-[160px] outline-none"
+      // Inside the dialog's own stacking context, so any positive value sits
+      // above the mini canvas
+      className="z-[110]"
       style={{
         left: menu.screen.x,
         top: menu.screen.y,
         transform: "translate(-50%, -50%)",
       }}
     >
-      <div className="px-2 py-1.5 border-b border-neutral-700">
-        <span className="text-[10px] text-neutral-400 uppercase tracking-wide">
-          Add {menu.fromHandleId} node
-        </span>
-      </div>
-      <div className="py-1">
+      <MenuHeader>
+        <MenuSectionLabel>Add {menu.fromHandleId} node</MenuSectionLabel>
+      </MenuHeader>
+      <MenuList>
         {options.map((option, index) => (
-          <button
+          <MenuItem
             key={option.type}
+            selected={index === selectedIndex}
             onClick={() => onSelect(option.type)}
             onMouseEnter={() => setSelectedIndex(index)}
-            className={`w-full px-3 py-2 text-left text-[11px] font-medium flex items-center gap-2 transition-colors ${
-              index === selectedIndex
-                ? "bg-neutral-700 text-neutral-100"
-                : "text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100"
-            }`}
           >
             {getTemplateNodeIcon(option.type)}
             {option.label}
-          </button>
+          </MenuItem>
         ))}
-      </div>
-    </div>
+      </MenuList>
+    </MenuSurface>
   );
 }
 
@@ -346,8 +349,6 @@ interface SplitGridTemplateModalProps {
 function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTemplateModalProps) {
   const materializeSplitGridCells = useWorkflowStore((state) => state.materializeSplitGridCells);
   const isRunning = useWorkflowStore((state) => state.isRunning);
-  const incrementModalCount = useWorkflowStore((state) => state.incrementModalCount);
-  const decrementModalCount = useWorkflowStore((state) => state.decrementModalCount);
   const canvasNavigationSettings = useWorkflowStore((state) => state.canvasNavigationSettings);
 
   // Match the main canvas's wheel navigation (scroll-to-pan when zoomMode is
@@ -390,10 +391,6 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
   }, [fitView]);
 
   // Freeze the main canvas while the editor is open
-  useEffect(() => {
-    incrementModalCount();
-    return () => decrementModalCount();
-  }, [incrementModalCount, decrementModalCount]);
 
   // Track the canvas wrapper size so the fixed rail can be placed + hit-tested
   useEffect(() => {
@@ -697,14 +694,14 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
       let position: { x: number; y: number };
       let connection: Connection;
       if (dropMenu.fromHandleType === "source") {
-        // Forward drag: align the new node's input handle with the drop point
-        const input = entry.inputs.find((handle) => handle.id === kind);
-        const handleRatio = input?.top ? parseFloat(input.top) / 100 : 0.5;
-        position = { x: dropMenu.flow.x, y: dropMenu.flow.y - dims.height * handleRatio };
+        // Forward drag: align the new node's input socket with the drop point
+        const inputIndex = Math.max(0, entry.inputs.findIndex((handle) => handle.id === kind));
+        position = { x: dropMenu.flow.x, y: dropMenu.flow.y - templateHandleTop(inputIndex) };
         connection = { source: dropMenu.fromNodeId, sourceHandle: kind, target: newId, targetHandle: kind };
       } else {
-        // Backward drag: align the new node's output handle with the drop point
-        position = { x: dropMenu.flow.x - dims.width, y: dropMenu.flow.y - dims.height / 2 };
+        // Backward drag: align the new node's output socket with the drop point
+        const outputIndex = Math.max(0, entry.outputs.findIndex((handle) => handle.id === kind));
+        position = { x: dropMenu.flow.x - dims.width, y: dropMenu.flow.y - templateHandleTop(outputIndex) };
         connection = { source: newId, sourceHandle: kind, target: dropMenu.fromNodeId, targetHandle: kind };
       }
 
@@ -715,7 +712,8 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
           type: "splitGridTemplateNode" as const,
           position,
           deletable: true,
-          style: { width: dims.width, height: dims.height },
+          width: dims.width,
+          style: { width: dims.width },
           data: {
             nodeType: type,
             overrides: seedOverridesFor(type),
@@ -775,39 +773,47 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
     onClose();
   }, [isRunning, baseNodeId, rfNodes, rfEdges, routerWires, nodeId, materializeSplitGridCells, onClose]);
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60"
-      // Bubble-phase (not capture): the mini-canvas's native wheel-to-pan
-      // listener on the wrapper must run first; we still stop the wheel from
-      // leaking to the frozen main canvas behind the modal.
-      onWheel={(event) => event.stopPropagation()}
-      onPointerDown={(event) => {
-        backdropPointerDownRef.current = event.target === event.currentTarget;
-      }}
-      onClick={(event) => {
-        if (event.target === event.currentTarget && backdropPointerDownRef.current) {
-          requestClose();
-        }
-        backdropPointerDownRef.current = false;
+  return (
+    <Dialog
+      open
+      onClose={requestClose}
+      // Escape and the backdrop have their own rules here: Escape closes a
+      // menu or toolbar first, and a drag that ends on the backdrop is not a
+      // click. Both stay with this component.
+      closeOnEscape={false}
+      closeOnBackdrop={false}
+      stopWheel={false}
+      portal
+      className="w-[min(1080px,94vw)] h-[min(720px,88vh)] max-h-none"
+      overlayProps={{
+        // Bubble-phase (not capture): the mini-canvas's native wheel-to-pan
+        // listener on the wrapper must run first; we still stop the wheel from
+        // leaking to the frozen main canvas behind the modal.
+        onWheel: (event) => event.stopPropagation(),
+        onPointerDown: (event) => {
+          backdropPointerDownRef.current = event.target === event.currentTarget;
+        },
+        onClick: (event) => {
+          if (event.target === event.currentTarget && backdropPointerDownRef.current) {
+            requestClose();
+          }
+          backdropPointerDownRef.current = false;
+        },
       }}
     >
-      <div className="relative w-[min(1080px,94vw)] h-[min(720px,88vh)] bg-neutral-800 rounded-xl border border-neutral-700 shadow-2xl overflow-clip flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-b border-neutral-700/60 shrink-0">
-          <div className="min-w-0">
-            <h2 className="text-base font-semibold text-neutral-100">Cell Node Set</h2>
-            <p className="text-xs text-neutral-500 mt-0.5 truncate">
-              These nodes are created for every split image and grouped per cell
-            </p>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider">
+        <DialogHeader
+          divider
+          closeButton={false}
+          className="pb-2.5"
+          actions={
+            <>
+            <span className="text-[10px] font-semibold text-neutral-500 uppercase tracking-wider mr-1">
               Presets
             </span>
             <button
               onClick={() => applyPreset(createDefaultSplitGridTemplate())}
-              className="px-2.5 py-1.5 text-xs text-neutral-400 hover:text-neutral-100 bg-neutral-900 border border-neutral-700 hover:border-neutral-500 rounded-md transition-colors"
+              className="h-7 px-2.5 text-xs text-neutral-400 hover:text-neutral-100 bg-well border border-chrome-border hover:border-neutral-500 rounded-md transition-colors"
             >
               Image only
             </button>
@@ -817,25 +823,23 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
                   createClassicSplitGridTemplate(nodeData.defaultPrompt, nodeData.generateSettings)
                 )
               }
-              className="px-2.5 py-1.5 text-xs text-neutral-400 hover:text-neutral-100 bg-neutral-900 border border-neutral-700 hover:border-neutral-500 rounded-md transition-colors"
+              className="h-7 px-2.5 text-xs text-neutral-400 hover:text-neutral-100 bg-well border border-chrome-border hover:border-neutral-500 rounded-md transition-colors"
             >
               Prompt + Generate
             </button>
-            <div className="w-px h-6 bg-neutral-700 mx-1" />
-            <button
-              onClick={requestClose}
-              className="p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors"
-              aria-label="Close"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
-          </div>
-        </div>
+            <div className="w-px h-4 bg-neutral-600 mx-1" />
+            <DialogCloseButton />
+            </>
+          }
+        >
+          <DialogTitle>Cell Node Set</DialogTitle>
+          <DialogDescription className="truncate">
+            These nodes are created for every split image and grouped per cell
+          </DialogDescription>
+        </DialogHeader>
 
         {/* Mini canvas */}
-        <div ref={canvasWrapperRef} className="flex-1 min-h-0 relative bg-neutral-900">
+        <div ref={canvasWrapperRef} className="flex-1 min-h-0 relative bg-well">
           {/* Router wires render BEHIND the canvas so nodes occlude them, like
               normal edges (the pane is transparent, so they show in the gaps) */}
           <RouterWires wires={routerWires} nodes={rfNodes} size={wrapperSize} />
@@ -892,14 +896,15 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
           {/* Floating delete toolbar — same look/behavior as the main canvas
               EdgeToolbar, minus pause (cells run in one shot) */}
           {edgeToolbar && (
-            <div
+            <MenuSurface
+              variant="bar"
               data-edge-toolbar
-              className="fixed z-[110] flex items-center gap-1 bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl p-1"
+              className="z-[110]"
               style={{ left: edgeToolbar.x, top: edgeToolbar.y, transform: "translateX(-50%)" }}
             >
-              <button
+              <MenuIconButton
                 onClick={handleToolbarDelete}
-                className="p-1.5 rounded hover:bg-neutral-700 text-neutral-400 hover:text-red-400 transition-colors"
+                className="hover:text-red-400"
                 title="Delete"
                 aria-label="Delete connection"
               >
@@ -910,13 +915,13 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
                     d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
                   />
                 </svg>
-              </button>
-            </div>
+              </MenuIconButton>
+            </MenuSurface>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between gap-4 px-5 py-3.5 border-t border-neutral-700/50 shrink-0">
+        <DialogFooter className="justify-between gap-4">
           <div className="text-xs text-neutral-500 min-w-0">
             <span>
               {perCellNodeCount} node{perCellNodeCount === 1 ? "" : "s"} per cell · {nodeData.gridRows}×{nodeData.gridCols} grid → {cellCount} group{cellCount === 1 ? "" : "s"}
@@ -928,51 +933,40 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
             ))}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={requestClose}
-              className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-100 transition-colors"
-            >
+            <DialogButton variant="ghost" onClick={requestClose}>
               Cancel
-            </button>
-            <button
+            </DialogButton>
+            <DialogButton
+              variant="primary"
               onClick={handleApply}
               disabled={isRunning}
               title={isRunning ? "Wait for the current run to finish" : undefined}
-              className="px-4 py-2 text-sm bg-white text-neutral-900 rounded-lg hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
               Apply to {cellCount} cell{cellCount === 1 ? "" : "s"}
-            </button>
+            </DialogButton>
           </div>
-        </div>
+        </DialogFooter>
 
         {/* Discard-changes confirmation */}
         {showDiscardConfirm && (
-          <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/60">
-            <div className="bg-neutral-800 border border-neutral-600 rounded-lg p-5 mx-4 max-w-sm shadow-xl">
-              <h3 className="text-sm font-semibold text-neutral-100">Discard changes?</h3>
-              <p className="text-xs text-neutral-400 mt-1">
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-scrim">
+            <div className="bg-card border border-chrome-border rounded-card p-5 mx-4 max-w-sm shadow-dialog">
+              <h3 className="text-base font-semibold text-neutral-100">Discard changes?</h3>
+              <p className="text-[13px] text-neutral-400 mt-1">
                 Your edits to the cell node set haven&apos;t been applied.
               </p>
               <div className="flex justify-end gap-2 mt-4">
-                <button
-                  onClick={() => setShowDiscardConfirm(false)}
-                  className="px-3 py-1.5 text-xs font-medium text-neutral-300 bg-neutral-700 hover:bg-neutral-600 rounded transition-colors"
-                >
+                <DialogButton variant="secondary" onClick={() => setShowDiscardConfirm(false)}>
                   Keep editing
-                </button>
-                <button
-                  onClick={onClose}
-                  className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded transition-colors"
-                >
+                </DialogButton>
+                <DialogButton variant="danger" onClick={onClose}>
                   Discard
-                </button>
+                </DialogButton>
               </div>
             </div>
           </div>
         )}
-      </div>
-    </div>,
-    document.body
+    </Dialog>
   );
 }
 

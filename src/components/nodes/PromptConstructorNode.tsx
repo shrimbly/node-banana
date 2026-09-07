@@ -1,21 +1,38 @@
 "use client";
 
 import { useCallback, useState, useEffect, useMemo, useRef, ReactNode } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
-import { BaseNode } from "./BaseNode";
+import { NodeProps, Node } from "@xyflow/react";
+import { NodeShell } from "./NodeShell";
+import { CARD_PAD, ControlsCard, HeightGrip, type SocketSpec } from "./ui";
 import { usePromptAutocomplete } from "@/hooks/usePromptAutocomplete";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { PromptConstructorNodeData, PromptNodeData, LLMGenerateNodeData, AvailableVariable } from "@/types";
+import { useShallow } from "zustand/shallow";
+import { nodeGraphIndex } from "@/lib/edges/graphIndex";
+import { PromptConstructorNodeData, PromptNodeData, LLMGenerateNodeData, AvailableVariable, WorkflowNode } from "@/types";
 import { resolveTextSourcesThroughRouters } from "@/store/utils/connectedInputs";
 import { parseVarTags } from "@/utils/parseVarTags";
 
 type PromptConstructorNodeType = Node<PromptConstructorNodeData, "promptConstructor">;
 
+const INPUT_SOCKETS: SocketSpec[] = [{ id: "text", type: "text", label: "Text" }];
+const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "text", type: "text", label: "Text" }];
+const DEFAULT_HEIGHT = 160;
+
 export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptConstructorNodeType>) {
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
-  const edges = useWorkflowStore((state) => state.edges);
-  const nodes = useWorkflowStore((state) => state.nodes);
+  // The text nodes feeding this one, as the store's own node objects, so the
+  // list only changes when one of them does and not on every drag frame
+  const connectedTextNodes = useWorkflowStore(
+    useShallow((state) => {
+      const { byId } = nodeGraphIndex(state.nodes);
+      const directTextNodes = state.edges
+        .filter((e) => e.target === id && e.targetHandle === "text")
+        .map((e) => byId.get(e.source))
+        .filter((n): n is WorkflowNode => n !== undefined);
+      return resolveTextSourcesThroughRouters(directTextNodes, state.nodes, state.edges);
+    })
+  );
 
   // Local state for template to prevent cursor jumping
   const [localTemplate, setLocalTemplate] = useState(nodeData.template);
@@ -32,12 +49,6 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
 
   // Get available variables from connected prompt nodes (named variables + inline <var> tags)
   const availableVariables = useMemo((): AvailableVariable[] => {
-    const directTextNodes = edges
-      .filter((e) => e.target === id && e.targetHandle === "text")
-      .map((e) => nodes.find((n) => n.id === e.source))
-      .filter((n): n is typeof nodes[0] => n !== undefined);
-    const connectedTextNodes = resolveTextSourcesThroughRouters(directTextNodes, nodes, edges);
-
     const vars: AvailableVariable[] = [];
     const usedNames = new Set<string>();
 
@@ -84,7 +95,7 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
     });
 
     return vars;
-  }, [edges, nodes, id]);
+  }, [connectedTextNodes]);
 
   // Autocomplete via shared hook
   const {
@@ -184,54 +195,26 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
     setTimeout(() => closeAutocomplete(), 200);
   }, [id, localTemplate, nodeData.template, updateNodeData, closeAutocomplete]);
 
+  const mediaHeight = nodeData.mediaHeight ?? DEFAULT_HEIGHT;
+  const hasFooter = availableVariables.length > 0 || unresolvedVars.length > 0;
+
   return (
     <>
-      <BaseNode
+      <NodeShell
         id={id}
         selected={selected}
-        fullBleed
-      >
-        {/* Text input handle */}
-        <Handle
-          type="target"
-          position={Position.Left}
-          id="text"
-          data-handletype="text"
-          style={{ zIndex: 10 }}
-        />
-
-        {/* Template textarea with highlight overlay for @variables */}
-        <div className="relative w-full h-full">
-          {/* Highlight overlay - blue for resolved, red for unresolved @vars */}
-          {highlightedContent.length > 0 && (
+        media={{ kind: "fixed", height: mediaHeight }}
+        inputs={INPUT_SOCKETS}
+        outputs={OUTPUT_SOCKETS}
+        cardChildren={
+          // Outside the clip so it can hang below the text surface; the clip
+          // starts CARD_PAD inside the card, so its offsets shift by that much.
+          showAutocomplete && filteredAutocompleteVars.length > 0 ? (
             <div
-              ref={highlightRef}
-              className={`absolute inset-0 p-3 text-xs leading-relaxed text-transparent bg-neutral-800 rounded-lg overflow-hidden whitespace-pre-wrap break-words pointer-events-none ${availableVariables.length > 0 || unresolvedVars.length > 0 ? "pb-7" : ""}`}
-              aria-hidden="true"
-            >
-              {highlightedContent}
-            </div>
-          )}
-          <textarea
-            ref={textareaRef}
-            value={localTemplate}
-            onChange={handleChange}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-            onKeyDown={handleKeyDown}
-            onScroll={handleScroll}
-            placeholder="Type @ to insert variables..."
-            className={`nodrag nopan nowheel relative w-full h-full p-3 text-xs leading-relaxed text-neutral-100 rounded-lg resize-none focus:outline-none placeholder:text-neutral-500 ${highlightedContent.length > 0 ? "bg-transparent" : "bg-neutral-800"} ${availableVariables.length > 0 || unresolvedVars.length > 0 ? "pb-7" : ""}`}
-            title={resolvedPreview ? `Preview: ${resolvedPreview}` : undefined}
-          />
-
-          {/* Autocomplete dropdown */}
-          {showAutocomplete && filteredAutocompleteVars.length > 0 && (
-            <div
-              className="absolute z-20 bg-neutral-800 border border-neutral-600 rounded shadow-xl max-h-40 overflow-y-auto"
+              className="absolute z-20 bg-neutral-800 border border-neutral-600 rounded shadow-xl max-h-40 overflow-y-auto nowheel"
               style={{
-                top: autocompletePosition.top,
-                left: autocompletePosition.left,
+                top: autocompletePosition.top + CARD_PAD,
+                left: autocompletePosition.left + CARD_PAD,
               }}
             >
               {filteredAutocompleteVars.map((variable, index) => (
@@ -254,32 +237,49 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
                 </button>
               ))}
             </div>
-          )}
-        </div>
-
-        {/* Footer - available vars + unresolved warning */}
-        {(availableVariables.length > 0 || unresolvedVars.length > 0) && (
-          <div className="absolute bottom-0 left-0 right-0 z-10 px-3 py-1.5 bg-neutral-900/90 rounded-b-lg text-[10px] pointer-events-none flex items-center justify-between gap-2">
-            <span className="text-neutral-500 truncate">
-              {availableVariables.length > 0 ? `Available: ${availableVariables.map(v => `@${v.name}`).join(', ')}` : ''}
-            </span>
-            {unresolvedVars.length > 0 && (
-              <span className="text-red-400 whitespace-nowrap">
-                {unresolvedVars.length} {unresolvedVars.length === 1 ? 'var' : 'vars'} missing
-              </span>
-            )}
+          ) : undefined
+        }
+        controls={
+          <ControlsCard
+            id={id}
+            summary={{
+              title: hasFooter && availableVariables.length > 0
+                ? `Available: ${availableVariables.map((v) => `@${v.name}`).join(", ")}`
+                : "Type @ to insert variables",
+              values: unresolvedVars.length > 0 ? (
+                <span className="text-node text-red-400 whitespace-nowrap">
+                  {unresolvedVars.length} {unresolvedVars.length === 1 ? "var" : "vars"} missing
+                </span>
+              ) : undefined,
+            }}
+          />
+        }
+      >
+        {/* Highlight overlay - blue for resolved, red for unresolved @vars */}
+        {highlightedContent.length > 0 && (
+          <div
+            ref={highlightRef}
+            className="absolute inset-0 p-3 pb-4 text-xs leading-relaxed text-transparent bg-neutral-900/40 overflow-hidden whitespace-pre-wrap break-words pointer-events-none"
+            aria-hidden="true"
+          >
+            {highlightedContent}
           </div>
         )}
-
-        {/* Text output handle */}
-        <Handle
-          type="source"
-          position={Position.Right}
-          id="text"
-          data-handletype="text"
-          style={{ zIndex: 10 }}
+        <textarea
+          ref={textareaRef}
+          value={localTemplate}
+          onChange={handleChange}
+          onFocus={handleFocus}
+          onBlur={handleBlur}
+          onKeyDown={handleKeyDown}
+          onScroll={handleScroll}
+          placeholder="Type @ to insert variables..."
+          className={`nodrag nopan nowheel absolute inset-0 w-full h-full p-3 pb-4 text-xs leading-relaxed text-neutral-100 resize-none focus:outline-none placeholder:text-neutral-500 ${highlightedContent.length > 0 ? "bg-transparent" : "bg-neutral-900/40"}`}
+          title={resolvedPreview ? `Preview: ${resolvedPreview}` : undefined}
         />
-      </BaseNode>
+
+        <HeightGrip height={mediaHeight} onChange={(h) => updateNodeData(id, { mediaHeight: h })} />
+      </NodeShell>
     </>
   );
 }

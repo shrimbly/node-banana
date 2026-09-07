@@ -194,7 +194,9 @@ export function getConnectedInputsPure(
   visited?: Set<string>,
   dimmedNodeIds?: Set<string>
 ): ConnectedInputs {
-  const _visited = visited || new Set<string>();
+  // Detect cycles along this path only. Sibling branches can share a router:
+  // marking it globally visited would drop its data from the second branch.
+  const _visited = new Set(visited);
   if (_visited.has(nodeId)) return { images: [], videos: [], audio: [], model3d: null, text: null, textItems: [], dynamicInputs: {}, easeCurve: null };
   _visited.add(nodeId);
   const images: string[] = [];
@@ -268,9 +270,8 @@ export function getConnectedInputsPure(
     }
   };
 
-  // Cache passthrough node results so multiple edges from the same router/switch
-  // all receive correct data (the _visited set prevents re-traversal, so we cache
-  // the result from the first traversal and reuse it for subsequent edges).
+  // Reuse passthrough results for multiple edges from the same router/switch
+  // within this frame. Other branches have their own traversal path and cache.
   const passthroughCache = new Map<string, ConnectedInputs>();
 
   edges
@@ -454,6 +455,14 @@ export function getConnectedInputsPure(
     }
   }
 
+  // Executors use `text` as their main generation prompt. Additional schema
+  // text slots (such as negative_prompt) must not replace it just because their
+  // edges were connected later. Named inputs still retain their own values.
+  const schemaPrompt = dynamicInputs.prompt;
+  if (schemaPrompt !== undefined) {
+    text = Array.isArray(schemaPrompt) ? schemaPrompt[0] ?? text : schemaPrompt;
+  }
+
   return { images, videos, audio, model3d, text, textItems, dynamicInputs, easeCurve };
 }
 
@@ -461,84 +470,69 @@ export function getConnectedInputsPure(
  * Validate workflow structure.
  * Pure function version of workflowStore.validateWorkflow.
  */
+export interface NodeReadiness {
+  /** Short hint for the node itself, e.g. "needs a prompt". */
+  hint: string;
+  /** The full sentence, as the workflow-level validation reports it. */
+  message: string;
+}
+
+/**
+ * Which nodes cannot run as wired, and why. Advisory: a run never refuses to
+ * start over this; the executor skips such a node (and what depends on it)
+ * and finishes the rest. Loop edges are excluded because they carry no data
+ * on the first iteration.
+ */
+export function nodeReadinessPure(nodes: WorkflowNode[], edges: WorkflowEdge[]): Record<string, NodeReadiness> {
+  const readiness: Record<string, NodeReadiness> = {};
+  const connected = (nodeId: string, accept: (handle: string | null | undefined) => boolean, includeLoops = false) =>
+    edges.some((e) => e.target === nodeId && (includeLoops || !e.data?.isLoop) && accept(e.targetHandle));
+  const isType = (handle: string | null | undefined, type: string) => handle === type || Boolean(handle?.startsWith(`${type}-`));
+
+  for (const node of nodes) {
+    switch (node.type) {
+      case "nanoBanana":
+        // Text required, image optional
+        if (!connected(node.id, (h) => isType(h, "text")))
+          readiness[node.id] = { hint: "needs a prompt", message: `Generate node "${node.id}" missing text input` };
+        break;
+      case "generateVideo":
+        // A prompt is not always required: video-to-video models need only a
+        // video, image-to-video needs an image. Mirrors the executor, which
+        // runs as long as any of text/image/video/audio is present.
+        if (!connected(node.id, (h) => ["text", "image", "video", "audio"].some((t) => isType(h, t))))
+          readiness[node.id] = { hint: "needs an input", message: `Video node "${node.id}" missing input` };
+        break;
+      case "annotation":
+        // An image, connected or loaded by hand
+        if (!connected(node.id, () => true, true) && (node.data as AnnotationNodeData).sourceImage === null)
+          readiness[node.id] = { hint: "needs an image", message: `Annotation node "${node.id}" missing image input` };
+        break;
+      case "output":
+        if (!connected(node.id, () => true, true))
+          readiness[node.id] = { hint: "needs an image", message: `Output node "${node.id}" missing image input` };
+        break;
+      case "splitGrid":
+        if (!connected(node.id, (h) => h === "image"))
+          readiness[node.id] = { hint: "needs an image", message: `Split Grid node "${node.id}" missing image input` };
+        break;
+    }
+  }
+  return readiness;
+}
+
+/**
+ * Workflow-level validation. Only an empty workflow is a hard failure; the
+ * wiring findings are the same as nodeReadinessPure, kept here for the
+ * callers that want them as one list.
+ */
 export function validateWorkflowPure(
   nodes: WorkflowNode[],
   edges: WorkflowEdge[]
 ): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
-
   if (nodes.length === 0) {
-    errors.push("Workflow is empty");
-    return { valid: false, errors };
+    return { valid: false, errors: ["Workflow is empty"] };
   }
-
-  // Check each Nano Banana node has required inputs (text required, image optional)
-  // Loop edges are excluded because they carry no data on the first iteration.
-  nodes
-    .filter((n) => n.type === "nanoBanana")
-    .forEach((node) => {
-      const textConnected = edges.some(
-        (e) => e.target === node.id &&
-               !e.data?.isLoop &&
-               (e.targetHandle === "text" || e.targetHandle?.startsWith("text-"))
-      );
-      if (!textConnected) {
-        errors.push(`Generate node "${node.id}" missing text input`);
-      }
-    });
-
-  // Check generateVideo nodes have at least one usable input connected.
-  // A prompt is not always required: video-to-video models (e.g. upscalers)
-  // need only a video input, image-to-video needs an image, etc. This mirrors
-  // the executor, which runs as long as any of text/image/video/audio is present.
-  nodes
-    .filter((n) => n.type === "generateVideo")
-    .forEach((node) => {
-      const hasInput = edges.some(
-        (e) => e.target === node.id &&
-               !e.data?.isLoop &&
-               (e.targetHandle === "text" || e.targetHandle?.startsWith("text-") ||
-                e.targetHandle === "image" || e.targetHandle?.startsWith("image-") ||
-                e.targetHandle === "video" || e.targetHandle?.startsWith("video-") ||
-                e.targetHandle === "audio" || e.targetHandle?.startsWith("audio-"))
-      );
-      if (!hasInput) {
-        errors.push(`Video node "${node.id}" missing input`);
-      }
-    });
-
-  // Check annotation nodes have image input (either connected or manually loaded)
-  nodes
-    .filter((n) => n.type === "annotation")
-    .forEach((node) => {
-      const imageConnected = edges.some((e) => e.target === node.id);
-      const hasManualImage = (node.data as AnnotationNodeData).sourceImage !== null;
-      if (!imageConnected && !hasManualImage) {
-        errors.push(`Annotation node "${node.id}" missing image input`);
-      }
-    });
-
-  // Check output nodes have image input
-  nodes
-    .filter((n) => n.type === "output")
-    .forEach((node) => {
-      const imageConnected = edges.some((e) => e.target === node.id);
-      if (!imageConnected) {
-        errors.push(`Output node "${node.id}" missing image input`);
-      }
-    });
-
-  // Check split grid nodes have an image to split
-  nodes
-    .filter((n) => n.type === "splitGrid")
-    .forEach((node) => {
-      const imageConnected = edges.some(
-        (e) => e.target === node.id && !e.data?.isLoop && e.targetHandle === "image"
-      );
-      if (!imageConnected) {
-        errors.push(`Split Grid node "${node.id}" missing image input`);
-      }
-    });
-
+  const errors = Object.values(nodeReadinessPure(nodes, edges)).map((r) => r.message);
   return { valid: errors.length === 0, errors };
 }

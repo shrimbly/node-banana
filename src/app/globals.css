@@ -2,17 +2,57 @@
 
 @theme {
   --color-canvas-bg: #171717;
+
+  /* Node anatomy (see docs/node-redesign.md) */
+  --color-card: #262626;
+  --color-card-border: rgb(64 64 64 / 0.6);
+  --color-panel: #2a2a2a;
+  --color-well: #1a1a1a;
+  --color-selection: #3b82f6;
+  --color-running: #3b82f6;
+  --color-error: #ef4444;
+
+  /* Handle / socket colours, keyed by handle type */
+  --color-handle-image: #10b981;
+  --color-handle-text: #3b82f6;
+  --color-handle-3d: #f97316;
+  --color-handle-audio: #a855f7;
+  --color-handle-video: #ec4899;
+  --color-handle-easeCurve: #bef264;
+  --color-handle-reference: #6b7280;
+
+  --radius-card: 12px;
+  --radius-media: 8px;
+  --radius-controls: 10px;
+  --radius-well: 8px;
+
+  /* Faint recess for input wells on the settings panel */
+  --shadow-well: inset 0 1px 1.5px rgb(0 0 0 / 0.3), inset 0 0 0 1px rgb(0 0 0 / 0.12), 0 1px 0 rgb(255 255 255 / 0.025);
+
+  /* Floating chrome — dialogs and menus (src/components/ui). Same surface as
+     a node card, one tier up: a solid border where the card's is 60%, and a
+     shadow that reads as height. Menus are controls cards, dialogs are cards. */
+  --color-chrome-border: #404040;
+  --color-scrim: rgb(0 0 0 / 0.6);
+  --color-scrim-heavy: rgb(0 0 0 / 0.9);
+  --shadow-menu: 0 8px 24px -4px rgb(0 0 0 / 0.5), 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-dialog: 0 24px 64px -12px rgb(0 0 0 / 0.65);
+
+  --text-node: 10px;
+  --text-node--line-height: 14px;
+}
+
+/* Squircle corners where the engine supports them (Chrome 139+); plain
+   border-radius elsewhere. */
+@utility squircle {
+  @supports (corner-shape: squircle) {
+    corner-shape: squircle;
+  }
 }
 
 :root {
   --background: #0a0a0a;
   --foreground: #fafafa;
-  /* Handle colors (used by labels) */
-  --handle-color-image: #10b981;
-  --handle-color-text: #3b82f6;
-  --handle-color-3d: #f97316;
-  --handle-color-audio: #a855f7;
-  --handle-color-video: #ec4899;
 }
 
 html {
@@ -107,8 +147,51 @@ body {
   transition: opacity 250ms ease-in-out;
 }
 
-/* Base handle styles */
-.react-flow__handle {
+/* Sockets: the handle is an 18×28 box whose SVG swell sits in the media
+   card's border. Position and mirroring are inline; this strips React Flow's
+   circle and gives the swell a generous hit area. */
+.react-flow__handle.socket {
+  width: 18px;
+  height: 18px;
+  min-width: 0;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  z-index: 5;
+}
+
+.react-flow__handle.socket::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 30px;
+  height: 34px;
+  border-radius: 50%;
+}
+
+.react-flow__handle.socket > svg {
+  display: block;
+  overflow: visible;
+}
+
+.react-flow__handle.socket.socket-placeholder {
+  opacity: 0.3;
+}
+
+/* While a connection is being dragged onto a socket that would accept it,
+   fill the hole so the target reads before the drop. */
+.react-flow__handle.socket.connectingto.valid [data-socket-hole] {
+  fill: currentColor;
+  stroke-opacity: 1;
+}
+
+/* Circle handles for the one mini-canvas that still draws plain React Flow
+   handles (the Comfy node preview in the import dialog). */
+.react-flow__handle:not(.socket) {
   width: 14px;
   height: 14px;
   border-radius: 50%;
@@ -118,7 +201,7 @@ body {
 }
 
 /* Larger invisible hit area for easier clicking, especially when zoomed out */
-.react-flow__handle::before {
+.react-flow__handle:not(.socket)::before {
   content: "";
   position: absolute;
   top: 50%;
@@ -129,37 +212,32 @@ body {
   border-radius: 50%;
 }
 
-.react-flow__handle-left {
+.react-flow__handle-left:not(.socket) {
   left: -7px;
 }
 
-.react-flow__handle-right {
+.react-flow__handle-right:not(.socket) {
   right: -7px;
 }
 
-/* Image handles - soft green */
-.react-flow__handle[data-handletype="image"] {
-  background: #10b981;
+.react-flow__handle[data-handletype="image"]:not(.socket) {
+  background: var(--color-handle-image);
 }
 
-/* Text handles - soft blue */
-.react-flow__handle[data-handletype="text"] {
-  background: #3b82f6;
+.react-flow__handle[data-handletype="text"]:not(.socket) {
+  background: var(--color-handle-text);
 }
 
-/* Audio handles - purple */
-.react-flow__handle[data-handletype="audio"] {
-  background: #a855f7;
+.react-flow__handle[data-handletype="audio"]:not(.socket) {
+  background: var(--color-handle-audio);
 }
 
-/* Video handles - pink */
-.react-flow__handle[data-handletype="video"] {
-  background: #ec4899;
+.react-flow__handle[data-handletype="video"]:not(.socket) {
+  background: var(--color-handle-video);
 }
 
-/* 3D handles - orange */
-.react-flow__handle[data-handletype="3d"] {
-  background: #f97316;
+.react-flow__handle[data-handletype="3d"]:not(.socket) {
+  background: var(--color-handle-3d);
 }
 
 .react-flow__edge-path {
@@ -169,9 +247,13 @@ body {
   stroke-linejoin: round;
 }
 
+/* Hovered or selected noodles switch to their own "active" stroke (set by the
+   edge component as --edge-stroke-active), so the highlight keeps the type
+   colour and gradient instead of turning a flat blue. */
 .react-flow__edge.selected .react-flow__edge-path,
 .react-flow__edge:hover .react-flow__edge-path {
-  stroke: #3b82f6;
+  stroke: var(--edge-stroke-active, #3b82f6) !important;
+  stroke-opacity: 1 !important;
 }
 
 /* Hide resize handles but show resize cursor on edges */
@@ -200,40 +282,6 @@ body {
 .react-flow__resize-control.top.right,
 .react-flow__resize-control.bottom.left {
   cursor: nesw-resize !important;
-}
-
-/* React Flow Controls dark theme */
-.react-flow__controls {
-  background: #262626 !important;
-  border: 1px solid #404040 !important;
-  border-radius: 8px !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
-}
-
-.react-flow__controls-button {
-  background: #262626 !important;
-  border-bottom: 1px solid #404040 !important;
-}
-
-.react-flow__controls-button svg {
-  fill: #d4d4d4 !important;
-}
-
-.react-flow__controls-button svg path {
-  fill: #d4d4d4 !important;
-}
-
-.react-flow__controls-button:hover {
-  background: #404040 !important;
-}
-
-.react-flow__controls-button:hover svg,
-.react-flow__controls-button:hover svg path {
-  fill: #fafafa !important;
-}
-
-.react-flow__controls-button:last-child {
-  border-bottom: none !important;
 }
 
 /* Scrollbars.

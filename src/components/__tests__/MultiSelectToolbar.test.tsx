@@ -15,6 +15,7 @@ vi.mock("jszip", () => ({
 const mockOnNodesChange = vi.fn();
 const mockCreateGroup = vi.fn();
 const mockRemoveNodesFromGroup = vi.fn();
+const mockExecuteSelectedNodes = vi.fn();
 const mockUseWorkflowStore = vi.fn();
 
 vi.mock("@/store/workflowStore", () => ({
@@ -61,6 +62,8 @@ const createDefaultState = (overrides = {}) => ({
   onNodesChange: mockOnNodesChange,
   createGroup: mockCreateGroup,
   removeNodesFromGroup: mockRemoveNodesFromGroup,
+  executeSelectedNodes: mockExecuteSelectedNodes,
+  isRunning: false,
   ...overrides,
 });
 
@@ -116,7 +119,7 @@ describe("MultiSelectToolbar", () => {
         </TestWrapper>
       );
 
-      expect(screen.getByTitle("Stack horizontally (H)")).toBeInTheDocument();
+      expect(screen.getByTitle("Stack horizontally")).toBeInTheDocument();
     });
 
     it("should not render when nodes are selected but less than 2", () => {
@@ -151,6 +154,24 @@ describe("MultiSelectToolbar", () => {
       });
     });
 
+    it("runs the selected nodes from the bar", () => {
+      render(<TestWrapper><MultiSelectToolbar /></TestWrapper>);
+      const runButton = screen.getByRole("button", { name: "Run selected nodes" });
+      expect(runButton).toHaveAttribute("title", "Run 2 selected nodes");
+      fireEvent.click(runButton);
+      expect(mockExecuteSelectedNodes).toHaveBeenCalledWith(["node-1", "node-2"]);
+    });
+
+    it("holds the run button while a run is in progress", () => {
+      mockUseWorkflowStore.mockImplementation((selector) =>
+        selector(createDefaultState({
+          isRunning: true,
+          nodes: [createMockNode("node-1", { position: { x: 0, y: 0 } }), createMockNode("node-2", { position: { x: 300, y: 0 } })],
+        })));
+      render(<TestWrapper><MultiSelectToolbar /></TestWrapper>);
+      expect(screen.getByRole("button", { name: "Run selected nodes" })).toBeDisabled();
+    });
+
     it("should render stack horizontally button", () => {
       render(
         <TestWrapper>
@@ -158,7 +179,7 @@ describe("MultiSelectToolbar", () => {
         </TestWrapper>
       );
 
-      expect(screen.getByTitle("Stack horizontally (H)")).toBeInTheDocument();
+      expect(screen.getByTitle("Stack horizontally")).toBeInTheDocument();
     });
 
     it("should render stack vertically button", () => {
@@ -219,7 +240,7 @@ describe("MultiSelectToolbar", () => {
         </TestWrapper>
       );
 
-      const stackHorizontalButton = screen.getByTitle("Stack horizontally (H)");
+      const stackHorizontalButton = screen.getByTitle("Stack horizontally");
       fireEvent.click(stackHorizontalButton);
 
       // Should be called for each node
@@ -242,7 +263,7 @@ describe("MultiSelectToolbar", () => {
         </TestWrapper>
       );
 
-      fireEvent.click(screen.getByTitle("Stack horizontally (H)"));
+      fireEvent.click(screen.getByTitle("Stack horizontally"));
 
       // A single batched call positions all nodes; node-2 (x=100) comes first
       expect(mockOnNodesChange).toHaveBeenCalledWith([
@@ -364,6 +385,56 @@ describe("MultiSelectToolbar", () => {
 
       // With 4 nodes, should create a 2x2 grid
       expect(mockOnNodesChange).toHaveBeenCalled();
+    });
+  });
+
+  describe("Spacing control", () => {
+    it.each([
+      ["Stack horizontally", { x: 300, y: 0 }, { x: 600, y: 0 }],
+      ["Stack vertically (V)", { x: 0, y: 280 }, { x: 0, y: 560 }],
+      ["Arrange as grid (G)", { x: 300, y: 0 }, { x: 0, y: 280 }],
+    ])("adjusts spacing live for %s", (title, secondPosition, thirdPosition) => {
+      const nodes = [
+        createMockNode("node-1", { position: { x: 0, y: 0 } }),
+        createMockNode("node-2", { position: { x: 400, y: 400 } }),
+        createMockNode("node-3", { position: { x: 800, y: 800 } }),
+      ];
+      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes })));
+      render(<TestWrapper><MultiSelectToolbar /></TestWrapper>);
+
+      expect(screen.queryByRole("slider")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByTitle(title));
+      const slider = screen.getByRole("slider", { name: "Node spacing" });
+      expect(slider).toHaveValue("20");
+      fireEvent.change(slider, { target: { value: "80" } });
+
+      expect(mockOnNodesChange).toHaveBeenLastCalledWith([
+        { type: "position", id: "node-1", position: { x: 0, y: 0 } },
+        { type: "position", id: "node-2", position: secondPosition },
+        { type: "position", id: "node-3", position: thirdPosition },
+      ]);
+      expect(slider).toHaveAttribute("aria-valuetext", "80 pixels");
+    });
+
+    it("keeps the control anchored during layout updates and clears it on selection change", () => {
+      // The mocked store has no subscription to bypass React.memo on updates.
+      const Toolbar = (MultiSelectToolbar as unknown as { type: typeof MultiSelectToolbar }).type;
+      let nodes = [
+        createMockNode("node-1", { position: { x: 0, y: 0 } }),
+        createMockNode("node-2", { position: { x: 400, y: 400 } }),
+      ];
+      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes })));
+      const { container, rerender } = render(<TestWrapper><Toolbar /></TestWrapper>);
+      fireEvent.click(screen.getByTitle("Stack horizontally"));
+      const originalLeft = (container.firstChild as HTMLElement).style.left;
+      nodes = nodes.map((node, index) => ({ ...node, position: { x: index * 240, y: 0 } }));
+      rerender(<TestWrapper><Toolbar /></TestWrapper>);
+      expect((container.firstChild as HTMLElement).style.left).toBe(originalLeft);
+      expect(screen.getByRole("slider")).toBeInTheDocument();
+
+      nodes = [nodes[0], createMockNode("node-3")];
+      rerender(<TestWrapper><Toolbar /></TestWrapper>);
+      expect(screen.queryByRole("slider")).not.toBeInTheDocument();
     });
   });
 

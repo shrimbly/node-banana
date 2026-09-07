@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useReactFlow } from "@xyflow/react";
 import { NodeType, ProviderType } from "@/types";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
+import { getNodeSize } from "@/utils/nodeDimensions";
 import { ProviderBadge } from "./ProviderBadge";
 
 export interface CommentNavigationProps {
@@ -306,10 +306,7 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
           const storeNode = store.nodes.find(n => n.id === nodeId);
           if (!storeNode) continue;
 
-          const nodeType = storeNode.type as NodeType;
-          const defaults = defaultNodeDimensions[nodeType] || { width: 300, height: 280 };
-          const nodeWidth = storeNode.measured?.width || (storeNode.style?.width as number) || defaults.width;
-          const nodeHeight = storeNode.measured?.height || (storeNode.style?.height as number) || defaults.height;
+          const { width: nodeWidth, height: nodeHeight } = getNodeSize(storeNode);
 
           // Calculate node center
           const nodeCenterX = finalX + nodeWidth / 2;

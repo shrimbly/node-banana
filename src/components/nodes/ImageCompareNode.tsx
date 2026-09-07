@@ -1,33 +1,36 @@
 "use client";
 
-import { useMemo } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
-import {
-  ReactCompareSlider,
-  ReactCompareSliderImage,
-} from "react-compare-slider";
-import { BaseNode } from "./BaseNode";
+import { useState } from "react";
+import { NodeProps, Node } from "@xyflow/react";
+import { ReactCompareSlider, ReactCompareSliderImage } from "react-compare-slider";
+import { NodeShell } from "./NodeShell";
 import { useWorkflowStore } from "@/store/workflowStore";
+import { useShallow } from "zustand/shallow";
+import { nodeGraphIndex } from "@/lib/edges/graphIndex";
 import { ImageCompareNodeData } from "@/types";
+import { EmptyState, type SocketSpec } from "./ui";
 
 type ImageCompareNodeType = Node<ImageCompareNodeData, "imageCompare">;
 
-export function ImageCompareNode({
-  id,
-  data,
-  selected,
-}: NodeProps<ImageCompareNodeType>) {
-  const nodeData = data;
-  const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
-  const edges = useWorkflowStore((state) => state.edges);
-  const nodes = useWorkflowStore((state) => state.nodes);
+const INPUT_SOCKETS: SocketSpec[] = [
+  { id: "image", type: "image", label: "A" },
+  { id: "image-1", type: "image", label: "B" },
+];
+const EMPTY_HEIGHT = 160;
 
-  // Collect images in real-time from connected nodes (same pattern as OutputGalleryNode)
-  const displayImages = useMemo(() => {
+export function ImageCompareNode({ id, data, selected }: NodeProps<ImageCompareNodeType>) {
+  const nodeData = data;
+  const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
+
+  // Collect images in real-time from connected nodes (same pattern as
+  // OutputGalleryNode). Selected as the list of image strings, compared by
+  // value, so a drag frame elsewhere does not re-render the comparison
+  const displayImages = useWorkflowStore(useShallow((state) => {
     const connectedImages: string[] = [];
+    const { byId } = nodeGraphIndex(state.nodes);
 
     // Get edges connected to this node, sorted by creation time for stable ordering
-    const sortedEdges = edges
+    const sortedEdges = state.edges
       .filter((edge) => edge.target === id)
       .sort((a, b) => {
         const aTime = (a.data?.createdAt as number) || 0;
@@ -36,20 +39,17 @@ export function ImageCompareNode({
       });
 
     sortedEdges.forEach((edge) => {
-      const sourceNode = nodes.find((n) => n.id === edge.source);
+      const sourceNode = byId.get(edge.source);
       if (!sourceNode) return;
 
       let image: string | null = null;
+      const d = sourceNode.data as Record<string, unknown>;
 
       // Extract image from different node types
       if (sourceNode.type === "imageInput") {
-        image = (sourceNode.data as any).image;
-      } else if (sourceNode.type === "annotation") {
-        image = (sourceNode.data as any).outputImage;
-      } else if (sourceNode.type === "nanoBanana") {
-        image = (sourceNode.data as any).outputImage;
-      } else if (sourceNode.type === "removeBackground") {
-        image = (sourceNode.data as any).outputImage;
+        image = d.image as string | null;
+      } else if (sourceNode.type === "annotation" || sourceNode.type === "nanoBanana" || sourceNode.type === "removeBackground") {
+        image = d.outputImage as string | null;
       }
 
       if (image) {
@@ -58,90 +58,48 @@ export function ImageCompareNode({
     });
 
     return connectedImages;
-  }, [edges, nodes, id]);
+  }));
 
   const imageA = displayImages[0] || nodeData.imageA || null;
   const imageB = displayImages[1] || nodeData.imageB || null;
+  const ready = Boolean(imageA && imageB);
+
+  const media = ready
+    ? { kind: "aspect" as const, aspect: loadedAspect?.src === imageA ? loadedAspect.aspect : 1 }
+    : { kind: "fixed" as const, height: EMPTY_HEIGHT };
 
   return (
-    <BaseNode
-      id={id}
-      selected={selected}
-      className="min-w-[200px]"
-    >
-      {/* Two labeled image input handles */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="image"
-        data-handletype="image"
-        style={{ top: "35%" }}
-      />
-      <div
-        className="absolute left-[-8px] top-[35%] -translate-y-1/2 -translate-x-full mr-1 text-[9px] text-neutral-400 font-medium"
-        style={{ pointerEvents: "none" }}
-      >
-        A
-      </div>
-
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="image-1"
-        data-handletype="image"
-        style={{ top: "65%" }}
-      />
-      <div
-        className="absolute left-[-8px] top-[65%] -translate-y-1/2 -translate-x-full mr-1 text-[9px] text-neutral-400 font-medium"
-        style={{ pointerEvents: "none" }}
-      >
-        B
-      </div>
-
-      {/* Comparison view or placeholder */}
-      {imageA && imageB ? (
-        <div className="flex-1 relative nodrag nopan nowheel">
+    <NodeShell id={id} selected={selected} media={media} inputs={INPUT_SOCKETS} minWidth={240}>
+      {ready ? (
+        <div className="absolute inset-0 nodrag nopan nowheel">
+          {/* Measures A: the slider fills the clip, so the clip takes A's proportions. */}
+          <img
+            src={imageA!}
+            alt=""
+            aria-hidden
+            className="hidden"
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              if (img.naturalWidth > 0 && img.naturalHeight > 0) {
+                setLoadedAspect({ src: imageA!, aspect: img.naturalWidth / img.naturalHeight });
+              }
+            }}
+          />
           <ReactCompareSlider
-            itemOne={
-              <ReactCompareSliderImage
-                src={imageA}
-                alt="Image A"
-                style={{ objectFit: "contain" }}
-              />
-            }
-            itemTwo={
-              <ReactCompareSliderImage
-                src={imageB}
-                alt="Image B"
-                style={{ objectFit: "contain" }}
-              />
-            }
+            itemOne={<ReactCompareSliderImage src={imageA!} alt="Image A" style={{ objectFit: "cover" }} />}
+            itemTwo={<ReactCompareSliderImage src={imageB!} alt="Image B" style={{ objectFit: "cover" }} />}
             portrait={false}
             style={{ width: "100%", height: "100%" }}
           />
-          {/* Corner labels */}
-          <div className="absolute top-2 left-2 bg-black/50 text-white text-[10px] font-medium px-2 py-1 rounded pointer-events-none">
-            A
-          </div>
-          <div className="absolute top-2 right-2 bg-black/50 text-white text-[10px] font-medium px-2 py-1 rounded pointer-events-none">
-            B
-          </div>
+          <div className="absolute top-2 left-2 bg-black/50 text-white text-[10px] font-medium px-2 py-1 rounded pointer-events-none">A</div>
+          <div className="absolute top-2 right-2 bg-black/50 text-white text-[10px] font-medium px-2 py-1 rounded pointer-events-none">B</div>
         </div>
       ) : (
-        <div className="w-full flex-1 min-h-[200px] border border-dashed border-neutral-600 rounded flex flex-col items-center justify-center gap-2">
-          <span className="text-neutral-500 text-[10px] text-center px-4">
-            {!imageA && !imageB
-              ? "Connect 2 images to compare"
-              : "Connect another image to compare"}
-          </span>
-          {imageA && !imageB && (
-            <div className="text-[9px] text-neutral-600">Image A connected</div>
-          )}
-          {!imageA && imageB && (
-            <div className="text-[9px] text-neutral-600">Image B connected</div>
-          )}
-        </div>
+        <EmptyState
+          message={!imageA && !imageB ? "Connect 2 images to compare" : "Connect another image to compare"}
+          hint={imageA && !imageB ? "Image A connected" : !imageA && imageB ? "Image B connected" : undefined}
+        />
       )}
-    </BaseNode>
+    </NodeShell>
   );
 }

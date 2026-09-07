@@ -1,11 +1,11 @@
-import type { WorkflowNode, WorkflowEdge, NodeGroup } from "@/types";
-import type { EdgeStyle } from "./workflowStore";
+import type { WorkflowNode, WorkflowEdge, NodeGroup, EdgeStyle, EdgeAppearance } from "@/types";
 
 export interface UndoSnapshot {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   groups: Record<string, NodeGroup>;
   edgeStyle: EdgeStyle;
+  edgeAppearance: EdgeAppearance;
 }
 
 const MAX_HISTORY = 50;
@@ -20,6 +20,11 @@ export class UndoManager {
 
   get canRedo(): boolean {
     return this.redoStack.length > 0;
+  }
+
+  /** Read-only media ownership view; undo and redo both keep these nodes alive. */
+  get retainedNodes(): readonly WorkflowNode[] {
+    return [...this.undoStack, ...this.redoStack].flatMap((snapshot) => snapshot.nodes);
   }
 
   push(snapshot: UndoSnapshot): void {

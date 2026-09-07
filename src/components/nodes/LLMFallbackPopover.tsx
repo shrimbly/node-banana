@@ -10,7 +10,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { createPortal } from "react-dom";
+import { Dialog, DialogBody, DialogButton, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/Dialog";
 import { useWorkflowStore } from "@/store/workflowStore";
 import type {
   LLMGenerateNodeData,
@@ -92,24 +92,17 @@ export function LLMFallbackPopover({ nodeId, onClose }: LLMFallbackPopoverProps)
     onClose();
   };
 
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60"
-      onClick={onClose}
-    >
-      <div
-        className="w-80 bg-neutral-900 border border-neutral-700 rounded-lg shadow-xl p-4"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2 className="text-sm font-semibold text-neutral-200 mb-3">
-          Select fallback LLM
-        </h2>
-
+  return (
+    <Dialog open onClose={onClose} size="xs" portal>
+      <DialogHeader compact closeButton={false}>
+        <DialogTitle compact>Select fallback LLM</DialogTitle>
+      </DialogHeader>
+      <DialogBody compact>
         <label className="block text-xs text-neutral-400 mb-1">Provider</label>
         <select
           value={provider}
           onChange={(e) => setProvider(e.target.value as LLMProvider)}
-          className="w-full mb-3 px-2 py-1.5 text-sm bg-neutral-800 border border-neutral-700 rounded text-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-600"
+          className="w-full mb-3 px-2 py-1.5 text-sm bg-well border border-card-border rounded-well text-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-600"
         >
           {LLM_PROVIDERS.map((p) => (
             <option key={p.value} value={p.value}>
@@ -122,7 +115,7 @@ export function LLMFallbackPopover({ nodeId, onClose }: LLMFallbackPopoverProps)
         <select
           value={model}
           onChange={(e) => setModel(e.target.value as LLMModelType)}
-          className="w-full mb-4 px-2 py-1.5 text-sm bg-neutral-800 border border-neutral-700 rounded text-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-600"
+          className="w-full mb-1 px-2 py-1.5 text-sm bg-well border border-card-border rounded-well text-neutral-200 focus:outline-none focus:ring-1 focus:ring-neutral-600"
         >
           {LLM_MODELS[provider].map((m) => (
             <option key={m.value} value={m.value}>
@@ -131,30 +124,20 @@ export function LLMFallbackPopover({ nodeId, onClose }: LLMFallbackPopoverProps)
           ))}
         </select>
 
-        <div className="flex items-center justify-between gap-2">
-          <button
-            onClick={handleRemove}
-            className="px-2 py-1 text-xs text-red-400 hover:text-red-300 transition-colors"
-          >
-            Remove fallback
-          </button>
-          <div className="flex gap-2">
-            <button
-              onClick={onClose}
-              className="px-3 py-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              className="px-3 py-1 text-xs text-white bg-emerald-600 hover:bg-emerald-500 rounded transition-colors"
-            >
-              Save
-            </button>
-          </div>
+      </DialogBody>
+      <DialogFooter compact className="justify-between">
+        <DialogButton compact variant="danger" onClick={handleRemove}>
+          Remove fallback
+        </DialogButton>
+        <div className="flex gap-1.5">
+          <DialogButton compact variant="ghost" onClick={onClose}>
+            Cancel
+          </DialogButton>
+          <DialogButton compact variant="primary" onClick={handleSave}>
+            Save
+          </DialogButton>
         </div>
-      </div>
-    </div>,
-    document.body
+      </DialogFooter>
+    </Dialog>
   );
 }

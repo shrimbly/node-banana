@@ -105,7 +105,7 @@ describe("executeNanoBanana", () => {
     await expect(executeNanoBanana(ctx)).rejects.toThrow("Missing text input");
 
     expect(ctx.updateNodeData).toHaveBeenCalledWith("gen-1", {
-      status: "error",
+      status: "skipped",
       error: "Missing text input",
     });
   });

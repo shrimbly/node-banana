@@ -1,22 +1,24 @@
 "use client";
 
 import { useCallback, useState, useEffect, useMemo, useRef } from "react";
-import { createPortal } from "react-dom";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
-import { BaseNode } from "./BaseNode";
+import { NodeProps, Node } from "@xyflow/react";
+import { Dialog, DialogBody, DialogButton, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/Dialog";
+import { NodeShell } from "./NodeShell";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { PromptNodeData } from "@/types";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
-import { HandleLabel } from "./HandleLabel";
+import { ControlsCard, HeightGrip, SummaryValues, type SocketSpec } from "./ui";
 
 type PromptNodeType = Node<PromptNodeData, "prompt">;
+
+const INPUT_SOCKETS: SocketSpec[] = [{ id: "text", type: "text", label: "Text" }];
+const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "text", type: "text", label: "Text", dataTutorial: "prompt-output-handle" }];
+const DEFAULT_HEIGHT = 160;
 
 export function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const getConnectedInputs = useWorkflowStore((state) => state.getConnectedInputs);
   const edges = useWorkflowStore((state) => state.edges);
-  const showLabels = useShowHandleLabels(selected);
 
   // Local state for prompt to prevent cursor jumping during typing
   const [localPrompt, setLocalPrompt] = useState(nodeData.prompt);
@@ -28,7 +30,7 @@ export function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
 
   // Check if this node has any incoming text connections
   const hasIncomingTextConnection = useMemo(() => {
-    return edges.some((edge) => edge.target === id && edge.targetHandle === "text");
+    return (edges ?? []).some((edge) => edge.target === id && edge.targetHandle === "text");
   }, [edges, id]);
 
   // Track the last received text from connected LLM node to detect when it changes
@@ -91,62 +93,54 @@ export function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
     setVarNameInput(sanitized);
   }, []);
 
+  const mediaHeight = nodeData.mediaHeight ?? DEFAULT_HEIGHT;
+  const charCount = (localPrompt ?? "").length;
+
   return (
     <>
-      <BaseNode
+      <NodeShell
         id={id}
         selected={selected}
-        fullBleed
+        media={{ kind: "fixed", height: mediaHeight }}
+        inputs={INPUT_SOCKETS}
+        outputs={OUTPUT_SOCKETS}
+        controls={
+          <ControlsCard
+            id={id}
+            summary={{
+              title: (
+                <button
+                  onClick={() => setShowVarDialog(true)}
+                  className="nodrag nopan text-node text-blue-400 hover:text-blue-300 transition-colors"
+                  title="Set variable name"
+                >
+                  {nodeData.variableName ? `@${nodeData.variableName}` : "Add variable"}
+                </button>
+              ),
+              values: <SummaryValues items={[`${charCount} chars`, nodeData.isOptional ? "optional" : null]} />,
+            }}
+          />
+        }
       >
-        {/* Text input handle - for receiving text from LLM nodes */}
-        <Handle
-          type="target"
-          position={Position.Left}
-          id="text"
-          data-handletype="text"
-          style={{ zIndex: 10 }}
-        />
-        <HandleLabel label="Text" side="target" color="var(--handle-color-text)" visible={showLabels} />
-
         <textarea
           value={localPrompt}
           onChange={handleChange}
           onFocus={handleFocus}
           onBlur={handleBlur}
           placeholder={hasIncomingTextConnection ? "Text from connected node (editable)..." : nodeData.isOptional ? "Optional prompt (leave empty to skip)..." : "Describe what to generate..."}
-          className="nodrag nopan nowheel w-full h-full p-3 pb-7 text-xs leading-relaxed text-neutral-100 bg-neutral-800 rounded-t-lg resize-none focus:outline-none placeholder:text-neutral-500"
+          className="nodrag nopan nowheel absolute inset-0 w-full h-full p-3 pb-4 text-xs leading-relaxed text-neutral-100 bg-neutral-900/40 resize-none focus:outline-none placeholder:text-neutral-500"
         />
-        <div className="absolute bottom-0 left-0 right-0 z-10 px-3 py-1.5 bg-neutral-900/90 rounded-b-lg">
-          <button
-            onClick={() => setShowVarDialog(true)}
-            className="nodrag nopan text-[10px] text-blue-400 hover:text-blue-300 transition-colors"
-            title="Set variable name"
-          >
-            {nodeData.variableName ? `@${nodeData.variableName}` : "Add variable"}
-          </button>
-        </div>
+        <HeightGrip height={mediaHeight} onChange={(h) => updateNodeData(id, { mediaHeight: h })} />
+      </NodeShell>
 
-        {/* Text output handle */}
-        <Handle
-          type="source"
-          position={Position.Right}
-          id="text"
-          data-handletype="text"
-          data-tutorial="prompt-output-handle"
-          style={{ zIndex: 10 }}
-        />
-        <HandleLabel label="Text" side="source" color="var(--handle-color-text)" visible={showLabels} />
-      </BaseNode>
-
-      {/* Variable Naming Dialog - rendered via portal */}
-      {showVarDialog && createPortal(
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999]">
-          <div className="bg-neutral-800 border border-neutral-600 rounded-lg shadow-xl p-4 w-96">
-            <h3 className="text-sm font-semibold text-neutral-100 mb-3">Set Variable Name</h3>
-            <p className="text-xs text-neutral-400 mb-3">
-              Use this prompt as a variable in PromptConstructor nodes
-            </p>
-            <div className="mb-4">
+      {/* Variable Naming Dialog - on the dialog tier, in a body portal */}
+      <Dialog open={showVarDialog} onClose={() => setShowVarDialog(false)} size="xs" portal>
+          <DialogHeader compact closeButton={false}>
+            <DialogTitle compact>Set Variable Name</DialogTitle>
+            <DialogDescription>Use this prompt as a variable in PromptConstructor nodes</DialogDescription>
+          </DialogHeader>
+          <DialogBody compact>
+            <div className="mb-1">
               <label className="block text-xs text-neutral-300 mb-1">Variable name</label>
               <input
                 type="text"
@@ -158,7 +152,7 @@ export function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
                   }
                 }}
                 placeholder="e.g. color, style, subject"
-                className="w-full px-3 py-2 text-sm text-neutral-100 bg-neutral-900 border border-neutral-700 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                className="w-full px-2.5 py-1.5 text-[13px] text-neutral-100 bg-well border border-card-border rounded-well focus:outline-none focus:border-selection"
                 autoFocus
               />
               {varNameInput && (
@@ -167,33 +161,21 @@ export function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
                 </div>
               )}
             </div>
-            <div className="flex gap-2 justify-end">
-              {nodeData.variableName && (
-                <button
-                  onClick={handleClearVariableName}
-                  className="px-3 py-1.5 text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-900/30 rounded transition-colors"
-                >
-                  Clear
-                </button>
-              )}
-              <button
-                onClick={() => setShowVarDialog(false)}
-                className="px-3 py-1.5 text-xs font-medium text-neutral-400 hover:text-neutral-300 hover:bg-neutral-700 rounded transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSaveVariableName}
-                disabled={!varNameInput}
-                className="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
+          </DialogBody>
+          <DialogFooter compact>
+            {nodeData.variableName && (
+              <DialogButton compact variant="danger" onClick={handleClearVariableName} className="mr-auto">
+                Clear
+              </DialogButton>
+            )}
+            <DialogButton compact variant="ghost" onClick={() => setShowVarDialog(false)}>
+              Cancel
+            </DialogButton>
+            <DialogButton compact variant="primary" onClick={handleSaveVariableName} disabled={!varNameInput}>
+              Save
+            </DialogButton>
+          </DialogFooter>
+      </Dialog>
     </>
   );
 }
