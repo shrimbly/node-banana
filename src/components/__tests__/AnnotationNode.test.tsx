@@ -10,12 +10,12 @@ const mockUpdateNodeData = vi.fn();
 const mockUseWorkflowStore = vi.fn();
 
 vi.mock("@/store/workflowStore", () => ({
-  useWorkflowStore: (selector?: (state: unknown) => unknown) => {
+  useWorkflowStore: Object.assign((selector?: (state: unknown) => unknown) => {
     if (selector) {
       return mockUseWorkflowStore(selector);
     }
     return mockUseWorkflowStore((s: unknown) => s);
-  },
+  }, { getState: () => ({ workflowLifecycleId: 0 }) }),
 }));
 
 // Mock the annotation store

@@ -7,6 +7,7 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { AudioInputNodeData } from "@/types";
 import { useAudioVisualization } from "@/hooks/useAudioVisualization";
 import { useAudioPlayback } from "@/hooks/useAudioPlayback";
+import { useNodeMediaRequest } from "@/hooks/useNodeMediaRequest";
 import { downloadMedia } from "@/utils/downloadMedia";
 import { ControlsCard, SummaryValues, type SocketSpec } from "./ui";
 
@@ -19,6 +20,7 @@ const MEDIA_HEIGHT = 96;
 export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeType>) {
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
+  const { beginRequest, cancelRequest } = useNodeMediaRequest();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
@@ -66,24 +68,30 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
         return;
       }
 
+      const isCurrent = beginRequest();
       const reader = new FileReader();
       reader.onload = (event) => {
+        if (!isCurrent()) return;
         const base64 = event.target?.result as string;
 
         // Extract duration using HTML Audio element
         const audio = new Audio(base64);
         audio.onloadedmetadata = () => {
+          if (!isCurrent()) return;
           updateNodeData(id, {
             audioFile: base64,
+            audioFileRef: undefined,
             filename: file.name,
             format: file.type,
             duration: audio.duration,
           });
         };
         audio.onerror = () => {
+          if (!isCurrent()) return;
           // Still load the file even if metadata extraction fails
           updateNodeData(id, {
             audioFile: base64,
+            audioFileRef: undefined,
             filename: file.name,
             format: file.type,
             duration: null,
@@ -92,7 +100,7 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
       };
       reader.readAsDataURL(file);
     },
-    [id, updateNodeData]
+    [id, updateNodeData, beginRequest]
   );
 
   const handleDrop = useCallback(
@@ -119,6 +127,7 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
   }, []);
 
   const handleRemove = useCallback(() => {
+    cancelRequest();
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current = null;
@@ -126,11 +135,12 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
     setAudioBlob(null);
     updateNodeData(id, {
       audioFile: null,
+      audioFileRef: undefined,
       filename: null,
       duration: null,
       format: null,
     });
-  }, [id, updateNodeData, audioRef]);
+  }, [id, updateNodeData, audioRef, cancelRequest]);
 
   const duration = audioRef.current?.duration;
   const hasDuration = !!duration && isFinite(duration);

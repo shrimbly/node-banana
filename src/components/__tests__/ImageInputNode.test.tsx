@@ -7,7 +7,7 @@ import { ReactFlowProvider } from "@xyflow/react";
 const mockUpdateNodeData = vi.fn();
 
 vi.mock("@/store/workflowStore", () => ({
-  useWorkflowStore: vi.fn((selector) => {
+  useWorkflowStore: Object.assign(vi.fn((selector) => {
     const state = {
       updateNodeData: mockUpdateNodeData,
       currentNodeIds: [],
@@ -18,7 +18,7 @@ vi.mock("@/store/workflowStore", () => ({
       setNavigationTarget: vi.fn(),
     };
     return selector(state);
-  }),
+  }), { getState: () => ({ workflowLifecycleId: 0 }) }),
 }));
 
 // Mock alert
