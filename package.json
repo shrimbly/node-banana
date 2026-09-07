@@ -30,7 +30,7 @@
     "jszip": "^3.10.1",
     "konva": "^10.0.12",
     "mediabunny": "^1.31.0",
-    "next": "^16.0.7",
+    "next": "^16.2.11",
     "onnxruntime-web": "^1.21.0",
     "postcss": "^8.5.6",
     "react": "^19.2.0",
