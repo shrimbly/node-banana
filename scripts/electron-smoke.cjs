@@ -16,6 +16,52 @@ async function availablePort() {
   return port;
 }
 
+function windowEvent(desktop, event) {
+  return desktop.evaluate(({ BrowserWindow }, event) => new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error(`Window did not emit ${event}`)), 10_000);
+    BrowserWindow.getAllWindows()[0].once(event, () => { clearTimeout(timeout); resolve(true); });
+  }), event);
+}
+
+async function checkWindowControls(desktop, page) {
+  if (process.platform !== 'darwin') return;
+  const controls = page.getByRole('group', { name: 'Window controls' });
+  const dots = controls.locator('.desktop-window-control-dot');
+  const opacities = () => dots.evaluateAll((dots) => dots.map((dot) => Number(getComputedStyle(dot).opacity)));
+  await page.mouse.move(400, 300);
+  assert.deepEqual(await opacities(), [0.45, 0.45, 0.45]);
+  await fs.mkdir(path.join(root, '.scratch'), { recursive: true });
+  await page.screenshot({ path: path.join(root, '.scratch', 'window-controls-dim.png'), clip: { x: 0, y: 0, width: 240, height: 38 } });
+  for (let index = 0; index < 3; index++) {
+    await controls.getByRole('button').nth(index).hover();
+    assert.deepEqual(await opacities(), [0, 1, 2].map((i) => i === index ? 1 : 0.45));
+  }
+  await page.screenshot({ path: path.join(root, '.scratch', 'window-controls-hover.png'), clip: { x: 0, y: 0, width: 240, height: 38 } });
+  const boxes = await dots.evaluateAll((dots) => dots.map((dot) => dot.getBoundingClientRect().toJSON()));
+  for (let index = 0; index < 2; index++) {
+    await page.mouse.move((boxes[index].right + boxes[index + 1].left) / 2, boxes[index].top + boxes[index].height / 2);
+    assert.ok((await opacities()).every((opacity) => opacity >= 0.45));
+  }
+  await page.mouse.move(400, 300);
+  assert.deepEqual(await opacities(), [0.45, 0.45, 0.45]);
+  console.log('PASS: window controls stay dimmed, brighten individually, and remain visible between buttons');
+
+  // These clicks also prove controls remain reachable above the onboarding dialog.
+  const minimized = windowEvent(desktop, 'minimize');
+  await controls.getByRole('button', { name: 'Minimise window' }).click();
+  await minimized;
+  const restored = windowEvent(desktop, 'restore');
+  await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].restore());
+  await restored;
+  const fullscreen = windowEvent(desktop, 'enter-full-screen');
+  await controls.getByRole('button', { name: 'Toggle fullscreen' }).click();
+  await fullscreen;
+  const windowed = windowEvent(desktop, 'leave-full-screen');
+  await controls.getByRole('button', { name: 'Toggle fullscreen' }).click();
+  await windowed;
+  console.log('PASS: window controls minimise and toggle native fullscreen');
+}
+
 async function main() {
   const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'node-banana-electron-'));
   const port = await availablePort();
@@ -50,6 +96,7 @@ async function main() {
       require: 'undefined', process: 'undefined',
     });
     console.log('PASS: Electron renders the editor in a sandboxed window');
+    await checkWindowControls(desktop, page);
 
     if (!production) {
       const hmrMessage = await page.evaluate(() => new Promise((resolve, reject) => {
@@ -65,6 +112,13 @@ async function main() {
     await page.getByRole('button', { name: 'Close', exact: true }).last().click();
     await page.getByRole('button', { name: 'Skip', exact: true }).click();
     await page.keyboard.press('Escape');
+    if (process.platform === 'darwin') {
+      await page.getByRole('button', { name: 'Close window', exact: true }).focus();
+      await page.keyboard.press('Tab');
+      assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Minimise window');
+      assert.equal(await page.locator('.desktop-window-minimize .desktop-window-control-dot').evaluate((dot) => getComputedStyle(dot).opacity), '1');
+      console.log('PASS: keyboard focus also brightens the focused window control');
+    }
     await page.locator('.react-flow__pane').click({ position: { x: 100, y: 100 } });
     const initialNodes = await page.locator('.react-flow__node').count();
     await page.keyboard.press('Shift+P');
@@ -129,6 +183,13 @@ async function main() {
     assert.equal(await reopened.evaluate(() => localStorage.getItem('node-banana-electron-smoke')), 'persisted');
     assert.equal(await reopened.evaluate(() => localStorage.getItem('node-banana-ftux-completed')), 'true');
     console.log('PASS: desktop settings survive a full restart');
+    if (process.platform === 'darwin') {
+      const closed = windowEvent(desktop, 'closed');
+      await reopened.getByRole('button', { name: 'Close window', exact: true }).click();
+      await closed;
+      assert.equal(await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().length), 0);
+      console.log('PASS: the close control closes the native window');
+    }
   } finally {
     if (desktop) await desktop.close();
     await fs.rm(temp, { recursive: true, force: true });

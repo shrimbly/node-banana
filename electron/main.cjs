@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, Menu, session, shell, utilityProcess } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, utilityProcess } = require('electron');
 const { randomBytes } = require('node:crypto');
 const path = require('node:path');
 
@@ -46,8 +46,6 @@ async function createWindow() {
     show: false,
     ...(process.platform === 'darwin' ? {
       titleBarStyle: 'hidden',
-      // Align native controls with the workflow tabs; CSS reserves their gutter.
-      trafficLightPosition: { x: 14, y: 16 },
     } : {}),
     webPreferences: {
       nodeIntegration: false,
@@ -56,6 +54,12 @@ async function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
     },
   });
+  if (process.platform === 'darwin') {
+    // The tab bar renders controls with predictable per-button hover styling.
+    window.setWindowButtonVisibility(false);
+    window.on('enter-full-screen', () => window?.setWindowButtonVisibility(false));
+    window.on('leave-full-screen', () => window?.setWindowButtonVisibility(false));
+  }
   window.webContents.setWindowOpenHandler(({ url }) => {
     openExternal(url);
     return { action: 'deny' };
@@ -134,6 +138,20 @@ function startBackend() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  ipcMain.on('desktop:window-action', (event, action) => {
+    if (process.platform !== 'darwin' || !window || event.sender !== window.webContents) return;
+    if (!event.senderFrame || event.senderFrame !== window.webContents.mainFrame) return;
+    if (new URL(event.senderFrame.url).origin !== origin) return;
+    switch (action) {
+      case 'close': window.close(); break;
+      case 'minimize': window.minimize(); break;
+      case 'toggle-fullscreen': window.setFullScreen(!window.isFullScreen()); break;
+      case 'toggle-maximize':
+        if (window.isMaximized()) window.unmaximize();
+        else window.maximize();
+        break;
+    }
+  });
   app.on('second-instance', () => {
     if (window?.isMinimized()) window.restore();
     window?.show();

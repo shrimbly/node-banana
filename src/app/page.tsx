@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { FloatingMenu } from "@/components/FloatingMenu";
 import { WorkflowTabs } from "@/components/WorkflowTabs";
+import { DesktopWindowControls } from "@/components/DesktopWindowControls";
 import { WorkflowCanvas } from "@/components/WorkflowCanvas";
 import { FloatingActionBar } from "@/components/FloatingActionBar";
 import { AnnotationModal } from "@/components/AnnotationModal";
@@ -60,6 +61,7 @@ export default function Home() {
   return (
     <ReactFlowProvider>
       <div className="h-screen flex flex-col bg-[#0f0f0f]">
+        <DesktopWindowControls />
         <WorkflowTabs />
         {/* The floating menu is positioned against this box, so it clears the tab
             strip. The box is the canvas frame: rounded top corners the active tab
