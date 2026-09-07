@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { WorkflowCanvas } from "@/components/WorkflowCanvas";
 import { ReactFlowProvider } from "@xyflow/react";
+import { useToast } from "@/components/Toast";
 
 // Mock the workflow store
 const mockOnNodesChange = vi.fn();
@@ -179,6 +180,30 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe("WorkflowCanvas", () => {
+  it.each(["current", "superseded", "switched-after-load"])("handles generated-workflow hydration ownership (%s)", async (scenario) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      json: async () => ({ success: true, workflow: { nodes: [], edges: [] } }),
+    }));
+    const state = createDefaultState({ workflowLifecycleId: 1 });
+    mockUseWorkflowStore.mockImplementation((selector) => selector(state));
+    mockLoadWorkflow.mockImplementationOnce(async () => {
+      state.workflowLifecycleId = 2; // Begin hydration.
+      await Promise.resolve();
+      state.workflowLifecycleId = scenario === "switched-after-load" ? 4 : 3;
+      return scenario === "superseded" ? undefined : 3;
+    });
+    useToast.getState().hide();
+    try {
+      render(<TestWrapper><WorkflowCanvas /></TestWrapper>);
+      await act(async () => { await mockChatProps.current!.onBuildWorkflow("New graph"); });
+      expect(state.captureSnapshot).toHaveBeenCalledOnce();
+      expect(mockLoadWorkflow).toHaveBeenCalledOnce();
+      expect(useToast.getState().message).toBe(scenario === "current" ? "Workflow generated successfully" : null);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("discards a generated workflow when its originating workflow has changed", async () => {
     let resolveResponse!: (value: unknown) => void;
     const response = new Promise((resolve) => { resolveResponse = resolve; });

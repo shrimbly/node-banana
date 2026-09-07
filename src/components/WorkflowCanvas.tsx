@@ -1372,7 +1372,9 @@ export function WorkflowCanvas() {
         captureSnapshot(); // Capture BEFORE loading new workflow
         const loading = loadWorkflow(data.workflow, undefined, { preserveSnapshot: true });
         lifecycleId = useWorkflowStore.getState().workflowLifecycleId;
-        await loading;
+        const committedLifecycleId = await loading;
+        if (committedLifecycleId === undefined) return;
+        lifecycleId = committedLifecycleId;
         if (!isCurrent()) return;
         setIsChatOpen(false);
         showToast("Workflow generated successfully", "success");
