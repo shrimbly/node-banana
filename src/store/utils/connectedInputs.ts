@@ -455,6 +455,14 @@ export function getConnectedInputsPure(
     }
   }
 
+  // Executors use `text` as their main generation prompt. Additional schema
+  // text slots (such as negative_prompt) must not replace it just because their
+  // edges were connected later. Named inputs still retain their own values.
+  const schemaPrompt = dynamicInputs.prompt;
+  if (schemaPrompt !== undefined) {
+    text = Array.isArray(schemaPrompt) ? schemaPrompt[0] ?? text : schemaPrompt;
+  }
+
   return { images, videos, audio, model3d, text, textItems, dynamicInputs, easeCurve };
 }
 

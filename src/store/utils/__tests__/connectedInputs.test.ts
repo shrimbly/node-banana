@@ -250,6 +250,30 @@ describe("getConnectedInputsPure", () => {
     expect(result.dynamicInputs).toEqual({ image_url: "data:image/png;base64,a" });
   });
 
+  it.each([false, true])("keeps the named prompt authoritative when a negative prompt is connected (routed: %s)", (routed) => {
+    const nodes = [
+      makeNode("positive", "prompt", { prompt: "a mountain lake" }),
+      makeNode("negative", "prompt", { prompt: "blurry, low quality" }),
+      makeNode("router", "router"),
+      makeNode("gen", "nanoBanana", {
+        inputSchema: [{ name: "prompt", type: "text" }, { name: "negative_prompt", type: "text" }],
+      }),
+    ];
+    const textEdge = (source: string, target: string, handle: string): WorkflowEdge => ({
+      ...makeEdge(source, target, handle), sourceHandle: "text",
+    });
+    const edges = [
+      ...(routed ? [textEdge("positive", "router", "text")] : []),
+      textEdge(routed ? "router" : "positive", "gen", "text-0"),
+      textEdge("negative", "gen", "text-1"),
+    ];
+
+    const result = getConnectedInputsPure("gen", nodes, edges);
+
+    expect(result.text).toBe("a mountain lake");
+    expect(result.dynamicInputs).toEqual({ prompt: "a mountain lake", negative_prompt: "blurry, low quality" });
+  });
+
   it("should populate dynamicInputs through a router passthrough (regression: router bypassed dynamicInputs → 422)", () => {
     const nodes = [
       makeNode("img", "imageInput", { image: "data:image/png;base64,a" }),
