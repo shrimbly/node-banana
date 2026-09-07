@@ -145,6 +145,32 @@ describe("revokeBlobUrl", () => {
 });
 
 describe("clearNodeImageRefs", () => {
+  it("keeps live video and model blobs readable when preparing Save As", () => {
+    const revoke = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+    try {
+      const nodes = [
+        {
+          ...makeNode("video", "videoTrim"),
+          data: { outputVideo: "blob:http://localhost/video", outputVideoRef: "old/video.mp4" },
+        },
+        {
+          ...makeNode("model", "glbViewer"),
+          data: { glbUrl: "blob:http://localhost/model", glbUrlRef: "old/model.glb" },
+        },
+      ] as unknown as WorkflowNode[];
+
+      const result = clearNodeImageRefs(nodes);
+
+      expect(result[0].data).toEqual({ outputVideo: "blob:http://localhost/video" });
+      expect(result[1].data).toEqual({ glbUrl: "blob:http://localhost/model" });
+      // Externalization still needs to read these URLs after the refs are cleared.
+      expect(revoke).not.toHaveBeenCalled();
+      expect(nodes[0].data).toHaveProperty("outputVideoRef", "old/video.mp4");
+    } finally {
+      revoke.mockRestore();
+    }
+  });
+
   it("should clear imageRef fields", () => {
     const nodes = [
       {
