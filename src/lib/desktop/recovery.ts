@@ -45,11 +45,14 @@ export function decodeRecovery(raw: unknown): RecoverySnapshot {
   }) };
 }
 
+type RecoveryAsset = { $recoveryAsset: string; mime: string };
+// Reuse the previous checkpoint's immutable media without retaining closed tabs.
+let previousAssets = new Map<string, Promise<RecoveryAsset>>();
 export async function encodeRecovery(snapshot: RecoverySnapshot): Promise<unknown> {
-  const assets = new Map<string, Promise<unknown>>();
+  const assets = new Map<string, Promise<RecoveryAsset>>();
   async function walk(value: unknown): Promise<unknown> {
-    if (typeof value === 'string' && value.startsWith('blob:')) {
-      let asset = assets.get(value);
+    if (typeof value === 'string' && (value.startsWith('blob:') || /^data:[\w.+-]+\/[\w.+-]+[;,]/.test(value))) {
+      let asset = assets.get(value) || previousAssets.get(value);
       if (!asset) {
         asset = (async () => {
           const response = await fetch(value);
@@ -59,8 +62,8 @@ export async function encodeRecovery(snapshot: RecoverySnapshot): Promise<unknow
           if (!result.ok) throw new Error(result.error);
           return result.value;
         })();
-        assets.set(value, asset);
       }
+      assets.set(value, asset);
       return asset;
     }
     if (value instanceof Set) return [...value];
@@ -76,7 +79,53 @@ export async function encodeRecovery(snapshot: RecoverySnapshot): Promise<unknow
     }
     return value;
   }
-  return walk(snapshot);
+  const encoded = await walk(snapshot);
+  // Reject before IPC, whose structured clone allocation can crash the main
+  // process before its handler gets a chance to validate a large payload.
+  if (JSON.stringify(encoded).length > 8 * 1024 * 1024) throw new Error('Recovery metadata is too large. Save your workflows to disk.');
+  previousAssets = assets;
+  return encoded;
+}
+
+export async function hydrateRecovery(raw: unknown): Promise<RecoverySnapshot> {
+  const assets = new Map<string, Promise<string>>();
+  async function walk(value: unknown): Promise<unknown> {
+    if (!value || typeof value !== 'object') return value;
+    const asset = value as RecoveryAsset;
+    if (typeof asset.$recoveryAsset === 'string') {
+      let loaded = assets.get(asset.$recoveryAsset);
+      if (!loaded) {
+        loaded = (async () => {
+          const parts: ArrayBuffer[] = [];
+          let offset = 0;
+          while (true) {
+            const result = await window.nodeBananaDesktop!.recovery.readAsset({ asset, offset });
+            if (!result.ok) throw new Error(result.error);
+            const { bytes, size } = result.value;
+            if (size > 256 * 1024 * 1024 || offset + bytes.length > size || (!bytes.length && offset < size)) throw new Error('Invalid recovery media');
+            parts.push(new Uint8Array(bytes).buffer);
+            offset += bytes.length;
+            if (offset === size) break;
+          }
+          const url = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = () => reject(new Error('Recovery media could not be opened.'));
+            reader.readAsDataURL(new Blob(parts, { type: asset.mime }));
+          });
+          previousAssets.set(url, Promise.resolve(asset));
+          return url;
+        })();
+        assets.set(asset.$recoveryAsset, loaded);
+      }
+      return loaded;
+    }
+    if (Array.isArray(value)) { const result = []; for (const child of value) result.push(await walk(child)); return result; }
+    const result: Record<string, unknown> = {};
+    for (const [key, child] of Object.entries(value)) result[key] = await walk(child);
+    return result;
+  }
+  return decodeRecovery(await walk(raw));
 }
 
 // One writer; pending edits coalesce to the latest graph. The maximum timer is

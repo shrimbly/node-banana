@@ -39,12 +39,15 @@ npm run electron:package
 npm run electron:test
 npm run electron:smoke -- --executable "dist-electron/mac-arm64/Node Banana.app/Contents/MacOS/Node Banana"
 npm run electron:acceptance
+node scripts/electron-large-workflow.cjs --workflow "/path/to/large-workflow.json"
 npm run electron:smoke -- --executable "/Applications/Node Banana.app/Contents/MacOS/Node Banana" --native-input
 ```
 
 `electron:package` produces the `.app`, drag-to-Applications DMG and ZIP in `dist-electron/`. Use `npm run electron:package -- --dir` for an app-only packaging iteration. Builds use `npm ci` and the checked-in lockfile in a fresh temporary directory. Only source/configuration/public assets are copied into that build. The child build environment is allowlisted; `.env*`, developer keys, workflows, logs, Git history, caches, tests and fixtures do not enter the release inputs. Runtime production dependencies, `.next`, public assets and the custom server are packaged explicitly; [Next standalone output does not trace custom servers](https://nextjs.org/docs/app/guides/custom-server).
 
 `electron:acceptance` copies the app outside the repository, uses a clean profile and environment, and tests port conflict/retry, assets/native image processing, credential migration/update/delete/failure, backend and renderer crashes, tab recovery, interrupted generation, discards and bundle immutability. It uses a synthetic key for the provider error path. A successful provider request with a valid tester credential remains a separate manual check unless explicitly configured for the acceptance run.
+
+`electron-large-workflow.cjs` loads an existing media-heavy workflow in a disposable profile, blocks workflow writes and provider submissions, and checks checkpointing and crash restoration. It leaves the original workflow file unchanged. Recovery keeps media outside checkpoint JSON and transfers it in 1 MiB chunks.
 
 Native input checks use `cliclick` and require macOS Accessibility permission. They exercise OS hit testing for hover, minimise, fullscreen, close, and window dragging. Browser development remains `npm run dev`; unpackaged desktop development remains `npm run electron:dev`.
 

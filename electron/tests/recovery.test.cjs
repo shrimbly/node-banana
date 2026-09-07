@@ -18,7 +18,8 @@ test('recovers previous checkpoint, durable assets and discards across interrupt
     const recovered = createRecoveryStore(temp).read();
     assert.equal(recovered.snapshot.tabs[0].snapshot.nodes[0].data.text, 'first');
     assert.equal(recovered.warnings.length, 1);
-    assert.equal(store.hydrate(recovered.snapshot).snapshot.tabs[0].snapshot.nodes[0].data.media, 'data:video/mp4;base64,bWVkaWE=');
+    assert.deepEqual(store.hydrate(recovered.snapshot).snapshot.tabs[0].snapshot.nodes[0].data.media, asset);
+    assert.equal(store.readAsset({ asset, offset: 0 }).bytes.toString(), 'media');
     store.discardTab('one');
     store.write(snapshot('late-inflight-write', asset));
     assert.deepEqual(store.read().snapshot.tabs.map(t => t.id), ['two']);
@@ -57,5 +58,27 @@ test('missing external media is reported without removing its reference', () => 
     const recovered = store.hydrate(value);
     assert.equal(recovered.snapshot.tabs[0].snapshot.nodes[0].data.imageRef, 'missing-image');
     assert.ok(recovered.warnings.some(warning => warning.includes('External media is missing: missing-image')));
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('transfers media in bounded ordered chunks and never expands checkpoint IPC', () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'banana-media-chunks-'));
+  try {
+    const store = createRecoveryStore(temp);
+    store.read();
+    const first = Buffer.alloc(1024 * 1024, 42);
+    const { uploadId } = store.assetChunk({ offset: 0, bytes: first, mime: 'video/mp4', done: false });
+    assert.throws(() => store.assetChunk({ uploadId, offset: 1, bytes: first, mime: 'video/mp4', done: false }));
+    assert.throws(() => store.assetChunk({ offset: 0, bytes: Buffer.alloc(first.length + 1), mime: 'video/mp4', done: true }));
+    const { asset } = store.assetChunk({ uploadId, offset: first.length, bytes: Buffer.from('tail'), mime: 'video/mp4', done: true });
+    store.write(snapshot('chunked', asset));
+    assert.deepEqual(store.hydrate(store.read().snapshot).snapshot.tabs[0].snapshot.nodes[0].data.media, asset);
+    const readFirst = store.readAsset({ asset, offset: 0 });
+    assert.equal(readFirst.size, first.length + 4);
+    assert.deepEqual(readFirst.bytes, first);
+    assert.equal(store.readAsset({ asset, offset: first.length }).bytes.toString(), 'tail');
+    assert.throws(() => store.readAsset({ asset, offset: -1 }));
+    assert.throws(() => store.readAsset({ asset: { $recoveryAsset: '../escape' }, offset: 0 }));
+    assert.ok(fs.statSync(path.join(temp, 'recovery/checkpoint-v1.json')).size < 2000);
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 });

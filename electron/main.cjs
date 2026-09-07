@@ -141,7 +141,7 @@ async function createWindow() {
 }
 function registerBridge() {
   for (const [category, operations, getStore] of [
-    ['recovery', ['read', 'write', 'putAsset', 'hydrate', 'discardTab', 'discard'], () => recoveryStore],
+    ['recovery', ['read', 'write', 'assetChunk', 'readAsset', 'hydrate', 'discardTab', 'discard'], () => recoveryStore],
     ['credentials', ['read', 'write', 'delete'], () => credentialStore],
   ]) for (const operation of operations) ipcMain.handle(`desktop:${category}:${operation}`, (event, value) => {
     if (!validCaller(event)) throw new Error('Unauthorized desktop request');

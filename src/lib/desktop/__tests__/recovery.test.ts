@@ -54,9 +54,47 @@ it('persists blob bytes before encoding and rejects expired URLs without publish
     expect(encoded).toContain('$recoveryAsset');
     expect(putAsset).toHaveBeenCalledTimes(1);
     global.fetch = vi.fn(async () => { throw new Error('Expired blob'); });
+    // A cached, durable blob remains recoverable after its URL is revoked.
+    await expect(encodeRecovery(value)).resolves.toBeDefined();
+    Object.assign(value.tabs[0].snapshot.nodes[0].data, { outputVideo: 'blob:http://127.0.0.1/never-saved' });
     await expect(encodeRecovery(value)).rejects.toThrow('Expired blob');
   } finally {
     global.fetch = originalFetch;
     delete (window as { nodeBananaDesktop?: unknown }).nodeBananaDesktop;
   }
+});
+
+it('externalizes repeated data URLs before IPC and reuses the next checkpoint media', async () => {
+  vi.resetModules();
+  const { encodeRecovery } = await import('../recovery');
+  const ref = { $recoveryAsset: 'hash', mime: 'image/png' };
+  const putAsset = vi.fn(async () => ({ ok: true, value: ref }));
+  Object.defineProperty(window, 'nodeBananaDesktop', { configurable: true, value: { recovery: { putAsset } } });
+  const originalFetch = global.fetch;
+  try {
+    global.fetch = vi.fn(async () => ({ ok: true, blob: async () => ({ type: 'image/png', arrayBuffer: async () => new Uint8Array([1, 2, 3]).buffer }) })) as unknown as typeof fetch;
+    const value = snapshot();
+    const image = `data:image/png;base64,${'A'.repeat(1024 * 1024)}`;
+    Object.assign(value.tabs[0].snapshot, { nodes: Array.from({ length: 471 }, (_, i) => ({ id: String(i), data: { image, outputImage: image } })) });
+    const encoded = await encodeRecovery(value);
+    expect(JSON.stringify(encoded).length).toBeLessThan(100000);
+    expect(JSON.stringify(encoded)).not.toContain('data:image');
+    expect(putAsset).toHaveBeenCalledTimes(1);
+    await encodeRecovery(value);
+    expect(putAsset).toHaveBeenCalledTimes(1);
+  } finally { global.fetch = originalFetch; delete (window as { nodeBananaDesktop?: unknown }).nodeBananaDesktop; }
+});
+
+it('hydrates duplicate references in renderer memory with bounded reads', async () => {
+  const { hydrateRecovery } = await import('../recovery');
+  const readAsset = vi.fn(async ({ offset }: { offset: number }) => ({ ok: true, value: { bytes: new Uint8Array(offset ? [3] : [1, 2]), size: 3 } }));
+  Object.defineProperty(window, 'nodeBananaDesktop', { configurable: true, value: { recovery: { readAsset } } });
+  try {
+    const value = snapshot();
+    const asset = { $recoveryAsset: 'hash', mime: 'image/png' };
+    Object.assign(value.tabs[0].snapshot, { nodes: [{ id: 'a', data: { image: asset, outputImage: asset } }] });
+    const result = await hydrateRecovery(value);
+    expect(result.tabs[0].snapshot.nodes[0].data).toMatchObject({ image: 'data:image/png;base64,AQID', outputImage: 'data:image/png;base64,AQID' });
+    expect(readAsset.mock.calls.map(([request]) => request.offset)).toEqual([0, 2]);
+  } finally { delete (window as { nodeBananaDesktop?: unknown }).nodeBananaDesktop; }
 });

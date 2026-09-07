@@ -15,7 +15,20 @@ contextBridge.exposeInMainWorld('nodeBananaDesktop', {
   recovery: {
     read: () => ipcRenderer.invoke('desktop:recovery:read'),
     write: (value) => ipcRenderer.invoke('desktop:recovery:write', value),
-    putAsset: (value) => ipcRenderer.invoke('desktop:recovery:putAsset', value),
+    putAsset: async ({ bytes, mime }) => {
+      if (!(bytes instanceof Uint8Array) || bytes.length > 256 * 1024 * 1024) return { ok: false, error: 'Recovery media is too large. Save your workflow to disk.' };
+      let uploadId;
+      const chunkSize = 1024 * 1024;
+      for (let offset = 0; offset < bytes.length || offset === 0; offset += chunkSize) {
+        const result = await ipcRenderer.invoke('desktop:recovery:assetChunk', {
+          uploadId, offset, bytes: bytes.slice(offset, offset + chunkSize), mime, done: offset + chunkSize >= bytes.length,
+        });
+        if (!result.ok) return result;
+        if (result.value.asset) return { ok: true, value: result.value.asset };
+        uploadId = result.value.uploadId;
+      }
+    },
+    readAsset: (value) => ipcRenderer.invoke('desktop:recovery:readAsset', value),
     hydrate: (value) => ipcRenderer.invoke('desktop:recovery:hydrate', value),
     discardTab: (id) => ipcRenderer.invoke('desktop:recovery:discardTab', id),
     discard: () => ipcRenderer.invoke('desktop:recovery:discard'),

@@ -1,8 +1,9 @@
 const fs = require('node:fs');
 const path = require('node:path');
-const { createHash } = require('node:crypto');
+const { createHash, randomUUID } = require('node:crypto');
 const { atomicWrite } = require('./files.cjs');
 const MAX_SNAPSHOT = 256 * 1024 * 1024;
+const CHUNK_SIZE = 1024 * 1024;
 const MAX_ASSET = 256 * 1024 * 1024;
 function validateSnapshot(value) {
   if (!value || value.version !== 1 || !Array.isArray(value.tabs) || !value.tabs.length || value.tabs.length > 200) throw new Error('Invalid recovery checkpoint');
@@ -24,14 +25,15 @@ function createRecoveryStore(userData) {
   const current = path.join(directory, 'checkpoint-v1.json');
   const previous = path.join(directory, 'checkpoint-v1.previous.json');
   const marker = path.join(directory, 'session-v1.json');
+  const uploads = new Map();
   let closed = false;
   let acknowledged = false;
   function session() {
     try { return JSON.parse(fs.readFileSync(marker, 'utf8')); } catch { return { clean: false, discarded: [] }; }
   }
   function readCheckpoint(filename) {
+    if (fs.statSync(filename).size > MAX_SNAPSHOT) throw new Error('Checkpoint too large');
     const bytes = fs.readFileSync(filename);
-    if (bytes.length > MAX_SNAPSHOT) throw new Error('Checkpoint too large');
     const record = JSON.parse(bytes);
     if (record.sha256 !== createHash('sha256').update(record.payload).digest('hex')) throw new Error('Damaged checkpoint');
     return validateSnapshot(JSON.parse(record.payload));
@@ -42,9 +44,21 @@ function createRecoveryStore(userData) {
   }
   function assetRead(ref) {
     if (typeof ref.mime !== 'string' || !/^[\w.+-]+\/[\w.+-]+$/.test(ref.mime)) throw new Error('Invalid media type');
-    const bytes = fs.readFileSync(assetPath(ref.$recoveryAsset));
-    if (createHash('sha256').update(bytes).digest('hex') !== ref.$recoveryAsset) throw new Error('Damaged recovery asset');
-    return bytes;
+    const filename = assetPath(ref.$recoveryAsset);
+    const size = fs.statSync(filename).size;
+    if (size > MAX_ASSET) throw new Error('Recovery media too large');
+    const hash = createHash('sha256');
+    const buffer = Buffer.alloc(Math.min(CHUNK_SIZE, size));
+    const fd = fs.openSync(filename, 'r');
+    try {
+      for (let offset = 0; offset < size;) {
+        const count = fs.readSync(fd, buffer, 0, Math.min(buffer.length, size - offset), offset);
+        if (!count) throw new Error('Incomplete recovery media');
+        hash.update(buffer.subarray(0, count)); offset += count;
+      }
+    } finally { fs.closeSync(fd); }
+    if (hash.digest('hex') !== ref.$recoveryAsset) throw new Error('Damaged recovery asset');
+    return ref;
   }
   function filtered(snapshot, discarded) {
     snapshot.tabs = snapshot.tabs.filter(tab => !discarded.includes(tab.id));
@@ -79,13 +93,61 @@ function createRecoveryStore(userData) {
       const payload = JSON.stringify(snapshot);
       if (Buffer.byteLength(payload) > MAX_SNAPSHOT) throw new Error('Recovery is too large. Save your workflows to disk.');
       // Every referenced asset must already be safely on disk before publishing.
-      assetReferences(snapshot, assetRead);
+      const verified = new Set();
+      assetReferences(snapshot, ref => { if (!verified.has(ref.$recoveryAsset)) { assetRead(ref); verified.add(ref.$recoveryAsset); } });
       let validCurrent = false;
       try { readCheckpoint(current); validCurrent = true; } catch { /* Keep previous when current is corrupt. */ }
       if (validCurrent) atomicWrite(previous, fs.readFileSync(current));
       atomicWrite(current, JSON.stringify({ sha256: createHash('sha256').update(payload).digest('hex'), payload }));
       acknowledged = true;
       return true;
+    },
+    // Never send media-sized strings or buffers through main-process IPC.
+    assetChunk({ uploadId, offset, bytes, mime, done }) {
+      if (!(bytes instanceof Uint8Array) || bytes.length > CHUNK_SIZE || !Number.isSafeInteger(offset) || offset < 0 || typeof mime !== 'string' || !/^[\w.+-]+\/[\w.+-]+$/.test(mime)) throw new Error('Invalid recovery media chunk');
+      // Abandoned transfers expire; neither disk usage nor open handles grow forever.
+      for (const [id, upload] of uploads) if (Date.now() - upload.updated > 60000) {
+        fs.rmSync(upload.filename, { force: true }); uploads.delete(id);
+      }
+      let upload = uploads.get(uploadId);
+      if (!uploadId && offset === 0) {
+        if (uploads.size >= 4) throw new Error('Too many recovery media transfers');
+        uploadId = randomUUID();
+        const filename = path.join(directory, 'assets', `${uploadId}.tmp`);
+        fs.mkdirSync(path.dirname(filename), { recursive: true, mode: 0o700 });
+        fs.writeFileSync(filename, '', { flag: 'wx', mode: 0o600 });
+        upload = { filename, size: 0, hash: createHash('sha256'), mime, updated: Date.now() };
+        uploads.set(uploadId, upload);
+      }
+      if (!upload || upload.size !== offset || upload.mime !== mime) throw new Error('Invalid recovery media transfer');
+      try {
+        if (offset + bytes.length > MAX_ASSET) throw new Error('Recovery media too large');
+        fs.appendFileSync(upload.filename, bytes);
+        upload.hash.update(bytes); upload.size += bytes.length; upload.updated = Date.now();
+        if (!done) return { uploadId };
+        const id = upload.hash.digest('hex');
+        const fd = fs.openSync(upload.filename, 'r');
+        try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+        fs.renameSync(upload.filename, assetPath(id));
+        if (process.platform !== 'win32') {
+          const dir = fs.openSync(path.dirname(upload.filename), 'r');
+          try { fs.fsyncSync(dir); } finally { fs.closeSync(dir); }
+        }
+        uploads.delete(uploadId);
+        return { asset: { $recoveryAsset: id, mime } };
+      } catch (error) { fs.rmSync(upload.filename, { force: true }); uploads.delete(uploadId); throw error; }
+    },
+    readAsset({ asset, offset }) {
+      if (!Number.isSafeInteger(offset) || offset < 0) throw new Error('Invalid media offset');
+      const filename = assetPath(asset.$recoveryAsset);
+      const size = fs.statSync(filename).size;
+      if (size > MAX_ASSET || offset > size) throw new Error('Invalid media size');
+      const bytes = Buffer.alloc(Math.min(CHUNK_SIZE, size - offset));
+      const fd = fs.openSync(filename, 'r');
+      try {
+        if (fs.readSync(fd, bytes, 0, bytes.length, offset) !== bytes.length) throw new Error('Incomplete recovery media');
+      } finally { fs.closeSync(fd); }
+      return { bytes, size };
     },
     putAsset({ bytes, mime }) {
       if (!(bytes instanceof Uint8Array) || bytes.length > MAX_ASSET || typeof mime !== 'string' || !/^[\w.+-]+\/[\w.+-]+$/.test(mime)) throw new Error('Invalid recovery media');
@@ -97,10 +159,14 @@ function createRecoveryStore(userData) {
     hydrate(snapshot) {
       validateSnapshot(snapshot);
       const warnings = [];
+      const verified = new Map();
       function walk(value) {
         if (!value || typeof value !== 'object') return value;
         if (value.$recoveryAsset) {
-          try { return `data:${value.mime};base64,${assetRead(value).toString('base64')}`; }
+          try {
+            if (!verified.has(value.$recoveryAsset)) verified.set(value.$recoveryAsset, assetRead(value));
+            return verified.get(value.$recoveryAsset);
+          }
           catch { warnings.push(`Missing or damaged recovery media: ${value.$recoveryAsset}`); return null; }
         }
         if (Array.isArray(value)) return value.map(walk);

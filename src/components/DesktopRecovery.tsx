@@ -3,7 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { useWorkflowStore } from '@/store/workflowStore';
 import { captureWorkflowTabSnapshot } from '@/store/utils/workflowTabs';
-import { captureRecovery, checkpointScheduler, decodeRecovery, encodeRecovery } from '@/lib/desktop/recovery';
+import { captureRecovery, checkpointScheduler, hydrateRecovery, encodeRecovery } from '@/lib/desktop/recovery';
 import { isDesktop } from '@/lib/desktop/credentials';
 
 let recoveryRead: ReturnType<NonNullable<Window['nodeBananaDesktop']>['recovery']['read']> | undefined;
@@ -40,7 +40,7 @@ export function DesktopRecovery({ children }: { children: ReactNode }) {
     try {
       const result = await window.nodeBananaDesktop!.recovery.hydrate(checkpoint);
       if (!result.ok) throw new Error(result.error);
-      const snapshot = decodeRecovery(result.value.snapshot);
+      const snapshot = await hydrateRecovery(result.value.snapshot);
       useWorkflowStore.getState().restoreDesktopSession(snapshot.tabs, snapshot.activeTabId);
       setNotice(['Session restored. Interrupted generations were stopped. Remote jobs may still be running; no requests were resubmitted.', ...result.value.warnings].join(' '));
       setCheckpoint(null); setError(null); setReady(true);
