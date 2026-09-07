@@ -194,7 +194,9 @@ export function getConnectedInputsPure(
   visited?: Set<string>,
   dimmedNodeIds?: Set<string>
 ): ConnectedInputs {
-  const _visited = visited || new Set<string>();
+  // Detect cycles along this path only. Sibling branches can share a router:
+  // marking it globally visited would drop its data from the second branch.
+  const _visited = new Set(visited);
   if (_visited.has(nodeId)) return { images: [], videos: [], audio: [], model3d: null, text: null, textItems: [], dynamicInputs: {}, easeCurve: null };
   _visited.add(nodeId);
   const images: string[] = [];
@@ -268,9 +270,8 @@ export function getConnectedInputsPure(
     }
   };
 
-  // Cache passthrough node results so multiple edges from the same router/switch
-  // all receive correct data (the _visited set prevents re-traversal, so we cache
-  // the result from the first traversal and reuse it for subsequent edges).
+  // Reuse passthrough results for multiple edges from the same router/switch
+  // within this frame. Other branches have their own traversal path and cache.
   const passthroughCache = new Map<string, ConnectedInputs>();
 
   edges

@@ -294,6 +294,52 @@ describe("getConnectedInputsPure", () => {
     expect(result.images).toEqual(["data:image/png;base64,a"]);
   });
 
+  it.each(["router", "switch"])("preserves both video frame slots through converging %s branches", (branchType) => {
+    const image = "data:image/png;base64,frame";
+    const branchData = branchType === "switch"
+      ? { inputType: "image", switches: [{ id: "on", enabled: true }] }
+      : {};
+    const nodes = [
+      makeNode("image", "imageInput", { image }),
+      makeNode("shared", "router"),
+      makeNode("left", branchType, branchData),
+      makeNode("right", branchType, branchData),
+      makeNode("video", "generateVideo", {
+        inputSchema: [{ name: "start_frame", type: "image" }, { name: "end_frame", type: "image" }],
+      }),
+    ];
+    const edges = [
+      makeEdge("image", "shared"),
+      makeEdge("shared", "left"),
+      makeEdge("shared", "right"),
+      { ...makeEdge("left", "video", "image-0"), sourceHandle: branchType === "switch" ? "on" : "image" },
+      { ...makeEdge("right", "video", "image-1"), sourceHandle: branchType === "switch" ? "on" : "image" },
+    ];
+
+    const result = getConnectedInputsPure("video", nodes, edges);
+
+    expect(result.dynamicInputs).toEqual({ start_frame: image, end_frame: image });
+    expect(result.images).toEqual([image, image]);
+  });
+
+  it("still terminates router cycles while preserving an independent input", () => {
+    const image = "data:image/png;base64,frame";
+    const nodes = [
+      makeNode("image", "imageInput", { image }),
+      makeNode("left", "router"),
+      makeNode("right", "router"),
+      makeNode("gen", "nanoBanana"),
+    ];
+    const edges = [
+      makeEdge("left", "right"),
+      makeEdge("right", "left"),
+      makeEdge("image", "left"),
+      makeEdge("right", "gen"),
+    ];
+
+    expect(getConnectedInputsPure("gen", nodes, edges).images).toEqual([image]);
+  });
+
   it("should map a connected video into dynamicInputs and videos via schema", () => {
     const nodes = [
       makeNode("vid", "videoInput", { video: "data:video/mp4;base64,v" }),
