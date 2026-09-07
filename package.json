@@ -15,7 +15,9 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "comfy:record": "node scripts/comfy-smoke.mjs record",
-    "comfy:smoke": "node scripts/comfy-smoke.mjs run"
+    "comfy:smoke": "node scripts/comfy-smoke.mjs run",
+    "electron:package": "node scripts/package-electron.cjs",
+    "electron:test": "node --test electron/tests/*.test.cjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.13",
@@ -59,6 +61,7 @@
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^4.0.16",
     "electron": "^44.2.0",
+    "electron-builder": "26.15.3",
     "jsdom": "^27.4.0",
     "playwright-core": "^1.63.0",
     "typescript": "5.9.3",

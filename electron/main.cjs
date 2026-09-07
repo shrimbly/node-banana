@@ -2,7 +2,9 @@ const { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, utilityProces
 const { randomBytes } = require('node:crypto');
 const path = require('node:path');
 
-const root = path.resolve(__dirname, '..');
+const { provisionRuntime } = require('./lib/runtime.cjs');
+let root = path.resolve(__dirname, '..');
+let runtime;
 const dev = process.argv.includes('--dev');
 const port = Number(process.env.NODE_BANANA_ELECTRON_PORT || 47831);
 const token = randomBytes(32).toString('hex');
@@ -91,13 +93,14 @@ async function createWindow() {
 function startBackend() {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error('The local server did not start within 120 seconds. Check the terminal for details.')), 120_000);
-    backend = utilityProcess.fork(path.join(__dirname, 'server.cjs'), [], {
+    backend = utilityProcess.fork(app.isPackaged ? path.join(root, 'server.cjs') : path.join(__dirname, 'server.cjs'), [], {
       cwd: root,
       serviceName: 'Node Banana Server',
       env: {
         ...process.env,
         NODE_ENV: dev ? 'development' : 'production',
         NODE_BANANA_ELECTRON: '1',
+        NODE_BANANA_LOGS_DIR: app.getPath('logs'),
         NODE_BANANA_ELECTRON_PORT: String(port),
         NODE_BANANA_ELECTRON_TOKEN: token,
       },
@@ -170,7 +173,12 @@ if (!app.requestSingleInstanceLock()) {
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
       throw new Error('NODE_BANANA_ELECTRON_PORT must be a port number between 1 and 65535.');
     }
+    if (app.isPackaged) {
+      runtime = await provisionRuntime(path.join(process.resourcesPath, 'runtime'), app.getPath('userData'));
+      root = runtime.directory;
+    }
     origin = await startBackend();
+    await runtime?.markSuccessful();
     const localURLs = [`${origin}/*`, `${origin.replace('http:', 'ws:')}/*`];
     session.defaultSession.webRequest.onBeforeSendHeaders({ urls: localURLs }, (details, callback) => {
       callback({ requestHeaders: { ...details.requestHeaders, 'X-Node-Banana-Desktop': token } });

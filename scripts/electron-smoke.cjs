@@ -8,7 +8,9 @@ const { promisify } = require('node:util');
 const { _electron: electron } = require('playwright-core');
 
 const root = path.resolve(__dirname, '..');
-const production = process.argv.includes('--production');
+const executableIndex = process.argv.indexOf('--executable');
+const executablePath = executableIndex >= 0 ? path.resolve(process.argv[executableIndex + 1]) : undefined;
+const production = !!executablePath || process.argv.includes('--production');
 const nativeInput = process.argv.includes('--native-input');
 const run = promisify(execFile);
 
@@ -106,8 +108,9 @@ async function main() {
   let desktop;
   const launch = async () => {
     const instance = await electron.launch({
-      args: [root, ...(production ? [] : ['--dev'])],
-      cwd: root,
+      executablePath,
+      args: executablePath ? [] : [root, ...(production ? [] : ['--dev'])],
+      cwd: executablePath ? temp : root,
       env: { ...process.env, NODE_BANANA_ELECTRON_PORT: String(port), NODE_BANANA_ELECTRON_USER_DATA: path.join(temp, 'profile') },
       timeout: 120_000,
     });

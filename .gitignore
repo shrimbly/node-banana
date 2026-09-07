@@ -52,3 +52,6 @@ logs/*.json
 
 .superset/
 .scratch/
+
+# Electron release artifacts
+/dist-electron/

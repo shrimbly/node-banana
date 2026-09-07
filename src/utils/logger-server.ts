@@ -32,7 +32,7 @@ export async function saveSession(session: LogSession): Promise<void> {
     return;
   }
 
-  const logsDir = path.join(process.cwd(), 'logs');
+  const logsDir = process.env.NODE_BANANA_LOGS_DIR || path.join(process.cwd(), 'logs');
   const filename = `session-${session.sessionId}.json`;
   const filepath = path.join(logsDir, filename);
 
@@ -61,7 +61,7 @@ export async function rotateLogFiles(): Promise<void> {
     return;
   }
 
-  const logsDir = path.join(process.cwd(), 'logs');
+  const logsDir = process.env.NODE_BANANA_LOGS_DIR || path.join(process.cwd(), 'logs');
 
   // Ensure logs directory exists
   try {
