@@ -61,7 +61,7 @@ async function main() {
       },
       npmRebuild: false, asar: true,
       mac: { target: process.argv.includes('--dir') ? [{ target: 'dir', arch: ['arm64'] }] : [{ target: 'dir', arch: ['arm64'] }, { target: 'dmg', arch: ['arm64'] }, { target: 'zip', arch: ['arm64'] }],
-        icon: path.join(root, 'public/banana_icon.png'), identity: null, category: 'public.app-category.graphics-design' },
+        icon: path.join(root, 'electron/icon.png'), identity: null, category: 'public.app-category.graphics-design' },
       dmg: { sign: false, contents: [{ x: 130, y: 220 }, { x: 410, y: 220, type: 'link', path: '/Applications' }] },
       artifactName: '${productName}-${version}-${arch}.${ext}',
     } });
