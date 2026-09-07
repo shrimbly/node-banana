@@ -50,6 +50,8 @@ export interface NodeExecutionContext {
   appendOutputGalleryVideo: (targetId: string, video: string) => void;
   /** Rebuilds a splitGrid node's cells from its template when stale; returns true if rebuilt */
   materializeSplitGridCells: (nodeId: string) => boolean;
+  /** Release replaced media only when no live workflow, clipboard, or history still owns it. */
+  releaseMediaUrl?: (url: string | null | undefined) => void;
   get: () => unknown;
 }
 
