@@ -51,7 +51,7 @@ class DeferredMetadata {
 
 const props = {
   id: "shared-node-id", selected: false, isConnectable: true, positionAbsoluteX: 0,
-  positionAbsoluteY: 0, zIndex: 0, dragging: false, deletable: true, selectable: true,
+  positionAbsoluteY: 0, zIndex: 0, dragging: false, draggable: true, deletable: true, selectable: true,
 };
 const cases = [
   { name: "image", mime: "image/png", render: () => <ImageInputNode {...props} type="imageInput" data={{ image: null, filename: null, dimensions: null }} /> },
