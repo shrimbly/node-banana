@@ -53,7 +53,7 @@ export function ChatPanel({ isOpen, onClose, onBuildWorkflow, isBuildingWorkflow
 
   const [transport] = useState(() => new DefaultChatTransport({ api: "/api/chat", fetch: customFetch }));
 
-  const { messages, sendMessage, setMessages, status } = useChat({
+  const { messages, sendMessage, setMessages, status, stop } = useChat({
     transport,
     onError: (error) => {
       // Check if this is an oversized payload error (413 or token limit)
@@ -65,6 +65,10 @@ export function ChatPanel({ isOpen, onClose, onBuildWorkflow, isBuildingWorkflow
       }
     },
   });
+
+  // The canvas remounts the chat when its workflow changes. Stop the old
+  // response stream so its tool calls cannot mutate the replacement graph.
+  useEffect(() => () => { void stop(); }, [stop]);
 
   const isLoading = status === "streaming" || status === "submitted";
 

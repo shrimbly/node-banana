@@ -24,6 +24,16 @@ const mockViewport = vi.hoisted(() => ({ zoom: 1 }));
 const mockReactFlowProps = vi.hoisted(() => ({
   current: null as Record<string, unknown> | null,
 }));
+const mockChatProps = vi.hoisted(() => ({
+  current: null as { onBuildWorkflow: (description: string) => Promise<void>; onApplyEdits: (operations: unknown[]) => unknown } | null,
+}));
+
+vi.mock("@/components/ChatPanel", () => ({
+  ChatPanel: (props: NonNullable<typeof mockChatProps.current>) => {
+    mockChatProps.current = props;
+    return null;
+  },
+}));
 
 vi.mock("@/store/workflowStore", () => {
   const useWorkflowStore = (selector?: (state: unknown) => unknown) => {
@@ -124,6 +134,7 @@ const defaultProviderSettings = {
 
 // Default store state factory
 const createDefaultState = (overrides = {}) => ({
+  workflowLifecycleId: 0,
   nodes: [],
   edges: [],
   groups: {},
@@ -168,6 +179,46 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe("WorkflowCanvas", () => {
+  it("discards a generated workflow when its originating workflow has changed", async () => {
+    let resolveResponse!: (value: unknown) => void;
+    const response = new Promise((resolve) => { resolveResponse = resolve; });
+    const fetchMock = vi.fn(() => response);
+    vi.stubGlobal("fetch", fetchMock);
+    const state = createDefaultState({ workflowLifecycleId: 1 });
+    mockUseWorkflowStore.mockImplementation((selector) => selector(state));
+    try {
+      const { rerender } = render(<TestWrapper><WorkflowCanvas /></TestWrapper>);
+      let pending!: Promise<void>;
+      act(() => { pending = mockChatProps.current!.onBuildWorkflow("A new workflow"); });
+      state.workflowLifecycleId = 2;
+      rerender(<TestWrapper><WorkflowCanvas /></TestWrapper>);
+      await act(async () => {
+        resolveResponse({ json: async () => ({ success: true, workflow: { nodes: [], edges: [] } }) });
+        await pending;
+      });
+      expect(state.captureSnapshot).not.toHaveBeenCalled();
+      expect(mockLoadWorkflow).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("rejects tool callbacks retained from the previous workflow", async () => {
+    const state = createDefaultState({ workflowLifecycleId: 1 });
+    mockUseWorkflowStore.mockImplementation((selector) => selector(state));
+    const { rerender } = render(<TestWrapper><WorkflowCanvas /></TestWrapper>);
+    const stale = mockChatProps.current!;
+    state.workflowLifecycleId = 2;
+    rerender(<TestWrapper><WorkflowCanvas /></TestWrapper>);
+    await act(async () => { await stale.onBuildWorkflow("Old request"); });
+    let result: unknown;
+    act(() => { result = stale.onApplyEdits([{ type: "removeNode", nodeId: "a" }]); });
+    expect(result).toMatchObject({ applied: 0 });
+    expect(state.applyEditOperations).not.toHaveBeenCalled();
+    expect(state.captureSnapshot).not.toHaveBeenCalled();
+    expect(mockLoadWorkflow).not.toHaveBeenCalled();
+  });
+
   it("keeps automatic edge selection out of node marquee selection", () => {
     mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState()));
     render(<TestWrapper><WorkflowCanvas /></TestWrapper>);

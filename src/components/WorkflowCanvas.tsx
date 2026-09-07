@@ -432,6 +432,8 @@ export function WorkflowCanvas() {
   const [isSplitting, setIsSplitting] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [isBuildingWorkflow, setIsBuildingWorkflow] = useState(false);
+  const workflowLifecycleId = useWorkflowStore((state) => state.workflowLifecycleId);
+  const buildRequestId = useRef(0);
   const [showNewProjectSetup, setShowNewProjectSetup] = useState(false);
   const [expandingNode, setExpandingNode] = useState<{ id: string; type: string } | null>(null);
 
@@ -1346,6 +1348,10 @@ export function WorkflowCanvas() {
 
   // Handle workflow generation from chat conversation
   const handleBuildWorkflow = useCallback(async (description: string) => {
+    if (useWorkflowStore.getState().workflowLifecycleId !== workflowLifecycleId) return;
+    let lifecycleId = useWorkflowStore.getState().workflowLifecycleId;
+    const requestId = ++buildRequestId.current;
+    const isCurrent = () => requestId === buildRequestId.current && useWorkflowStore.getState().workflowLifecycleId === lifecycleId;
     setIsBuildingWorkflow(true);
     try {
       const response = await fetch("/api/quickstart", {
@@ -1358,22 +1364,29 @@ export function WorkflowCanvas() {
       });
 
       const data = await response.json();
+      // A chat response belongs to the graph it was requested for, even if
+      // another tab reuses its node IDs or the same file has since been loaded.
+      if (!isCurrent()) return;
 
       if (data.success && data.workflow) {
         captureSnapshot(); // Capture BEFORE loading new workflow
-        await loadWorkflow(data.workflow, undefined, { preserveSnapshot: true });
+        const loading = loadWorkflow(data.workflow, undefined, { preserveSnapshot: true });
+        lifecycleId = useWorkflowStore.getState().workflowLifecycleId;
+        await loading;
+        if (!isCurrent()) return;
         setIsChatOpen(false);
         showToast("Workflow generated successfully", "success");
       } else {
         showToast(data.error || "Failed to generate workflow", "error");
       }
     } catch (error) {
+      if (!isCurrent()) return;
       console.error("Error generating workflow:", error);
       showToast("Failed to generate workflow. Please try again.", "error");
     } finally {
-      setIsBuildingWorkflow(false);
+      if (requestId === buildRequestId.current) setIsBuildingWorkflow(false);
     }
-  }, [loadWorkflow, showToast, captureSnapshot]);
+  }, [loadWorkflow, showToast, captureSnapshot, workflowLifecycleId]);
 
   // Create lightweight workflow state for chat (strip base64 images).
   // Keep a ref to the raw nodes/edges and expose the stripped payload lazily via
@@ -1409,6 +1422,9 @@ export function WorkflowCanvas() {
 
   // Handle applying edit operations from chat
   const handleApplyEdits = useCallback((operations: EditOperation[]) => {
+    if (useWorkflowStore.getState().workflowLifecycleId !== workflowLifecycleId) {
+      return { applied: 0, skipped: ["The workflow changed before the AI edits arrived."] };
+    }
     captureSnapshot(); // Snapshot before AI edits
     const result = applyEditOperations(operations);
     if (result.applied > 0) {
@@ -1418,7 +1434,7 @@ export function WorkflowCanvas() {
       console.warn('Skipped operations:', result.skipped);
     }
     return result;
-  }, [captureSnapshot, applyEditOperations, showToast]);
+  }, [captureSnapshot, applyEditOperations, showToast, workflowLifecycleId]);
 
   // Handle node selection from drop menu
   const handleMenuSelect = useCallback(
@@ -2597,6 +2613,7 @@ export function WorkflowCanvas() {
 
       {/* Chat panel */}
       <ChatPanel
+        key={workflowLifecycleId}
         isOpen={isChatOpen}
         onClose={() => setIsChatOpen(false)}
         onBuildWorkflow={handleBuildWorkflow}
