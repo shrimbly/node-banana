@@ -1,5 +1,12 @@
 export type CredentialName = `provider.${"gemini" | "openai" | "anthropic" | "replicate" | "fal" | "kie" | "wavespeed"}` | `comfy.${"cloudApiKey" | "remoteApiKey" | "comfyOrgApiKey" | "cloudUrl" | "localUrl" | "remoteUrl"}`;
 export type DesktopCredentials = Partial<Record<CredentialName, string | null>>;
+export type EnvironmentImport = { cancelled: true } | {
+  cancelled: false;
+  imported: string[];
+  skipped: string[];
+  credentials: DesktopCredentials;
+  preferences: { mode?: 'cloud' | 'local' | 'remote'; localUsesApiV2?: boolean; remoteUsesApiV2?: boolean };
+};
 export type DesktopResult<T> = { ok: true; value: T } | { ok: false; error: string };
 
 declare global {
@@ -21,6 +28,7 @@ declare global {
         discard: () => Promise<DesktopResult<void>>;
       };
       credentials: {
+        importEnvironment: () => Promise<DesktopResult<EnvironmentImport>>;
         read: () => Promise<DesktopResult<DesktopCredentials>>;
         write: (patch: DesktopCredentials) => Promise<DesktopResult<DesktopCredentials>>;
         delete: (name: CredentialName) => Promise<DesktopResult<DesktopCredentials>>;

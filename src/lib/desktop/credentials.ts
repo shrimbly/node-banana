@@ -80,3 +80,20 @@ export function saveDesktopCredentials(patch: DesktopCredentials) {
     }
   }).catch(error => report(error instanceof Error ? error.message : 'Keys could not be saved securely.'));
 }
+
+
+export async function importDesktopEnvironment() {
+  await initializeDesktopCredentials();
+  await writes;
+  const result = await window.nodeBananaDesktop!.credentials.importEnvironment();
+  if (!result.ok) throw new Error(result.error);
+  if (result.value.cancelled) return result.value;
+  // Edits made while the picker was open still win in renderer memory.
+  memory = { ...result.value.credentials, ...pending };
+  const comfy = stored(COMFY);
+  for (const [key, value] of Object.entries(result.value.preferences)) {
+    if (comfy[key] === undefined) comfy[key] = value;
+  }
+  localStorage.setItem(COMFY, JSON.stringify(comfy));
+  return result.value;
+}

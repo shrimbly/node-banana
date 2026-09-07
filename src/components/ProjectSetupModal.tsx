@@ -5,12 +5,14 @@ import { generateWorkflowId, useWorkflowStore } from "@/store/workflowStore";
 import { ProviderType, ProviderSettings, NodeDefaultsConfig, LLMProvider, LLMModelType, EdgeAppearance, EdgeStyle } from "@/types";
 import { CanvasNavigationSettings, PanMode, ZoomMode, SelectionMode } from "@/types/canvas";
 import { EnvStatusResponse } from "@/app/api/env-status/route";
-import { loadNodeDefaults, saveNodeDefaults, getLastProjectBaseDir, setLastProjectBaseDir, saveEdgeDefaults } from "@/store/utils/localStorage";
+import { loadNodeDefaults, saveNodeDefaults, getLastProjectBaseDir, setLastProjectBaseDir, saveEdgeDefaults, getProviderSettings } from "@/store/utils/localStorage";
 import { clearFetchCache } from "@/utils/deduplicatedFetch";
 import { ProviderModel } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { ComfySettingsTab, useComfySettingsDraft } from "@/components/settings/ComfySettingsTab";
-import { saveComfySettings } from "@/lib/comfy/settings";
+import { saveComfySettings, getComfySettings } from "@/lib/comfy/settings";
+import { EnvironmentImport } from '@/components/settings/EnvironmentImport';
+import { isDesktop, comfySecretFields } from '@/lib/desktop/credentials';
 import { ConnectionSettings } from "@/components/settings/ConnectionSettings";
 import {
   Dialog,
@@ -269,7 +271,9 @@ export function ProjectSetupModal({
         .then((data: EnvStatusResponse) => setEnvStatus(data))
         .catch(() => setEnvStatus(null));
     }
-  }, [isOpen, mode, workflowName, saveDirectoryPath, useExternalImageStorage, providerSettings, canvasNavigationSettings]);
+    // Provider edits/imports must not reset other unsaved settings drafts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, mode, workflowName, saveDirectoryPath, useExternalImageStorage, canvasNavigationSettings]);
 
   const handleBrowse = async () => {
     setIsBrowsing(true);
@@ -560,6 +564,17 @@ export function ProjectSetupModal({
         {/* Providers Tab Content */}
         {activeTab === "providers" && (
           <div className="space-y-3">
+            <EnvironmentImport onImported={result => {
+              const imported = getProviderSettings();
+              setLocalProviders(previous => ({ providers: Object.fromEntries(Object.entries(previous.providers).map(([id, config]) => [id, {
+                ...config, apiKey: config.apiKey || imported.providers[id as ProviderType]?.apiKey,
+              }])) as ProviderSettings['providers'] }));
+              const comfy = getComfySettings();
+              const next = { ...localComfySettings };
+              for (const key of comfySecretFields) if (!next[key]) Object.assign(next, { [key]: comfy[key] });
+              for (const key of Object.keys(result.preferences) as (keyof typeof result.preferences)[]) Object.assign(next, { [key]: comfy[key] });
+              setLocalComfySettings(next);
+            }} />
             {/* Gemini Provider */}
             <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
               <div className="flex items-center justify-between">
@@ -897,7 +912,7 @@ export function ProjectSetupModal({
             </div>
 
             <p className="text-xs text-neutral-400 mt-2">
-              Add API keys via <code className="px-1 py-0.5 bg-neutral-800 rounded">.env.local</code> for better security. Keys added here override .env and are stored in your browser.
+              {isDesktop() ? 'Keys are encrypted in your desktop profile. Imported keys are saved immediately.' : <>Add API keys via <code className="px-1 py-0.5 bg-neutral-800 rounded">.env.local</code> for server-side storage. Keys added here override .env and are stored in your browser.</>}
             </p>
           </div>
         )}

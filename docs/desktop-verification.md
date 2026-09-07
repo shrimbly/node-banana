@@ -1,13 +1,15 @@
 # Mac preview verification — 8 September 2026
 
-Verified on macOS 26.2 / Apple Silicon with Electron 44.2.0 and Next.js 16.1.6. The release runtime is `1.9.0-d89ec8f1-36cb-41d9-8edb-e4dbe7669f1c`.
+Verified on macOS 26.2 / Apple Silicon with Electron 44.2.0 and Next.js 16.1.6. The release runtime is `1.9.0-f8553999-9aa7-4ae7-91fe-b91fddc7808b`.
 
 | Check | Result |
 | --- | --- |
 | Isolated production build and electron-builder app/DMG/ZIP | Passed |
 | Source Electron development and authenticated HMR | Passed |
 | Foundation full Vitest suite | 155 files, 2,961 tests passed |
-| Main-process persistence/lifecycle tests | 10 tests passed |
+| Main-process persistence/lifecycle/import tests | 12 tests passed |
+| Environment import in packaged app | Passed: native picker, immediate renderer update, encrypted persistence across restart, preserved existing keys/source, repeat import, cancellation and encryption failure |
+| Renderer credential tests after environment import | 4 tests passed |
 | Focused desktop and workflow-tab tests after large-workflow fix | 29 tests passed |
 | Large workflow loading and crash recovery | 471 nodes, 103,932,547 bytes of media; 503,622-byte checkpoint; edited prompt restored |
 | Copied installation outside the repository | Passed with a clean profile and system-only PATH (no Node/npm) |
@@ -41,8 +43,8 @@ Recovery now externalises both data URLs and blobs, deduplicates media across re
 ## Release checksums (SHA-256)
 
 ```text
-f26a933c2df6e56e00c6da94e9ecdac21d88c4f3843995056bdddeefb8c29b94  Node Banana-1.9.0-arm64.dmg
-2af7b1fbd51ef671115678a330a481a215539198a9b84448a9ff388ead299ac9  Node Banana-1.9.0-arm64.zip
+b5df41dda39f1dd1fc926431d99bc9c46b90e1eea195c05aa3cbe09033733231  Node Banana-1.9.0-arm64.dmg
+4de9b9f09e52f535fc79097af66299ff9c342ecc02bbead696735a082d1d133f  Node Banana-1.9.0-arm64.zip
 ```
 
 The app remains unsigned and unnotarised. Installation and tester steps are in [desktop-preview.md](desktop-preview.md).

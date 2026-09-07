@@ -3,6 +3,7 @@ const { randomBytes } = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const { createRecoveryStore } = require('./lib/recovery.cjs');
+const { importEnvironmentFile } = require('./lib/environment-import.cjs');
 const { createCredentialStore } = require('./lib/credentials.cjs');
 const { provisionRuntime } = require('./lib/runtime.cjs');
 const { createDiagnostics, createRedactor } = require('./lib/diagnostics.cjs');
@@ -150,6 +151,21 @@ function registerBridge() {
       log(error);
       return { ok: false, error: category === 'credentials' ? error.message : 'Recovery could not be read or saved. Check disk space and permissions, and save your workflows to disk.' };
     }
+  });
+  let importingEnvironment = false;
+  ipcMain.handle('desktop:credentials:import-environment', async event => {
+    if (!validCaller(event)) throw new Error('Unauthorized desktop request');
+    if (importingEnvironment) return { ok: false, error: 'An environment import is already open.' };
+    importingEnvironment = true;
+    try {
+      const selected = await dialog.showOpenDialog(window, { title: 'Import provider settings from .env', buttonLabel: 'Import', properties: ['openFile', 'showHiddenFiles'] });
+      if (selected.canceled || !selected.filePaths[0]) return { ok: true, value: { cancelled: true } };
+      if (!validCaller(event)) throw new Error('The editor changed while choosing a file. Try importing again.');
+      return { ok: true, value: importEnvironmentFile(selected.filePaths[0], credentialStore) };
+    } catch (error) {
+      // Parser/file errors must never echo the file's contents into diagnostics.
+      return { ok: false, error: error.message || 'Environment settings could not be imported securely.' };
+    } finally { importingEnvironment = false; }
   });
   ipcMain.handle('desktop:backend-state', event => { if (!validCaller(event)) throw new Error('Unauthorized desktop request'); return backend.online(); });
   ipcMain.handle('desktop:restart-backend', event => { if (!validCaller(event)) throw new Error('Unauthorized desktop request'); return startWithRetry(); });

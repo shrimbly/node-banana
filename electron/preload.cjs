@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('nodeBananaDesktop', {
     discard: () => ipcRenderer.invoke('desktop:recovery:discard'),
   },
   credentials: {
+    importEnvironment: () => ipcRenderer.invoke('desktop:credentials:import-environment'),
     read: () => ipcRenderer.invoke('desktop:credentials:read'),
     write: (value) => ipcRenderer.invoke('desktop:credentials:write', value),
     delete: (name) => ipcRenderer.invoke('desktop:credentials:delete', name),

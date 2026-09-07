@@ -29,6 +29,14 @@ Provider keys and all ComfyUI authentication fields (including endpoint URLs tha
 
 The application bundle remains unchanged at runtime. A fresh build is copied atomically into user data before launch. The previous successful runtime is kept until the new server starts. Recovery keeps a current and previous checksummed checkpoint, plus durable media assets. Missing external files are reported; their references are preserved. Recovery data contains editor content and is private to the user account, but is not encrypted.
 
+## Import existing environment settings
+
+In the desktop app, open **Project settings → Providers → Import from .env**, or use the same button during API-key onboarding. Choose your existing `.env` or `.env.local` file; hidden files are shown in the native picker. Imported credentials are encrypted immediately and available without restarting. Existing non-empty credentials are kept. This explicit import can refill a previously cleared field. Cancelling the settings dialog does not undo the import.
+
+Supported provider variables are `GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `REPLICATE_API_KEY`, `FAL_API_KEY`, `KIE_API_KEY`, and `WAVESPEED_API_KEY`. ComfyUI imports support `COMFY_CLOUD_API_KEY`, `COMFY_API_KEY` (remote authentication), `COMFY_ORG_API_KEY`, `COMFY_CLOUD_URL`, `COMFY_LOCAL_URL`, and `COMFY_REMOTE_URL`. `COMFY_MODE` and `COMFY_API_V2` fill missing non-secret preferences.
+
+The source file is read locally and left unchanged. Unrelated variables are ignored. Files are parsed as data with Node's [environment-file parser](https://nodejs.org/api/util.html#utilparseenvcontent); shell commands and variable substitutions are not executed. Source `.env` files remain excluded from release packages. Browser-mode settings are unchanged.
+
 ## Build and verify
 
 On an Apple Silicon Mac with Node and npm:
@@ -39,6 +47,7 @@ npm run electron:package
 npm run electron:test
 npm run electron:smoke -- --executable "dist-electron/mac-arm64/Node Banana.app/Contents/MacOS/Node Banana"
 npm run electron:acceptance
+node scripts/electron-env-import.cjs
 node scripts/electron-large-workflow.cjs --workflow "/path/to/large-workflow.json"
 npm run electron:smoke -- --executable "/Applications/Node Banana.app/Contents/MacOS/Node Banana" --native-input
 ```

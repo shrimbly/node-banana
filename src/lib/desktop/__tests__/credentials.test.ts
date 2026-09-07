@@ -58,3 +58,23 @@ it('session-only saves retain old secrets while persisting new non-secret prefer
   expect(saved.providers.gemini.apiKey).toBe('old-secret');
   expect(JSON.stringify(saved)).not.toContain('new-session-secret');
 });
+
+it('imports encrypted credentials into memory and keeps only non-secret preferences in localStorage', async () => {
+  bridge();
+  localStorage.setItem('node-banana-comfy-settings', JSON.stringify({ mode: 'local' }));
+  const importEnvironment = vi.fn(async () => ({ ok: true, value: {
+    cancelled: false, imported: ['GEMINI_API_KEY', 'COMFY_API_KEY'], skipped: [],
+    credentials: { 'provider.gemini': 'imported-secret', 'comfy.remoteApiKey': 'comfy-imported-secret' },
+    preferences: { mode: 'remote', remoteUsesApiV2: true },
+  } }));
+  Object.assign(window.nodeBananaDesktop!.credentials, { importEnvironment });
+  const credentials = await import('../credentials');
+  await credentials.importDesktopEnvironment();
+  expect(credentials.desktopCredential('provider.gemini')).toBe('imported-secret');
+  expect(credentials.desktopCredential('comfy.remoteApiKey')).toBe('comfy-imported-secret');
+  expect(JSON.stringify(localStorage)).not.toContain('imported-secret');
+  expect(JSON.parse(localStorage.getItem('node-banana-comfy-settings')!)).toEqual({ mode: 'local', remoteUsesApiV2: true });
+  importEnvironment.mockResolvedValueOnce({ ok: false, error: 'Encryption unavailable' } as never);
+  await expect(credentials.importDesktopEnvironment()).rejects.toThrow('Encryption unavailable');
+  expect(credentials.desktopCredential('provider.gemini')).toBe('imported-secret');
+});
