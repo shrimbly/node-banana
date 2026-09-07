@@ -11,7 +11,12 @@ const dev = process.env.NODE_ENV !== 'production';
 // Local file APIs are unauthenticated: expose them to the network only when
 // the operator explicitly chooses a listening address.
 const hostname = process.env.HOST || '127.0.0.1';
-const localOnly = !process.env.HOST;
+const isLoopbackHost = (host) => {
+  const normalized = host.toLowerCase();
+  return normalized === 'localhost' || normalized === '::1' || normalized === '[::1]' ||
+    /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(normalized);
+};
+const localOnly = isLoopbackHost(hostname);
 const port = process.env.PORT || 3000;
 
 const app = next({ dev, hostname, port });
@@ -28,7 +33,7 @@ app.prepare().then(() => {
       } catch {
         requestHost = '';
       }
-      if (!['localhost', '127.0.0.1', '[::1]'].includes(requestHost)) {
+      if (!isLoopbackHost(requestHost)) {
         res.writeHead(403);
         res.end('Forbidden host');
         return;

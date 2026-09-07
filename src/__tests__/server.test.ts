@@ -48,6 +48,17 @@ describe("local server boundary", () => {
     expect(handle).not.toHaveBeenCalled();
   });
 
+  it.each(["127.0.0.1", "127.0.1.1", "localhost", "::1"])("keeps Host protection when explicitly bound to %s", async (host) => {
+    const { handler, handle } = await start({ HOST: host }, ["--production"]);
+    const res = { writeHead: vi.fn(), end: vi.fn() };
+    await handler({ headers: { host: "attacker.example:3000" } }, res);
+    expect(res.writeHead).toHaveBeenCalledWith(403);
+    expect(handle).not.toHaveBeenCalled();
+    const authority = host.includes(":") ? `[${host}]:3000` : `${host}:3000`;
+    await handler({ headers: { host: authority } }, {});
+    expect(handle).toHaveBeenCalledOnce();
+  });
+
   it("preserves explicit network hosting and custom ports", async () => {
     const { server, handler, handle } = await start({ HOST: "0.0.0.0", PORT: "8000" }, ["--production"]);
     expect(server.listen).toHaveBeenCalledWith("8000", "0.0.0.0", expect.any(Function));
