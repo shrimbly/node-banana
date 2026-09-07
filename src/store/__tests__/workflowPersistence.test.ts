@@ -166,9 +166,10 @@ describe("workflow replacement during persistence", () => {
     const pending = deferred<WorkflowFile>();
     vi.mocked(hydrateWorkflowMedia).mockReturnValueOnce(pending.promise);
     const oldLoad = store().loadWorkflow(file("Old"), "/old");
-    await store().loadWorkflow(file("New"), "/new");
+    const committedLifecycleId = await store().loadWorkflow(file("New"), "/new");
+    expect(committedLifecycleId).toBe(store().workflowLifecycleId);
     pending.resolve(file("Old"));
-    await oldLoad;
+    expect(await oldLoad).toBeUndefined();
     expect(store().workflowName).toBe("New");
     expect(store().nodes[0].id).toBe("New-node");
   });
@@ -179,7 +180,7 @@ describe("workflow replacement during persistence", () => {
     const loading = store().loadWorkflow(file("Old"), "/old");
     store().clearWorkflow();
     pending.resolve(file("Old"));
-    await loading;
+    expect(await loading).toBeUndefined();
     expect(store().nodes).toEqual([]);
     expect(store().workflowName).toBeNull();
   });

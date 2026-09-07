@@ -398,7 +398,8 @@ export interface WorkflowStore {
 
   // Save/Load
   saveWorkflow: (name?: string) => void;
-  loadWorkflow: (workflow: WorkflowFile, workflowPath?: string, options?: { preserveSnapshot?: boolean }) => Promise<void>;
+  /** Returns the committed lifecycle ID, or undefined when a newer operation superseded this load. */
+  loadWorkflow: (workflow: WorkflowFile, workflowPath?: string, options?: { preserveSnapshot?: boolean }) => Promise<number | undefined>;
   clearWorkflow: () => void;
 
   // Workflow tabs: several workflows open, one live in the canvas
@@ -3198,6 +3199,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     // Recompute dimming after loading workflow
     get().recomputeDimmedNodes();
+    return lifecycleId + 1;
   },
 
   newTab: () => {
