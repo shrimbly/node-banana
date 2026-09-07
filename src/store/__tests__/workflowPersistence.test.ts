@@ -21,6 +21,7 @@ const store = () => useWorkflowStore.getState();
 
 beforeEach(() => {
   vi.clearAllMocks();
+  store().clearClipboard();
   vi.mocked(externalizeWorkflowMedia).mockImplementation(async (workflow) => workflow);
   vi.mocked(hydrateWorkflowMedia).mockImplementation(async (workflow) => workflow);
   store().clearWorkflow();
@@ -39,7 +40,59 @@ beforeEach(() => {
 
 afterEach(() => {
   store().clearWorkflow();
+  vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe("media copied across workflows", () => {
+  it("externalizes copied media into the destination project instead of reusing source refs", async () => {
+    useWorkflowStore.setState({
+      nodes: [{ ...node("image-1", { image: "data:image/png;base64,copied", imageRef: "source-only" }), selected: true }],
+      imageRefBasePath: "/source",
+    });
+    store().copySelectedNodes();
+    store().newTab();
+    useWorkflowStore.setState({
+      imageRefBasePath: "/destination", saveDirectoryPath: "/destination",
+      workflowName: "Destination", workflowId: "destination-id",
+    });
+    store().pasteNodes();
+    await store().saveToFile();
+    const saved = vi.mocked(externalizeWorkflowMedia).mock.calls[0][0];
+    expect(saved.nodes[0].data.image).toBe("data:image/png;base64,copied");
+    expect(saved.nodes[0].data.imageRef).toBeUndefined();
+    expect(store().tabs[0].snapshot?.nodes[0].data.imageRef).toBe("source-only");
+  });
+
+  it.each(["active", "parked"] as const)("closing the %s source tab preserves blobs copied into another tab", (which) => {
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    useWorkflowStore.setState({ nodes: [{ ...node("video-1", { outputVideo: "blob:shared" }, "videoTrim"), selected: true }] });
+    const sourceTab = store().activeTabId;
+    store().copySelectedNodes();
+    const targetTab = store().newTab()!;
+    store().pasteNodes();
+    store().clearClipboard();
+    if (which === "active") store().switchTab(sourceTab);
+    store().closeTab(sourceTab);
+    expect(revoke).not.toHaveBeenCalledWith("blob:shared");
+    expect(store().activeTabId).toBe(targetTab);
+    expect(store().nodes[0].data.outputVideo).toBe("blob:shared");
+    store().clearWorkflow();
+    expect(revoke).toHaveBeenCalledWith("blob:shared");
+  });
+
+  it("preserves copied blobs through clearing their source until they are pasted", () => {
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    useWorkflowStore.setState({ nodes: [{ ...node("video-1", { outputVideo: "blob:clipboard" }, "videoTrim"), selected: true }] });
+    store().copySelectedNodes();
+    store().clearWorkflow();
+    expect(revoke).not.toHaveBeenCalledWith("blob:clipboard");
+    store().pasteNodes();
+    expect(store().nodes[0].data.outputVideo).toBe("blob:clipboard");
+    store().clearClipboard();
+    store().clearWorkflow();
+    expect(revoke).toHaveBeenCalledWith("blob:clipboard");
+  });
 });
 
 describe("save media snapshots", () => {

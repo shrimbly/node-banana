@@ -268,6 +268,7 @@ export interface WorkflowFile {
 interface ClipboardData {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
+  imageRefBasePath?: string | null;
 }
 
 export interface WorkflowStore {
@@ -710,31 +711,44 @@ const MAX_GLOBAL_IMAGE_HISTORY = 50;
 // Scan a node's data for blob: object URLs and revoke them to free the
 // backing Blob memory. Used when nodes are permanently discarded (workflow
 // clear/reload) where the undo history that referenced them is also cleared.
-function revokeNodeBlobUrls(nodes: WorkflowNode[]): void {
+function revokeNodeBlobUrls(nodes: WorkflowNode[], retainedNodes: WorkflowNode[] = []): void {
+  const retained = new Set<string>();
   // Recursively walk strings, arrays, and nested plain objects so blob: URLs
   // held in gallery/video arrays or nested media metadata are revoked too.
   // The depth cap guards against cycles / pathologically deep structures.
-  const revokeDeep = (value: unknown, depth: number): void => {
+  const visitDeep = (value: unknown, depth: number, visit: (url: string) => void): void => {
     if (depth > 8) return;
     if (typeof value === "string") {
-      if (value.startsWith("blob:")) revokeBlobUrl(value);
+      if (value.startsWith("blob:")) visit(value);
       return;
     }
     if (Array.isArray(value)) {
-      for (const item of value) revokeDeep(item, depth + 1);
+      for (const item of value) visitDeep(item, depth + 1, visit);
       return;
     }
     if (value && typeof value === "object") {
       for (const item of Object.values(value as Record<string, unknown>)) {
-        revokeDeep(item, depth + 1);
+        visitDeep(item, depth + 1, visit);
       }
     }
   };
-  for (const node of nodes) {
-    const data = node.data as Record<string, unknown> | undefined;
-    if (!data) continue;
-    revokeDeep(data, 0);
-  }
+  for (const node of retainedNodes) visitDeep(node.data, 0, (url) => retained.add(url));
+  for (const node of nodes) visitDeep(node.data, 0, (url) => {
+    if (!retained.has(url)) revokeBlobUrl(url);
+  });
+}
+
+/** Clipboard copies share immutable URL strings with their source nodes. */
+function retainedMediaNodes(state: WorkflowStore, discardedTabId = state.activeTabId): WorkflowNode[] {
+  return [
+    ...(state.clipboard?.nodes ?? []),
+    ...(state.activeTabId !== discardedTabId ? state.nodes : []),
+    ...(state.activeTabId !== discardedTabId ? state.previousWorkflowSnapshot?.nodes ?? [] : []),
+    ...state.tabs.filter((tab) => tab.id !== discardedTabId).flatMap((tab) => [
+      ...(tab.snapshot?.nodes ?? []),
+      ...(tab.snapshot?.previousWorkflowSnapshot?.nodes ?? []),
+    ]),
+  ];
 }
 
 /**
@@ -1489,7 +1503,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     const clonedNodes = clonePreservingStrings(selectedNodes) as WorkflowNode[];
     const clonedEdges = clonePreservingStrings(connectedEdges) as WorkflowEdge[];
 
-    set({ clipboard: { nodes: clonedNodes, edges: clonedEdges } });
+    set({ clipboard: { nodes: clonedNodes, edges: clonedEdges, imageRefBasePath: get().imageRefBasePath } });
   },
 
   pasteNodes: (offset: XYPosition = { x: 50, y: 50 }) => {
@@ -1510,7 +1524,12 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     // Create new nodes with updated IDs and offset positions
     const pastedCellMemberIds = new Set<string>();
-    const newNodes: WorkflowNode[] = clipboard.nodes.map((node) => {
+    // File refs are relative to the source project. A different destination
+    // must save the copied bytes locally rather than pointing at absent files.
+    const clipboardNodes = clipboard.imageRefBasePath && clipboard.imageRefBasePath === get().imageRefBasePath
+      ? clipboard.nodes
+      : clearNodeImageRefs(clipboard.nodes);
+    const newNodes: WorkflowNode[] = clipboardNodes.map((node) => {
       let data = clonePreservingStrings(node.data) as WorkflowNodeData;
 
       // A pasted splitGrid must not keep driving the original's cell nodes:
@@ -3104,7 +3123,11 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     // Revoke any blob: object URLs held by the outgoing nodes before they are
     // replaced. Safe because the undo history that referenced them is cleared below.
-    revokeNodeBlobUrls(get().nodes);
+    revokeNodeBlobUrls(get().nodes, [
+      ...retainedMediaNodes(get()),
+      ...hydratedWorkflow.nodes,
+      ...(options?.preserveSnapshot ? get().previousWorkflowSnapshot?.nodes ?? [] : []),
+    ]);
 
     set({
       // Clear selected state - selection should not be persisted across sessions
@@ -3213,7 +3236,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     if (tabs.length === 1) {
       // The last tab never goes away; it just becomes a fresh one
-      revokeNodeBlobUrls(get().nodes);
+      revokeNodeBlobUrls(get().nodes, retainedMediaNodes(get()));
       const id = createTabId();
       set({ tabs: [{ id, snapshot: null }], activeTabId: id });
       applyTabSnapshot(set, get, empty());
@@ -3222,7 +3245,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     if (tabId !== activeTabId) {
       // A parked tab: drop it, and the media object URLs only it referenced
-      if (closing.snapshot) revokeNodeBlobUrls(closing.snapshot.nodes);
+      if (closing.snapshot) revokeNodeBlobUrls(closing.snapshot.nodes, retainedMediaNodes(get(), tabId));
       set({ tabs: tabs.filter((tab) => tab.id !== tabId) });
       return true;
     }
@@ -3231,7 +3254,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     const next = tabs.find((tab) => tab.id === nextId);
     if (!nextId || !next) return false;
     // The live graph is being discarded, so its media object URLs go with it
-    revokeNodeBlobUrls(get().nodes);
+    revokeNodeBlobUrls(get().nodes, retainedMediaNodes(get()));
     const remaining = tabs.filter((tab) => tab.id !== tabId).map((tab) => (tab.id === nextId ? { ...tab, snapshot: null } : tab));
     set({ tabs: remaining, activeTabId: nextId });
     applyTabSnapshot(set, get, next.snapshot ?? empty());
@@ -3252,7 +3275,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     // Revoke any blob: object URLs held by the outgoing nodes before they are
     // discarded. Safe here because the undo history that also referenced them
     // is cleared below.
-    revokeNodeBlobUrls(get().nodes);
+    revokeNodeBlobUrls(get().nodes, retainedMediaNodes(get()));
     set({
       workflowLifecycleId: get().workflowLifecycleId + 1,
       nodes: [],
