@@ -67,7 +67,7 @@ export default function Home() {
             strip. The box is the canvas frame: rounded top corners the active tab
             flows into. It must not isolate its stacking: modals and menus inside
             it are fixed and have to cover the strip too. */}
-        <div className="relative mx-1 mb-1 flex-1 min-h-0 flex flex-col overflow-hidden rounded-t-md border border-card-border bg-canvas-bg">
+        <div className="workflow-canvas-frame relative mx-1 mb-1 flex-1 min-h-0 flex flex-col overflow-hidden rounded-t-md border border-card-border bg-canvas-bg">
         <ErrorBoundary
           label="Canvas"
           onError={(error, info) =>

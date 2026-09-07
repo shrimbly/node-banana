@@ -29,6 +29,8 @@
   --radius-media: 8px;
   --radius-controls: 10px;
   --radius-well: 8px;
+  /* Concentric with the 16px macOS window curve at the canvas's 4px inset. */
+  --radius-desktop-canvas: 12px;
 
   /* Faint recess for input wells on the settings panel */
   --shadow-well: inset 0 1px 1.5px rgb(0 0 0 / 0.3), inset 0 0 0 1px rgb(0 0 0 / 0.12), 0 1px 0 rgb(255 255 255 / 0.025);
@@ -66,6 +68,12 @@
   --desktop-window-control-dot-size: 14px;
   --desktop-window-control-rest-opacity: 0.45;
   --desktop-window-controls-layer: 10000;
+}
+
+/* Match the inset graph frame to the surrounding macOS window curve. */
+html[data-desktop-platform="darwin"] .workflow-canvas-frame {
+  border-bottom-left-radius: var(--radius-desktop-canvas);
+  border-bottom-right-radius: var(--radius-desktop-canvas);
 }
 
 /* The workflow strip doubles as the macOS title bar inside Electron. */
