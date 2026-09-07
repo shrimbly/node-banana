@@ -1,5 +1,6 @@
 "use client";
 
+import { DesktopSession } from "@/components/DesktopSession";
 import { useEffect, useState } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { FloatingMenu } from "@/components/FloatingMenu";
@@ -16,6 +17,10 @@ import { useFTUXStore } from "@/store/ftuxStore";
 import { anyWorkflowTabUnsaved } from "@/store/utils/workflowTabs";
 
 export default function Home() {
+  return <DesktopSession><Editor /></DesktopSession>;
+}
+
+function Editor() {
   const initializeAutoSave = useWorkflowStore(
     (state) => state.initializeAutoSave
   );

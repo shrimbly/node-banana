@@ -1,6 +1,13 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-// Expose only window actions, never the IPC transport or Node APIs.
+// Narrow capabilities on every desktop platform; never expose the IPC transport.
+contextBridge.exposeInMainWorld('nodeBananaDesktop', {
+  credentials: {
+    read: () => ipcRenderer.invoke('desktop:credentials:read'),
+    write: (value) => ipcRenderer.invoke('desktop:credentials:write', value),
+    delete: (name) => ipcRenderer.invoke('desktop:credentials:delete', name),
+  },
+});
 if (process.platform === 'darwin') {
   contextBridge.exposeInMainWorld('nodeBananaWindow', {
     close: () => ipcRenderer.send('desktop:window-action', 'close'),

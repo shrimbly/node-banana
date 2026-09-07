@@ -1,7 +1,8 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, utilityProcess } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, utilityProcess, safeStorage } = require('electron');
 const { randomBytes } = require('node:crypto');
 const path = require('node:path');
 
+const { createCredentialStore } = require('./lib/credentials.cjs');
 const { provisionRuntime } = require('./lib/runtime.cjs');
 let root = path.resolve(__dirname, '..');
 let runtime;
@@ -12,6 +13,12 @@ let backend;
 let window;
 let origin;
 let quitting = false;
+let credentialStore;
+
+function validCaller(event) {
+  if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) return false;
+  try { return new URL(event.senderFrame.url).origin === origin; } catch { return false; }
+}
 
 app.setName('Node Banana');
 app.setPath('userData', process.env.NODE_BANANA_ELECTRON_USER_DATA || path.join(app.getPath('appData'), 'Node Banana'));
@@ -141,6 +148,13 @@ function startBackend() {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  for (const operation of ['read', 'write', 'delete']) {
+    ipcMain.handle(`desktop:credentials:${operation}`, (event, value) => {
+      if (!validCaller(event)) throw new Error('Unauthorized desktop request');
+      try { return { ok: true, value: credentialStore[operation](value) }; }
+      catch (error) { return { ok: false, error: error.message }; }
+    });
+  }
   ipcMain.on('desktop:window-action', (event, action) => {
     if (process.platform !== 'darwin' || !window || event.sender !== window.webContents) return;
     if (!event.senderFrame || event.senderFrame !== window.webContents.mainFrame) return;
@@ -170,6 +184,7 @@ if (!app.requestSingleInstanceLock()) {
     if (!window && origin) createWindow().catch(fail);
   });
   app.whenReady().then(async () => {
+    credentialStore = createCredentialStore(app.getPath('userData'), safeStorage);
     if (!Number.isInteger(port) || port < 1 || port > 65535) {
       throw new Error('NODE_BANANA_ELECTRON_PORT must be a port number between 1 and 65535.');
     }
