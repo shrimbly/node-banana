@@ -41,9 +41,16 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(hydrateWorkflowMedia).mockImplementation(async (workflow) => workflow);
   store().clearWorkflow();
-  useWorkflowStore.setState({ nodes: [node("generate-1")], isSaving: false });
+  store().clearClipboard();
+  useWorkflowStore.setState({
+    nodes: [node("generate-1")], isSaving: false,
+    tabs: [{ id: store().activeTabId, snapshot: null }],
+  });
 });
-afterEach(() => store().clearWorkflow());
+afterEach(() => {
+  store().clearWorkflow();
+  vi.restoreAllMocks();
+});
 
 const runners = {
   workflow: () => store().executeWorkflow(),
@@ -52,6 +59,48 @@ const runners = {
 };
 
 describe("execution ownership", () => {
+  it.each(["sibling", "clipboard", "parked", "snapshot", "undo", "redo", "pending"] as const)("keeps replaced blobs owned by %s", (owner) => {
+    store().clearClipboard();
+    useWorkflowStore.setState({ nodes: [{ ...node("video-1", "videoTrim"), selected: true, data: { outputVideo: "blob:shared" } } as WorkflowNode] });
+    if (owner === "clipboard") store().copySelectedNodes();
+    if (owner === "snapshot") store().captureSnapshot();
+    if (owner === "sibling") {
+      useWorkflowStore.setState({ nodes: [...store().nodes, { ...node("copy", "videoTrim"), data: { outputVideo: "blob:shared" } } as WorkflowNode] });
+    }
+    if (owner === "parked") {
+      store().newTab();
+      useWorkflowStore.setState({ nodes: [{ ...node("video-1", "videoTrim"), data: { outputVideo: "blob:shared" } } as WorkflowNode] });
+    }
+    if (owner === "undo") store().addNode("prompt", { x: 0, y: 0 });
+    if (owner === "redo") {
+      // Undo a change that introduced the shared URL, parking it in redo only.
+      useWorkflowStore.setState({ nodes: [node("video-1", "videoTrim")] });
+      store().updateNodeData("video-1", { outputVideo: "blob:shared" });
+      store().undo();
+    }
+    if (owner === "pending") store().updateNodeData("video-1", { outputVideo: "blob:replacement" });
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    const ctx = store()._buildExecutionContext(store().nodes[0]);
+    useWorkflowStore.setState({ isRunning: true });
+    ctx.updateNodeData("video-1", { outputVideo: "blob:replacement" });
+    ctx.releaseMediaUrl!("blob:shared");
+    expect(revoke).not.toHaveBeenCalledWith("blob:shared");
+  });
+
+  it("releases a replaced blob when no live or recoverable node owns it", () => {
+    store().clearClipboard();
+    useWorkflowStore.setState({
+      tabs: [{ id: store().activeTabId, snapshot: null }],
+      nodes: [{ ...node("video-1", "videoTrim"), data: { outputVideo: "blob:unshared" } } as WorkflowNode],
+      isRunning: true,
+    });
+    const revoke = vi.spyOn(URL, "revokeObjectURL");
+    const ctx = store()._buildExecutionContext(store().nodes[0]);
+    ctx.updateNodeData("video-1", { outputVideo: "blob:replacement" });
+    ctx.releaseMediaUrl!("blob:unshared");
+    expect(revoke).toHaveBeenCalledWith("blob:unshared");
+  });
+
   it("cancels a run started during hydration before replacing its graph", async () => {
     const hydration = deferred();
     const generation = deferred();

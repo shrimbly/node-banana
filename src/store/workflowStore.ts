@@ -709,11 +709,8 @@ function syncUndoFlags(set: (partial: Partial<WorkflowStore>) => void): void {
 // unbounded across a session (each item can be 1-2MB).
 const MAX_GLOBAL_IMAGE_HISTORY = 50;
 
-// Scan a node's data for blob: object URLs and revoke them to free the
-// backing Blob memory. Used when nodes are permanently discarded (workflow
-// clear/reload) where the undo history that referenced them is also cleared.
-function revokeNodeBlobUrls(nodes: WorkflowNode[], retainedNodes: WorkflowNode[] = []): void {
-  const retained = new Set<string>();
+function nodeBlobUrls(nodes: readonly WorkflowNode[]): Set<string> {
+  const urls = new Set<string>();
   // Recursively walk strings, arrays, and nested plain objects so blob: URLs
   // held in gallery/video arrays or nested media metadata are revoked too.
   // The depth cap guards against cycles / pathologically deep structures.
@@ -733,10 +730,16 @@ function revokeNodeBlobUrls(nodes: WorkflowNode[], retainedNodes: WorkflowNode[]
       }
     }
   };
-  for (const node of retainedNodes) visitDeep(node.data, 0, (url) => retained.add(url));
-  for (const node of nodes) visitDeep(node.data, 0, (url) => {
+  for (const node of nodes) visitDeep(node.data, 0, (url) => urls.add(url));
+  return urls;
+}
+
+// Used when graphs are discarded and their undo history is cleared as well.
+function revokeNodeBlobUrls(nodes: WorkflowNode[], retainedNodes: WorkflowNode[] = []): void {
+  const retained = nodeBlobUrls(retainedNodes);
+  for (const url of nodeBlobUrls(nodes)) {
     if (!retained.has(url)) revokeBlobUrl(url);
-  });
+  }
 }
 
 /** Clipboard copies share immutable URL strings with their source nodes. */
@@ -1998,6 +2001,18 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     node,
     getConnectedInputs: get().getConnectedInputs,
     updateNodeData: (id, data) => { if (isCurrent()) get().updateNodeData(id, data); },
+    releaseMediaUrl: (url) => {
+      if (!isCurrent() || !url?.startsWith("blob:")) return;
+      const state = get();
+      const owners = nodeBlobUrls([
+        ...state.nodes,
+        ...retainedMediaNodes(state),
+        ...(state.previousWorkflowSnapshot?.nodes ?? []),
+        ...undoManager.retainedNodes,
+        ...(pendingDataSnapshot?.nodes ?? []),
+      ]);
+      if (!owners.has(url)) revokeBlobUrl(url);
+    },
     getFreshNode: (id: string) => get().nodes.find((n) => n.id === id),
     getEdges: () => get().edges,
     getNodes: () => get().nodes,
