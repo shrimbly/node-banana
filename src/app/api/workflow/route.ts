@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs/promises";
 import * as path from "path";
+import { randomUUID } from "crypto";
 import { logger } from "@/utils/logger";
 import { validateWorkflowPath } from "@/utils/pathValidation";
 
@@ -113,9 +114,17 @@ export async function POST(request: NextRequest) {
     const safeName = filename.replace(/[^a-zA-Z0-9-_]/g, "_");
     const filePath = path.join(directoryPath, `${safeName}.json`);
 
-    // Write workflow JSON
+    // Finish writing beside the destination before replacing the last good
+    // save. A direct write truncates that save even if the disk fills midway.
     const json = JSON.stringify(workflow, null, 2);
-    await fs.writeFile(filePath, json, "utf-8");
+    const temporaryPath = path.join(directoryPath, `.workflow-${randomUUID()}.tmp`);
+    try {
+      await fs.writeFile(temporaryPath, json, { encoding: "utf-8", flag: "wx" });
+      await fs.rename(temporaryPath, filePath);
+    } catch (error) {
+      await fs.unlink(temporaryPath).catch(() => undefined);
+      throw error;
+    }
 
     logger.info('file.save', 'Workflow saved successfully', {
       filePath,

@@ -5,11 +5,15 @@ import { NextRequest } from "next/server";
 const mockStat = vi.fn();
 const mockMkdir = vi.fn();
 const mockWriteFile = vi.fn();
+const mockRename = vi.fn();
+const mockUnlink = vi.fn();
 
 vi.mock("fs/promises", () => ({
   stat: (...args: unknown[]) => mockStat(...args),
   mkdir: (...args: unknown[]) => mockMkdir(...args),
   writeFile: (...args: unknown[]) => mockWriteFile(...args),
+  rename: (...args: unknown[]) => mockRename(...args),
+  unlink: (...args: unknown[]) => mockUnlink(...args),
 }));
 
 // Mock logger to avoid console noise during tests
@@ -42,6 +46,8 @@ function createMockGetRequest(params: Record<string, string>): NextRequest {
 describe("/api/workflow route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRename.mockResolvedValue(undefined);
+    mockUnlink.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -73,10 +79,11 @@ describe("/api/workflow route", () => {
       expect(data.success).toBe(true);
       expect(data.filePath).toBe("/test/dir/my-workflow.json");
       expect(mockWriteFile).toHaveBeenCalledWith(
-        "/test/dir/my-workflow.json",
+        expect.stringMatching(/^\/test\/dir\/\.workflow-[\w-]+\.tmp$/),
         JSON.stringify(mockWorkflow, null, 2),
-        "utf-8"
+        { encoding: "utf-8", flag: "wx" }
       );
+      expect(mockRename).toHaveBeenCalledWith(mockWriteFile.mock.calls[0][0], "/test/dir/my-workflow.json");
     });
 
     it("should sanitize filename with special characters", async () => {
@@ -201,9 +208,9 @@ describe("/api/workflow route", () => {
       expect(data.success).toBe(true);
       expect(mockMkdir).toHaveBeenCalledWith("/nonexistent/dir", { recursive: true });
       expect(mockWriteFile).toHaveBeenCalledWith(
-        "/nonexistent/dir/workflow.json",
+        expect.stringMatching(/^\/nonexistent\/dir\/\.workflow-[\w-]+\.tmp$/),
         JSON.stringify(mockWorkflow, null, 2),
-        "utf-8"
+        { encoding: "utf-8", flag: "wx" }
       );
     });
 
