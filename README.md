@@ -78,6 +78,46 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+### Local Electron app
+
+Use Node.js 22.12 or newer for the Electron tooling. After `npm install`, launch
+the desktop development app:
+
+```bash
+npm run electron:dev
+```
+
+This opens Node Banana in an Electron window and starts its own local Next.js
+server. UI edits reload automatically. Restart the command after changing files
+in `electron/`. No separate `npm run dev` process is needed.
+
+To run a production build locally:
+
+```bash
+npm run build
+npm run electron:start
+```
+
+The app reads the same `.env.local` as the browser version, and API keys can also
+be entered in Settings. Desktop settings use a separate persistent Electron
+profile; existing browser settings are not imported automatically. Workflows
+remain ordinary files that either version can open. Folder selection uses a
+native desktop dialog.
+
+The desktop server binds to `127.0.0.1:47831` and only accepts authenticated
+requests from the Electron session. Set `NODE_BANANA_ELECTRON_PORT` to override
+the port if it is occupied. Keep that port consistent: browser storage is tied
+to the origin. `NODE_BANANA_ELECTRON_USER_DATA` can point to an alternate absolute
+profile directory. Electron development output lives in `.next-electron`, so
+the browser dev server can run separately.
+
+Run `npm run electron:smoke` to check the real desktop window, editor interaction,
+local file save/load, native dialog bridge, settings persistence, and server
+shutdown using a temporary profile. It needs a graphical desktop (or Xvfb on
+Linux). Add `-- --production` to test an existing production build. These commands
+run from source; installer packaging, signing, and automatic updates are not yet
+configured. ComfyUI remains a separately installed or remote service.
+
 ### Environment Variables
 
 Create a `.env.local` file in the root directory:

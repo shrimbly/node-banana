@@ -2,8 +2,12 @@
   "name": "node-banana",
   "version": "1.9.0",
   "private": true,
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "node server.js",
+    "electron:dev": "electron . --dev",
+    "electron:start": "electron .",
+    "electron:smoke": "node scripts/electron-smoke.cjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -54,7 +58,9 @@
     "@types/three": "^0.182.0",
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^4.0.16",
+    "electron": "^44.2.0",
     "jsdom": "^27.4.0",
+    "playwright-core": "^1.63.0",
     "typescript": "5.9.3",
     "vite-tsconfig-paths": "^6.0.4",
     "vitest": "^4.0.16"
