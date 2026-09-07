@@ -330,7 +330,10 @@ export function TextField({ label, hint, value, onChange, placeholder, disabled,
         placeholder={placeholder}
         disabled={disabled}
         onFocus={onFocus}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          if (window.nodeBananaDesktop) onChange(e.target.value || undefined);
+        }}
         onBlur={() => {
           onBlur();
           onChange(text || undefined);
@@ -371,7 +374,10 @@ export function TextareaField({ label, hint, value, onChange, placeholder, rows 
         placeholder={placeholder}
         disabled={disabled}
         onFocus={onFocus}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => {
+          setText(e.target.value);
+          if (window.nodeBananaDesktop) onChange(e.target.value || undefined);
+        }}
         onBlur={() => {
           onBlur();
           onChange(text || undefined);

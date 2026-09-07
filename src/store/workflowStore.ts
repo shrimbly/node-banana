@@ -403,6 +403,7 @@ export interface WorkflowStore {
 
   // Workflow tabs: several workflows open, one live in the canvas
   desktopConnected: boolean;
+  setDesktopConnected: (online: boolean) => void;
   restoreDesktopSession: (tabs: { id: string; snapshot: WorkflowTabSnapshot }[], activeTabId: string) => void;
   tabs: WorkflowTab[];
   activeTabId: string;
@@ -776,6 +777,11 @@ function applyTabSnapshot(
 const initialTabId = createTabId();
 
 const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
+  setDesktopConnected: (online) => {
+    // Stop the old execution chain before a replacement backend can accept work.
+    if (!online) get()._abortController?.abort("desktop-backend-disconnected");
+    set({ desktopConnected: online });
+  },
   desktopConnected: typeof window === "undefined" || !window.nodeBananaDesktop,
   nodes: [],
   edges: [],

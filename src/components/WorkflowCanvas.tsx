@@ -585,6 +585,7 @@ export function WorkflowCanvas() {
   // land in the wrong place until something resizes a node. Re-measure every
   // node once the new DOM and viewport are up.
   const updateNodeInternals = useUpdateNodeInternals();
+  const canvasViewport = useWorkflowStore((state) => state.canvasViewport);
   const workflowLoadCount = useWorkflowStore((state) => state.workflowLoadCount);
   const nodeIdsRef = useRef<string[]>([]);
   nodeIdsRef.current = allNodes.map((n) => n.id);
@@ -2485,7 +2486,7 @@ export function WorkflowCanvas() {
         edgeTypes={edgeTypes}
         isValidConnection={isValidConnection}
         connectOnClick={false}
-        fitView
+        fitView={!canvasViewport}
         deleteKeyCode={isModalOpen ? null : DELETE_KEYS}
         multiSelectionKeyCode="Shift"
         selectionOnDrag={
@@ -2520,7 +2521,7 @@ export function WorkflowCanvas() {
         zoomOnDoubleClick={false}
         minZoom={0.1}
         maxZoom={4}
-        defaultViewport={{ x: 0, y: 0, zoom: 1 }}
+        defaultViewport={canvasViewport ?? { x: 0, y: 0, zoom: 1 }}
         panActivationKeyCode={
           tutorialActive
             ? null

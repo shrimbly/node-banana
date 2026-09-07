@@ -17,7 +17,7 @@ export function DesktopSession({ children }: { children: ReactNode }) {
   const initialize = () => initializeDesktopCredentials().then(() => { hydrate(); setError(null); }).catch(error => setError(error.message));
   useEffect(() => {
     if (!isDesktop()) { setReady(true); return; }
-    const update = (online: boolean) => useWorkflowStore.setState({ desktopConnected: online });
+    const update = (online: boolean) => useWorkflowStore.getState().setDesktopConnected(online);
     const unsubscribe = window.nodeBananaDesktop!.backend.onStatus(update);
     void window.nodeBananaDesktop!.backend.state().then(update);
     void initialize();

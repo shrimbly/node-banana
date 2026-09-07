@@ -142,9 +142,9 @@ function createRecoveryStore(userData) {
       fs.rmSync(path.join(directory, 'assets'), { recursive: true, force: true });
       atomicWrite(marker, JSON.stringify({ clean: false, discarded: [] }));
     },
-    markClean() {
+    markClean(force = false) {
       // Closing the recovery prompt is not consent to discard the offered work.
-      if (!acknowledged && !session().clean && [current, previous].some(file => fs.existsSync(file))) return;
+      if (!force && !acknowledged && !session().clean && [current, previous].some(file => fs.existsSync(file))) return;
       closed = true;
       atomicWrite(marker, JSON.stringify({ clean: true, discarded: [] }));
     },

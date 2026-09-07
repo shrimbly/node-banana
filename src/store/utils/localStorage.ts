@@ -173,7 +173,14 @@ export const saveProviderSettings = (settings: ProviderSettings): void => {
     }));
     saveDesktopCredentials(secrets);
     // Preserve legacy keys if encrypted migration failed; never add plaintext keys.
-    if (desktopCredentialsMigrated()) localStorage.setItem(PROVIDER_SETTINGS_KEY, JSON.stringify({ providers }));
+    if (!desktopCredentialsMigrated()) {
+      const legacy = localStorage.getItem(PROVIDER_SETTINGS_KEY);
+      const saved = legacy ? JSON.parse(legacy).providers || {} : {};
+      for (const [id, preferences] of Object.entries(providers)) {
+        if (saved[id]?.apiKey !== undefined) Object.assign(preferences, { apiKey: saved[id].apiKey });
+      }
+    }
+    localStorage.setItem(PROVIDER_SETTINGS_KEY, JSON.stringify({ providers }));
     return;
   }
   localStorage.setItem(PROVIDER_SETTINGS_KEY, JSON.stringify(settings));

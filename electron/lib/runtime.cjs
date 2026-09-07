@@ -1,4 +1,5 @@
 const fs = require('node:fs/promises');
+const { constants } = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { atomicWrite } = require('./files.cjs');
@@ -14,7 +15,7 @@ async function provisionRuntime(source, userData) {
   catch {
     const staging = path.join(runtimes, `.provision-${randomUUID()}`);
     try {
-      await fs.cp(source, staging, { recursive: true });
+      await fs.cp(source, staging, { recursive: true, verbatimSymlinks: true, mode: constants.COPYFILE_FICLONE });
       await fs.rename(staging, target);
     } finally { await fs.rm(staging, { recursive: true, force: true }); }
   }

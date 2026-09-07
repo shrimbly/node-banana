@@ -115,7 +115,7 @@ async function createWindow() {
   current.webContents.on('will-prevent-unload', event => {
     const choice = dialog.showMessageBoxSync(current, { type: 'question', buttons: ['Keep editing', 'Discard and close'], defaultId: 0, cancelId: 0, message: 'Close without saving your workflows?' });
     if (choice === 1) {
-      try { recoveryStore.markClean(); event.preventDefault(); } catch (error) { log(error); quitting = false; }
+      try { recoveryStore.markClean(true); event.preventDefault(); } catch (error) { log(error); quitting = false; }
     } else quitting = false;
   });
   current.webContents.on('render-process-gone', async (_event, details) => {

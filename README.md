@@ -98,7 +98,7 @@ npm run build
 npm run electron:start
 ```
 
-The app reads the same `.env.local` as the browser version, and API keys can also
+When running from source, the app reads the same `.env.local` as the browser version, and API keys can also
 be entered in Settings. Desktop settings use a separate persistent Electron
 profile; existing browser settings are not imported automatically. Workflows
 remain ordinary files that either version can open. Folder selection uses a
@@ -115,8 +115,7 @@ Run `npm run electron:smoke` to check the real desktop window, editor interactio
 local file save/load, native dialog bridge, settings persistence, and server
 shutdown using a temporary profile. It needs a graphical desktop (or Xvfb on
 Linux). Add `-- --production` to test an existing production build. These commands
-run from source; installer packaging, signing, and automatic updates are not yet
-configured. ComfyUI remains a separately installed or remote service.
+run from source. Use `npm run electron:package` for an unsigned Apple Silicon app, DMG and ZIP, and `npm run electron:acceptance` for packaged crash/recovery checks. See the [Mac preview guide](docs/desktop-preview.md) for installation, encrypted credentials and recovery details. Signing and automatic updates remain deferred. ComfyUI remains a separately installed or remote service.
 
 For macOS title-bar changes, also run
 `npm run electron:smoke -- --production --native-input` after building. This uses

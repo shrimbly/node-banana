@@ -17,7 +17,8 @@
     "comfy:record": "node scripts/comfy-smoke.mjs record",
     "comfy:smoke": "node scripts/comfy-smoke.mjs run",
     "electron:package": "node scripts/package-electron.cjs",
-    "electron:test": "node --test electron/tests/*.test.cjs"
+    "electron:test": "node --test electron/tests/*.test.cjs",
+    "electron:acceptance": "node scripts/electron-acceptance.cjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.13",

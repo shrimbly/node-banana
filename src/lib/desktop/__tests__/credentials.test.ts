@@ -42,3 +42,19 @@ it('failed migration preserves legacy and session edits never touch plaintext st
   expect(localStorage.getItem('node-banana-provider-settings')).toBe(legacy);
   expect(credentials.desktopCredentialsReady()).toBe(true);
 });
+it('session-only saves retain old secrets while persisting new non-secret preferences', async () => {
+  bridge(false);
+  localStorage.setItem('node-banana-provider-settings', JSON.stringify({ providers: { gemini: { apiKey: 'old-secret', enabled: true } } }));
+  const credentials = await import('../credentials');
+  await expect(credentials.initializeDesktopCredentials()).rejects.toThrow();
+  credentials.useSessionCredentials();
+  const { getProviderSettings, saveProviderSettings } = await import('@/store/utils/localStorage');
+  const settings = getProviderSettings();
+  settings.providers.gemini.apiKey = 'new-session-secret';
+  settings.providers.gemini.enabled = false;
+  saveProviderSettings(settings);
+  const saved = JSON.parse(localStorage.getItem('node-banana-provider-settings')!);
+  expect(saved.providers.gemini.enabled).toBe(false);
+  expect(saved.providers.gemini.apiKey).toBe('old-secret');
+  expect(JSON.stringify(saved)).not.toContain('new-session-secret');
+});

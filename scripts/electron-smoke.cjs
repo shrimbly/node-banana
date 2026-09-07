@@ -51,16 +51,23 @@ function windowEvent(desktop, event) {
 
 async function checkWindowControls(desktop, page) {
   if (process.platform !== 'darwin') return;
+  if (nativeInput) await desktop.evaluate(({ app, BrowserWindow }) => { app.focus({ steal: true }); BrowserWindow.getAllWindows()[0].focus(); });
+  if (nativeInput) await nativeMouse(desktop, 'c', 400, 300);
+  else await page.locator('.react-flow__pane').click({ position: { x: 100, y: 100 } });
   const controls = page.getByRole('group', { name: 'Window controls' });
   const dots = controls.locator('.desktop-window-control-dot');
   const opacities = () => dots.evaluateAll((dots) => dots.map((dot) => Number(getComputedStyle(dot).opacity)));
+  const expectOpacities = async (expected) => {
+    await page.waitForFunction(expected => [...document.querySelectorAll('.desktop-window-control-dot')].every((dot, index) => Number(getComputedStyle(dot).opacity) === expected[index]), expected, { timeout: 5000 });
+    assert.deepEqual(await opacities(), expected);
+  };
   await movePointer(desktop, page, 400, 300);
-  assert.deepEqual(await opacities(), [0.45, 0.45, 0.45]);
+  await expectOpacities([0.45, 0.45, 0.45]);
   await fs.mkdir(path.join(root, '.scratch'), { recursive: true });
   await page.screenshot({ path: path.join(root, '.scratch', 'window-controls-dim.png'), clip: { x: 0, y: 0, width: 240, height: 38 } });
   for (let index = 0; index < 3; index++) {
     await controlInput(desktop, controls.getByRole('button').nth(index), 'hover');
-    assert.deepEqual(await opacities(), [0, 1, 2].map((i) => i === index ? 1 : 0.45));
+    await expectOpacities([0, 1, 2].map((i) => i === index ? 1 : 0.45));
   }
   await page.screenshot({ path: path.join(root, '.scratch', 'window-controls-hover.png'), clip: { x: 0, y: 0, width: 240, height: 38 } });
   const boxes = await dots.evaluateAll((dots) => dots.map((dot) => dot.getBoundingClientRect().toJSON()));
@@ -69,7 +76,7 @@ async function checkWindowControls(desktop, page) {
     assert.ok((await opacities()).every((opacity) => opacity >= 0.45));
   }
   await movePointer(desktop, page, 400, 300);
-  assert.deepEqual(await opacities(), [0.45, 0.45, 0.45]);
+  await expectOpacities([0.45, 0.45, 0.45]);
   console.log('PASS: window controls stay dimmed, brighten individually, and remain visible between buttons');
 
   // Run with app dialogs dismissed: a modal can mask an overlapping drag region.
@@ -106,12 +113,13 @@ async function main() {
   const port = await availablePort();
   const origin = `http://127.0.0.1:${port}`;
   let desktop;
+  const launchEnv = executablePath ? { ...Object.fromEntries(['HOME', 'TMPDIR', 'LANG'].filter(key => process.env[key]).map(key => [key, process.env[key]])), PATH: '/usr/bin:/bin:/usr/sbin:/sbin' } : process.env;
   const launch = async () => {
     const instance = await electron.launch({
       executablePath,
       args: executablePath ? [] : [root, ...(production ? [] : ['--dev'])],
       cwd: executablePath ? temp : root,
-      env: { ...process.env, NODE_BANANA_ELECTRON_PORT: String(port), NODE_BANANA_ELECTRON_USER_DATA: path.join(temp, 'profile') },
+      env: { ...launchEnv, NODE_BANANA_ELECTRON_PORT: String(port), NODE_BANANA_ELECTRON_USER_DATA: path.join(temp, 'profile') },
       timeout: 120_000,
     });
     // Only the isolated smoke-test process has native dialogs stubbed.
@@ -244,7 +252,8 @@ async function main() {
   }
 }
 
-main().catch((error) => {
+module.exports = { checkWindowControls };
+if (require.main === module) main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });

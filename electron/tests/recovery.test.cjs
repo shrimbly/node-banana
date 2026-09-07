@@ -35,3 +35,27 @@ test('recovers previous checkpoint, durable assets and discards across interrupt
     assert.equal(createRecoveryStore(temp).read().snapshot, null);
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 });
+
+test('explicit discard wins even before a restored session checkpoints again', () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'banana-discard-'));
+  try {
+    const store = createRecoveryStore(temp);
+    store.read(); store.write(snapshot('unsaved'));
+    const next = createRecoveryStore(temp);
+    assert.ok(next.read().snapshot);
+    next.markClean(true);
+    assert.equal(createRecoveryStore(temp).read().snapshot, null);
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+});
+test('missing external media is reported without removing its reference', () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'banana-external-media-'));
+  try {
+    const store = createRecoveryStore(temp);
+    const value = snapshot('external');
+    value.tabs[0].snapshot.saveDirectoryPath = temp;
+    value.tabs[0].snapshot.nodes[0].data.imageRef = 'missing-image';
+    const recovered = store.hydrate(value);
+    assert.equal(recovered.snapshot.tabs[0].snapshot.nodes[0].data.imageRef, 'missing-image');
+    assert.ok(recovered.warnings.some(warning => warning.includes('External media is missing: missing-image')));
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+});

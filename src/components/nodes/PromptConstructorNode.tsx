@@ -111,7 +111,10 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
     availableVariables,
     textareaRef,
     localTemplate,
-    setLocalTemplate,
+    setLocalTemplate: (template) => {
+      setLocalTemplate(template);
+      if (window.nodeBananaDesktop) updateNodeData(id, { template });
+    },
     onTemplateCommit: (newTemplate) => updateNodeData(id, { template: newTemplate }),
   });
 

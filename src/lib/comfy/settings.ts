@@ -144,7 +144,12 @@ export function saveComfySettings(settings: ComfySettings): void {
     const secrets: DesktopCredentials = {};
     for (const key of comfySecretFields) { secrets[`comfy.${key}`] = preferences[key] ?? null; delete preferences[key]; }
     saveDesktopCredentials(secrets);
-    if (desktopCredentialsMigrated()) localStorage.setItem(COMFY_SETTINGS_KEY, JSON.stringify(preferences));
+    if (!desktopCredentialsMigrated()) {
+      const legacy = localStorage.getItem(COMFY_SETTINGS_KEY);
+      const saved = legacy ? JSON.parse(legacy) : {};
+      for (const key of comfySecretFields) if (saved[key] !== undefined) preferences[key] = saved[key];
+    }
+    localStorage.setItem(COMFY_SETTINGS_KEY, JSON.stringify(preferences));
     return;
   }
   localStorage.setItem(COMFY_SETTINGS_KEY, JSON.stringify(preferences));
