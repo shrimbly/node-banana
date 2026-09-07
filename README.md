@@ -118,6 +118,13 @@ Linux). Add `-- --production` to test an existing production build. These comman
 run from source; installer packaging, signing, and automatic updates are not yet
 configured. ComfyUI remains a separately installed or remote service.
 
+For macOS title-bar changes, also run
+`npm run electron:smoke -- --production --native-input` after building. This uses
+`cliclick` (installed separately) with macOS Accessibility permission to test real
+mouse hover, clicks, and window dragging; browser automation alone bypasses the
+native draggable-region hit testing. It brings the test window to the front and
+moves the mouse, so let it finish before interacting with the desktop.
+
 ### Environment Variables
 
 Create a `.env.local` file in the root directory:

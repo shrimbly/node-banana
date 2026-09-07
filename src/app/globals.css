@@ -70,7 +70,10 @@
 
 /* The workflow strip doubles as the macOS title bar inside Electron. */
 html[data-desktop-platform="darwin"] .workflow-tabs {
-  padding-left: var(--desktop-window-controls-inset);
+  /* Keep the native drag rectangle entirely outside the controls' gutter.
+     Padding would still make that area draggable beneath the fixed controls. */
+  margin-left: var(--desktop-window-controls-inset);
+  padding-left: 0;
   -webkit-app-region: drag;
   user-select: none;
 }
@@ -95,6 +98,7 @@ html[data-desktop-platform="darwin"] .desktop-window-controls {
 }
 
 .desktop-window-control {
+  -webkit-app-region: no-drag;
   display: flex;
   width: var(--desktop-window-control-width);
   height: var(--desktop-window-control-height);
