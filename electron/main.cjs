@@ -44,7 +44,17 @@ async function createWindow() {
     minHeight: 600,
     backgroundColor: '#0f0f0f',
     show: false,
-    webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true },
+    ...(process.platform === 'darwin' ? {
+      titleBarStyle: 'hidden',
+      // Align native controls with the workflow tabs; CSS reserves their gutter.
+      trafficLightPosition: { x: 14, y: 16 },
+    } : {}),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      preload: path.join(__dirname, 'preload.cjs'),
+    },
   });
   window.webContents.setWindowOpenHandler(({ url }) => {
     openExternal(url);

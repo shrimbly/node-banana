@@ -77,7 +77,7 @@ export function WorkflowTabs() {
       // Just above the canvas frame, so the active tab can sit over its top
       // border; everything the frame clips stays below it, and everything
       // fixed (modals, menus) still stacks above
-      className="relative z-[1] flex h-[38px] min-w-0 shrink-0 items-end bg-[#0f0f0f] pl-3 pr-2"
+      className="workflow-tabs relative z-[1] flex h-[38px] min-w-0 shrink-0 items-end bg-[#0f0f0f] pl-3 pr-2"
     >
       {summaries.map((tab, index) => {
         const name = tab.name ?? "Untitled";

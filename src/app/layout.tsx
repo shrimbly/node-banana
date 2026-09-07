@@ -13,7 +13,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // Electron's preload adds a platform styling attribute before hydration.
+    <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
         {children}
         <Toast />

@@ -53,6 +53,20 @@
 :root {
   --background: #0a0a0a;
   --foreground: #fafafa;
+  /* Space for macOS's native window buttons and the gap before the first tab. */
+  --desktop-window-controls-inset: 84px;
+}
+
+/* The workflow strip doubles as the macOS title bar inside Electron. */
+html[data-desktop-platform="darwin"] .workflow-tabs {
+  padding-left: var(--desktop-window-controls-inset);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+html[data-desktop-platform="darwin"] .workflow-tabs [role="tab"],
+html[data-desktop-platform="darwin"] .workflow-tabs button {
+  -webkit-app-region: no-drag;
 }
 
 html {
