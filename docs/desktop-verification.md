@@ -1,10 +1,11 @@
 # Mac preview verification — 8 September 2026
 
-Verified on macOS 26.2 / Apple Silicon with Electron 44.2.0 and Next.js 16.1.6. The release runtime is `1.9.0-f8553999-9aa7-4ae7-91fe-b91fddc7808b`.
+Verified on macOS 26.2 / Apple Silicon with Electron 44.2.0 and Next.js 16.1.6. The release runtime is `1.9.0-dc9296ee-2e42-4294-8fbc-69bbdb8d00af`.
 
 | Check | Result |
 | --- | --- |
 | Isolated production build and electron-builder app/DMG/ZIP | Passed |
+| Packaged icon and import layout | Passed: ten ICNS representations have dark opaque edges; onboarding and Project Settings place import action to the right; cancelled picker re-enables the action |
 | Source Electron development and authenticated HMR | Passed |
 | Foundation full Vitest suite | 155 files, 2,961 tests passed |
 | Main-process persistence/lifecycle/import tests | 12 tests passed |
@@ -28,6 +29,8 @@ Verified on macOS 26.2 / Apple Silicon with Electron 44.2.0 and Next.js 16.1.6. 
 | Secret and artifact scan | No test keys in bundle/logs/active localStorage; no `.env*` or test directories in bundle |
 | DMG installation and native Mac controls | Passed: hover, keyboard focus, minimise, fullscreen, dragging, close, restart |
 
+The final icon/layout rebuild passed the isolated production TypeScript build and packaged visual checks in a clean profile. The broader functional results below were obtained during the foundation, recovery and environment-import work; they were not repeated for these visual changes.
+
 Native controls were tested with `cliclick` against an app copied from the final read-only DMG into a temporary Applications directory, after ejecting the image. The app ran with only system tools on PATH and no developer provider environment variables. Test profiles were isolated from the normal Node Banana profile.
 
 The packaged provider check made a real Google LLM request with a synthetic key and received the expected authentication error. **A successful request with a valid tester-entered credential is still pending:** no test credential was supplied. No successful generation or provider billing has been claimed.
@@ -43,8 +46,8 @@ Recovery now externalises both data URLs and blobs, deduplicates media across re
 ## Release checksums (SHA-256)
 
 ```text
-b5df41dda39f1dd1fc926431d99bc9c46b90e1eea195c05aa3cbe09033733231  Node Banana-1.9.0-arm64.dmg
-4de9b9f09e52f535fc79097af66299ff9c342ecc02bbead696735a082d1d133f  Node Banana-1.9.0-arm64.zip
+b74bb384ff65028053d67dfefe45082e3c92e43b513dc1a6962a595666d3a114  Node Banana-1.9.0-arm64.dmg
+9379eb76528eb918bc165a342a6d10eae2b4d000b5581cc87b56ff52512d7338  Node Banana-1.9.0-arm64.zip
 ```
 
 The app remains unsigned and unnotarised. Installation and tester steps are in [desktop-preview.md](desktop-preview.md).
