@@ -3116,6 +3116,10 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     // A newer load, clear, or tab switch owns the canvas now. A slow hydration
     // must never replace that graph (including unsaved work in another tab).
     if (get().workflowLifecycleId !== lifecycleId) return;
+    // The outgoing graph remained visible during hydration, so another run or
+    // async edit may have started meanwhile. Invalidate those operations too,
+    // at the instant their graph is replaced.
+    get()._abortController?.abort("workflow-replaced");
     syncIdCounters(hydratedWorkflow.nodes, hydratedWorkflow.groups);
 
     // Load cost data for this workflow
@@ -3153,6 +3157,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       groups: hydratedWorkflow.groups || {},
       isRunning: false,
       currentNodeIds: [],
+      _abortController: null,
+      workflowLifecycleId: lifecycleId + 1,
       // Restore workflow ID and paths from localStorage if available
       workflowId: workflow.id || null,
       workflowName: workflow.name,

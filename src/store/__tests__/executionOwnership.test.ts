@@ -3,6 +3,12 @@ import { useWorkflowStore } from "../workflowStore";
 import { executeNanoBanana, executeGlbViewer, executeVideoTrim } from "../execution";
 import type { NodeExecutionContext } from "../execution";
 import type { WorkflowNode } from "@/types";
+import { hydrateWorkflowMedia } from "@/utils/mediaStorage";
+
+vi.mock("@/utils/mediaStorage", () => ({
+  externalizeWorkflowMedia: vi.fn(async (workflow) => workflow),
+  hydrateWorkflowMedia: vi.fn(async (workflow) => workflow),
+}));
 
 vi.mock("../execution", async (importOriginal) => ({
   ...await importOriginal<typeof import("../execution")>(),
@@ -33,6 +39,7 @@ const node = (id: string, type = "nanoBanana"): WorkflowNode =>
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(hydrateWorkflowMedia).mockImplementation(async (workflow) => workflow);
   store().clearWorkflow();
   useWorkflowStore.setState({ nodes: [node("generate-1")], isSaving: false });
 });
@@ -45,6 +52,37 @@ const runners = {
 };
 
 describe("execution ownership", () => {
+  it("cancels a run started during hydration before replacing its graph", async () => {
+    const hydration = deferred();
+    const generation = deferred();
+    vi.mocked(hydrateWorkflowMedia).mockImplementationOnce(async (workflow) => {
+      await hydration.promise;
+      return workflow;
+    });
+    vi.mocked(executeNanoBanana).mockImplementationOnce(async (ctx) => {
+      await generation.promise;
+      ctx.updateNodeData(ctx.node.id, { outputImage: "outgoing-graph-result" });
+    });
+    const loading = store().loadWorkflow({
+      version: 1, name: "Loaded", edgeStyle: "angular", edges: [],
+      nodes: [{ ...node("generate-1"), data: { status: "idle", outputImage: "loaded-image" } } as WorkflowNode],
+    }, "/loaded");
+    const running = store().executeWorkflow();
+    await vi.waitFor(() => expect(executeNanoBanana).toHaveBeenCalledOnce());
+    const controller = store()._abortController!;
+    const lifecycleDuringHydration = store().workflowLifecycleId;
+    hydration.resolve();
+    await loading;
+    expect(controller.signal.aborted).toBe(true);
+    expect(store()._abortController).toBeNull();
+    expect(store().workflowLifecycleId).toBeGreaterThan(lifecycleDuringHydration);
+    generation.resolve();
+    await running;
+    expect(store().nodes[0].data.outputImage).toBe("loaded-image");
+    expect(store().workflowName).toBe("Loaded");
+    expect(store().hasUnsavedChanges).toBe(false);
+  });
+
   it.each(Object.keys(runners) as (keyof typeof runners)[])("%s completion cannot overwrite or unlock a newer run", async (kind) => {
     const first = deferred();
     const second = deferred();
