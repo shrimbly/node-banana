@@ -45,6 +45,7 @@ function createDiagnostics(directory, redactor = createRedactor(), maxBytes = 2 
       if (pending.length > maxBytes) pending = '[Oversized diagnostic record omitted]';
     });
     stream.on('end', () => { pending += decoder.end(); if (pending) write(source, pending); });
+    stream.on('error', error => write(source, `Diagnostic stream error: ${error.message || error}`));
   }
   return { write, pipe, redactor };
 }

@@ -45,6 +45,12 @@ test('logs redact split secrets and rotate with bounded storage', async () => {
   try {
     const redactor = createRedactor(); redactor.add(['secret-split-across-chunks']);
     const logs = createDiagnostics(temp, redactor, 256);
+    const failed = new PassThrough();
+    logs.pipe(failed, 'backend');
+    assert.doesNotThrow(() => failed.emit('error', new Error('Connection reset: secret-split-across-chunks')));
+    const errorLog = fs.readFileSync(path.join(temp, 'desktop.log'), 'utf8');
+    assert.match(errorLog, /Diagnostic stream error: Connection reset: \[REDACTED\]/);
+    assert.ok(!errorLog.includes('secret-split-across-chunks'));
     const stream = new PassThrough(); logs.pipe(stream, 'backend');
     stream.write('key secret-split-'); stream.end('across-chunks\n'); await tick();
     assert.ok(!fs.readFileSync(path.join(temp, 'desktop.log'), 'utf8').includes('secret-split'));
