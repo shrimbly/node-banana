@@ -104,6 +104,40 @@ async function checkWindowControls(desktop, page) {
   }
 }
 
+async function checkStartupWindowControls(desktop, page) {
+  if (process.platform !== 'darwin') return;
+  await desktop.evaluate(({ app, BrowserWindow }) => { app.focus({ steal: true }); BrowserWindow.getAllWindows()[0].focus(); });
+  const controls = page.getByRole('group', { name: 'Window controls' });
+  await controls.waitFor();
+  for (const button of await controls.getByRole('button').all()) {
+    assert.equal(await button.evaluate(element => {
+      const box = element.getBoundingClientRect();
+      return element.contains(document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2));
+    }), true, 'Startup overlay covers a window control');
+  }
+  const minimized = windowEvent(desktop, 'minimize');
+  await controlInput(desktop, controls.getByRole('button', { name: 'Minimise window' }), 'click');
+  await minimized;
+  const restored = windowEvent(desktop, 'restore');
+  await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].restore());
+  await restored;
+  const fullscreen = windowEvent(desktop, 'enter-full-screen');
+  await controlInput(desktop, controls.getByRole('button', { name: 'Toggle fullscreen' }), 'click');
+  await fullscreen;
+  const windowed = windowEvent(desktop, 'leave-full-screen');
+  await controlInput(desktop, controls.getByRole('button', { name: 'Toggle fullscreen' }), 'click');
+  await windowed;
+  if (nativeInput) {
+    const before = await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBounds());
+    await nativeMouse(desktop, 'dd', before.width - 100, 20);
+    await nativeMouse(desktop, 'dm', before.width - 60, 60);
+    await nativeMouse(desktop, 'du', before.width - 60, 60);
+    const after = await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBounds());
+    assert.notDeepEqual({ x: after.x, y: after.y }, { x: before.x, y: before.y });
+  }
+  console.log('PASS: startup window controls remain clickable and native actions work above the pending dialog');
+}
+
 async function main() {
   if (nativeInput) {
     assert.equal(process.platform, 'darwin', '--native-input is supported on macOS');
@@ -252,7 +286,7 @@ async function main() {
   }
 }
 
-module.exports = { checkWindowControls };
+module.exports = { checkWindowControls, checkStartupWindowControls };
 if (require.main === module) main().catch((error) => {
   console.error(error);
   process.exitCode = 1;

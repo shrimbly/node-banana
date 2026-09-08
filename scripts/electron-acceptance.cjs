@@ -10,7 +10,7 @@ const { createHash } = require('node:crypto');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { _electron: electron } = require('playwright-core');
-const { checkWindowControls } = require('./electron-smoke.cjs');
+const { checkWindowControls, checkStartupWindowControls } = require('./electron-smoke.cjs');
 const run = promisify(execFile);
 const root = path.resolve(__dirname, '..');
 const supplied = process.argv.indexOf('--executable');
@@ -154,6 +154,7 @@ async function main() {
       return { status: response.status, body: await response.json() };
     });
     assert.equal(provider.body.success, false);
+    assert.match(provider.body.error, /API_KEY_INVALID|API key not valid|invalid api key/i, 'Expected an actual provider authentication rejection, not a local or network failure');
     console.log('PASS: credentials migrate, encrypt, update/delete and preserve ciphertext on encryption failure; provider error path responds');
 
     await page.locator('.react-flow__pane').click({ position: { x: 100, y: 100 } });
@@ -203,10 +204,18 @@ async function main() {
     assert.equal((await page.evaluate(value => window.nodeBananaDesktop.recovery.write(value), seeded)).ok, true);
     await crash();
     desktop = await launch(); page = await attach(desktop);
+    await page.getByRole('button', { name: 'Restore Session', exact: true }).waitFor();
+    await checkStartupWindowControls(desktop, page);
     const submissions = [];
     page.on('request', request => { if (request.method() === 'POST' && /\/api\/(generate|llm)/.test(request.url())) submissions.push(request.url()); });
     await page.getByRole('button', { name: 'Restore Session', exact: true }).click();
     await page.locator('.react-flow').waitFor();
+    assert.equal(await page.locator('.desktop-startup-drag-region').count(), 0);
+    await page.evaluate(() => window.dispatchEvent(new CustomEvent('desktop-credential-error', { detail: 'Acceptance credential write failure' })));
+    await page.getByRole('dialog', { name: 'Credential storage' }).waitFor();
+    await checkStartupWindowControls(desktop, page);
+    await page.getByRole('button', { name: 'Retry secure storage' }).click();
+    await page.getByRole('dialog', { name: 'Credential storage' }).waitFor({ state: 'hidden' });
     assert.equal(await page.getByRole('tab').count(), 2);
     assert.equal(await page.getByPlaceholder('Describe what to generate...').inputValue(), 'Recovery second tab');
     await page.getByRole('tab').first().click();

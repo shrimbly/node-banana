@@ -82,6 +82,12 @@ it('externalizes repeated data URLs before IPC and reuses the next checkpoint me
     expect(putAsset).toHaveBeenCalledTimes(1);
     await encodeRecovery(value);
     expect(putAsset).toHaveBeenCalledTimes(1);
+    await encodeRecovery(snapshot());
+    await encodeRecovery(snapshot());
+    // Undo may revive media after both disk checkpoints have released it.
+    // The encoder must upload again instead of reusing an expired cache entry.
+    await encodeRecovery(value);
+    expect(putAsset).toHaveBeenCalledTimes(2);
   } finally { global.fetch = originalFetch; delete (window as { nodeBananaDesktop?: unknown }).nodeBananaDesktop; }
 });
 
