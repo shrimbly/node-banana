@@ -219,7 +219,7 @@ export function ProjectSetupModal({
   const [edgeDefaultSaved, setEdgeDefaultSaved] = useState(false);
 
   // ComfyUI tab state
-  const [localComfySettings, setLocalComfySettings] = useComfySettingsDraft(isOpen);
+  const [localComfySettings, setLocalComfySettings, applyImportedComfySettings] = useComfySettingsDraft(isOpen);
 
   // Pre-fill when opening in settings mode
   useEffect(() => {
@@ -570,10 +570,10 @@ export function ProjectSetupModal({
                 ...config, apiKey: config.apiKey || imported.providers[id as ProviderType]?.apiKey,
               }])) as ProviderSettings['providers'] }));
               const comfy = getComfySettings();
-              const next = { ...localComfySettings };
-              for (const key of comfySecretFields) if (!next[key]) Object.assign(next, { [key]: comfy[key] });
-              for (const key of Object.keys(result.preferences) as (keyof typeof result.preferences)[]) Object.assign(next, { [key]: comfy[key] });
-              setLocalComfySettings(next);
+              applyImportedComfySettings(comfy, [
+                ...comfySecretFields,
+                ...Object.keys(result.preferences) as (keyof typeof result.preferences)[],
+              ]);
             }} />
             {/* Gemini Provider */}
             <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
