@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { generateWorkflowId, useWorkflowStore } from "@/store/workflowStore";
 import { ProviderType, ProviderSettings, NodeDefaultsConfig, LLMProvider, LLMModelType, EdgeAppearance, EdgeStyle } from "@/types";
 import { CanvasNavigationSettings, PanMode, ZoomMode, SelectionMode } from "@/types/canvas";
@@ -185,6 +185,7 @@ export function ProjectSetupModal({
 
   // Provider tab state
   const [localProviders, setLocalProviders] = useState<ProviderSettings>(providerSettings);
+  const editedProviderKeys = useRef(new Set<ProviderType>());
   const [showApiKey, setShowApiKey] = useState<Record<ProviderType, boolean>>({
     gemini: false,
     openai: false,
@@ -240,6 +241,7 @@ export function ProjectSetupModal({
       }
 
       // Sync local providers state
+      editedProviderKeys.current.clear();
       setLocalProviders(providerSettings);
       setShowApiKey({ gemini: false, openai: false, anthropic: false, replicate: false, fal: false, kie: false, wavespeed: false });
       // Initialize override as active if user already has a key set
@@ -435,6 +437,7 @@ export function ProjectSetupModal({
     providerId: ProviderType,
     updates: { enabled?: boolean; apiKey?: string | null }
   ) => {
+    if ('apiKey' in updates) editedProviderKeys.current.add(providerId);
     setLocalProviders((prev) => ({
       providers: {
         ...prev.providers,
@@ -567,7 +570,7 @@ export function ProjectSetupModal({
             <EnvironmentImport onImported={result => {
               const imported = getProviderSettings();
               setLocalProviders(previous => ({ providers: Object.fromEntries(Object.entries(previous.providers).map(([id, config]) => [id, {
-                ...config, apiKey: config.apiKey || imported.providers[id as ProviderType]?.apiKey,
+                ...config, apiKey: editedProviderKeys.current.has(id as ProviderType) ? config.apiKey : imported.providers[id as ProviderType]?.apiKey,
               }])) as ProviderSettings['providers'] }));
               const comfy = getComfySettings();
               applyImportedComfySettings(comfy, [
