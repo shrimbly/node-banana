@@ -6,6 +6,11 @@ const controls = [
   { action: "toggleFullscreen", label: "Toggle fullscreen", className: "desktop-window-fullscreen", icon: "M4 7V4h3m3 3v3H7" },
 ] as const;
 
+/** The tab strip supplies dragging once the editor has opened. */
+export function DesktopStartupDragRegion() {
+  return <div className="desktop-startup-drag-region" aria-hidden="true" />;
+}
+
 /** macOS window actions, exposed by Electron's isolated preload. */
 export function DesktopWindowControls() {
   return (

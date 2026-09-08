@@ -67,7 +67,7 @@
   --desktop-window-control-height: 24px;
   --desktop-window-control-dot-size: 14px;
   --desktop-window-control-rest-opacity: 0.45;
-  --desktop-window-controls-layer: 10000;
+  --desktop-window-controls-layer: 10001;
 }
 
 /* Match the inset graph frame to the surrounding macOS window curve. */
@@ -93,6 +93,18 @@ html[data-desktop-platform="darwin"] .workflow-tabs button {
 
 .desktop-window-controls {
   display: none;
+}
+
+.desktop-startup-drag-region { display: none; }
+html[data-desktop-platform="darwin"] .desktop-startup-drag-region {
+  display: block;
+  position: fixed;
+  z-index: var(--desktop-window-controls-layer);
+  top: 0;
+  left: var(--desktop-window-controls-inset);
+  right: 0;
+  height: 38px;
+  -webkit-app-region: drag;
 }
 
 html[data-desktop-platform="darwin"] .desktop-window-controls {

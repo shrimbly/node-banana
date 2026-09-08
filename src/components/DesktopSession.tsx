@@ -1,6 +1,7 @@
 'use client';
 
 import { DesktopRecovery } from './DesktopRecovery';
+import { DesktopWindowControls, DesktopStartupDragRegion } from './DesktopWindowControls';
 import { useEffect, useState, type ReactNode } from 'react';
 import { initializeDesktopCredentials, isDesktop, useSessionCredentials } from '@/lib/desktop/credentials';
 import { getProviderSettings } from '@/store/utils/localStorage';
@@ -28,6 +29,8 @@ export function DesktopSession({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return <>
+    <DesktopWindowControls />
+    {(!ready || error) && <DesktopStartupDragRegion />}
     {ready ? <DesktopRecovery>{children}</DesktopRecovery> : <div className="h-screen bg-[#0f0f0f] text-neutral-300 flex items-center justify-center">Opening Node Banana…</div>}
     {ready && !connected && <div role="status" className="fixed top-12 left-1/2 -translate-x-1/2 z-[9998] rounded-lg border border-amber-700 bg-neutral-900 p-4 text-sm text-neutral-200">
       Local server disconnected. New executions are disabled; your graph remains open.

@@ -5,6 +5,7 @@ import { useWorkflowStore } from '@/store/workflowStore';
 import { captureWorkflowTabSnapshot } from '@/store/utils/workflowTabs';
 import { captureRecovery, checkpointScheduler, hydrateRecovery, encodeRecovery } from '@/lib/desktop/recovery';
 import { isDesktop } from '@/lib/desktop/credentials';
+import { DesktopStartupDragRegion } from './DesktopWindowControls';
 
 let recoveryRead: ReturnType<NonNullable<Window['nodeBananaDesktop']>['recovery']['read']> | undefined;
 export function DesktopRecovery({ children }: { children: ReactNode }) {
@@ -52,6 +53,7 @@ export function DesktopRecovery({ children }: { children: ReactNode }) {
     setCheckpoint(null); setError(null); setReady(true);
   }
   return <>
+    {!ready && <DesktopStartupDragRegion />}
     {ready ? children : <div className="h-screen bg-[#0f0f0f] text-neutral-300 flex items-center justify-center">Checking your previous session…</div>}
     {!ready && (!!checkpoint || error) && <div role="dialog" aria-modal="true" aria-label="Session recovery" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 p-6">
       <div className="max-w-lg rounded-xl border border-neutral-700 bg-neutral-900 p-6 text-neutral-100 space-y-4">
