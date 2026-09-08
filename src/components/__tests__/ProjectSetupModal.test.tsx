@@ -124,14 +124,14 @@ describe("ProjectSetupModal", () => {
       ...settings.providers, openai: { ...settings.providers.openai, apiKey: 'imported-openai-key' },
     } }) : null);
     render(<ProjectSetupModal isOpen onClose={vi.fn()} onSave={vi.fn()} mode="settings" />);
-    fireEvent.click(screen.getByRole('button', { name: 'Providers', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Providers' }));
     const key = await screen.findByPlaceholderText('AIza...');
     expect(key).toHaveValue('saved-gemini-key');
     fireEvent.change(key, { target: { value: '' } });
     fireEvent.click(screen.getByRole('button', { name: 'Complete environment import' }));
     expect(key).toHaveValue('');
     expect(screen.getByPlaceholderText('sk-...')).toHaveValue('imported-openai-key');
-    fireEvent.click(screen.getByRole('button', { name: 'Save', exact: true }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     expect(mockUpdateProviderApiKey).toHaveBeenCalledWith('gemini', null);
     expect(mockUpdateProviderApiKey).toHaveBeenCalledWith('openai', 'imported-openai-key');
     localStorageMock.getItem.mockImplementation(() => null);
