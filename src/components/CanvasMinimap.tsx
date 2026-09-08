@@ -13,8 +13,10 @@ import {
 import { ChromeIconButton } from "./ChromeIconButton";
 import { CHROME_DIVIDER, CHROME_SURFACE } from "./chromeStyles";
 
-/** Card width, with its 1px border: wide enough for the control row. Neighbours to the left offset from this. */
-export const NAVIGATOR_WIDTH = 280;
+/** Five 32px buttons, 36px readout, two 9px dividers, seven 2px gaps,
+ * plus 4px control-row insets and the card's 1px border on each side.
+ * Neighbours to the left offset from this width. */
+export const NAVIGATOR_WIDTH = 238;
 /** Inset between the card edge and the minimap. */
 const MINIMAP_PADDING = 6;
 
@@ -85,7 +87,7 @@ function ZoomReadout() {
   const { zoom } = useViewport();
   return (
     <span
-      className="min-w-9 text-center text-[10px] font-medium tabular-nums text-neutral-300"
+      className="w-9 shrink-0 text-center text-[10px] font-medium tabular-nums text-neutral-300"
       aria-label="Zoom level"
     >
       {Math.round(zoom * 100)}%
@@ -148,7 +150,7 @@ export function CanvasMinimap({ disabled = false }: CanvasMinimapProps) {
           />
         </div>
       )}
-      <div className="flex h-[38px] items-center justify-center gap-0.5 px-1">
+      <div className="flex h-10 items-center gap-0.5 px-1">
         <ControlButton label="Zoom out" disabled={disabled} onClick={() => zoomOut()}>
           <svg className="h-[18px] w-[18px]" {...iconProps}><path d="M5 12h14" /></svg>
         </ControlButton>
