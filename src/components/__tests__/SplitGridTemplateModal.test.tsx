@@ -134,6 +134,51 @@ describe("SplitGridTemplateModal", () => {
     });
   });
 
+  describe("Preview geometry", () => {
+    it("previews a cell slice at its real aspect and includes the image controls", () => {
+      renderModal({ nodeData: {
+        sourceImage: "data:image/png;base64,grid", gridRows: 5, gridCols: 9,
+      } });
+      const img = screen.getByAltText("Source");
+      Object.defineProperties(img, {
+        naturalWidth: { value: 3200 }, naturalHeight: { value: 1000 },
+      });
+      fireEvent.load(img);
+      const clip = img.closest("[data-media-clip]") as HTMLElement;
+      expect(Number(clip.style.aspectRatio)).toBeCloseTo(16 / 9);
+      expect((img as HTMLElement).style.width).toBe("900%");
+      expect((img as HTMLElement).style.height).toBe("500%");
+      expect(img.closest("[data-node-shell]")?.querySelector("[data-controls-card]")).toHaveTextContent("split-1-1.png");
+    });
+
+    it("uses custom slice boundaries in the cell preview", () => {
+      renderModal({ nodeData: {
+        sourceImage: "data:image/png;base64,grid", gridRows: 2, gridCols: 2,
+        colOffsets: [0.25], rowOffsets: [0.5],
+      } });
+      const img = screen.getByAltText("Source");
+      Object.defineProperties(img, {
+        naturalWidth: { value: 2000 }, naturalHeight: { value: 1000 },
+      });
+      fireEvent.load(img);
+      expect((img.closest("[data-media-clip]") as HTMLElement).style.aspectRatio).toBe("1");
+      expect((img as HTMLElement).style.width).toBe("400%");
+    });
+
+    it("matches the real prompt height and configured generator aspect", () => {
+      renderModal({ nodeData: { generateSettings: {
+        aspectRatio: "16:9", resolution: "2K", model: "nano-banana-2",
+        useGoogleSearch: false, useImageSearch: false,
+      } } });
+      fireEvent.click(screen.getByRole("button", { name: "Prompt + Generate" }));
+      const prompt = screen.getByPlaceholderText(PROMPT_TEXTAREA_PLACEHOLDER);
+      expect(prompt.closest("[data-media-clip]")).toHaveStyle({ height: "160px" });
+      expect(prompt.closest("[data-node-shell]")?.querySelector("[data-controls-card]")).toHaveTextContent("Add variable");
+      const generate = screen.getByText("Run to generate");
+      expect(Number((generate.closest("[data-media-clip]") as HTMLElement).style.aspectRatio)).toBeCloseTo(16 / 9);
+    });
+  });
+
   describe("Modal Count", () => {
     it("should increment the modal count on mount", () => {
       renderModal();

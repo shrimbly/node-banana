@@ -89,6 +89,7 @@ import { getConnectedInputsPure, validateWorkflowPure, nodeReadinessPure, type C
 import { isMissingInputError } from "./execution/missingInput";
 import {
   buildCellInstances,
+  fitSplitGridCellMeasurements,
   clampGridDimension,
   computeMaterializedKey,
   getRouterConnections,
@@ -1107,8 +1108,18 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     }
 
     set((state) => {
+      const measuredIds = new Set(changes.filter((change) => change.type === "dimensions").map((change) => change.id));
+      // React Flow mutates the nested measured object while applying changes.
+      const previousNodes = measuredIds.size > 0 ? state.nodes.map((node) =>
+        measuredIds.has(node.id) ? { ...node, measured: { ...node.measured } } : node
+      ) : state.nodes;
       let nextNodes = applyNodeChanges(changes, state.nodes);
       let groups = state.groups;
+      if (measuredIds.size > 0) {
+        const fitted = fitSplitGridCellMeasurements(previousNodes, nextNodes, groups, measuredIds);
+        nextNodes = fitted.nodes;
+        groups = fitted.groups;
+      }
       if (hasRemoveChange) {
         const removedIds = new Set(
           changes.filter((c) => c.type === "remove").map((c) => c.id)

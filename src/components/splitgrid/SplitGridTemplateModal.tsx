@@ -52,6 +52,8 @@ import {
   createClassicSplitGridTemplate,
   createDefaultSplitGridTemplate,
   getSplitGridTemplate,
+  gridFractions,
+  resolveGridOffsets,
 } from "@/store/utils/splitGridTemplate";
 import {
   RouterRail,
@@ -151,8 +153,15 @@ function editorNodeDimensions(type: NodeType): { width: number; height: number }
 
 function templateToRfNodes(
   template: SplitGridTemplate,
-  sourceImage: string | null
+  sourceImage: string | null,
+  grid: Pick<SplitGridNodeData, "gridRows" | "gridCols" | "rowOffsets" | "colOffsets">
 ): TemplateRFNode[] {
+  const cols = clampGridDimension(grid.gridCols);
+  const rows = clampGridDimension(grid.gridRows);
+  const slice = {
+    width: gridFractions(cols, resolveGridOffsets(cols, grid.colOffsets))[0],
+    height: gridFractions(rows, resolveGridOffsets(rows, grid.rowOffsets))[0],
+  };
   return template.nodes.map((templateNode) => {
     // Nodes with an in-flow settings panel auto-grow to fit it on mount
     const dims = templateNode.size ?? editorNodeDimensions(templateNode.type);
@@ -174,6 +183,7 @@ function templateToRfNodes(
         overrides,
         isBase,
         sourceImage: isBase ? sourceImage : undefined,
+        slice: isBase ? slice : undefined,
       } satisfies TemplateNodeData,
     };
   });
@@ -358,7 +368,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
 
   const initialTemplate = useMemo(() => getSplitGridTemplate(nodeData), [nodeData]);
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<TemplateRFNode>(
-    templateToRfNodes(initialTemplate, nodeData.sourceImage)
+    templateToRfNodes(initialTemplate, nodeData.sourceImage, nodeData)
   );
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>(
     templateToRfEdges(initialTemplate)
@@ -505,7 +515,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
     initialSerializedRef.current = JSON.stringify(
       serializeTemplate(
         baseNodeId,
-        templateToRfNodes(initialTemplate, nodeData.sourceImage),
+        templateToRfNodes(initialTemplate, nodeData.sourceImage, nodeData),
         templateToRfEdges(initialTemplate),
         templateToRouterWires(initialTemplate)
       )
@@ -568,13 +578,13 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
 
   const applyPreset = useCallback(
     (template: SplitGridTemplate) => {
-      setRfNodes(templateToRfNodes(template, nodeData.sourceImage));
+      setRfNodes(templateToRfNodes(template, nodeData.sourceImage, nodeData));
       setRfEdges(templateToRfEdges(template));
       setRouterWires([]); // presets carry no router wiring
       idCounterRef.current = 0;
       refitSoon();
     },
-    [nodeData.sourceImage, setRfNodes, setRfEdges, refitSoon]
+    [nodeData, setRfNodes, setRfEdges, refitSoon]
   );
 
   // Cycles would materialize as cells the scheduler silently never executes

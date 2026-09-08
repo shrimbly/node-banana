@@ -28,6 +28,7 @@ import type {
   SelectedModel,
 } from "@/types";
 import { GEMINI_IMAGE_MODELS } from "@/types";
+import { parseAspectRatio } from "@/utils/nodeDimensions";
 import type { ProviderModel } from "@/lib/providers/types";
 import { ModelSearchDialog } from "../modals/ModelSearchDialog";
 import { ModelParameters } from "../nodes/ModelParameters";
@@ -52,6 +53,7 @@ export interface TemplateNodeData extends Record<string, unknown> {
   overrides: Record<string, unknown>;
   isBase: boolean;
   sourceImage?: string | null;
+  slice?: { width: number; height: number };
 }
 
 export type TemplateRFNode = Node<TemplateNodeData, "splitGridTemplateNode">;
@@ -169,16 +171,19 @@ function MiniFloatingHeader({
 function BaseImageBody({
   sourceImage,
   onAspect,
+  slice,
 }: {
   sourceImage?: string | null;
   onAspect: (aspect: number) => void;
+  slice?: { width: number; height: number };
 }) {
   return sourceImage ? (
     <>
       <img
         src={sourceImage}
         alt="Source"
-        className="absolute inset-0 w-full h-full object-cover opacity-50"
+        className="absolute top-0 left-0 max-w-none opacity-50"
+        style={{ width: `${100 / (slice?.width ?? 1)}%`, height: `${100 / (slice?.height ?? 1)}%` }}
         onLoad={(e) => {
           const img = e.currentTarget;
           if (img.naturalWidth > 0 && img.naturalHeight > 0) onAspect(img.naturalWidth / img.naturalHeight);
@@ -186,7 +191,7 @@ function BaseImageBody({
       />
       <div className="absolute inset-0 flex items-center justify-center">
         <span className="px-2 py-1 rounded bg-neutral-950/80 text-[10px] text-neutral-300">
-          One slice of this image per cell
+          One slice per cell · preview of cell 1-1
         </span>
       </div>
     </>
@@ -456,7 +461,7 @@ function GenerateTemplateNode({ id, data, selected }: NodeProps<TemplateRFNode>)
       <NodeShell
         id={id}
         selected={selected}
-        media={{ kind: "fixed", height: EMPTY_MEDIA_HEIGHT }}
+        media={{ kind: "aspect", aspect: parseAspectRatio(data.overrides.aspectRatio as string | undefined) }}
         inputs={toSockets(entry.inputs)}
         outputs={toSockets(entry.outputs)}
         controls={controls}
@@ -505,9 +510,9 @@ function TemplateNodeComponent(props: NodeProps<TemplateRFNode>) {
 
   const media =
     data.isBase && data.sourceImage
-      ? { kind: "aspect" as const, aspect: sourceAspect ?? 1 }
+      ? { kind: "aspect" as const, aspect: (sourceAspect ?? 1) * (data.slice?.width ?? 1) / (data.slice?.height ?? 1) }
       : data.nodeType === "prompt"
-        ? { kind: "fixed" as const, height: 140 }
+        ? { kind: "fixed" as const, height: (data.overrides.mediaHeight as number | undefined) ?? 160 }
         : { kind: "fixed" as const, height: EMPTY_MEDIA_HEIGHT };
 
   return (
@@ -528,9 +533,18 @@ function TemplateNodeComponent(props: NodeProps<TemplateRFNode>) {
         media={media}
         inputs={toSockets(entry.inputs)}
         outputs={toSockets(entry.outputs)}
+        controls={data.isBase || data.nodeType === "prompt" ? (
+          <ControlsCard
+            id={id}
+            summary={{
+              title: data.isBase ? "split-1-1.png" : "Add variable",
+              values: !data.isBase ? <SummaryValues items={[`${String(data.overrides.prompt ?? "").length} chars`]} /> : undefined,
+            }}
+          />
+        ) : undefined}
       >
         {data.isBase ? (
-          <BaseImageBody sourceImage={data.sourceImage} onAspect={setSourceAspect} />
+          <BaseImageBody sourceImage={data.sourceImage} slice={data.slice} onAspect={setSourceAspect} />
         ) : data.nodeType === "prompt" ? (
           <PromptBody nodeId={id} overrides={data.overrides} />
         ) : (

@@ -21,6 +21,7 @@ import type {
   SplitGridCell,
 } from "@/types";
 import { MODEL_DISPLAY_NAMES } from "@/types";
+import { getNodeSize } from "@/utils/nodeDimensions";
 import {
   createDefaultNodeData,
   createDefaultSplitGridTemplate,
@@ -470,7 +471,10 @@ export function buildCellInstances(options: BuildCellInstancesOptions): CellInst
           y: originY + (templateNode.position.y - minY),
         },
         data,
-        style: { width, height },
+        width,
+        style: { width },
+        // Initial layout hint only; React Flow replaces this with the full shell measurement.
+        measured: { width, height },
         groupId,
       });
     }
@@ -571,4 +575,100 @@ export function buildCellInstances(options: BuildCellInstancesOptions): CellInst
   }
 
   return { nodes, edges, groups, cells, routerEdges, routerPosition };
+}
+
+/**
+ * Keep generated cells readable when content (including detached controls) changes size.
+ * Only measurement changes trigger this: dragging a node remains a user edit.
+ * Preserve existing gaps and horizontal placement, then fit the group frames
+ * and move lower cell groups out of the way. Never re-create nodes or wiring.
+ */
+export function fitSplitGridCellMeasurements(
+  previousNodes: WorkflowNode[],
+  nodes: WorkflowNode[],
+  groups: Record<string, NodeGroup>,
+  changedIds: Set<string>
+): { nodes: WorkflowNode[]; groups: Record<string, NodeGroup> } {
+  const previousById = new Map(previousNodes.map((node) => [node.id, node]));
+  const nextById = new Map(nodes.map((node) => [node.id, node]));
+  let nextGroups = groups;
+  const overlapsX = (x: number, width: number, otherX: number, otherWidth: number) =>
+    x < otherX + otherWidth && otherX < x + width;
+
+  for (const split of nodes) {
+    if (split.type !== "splitGrid") continue;
+    const cells = getSplitGridCells(split.data as SplitGridNodeData);
+    if (!cells.some((cell) => cell.nodeIds.some((id) => changedIds.has(id)))) continue;
+    const cellGroupIds = new Set(cells.map((cell) => cell.groupId).filter((id): id is string => Boolean(id)));
+    const frames = Object.values(groups)
+      .filter((group) => cellGroupIds.has(group.id))
+      .sort((a, b) => a.position.y - b.position.y);
+
+    for (const frame of frames) {
+      // Include user-added members so fitting cannot leave them outside the frame.
+      const members = nodes.filter((node) => node.groupId === frame.id)
+        .sort((a, b) => a.position.y - b.position.y);
+      if (members.length === 0) continue;
+      const fitted: WorkflowNode[] = [];
+      for (const member of members) {
+        const previous = previousById.get(member.id) ?? member;
+        let y = -Infinity;
+        for (const upper of fitted) {
+          const oldUpper = previousById.get(upper.id) ?? upper;
+          const oldSize = getNodeSize(oldUpper);
+          const oldGap = previous.position.y - (oldUpper.position.y + oldSize.height);
+          if (previous.position.y <= oldUpper.position.y ||
+              !overlapsX(member.position.x, getNodeSize(member).width, upper.position.x, getNodeSize(upper).width)) continue;
+          // Preserve deliberate overlapping layouts unless the upper node grew.
+          const grew = getNodeSize(upper).height > oldSize.height || upper.position.y > oldUpper.position.y;
+          if (oldGap < 0 && !grew) continue;
+          y = Math.max(y, upper.position.y + getNodeSize(upper).height + (oldGap < 0 ? 32 : oldGap));
+        }
+        if (!Number.isFinite(y)) y = member.position.y;
+        const next = y === member.position.y ? member : { ...member, position: { ...member.position, y } };
+        nextById.set(member.id, next);
+        fitted.push(next);
+      }
+
+      const right = Math.max(...fitted.map((node) => node.position.x + getNodeSize(node).width));
+      const bottom = Math.max(...fitted.map((node) => node.position.y + getNodeSize(node).height));
+      const width = Math.max(frame.size.width, right - frame.position.x + GROUP_PADDING);
+      const oldBottom = Math.max(...members.map((node) => {
+        const previous = previousById.get(node.id) ?? node;
+        return previous.position.y + getNodeSize(previous).height;
+      }));
+      const bottomPadding = Math.max(GROUP_PADDING, frame.position.y + frame.size.height - oldBottom);
+      const height = bottom - frame.position.y + bottomPadding;
+      if (width !== frame.size.width || height !== frame.size.height) {
+        if (nextGroups === groups) nextGroups = { ...groups };
+        nextGroups[frame.id] = { ...frame, size: { width, height } };
+      }
+    }
+
+    // A taller cell must not cover the next row. Keep the user's existing
+    // spacing between rows, and leave unrelated workflow groups alone.
+    for (let index = 0; index < frames.length; index++) {
+      const original = frames[index];
+      let frame = nextGroups[original.id];
+      let y = -Infinity;
+      for (const oldUpper of frames.slice(0, index)) {
+        const upper = nextGroups[oldUpper.id];
+        const oldGap = original.position.y - (oldUpper.position.y + oldUpper.size.height);
+        if (oldGap < 0 || !overlapsX(frame.position.x, frame.size.width, upper.position.x, upper.size.width)) continue;
+        y = Math.max(y, upper.position.y + upper.size.height + oldGap);
+      }
+      if (!Number.isFinite(y)) y = frame.position.y;
+      const dy = y - frame.position.y;
+      if (dy === 0) continue;
+      if (nextGroups === groups) nextGroups = { ...groups };
+      frame = { ...frame, position: { ...frame.position, y } };
+      nextGroups[frame.id] = frame;
+      for (const member of nodes) {
+        if (member.groupId !== frame.id) continue;
+        const next = nextById.get(member.id)!;
+        nextById.set(member.id, { ...next, position: { ...next.position, y: next.position.y + dy } });
+      }
+    }
+  }
+  return { nodes: nodes.map((node) => nextById.get(node.id)!), groups: nextGroups };
 }
