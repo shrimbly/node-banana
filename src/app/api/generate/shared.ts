@@ -6,7 +6,7 @@
  * without shipping non-handler exports through a Next.js route file.
  */
 import { NextResponse } from "next/server";
-import type { GenerateResponse } from "@/types";
+import type { GenerateResponse, ImageGenerationMetadata } from "@/types";
 import { clearFalInputMappingCache as _clearFalInputMappingCache } from "./providers/fal";
 
 /**
@@ -19,7 +19,7 @@ export const clearFalInputMappingCache = _clearFalInputMappingCache;
  * Build the final NextResponse for a completed generation output.
  * Shared by the synchronous generate route and the async poll route.
  */
-export function buildMediaResponse(output: { type: string; data: string; url?: string }): NextResponse {
+export function buildMediaResponse(output: { type: string; data: string; url?: string }, generation?: ImageGenerationMetadata): NextResponse {
   if (output.type === "3d") {
     return NextResponse.json<GenerateResponse>({
       success: true,
@@ -51,6 +51,7 @@ export function buildMediaResponse(output: { type: string; data: string; url?: s
   return NextResponse.json<GenerateResponse>({
     success: true,
     image: output.data,
+    ...(generation ? { generation } : {}),
     contentType: "image",
   });
 }

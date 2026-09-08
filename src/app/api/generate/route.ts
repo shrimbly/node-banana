@@ -467,6 +467,7 @@ export async function POST(request: NextRequest) {
         images: processedImages,
         parameters,
         dynamicInputs: processedDynamicInputs,
+        signal: request.signal,
       };
 
       const result = await generateWithOpenAI(requestId, openaiApiKey, genInput);
@@ -476,8 +477,13 @@ export async function POST(request: NextRequest) {
           {
             success: false,
             error: result.error || "Generation failed",
+            errorCode: result.errorCode,
+            retryAfter: result.retryAfter,
           },
-          { status: 500 }
+          {
+            status: result.statusCode || 500,
+            ...(result.retryAfter ? { headers: { "Retry-After": result.retryAfter } } : {}),
+          }
         );
       }
 
@@ -490,7 +496,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      return buildMediaResponse(output);
+      return buildMediaResponse(output, result.generation);
     }
 
     // Default: Use Gemini
