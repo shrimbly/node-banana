@@ -1,6 +1,31 @@
 # Mac preview verification — 8 September 2026
 
-Verified on macOS 26.2 / Apple Silicon with Electron 44.2.0 and Next.js 16.1.6. The release runtime is `1.9.0-ebfaa7f8-2137-4570-924a-60a761577aed`.
+Verified on macOS 26.2 / Apple Silicon with Electron 44.2.0 and Next.js 16.1.6. The release runtime is `1.9.0-ad4975c6-fd7c-4f3b-851b-aa96ad086824`.
+
+## Review-fix verification
+
+The review fixes preserve decrypted keys for session-only use after a write failure, keep imported ComfyUI endpoints and explicit provider draft clears, and keep Mac controls available while startup decisions are pending. Tab closure now persists its discard marker within the same renderer turn as the busy check and graph change, covering both the tab strip and menu. A post-rename disk-sync failure completes closure with a warning rather than leaving an open tab excluded from recovery.
+
+Recovery collects media outside both valid checkpoints while protecting unfinished encodes, and reuses verification of unchanged files with metadata-based invalidation. Reserved runtime directory names are rejected, and diagnostic stream errors are contained and redacted.
+
+| Latest check | Result |
+| --- | --- |
+| Full Vitest suite | 158 files, 2,982 tests passed |
+| Electron persistence/lifecycle suite | 16 tests passed, including post-rename fsync failure, interrupted commit, asset collection and cache invalidation |
+| Isolated production build and unsigned arm64 app/DMG/ZIP | Passed; packaged desktop modules match current source |
+| Copied installation with clean profile and system-only PATH | Passed |
+| Native input while recovery and credential prompts remain open | Passed: controls are hit-testable, minimise/fullscreen work, and startup dragging moves the window |
+| Recovery, credentials and installed bundle acceptance | Passed: provider authentication rejection, migration/update/delete/failure, backend/renderer crashes, media/tab recovery, explicit discards, no resubmission and unchanged bundle digest |
+| Current `Cars.json` regression | 68 nodes, 106,131,310 bytes across 12 recovery assets, 193,469-byte checkpoint; responsive edits and crash recovery passed without submissions or source changes |
+| Older `Cars_new.json` inspection | All 63 nodes in the 265,175,984-byte file loaded without crashing; checkpoint failed with `Failed to fetch`. The saved file contains three expired `blob:` references, which require reattaching their media before recovery can checkpoint the graph. This is not a passing recovery result. |
+| Review loop | Original findings and additional confirmed findings fixed; all three specialist reviewers clear; final incremental CodeRabbit review returned zero findings |
+| Repository-wide TypeScript comparison | Same 203 pre-existing test-fixture diagnostics as pre-fix commit `592e3a6`; no new diagnostics |
+
+The native startup drag test initially ran before macOS finished its fullscreen transition. An isolated probe confirmed the drag region and native movement worked after that transition; the harness now waits before issuing a fixed-coordinate drag. The complete installed-app acceptance run passed afterward. An earlier native minimise check timed out; the dedicated smoke run and final acceptance both passed it.
+
+The large-workflow harness now supplies a file by path through the editor's drop handler, avoiding Chromium's 100 MB automation message limit for embedded media. The current `Cars.json` regression passed again through this path. Existing expired blob URLs in legacy workflow JSON cannot reconstruct the original media; this is separate from capturing live blob-backed media into durable recovery assets, which passed installed-app acceptance.
+
+## Earlier milestone checks
 
 | Check | Result |
 | --- | --- |
@@ -57,8 +82,8 @@ A subsequent user run passed input validation and created a Replicate prediction
 ## Release checksums (SHA-256)
 
 ```text
-67019d7a7445d248bb4f1c0a990638d13e3f3d5d80ebfeb3f4a4f4347fea3ec4  Node Banana-1.9.0-arm64.dmg
-fa1672dc7939f03516a053cb3078aa51eb76d691dd1ba897e7c8135d1a3e8cf9  Node Banana-1.9.0-arm64.zip
+ec98e2492668d0fa543817ea41cf6971f3731bb47d648484fcbf151b5bc0e644  Node Banana-1.9.0-arm64.dmg
+309fb12b0ca2c7338f3389dd6dcacfb8e8de6ce73ba058bd1560a59a0c7d8884  Node Banana-1.9.0-arm64.zip
 ```
 
 The app remains unsigned and unnotarised. Installation and tester steps are in [desktop-preview.md](desktop-preview.md).
