@@ -6,13 +6,17 @@ import { captureWorkflowTabSnapshot } from '@/store/utils/workflowTabs';
 import { captureRecovery, checkpointScheduler, hydrateRecovery, encodeRecovery } from '@/lib/desktop/recovery';
 import { isDesktop } from '@/lib/desktop/credentials';
 import { DesktopStartupDragRegion } from './DesktopWindowControls';
+import { Dialog, DialogBody, DialogButton, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/Dialog';
+import { useToast } from './Toast';
 
 let recoveryRead: ReturnType<NonNullable<Window['nodeBananaDesktop']>['recovery']['read']> | undefined;
 export function DesktopRecovery({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [checkpoint, setCheckpoint] = useState<unknown>(null);
-  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Warnings and the post-restore summary use the app's own notification
+  // stack; they stay until dismissed, like any other persistent toast.
+  const setNotice = (message: string | null) => { if (message) useToast.getState().show(message, 'info', true); };
   useEffect(() => {
     if (!isDesktop()) { setReady(true); return; }
     recoveryRead ??= window.nodeBananaDesktop!.recovery.read();
@@ -52,23 +56,27 @@ export function DesktopRecovery({ children }: { children: ReactNode }) {
     if (!result.ok) { setError(result.error); return; }
     setCheckpoint(null); setError(null); setReady(true);
   }
+  const showDialog = !ready && (!!checkpoint || !!error);
   return <>
     {!ready && <DesktopStartupDragRegion />}
-    {ready ? children : <div className="h-screen bg-[#0f0f0f] text-neutral-300 flex items-center justify-center">Checking your previous session…</div>}
-    {!ready && (!!checkpoint || error) && <div role="dialog" aria-modal="true" aria-label="Session recovery" className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 p-6">
-      <div className="max-w-lg rounded-xl border border-neutral-700 bg-neutral-900 p-6 text-neutral-100 space-y-4">
-        <p className="font-semibold">Restore your previous session?</p>
-        <p className="text-sm">Node Banana did not close normally. Restore checkpointed tabs and edits, or discard them and open an empty workspace.</p>
-        <p className="text-sm text-neutral-400">Interrupted generations will be stopped. Remote jobs may still be running. Recovery never submits requests.</p>
-        {error && <p role="alert" className="text-sm text-red-300">{error}</p>}
-        <div className="flex gap-3">
-          {!!checkpoint && <button className="rounded border border-neutral-600 px-3 py-2" onClick={() => void restore()}>Restore Session</button>}
-          <button className="rounded border border-neutral-600 px-3 py-2" onClick={() => void discard()}>Discard Recovery</button>
-        </div>
-      </div>
-    </div>}
-    {notice && ready && <div role="status" className="fixed bottom-5 left-1/2 -translate-x-1/2 z-[9998] max-w-2xl rounded-lg border border-neutral-600 bg-neutral-900 p-4 text-sm text-neutral-200">
-      {notice}<button aria-label="Dismiss recovery notice" className="ml-4 underline" onClick={() => setNotice(null)}>Dismiss</button>
-    </div>}
+    {ready ? children : <div className="h-screen bg-[#0f0f0f] flex items-center justify-center text-xs text-neutral-500">Checking your previous session…</div>}
+    <Dialog open={showDialog} size="sm" label="Session recovery">
+      <DialogHeader>
+        <DialogTitle>{checkpoint ? 'Restore your previous session?' : 'Session recovery'}</DialogTitle>
+        <DialogDescription>
+          {checkpoint
+            ? 'Node Banana did not close normally. Restore checkpointed tabs and edits, or discard them and open an empty workspace.'
+            : 'Node Banana did not close normally and the checkpoint could not be read.'}
+        </DialogDescription>
+      </DialogHeader>
+      <DialogBody scroll={false} className="flex flex-col gap-2 pb-4">
+        <p className="text-xs leading-4 text-neutral-500">Interrupted generations will be stopped. Remote jobs may still be running. Recovery never submits requests.</p>
+        {error && <p role="alert" className="rounded-md bg-red-500/10 px-2.5 py-2 text-xs leading-4 text-red-300">{error}</p>}
+      </DialogBody>
+      <DialogFooter>
+        <DialogButton variant="ghost" onClick={() => void discard()}>{checkpoint ? 'Discard' : 'Open empty workspace'}</DialogButton>
+        {!!checkpoint && <DialogButton variant="primary" autoFocus onClick={() => void restore()}>Restore session</DialogButton>}
+      </DialogFooter>
+    </Dialog>
   </>;
 }

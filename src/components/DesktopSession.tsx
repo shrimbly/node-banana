@@ -6,9 +6,43 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { initializeDesktopCredentials, isDesktop, useSessionCredentials } from '@/lib/desktop/credentials';
 import { getProviderSettings } from '@/store/utils/localStorage';
 import { useWorkflowStore } from '@/store/workflowStore';
+import { Dialog, DialogBody, DialogButton, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/Dialog';
+import { CHROME_SURFACE } from './chromeStyles';
+
+const WarningIcon = () => (
+  <svg className="h-4 w-4 shrink-0 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M12 9v4m0 4h.01" />
+    <path d="M10.3 3.9 2.6 17.2A2 2 0 0 0 4.3 20h15.4a2 2 0 0 0 1.7-2.8L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+  </svg>
+);
+
+const BANNER_ACTION = 'h-7 shrink-0 whitespace-nowrap rounded-md px-2.5 text-xs font-medium text-neutral-200 transition-colors duration-[120ms] hover:bg-white/7 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/30';
+
+/**
+ * Shown while the local server is down. Dismissible, and re-armed by the next
+ * disconnect, so a reader is not stuck with it once they have seen it.
+ */
+function DisconnectedBanner() {
+  const connected = useWorkflowStore(state => state.desktopConnected);
+  const [dismissed, setDismissed] = useState(false);
+  useEffect(() => { if (connected) setDismissed(false); }, [connected]);
+  if (connected || dismissed) return null;
+  return <div role="status" className={`${CHROME_SURFACE} fixed left-1/2 top-[54px] z-[9998] flex w-max max-w-[calc(100vw-32px)] -translate-x-1/2 items-center gap-3 rounded-xl py-1.5 pl-3.5 pr-1.5`}>
+    <WarningIcon />
+    <span className="text-xs leading-4 text-neutral-200">
+      Local server disconnected. <span className="text-neutral-400">New executions are disabled; your graph remains open.</span>
+    </span>
+    <div className="flex shrink-0 items-center gap-0.5">
+      <button type="button" className={BANNER_ACTION} onClick={() => void window.nodeBananaDesktop?.backend.restart()}>Restart server</button>
+      <button type="button" className={BANNER_ACTION} onClick={() => void window.nodeBananaDesktop?.openLogs()}>Open logs</button>
+      <button type="button" aria-label="Dismiss" className="flex h-7 w-7 items-center justify-center rounded-md text-neutral-500 transition-colors duration-[120ms] hover:bg-white/7 hover:text-white" onClick={() => setDismissed(true)}>
+        <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" aria-hidden="true"><path d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
+    </div>
+  </div>;
+}
 
 export function DesktopSession({ children }: { children: ReactNode }) {
-  const connected = useWorkflowStore(state => state.desktopConnected);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hydrate = () => {
@@ -31,22 +65,20 @@ export function DesktopSession({ children }: { children: ReactNode }) {
   return <>
     <DesktopWindowControls />
     {(!ready || error) && <DesktopStartupDragRegion />}
-    {ready ? <DesktopRecovery>{children}</DesktopRecovery> : <div className="h-screen bg-[#0f0f0f] text-neutral-300 flex items-center justify-center">Opening Node Banana…</div>}
-    {ready && !connected && <div role="status" className="fixed top-12 left-1/2 -translate-x-1/2 z-[9998] rounded-lg border border-amber-700 bg-neutral-900 p-4 text-sm text-neutral-200">
-      Local server disconnected. New executions are disabled; your graph remains open.
-      <button className="ml-4 underline" onClick={() => void window.nodeBananaDesktop?.backend.restart()}>Restart Server</button>
-      <button className="ml-4 underline" onClick={() => void window.nodeBananaDesktop?.openLogs()}>Open Logs</button>
-    </div>}
-    {error && <div className="fixed inset-0 z-[10000] bg-black/70 flex items-center justify-center p-6" role="dialog" aria-modal="true" aria-label="Credential storage">
-      <div className="max-w-lg rounded-xl border border-neutral-700 bg-neutral-900 p-6 text-neutral-100 space-y-4">
-        <p className="font-semibold">Keys could not be saved securely</p>
-        <p className="text-sm">{error}</p>
-        <p className="text-sm text-neutral-400">Your existing stored keys are preserved. Session-only keys stay in memory and are lost when the app closes.</p>
-        <div className="flex gap-3">
-          <button className="rounded border border-neutral-600 px-3 py-2" onClick={() => void initialize()}>Retry secure storage</button>
-          <button className="rounded border border-neutral-600 px-3 py-2" onClick={() => { useSessionCredentials(); hydrate(); setError(null); }}>Use for this session only</button>
-        </div>
-      </div>
-    </div>}
+    {ready ? <DesktopRecovery>{children}</DesktopRecovery> : <div className="h-screen bg-[#0f0f0f] flex items-center justify-center text-xs text-neutral-500">Opening Node Banana…</div>}
+    {ready && <DisconnectedBanner />}
+    <Dialog open={!!error} size="sm" label="Credential storage" overlayClassName="z-[10000]">
+      <DialogHeader>
+        <DialogTitle>Keys could not be saved securely</DialogTitle>
+        <DialogDescription>{error}</DialogDescription>
+      </DialogHeader>
+      <DialogBody scroll={false} className="pb-4">
+        <p className="text-xs leading-4 text-neutral-500">Your existing stored keys are preserved. Session-only keys stay in memory and are lost when the app closes.</p>
+      </DialogBody>
+      <DialogFooter>
+        <DialogButton variant="ghost" onClick={() => { useSessionCredentials(); hydrate(); setError(null); }}>Use for this session only</DialogButton>
+        <DialogButton variant="primary" autoFocus onClick={() => void initialize()}>Retry secure storage</DialogButton>
+      </DialogFooter>
+    </Dialog>
   </>;
 }
