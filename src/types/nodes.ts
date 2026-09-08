@@ -16,6 +16,7 @@ import type {
 export type { AnnotationNodeData, BaseNodeData };
 
 // Import from domain files to avoid circular dependencies
+import type { ImageGenerationMetadata } from "./api";
 import type { AspectRatio, Resolution, ModelType } from "./models";
 import type { LLMProvider, LLMModelType, SelectedModel, ProviderType } from "./providers";
 import type { ComfyAppDefinition, ComfyWorkflowInspection } from "@/lib/comfy/types";
@@ -148,6 +149,7 @@ export interface AvailableVariable {
  * Image history item for tracking generated images
  */
 export interface ImageHistoryItem {
+  generation?: ImageGenerationMetadata;
   id: string;
   image: string; // Base64 data URL
   timestamp: number; // For display & sorting
@@ -161,11 +163,12 @@ export interface ImageHistoryItem {
  * Carousel image item for per-node history (IDs only, images stored externally)
  */
 export interface CarouselImageItem {
+  generation?: ImageGenerationMetadata;
   id: string;
   timestamp: number;
   prompt: string;
   aspectRatio: AspectRatio;
-  model: ModelType;
+  model: ModelType | string;
 }
 
 /**

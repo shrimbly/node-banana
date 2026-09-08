@@ -56,6 +56,18 @@ describe("GlobalImageHistory", () => {
     vi.useRealTimers();
   });
 
+  it("labels usage costs as estimates and missing costs as unavailable", () => {
+    const history = [
+      createHistoryItem({ model: "GPT Image 2.5 Flare", generation: { modelId: "gpt-image-2.5-flare", parameters: {}, size: "1536x864", outputFormat: "webp", cost: { amount: 0.0325, currency: "USD", estimated: true } } }),
+      createHistoryItem({ model: "GPT Image 2.5 Sunburst", generation: { modelId: "gpt-image-2.5-sunburst", parameters: {} } }),
+    ];
+    mockUseWorkflowStore.mockImplementation(selector => selector(createDefaultState({ globalImageHistory: history })));
+    render(<GlobalImageHistory />);
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByTitle(/Est. \$0.0325 USD/)).toHaveAttribute("title", expect.stringContaining("1536x864 · WEBP"));
+    expect(screen.getByTitle(/Cost unavailable/)).toBeInTheDocument();
+  });
+
   describe("Empty State", () => {
     it("should not render when history is empty", () => {
       const { container } = render(<GlobalImageHistory />);

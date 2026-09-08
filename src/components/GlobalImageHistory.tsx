@@ -54,6 +54,15 @@ export function producerName(model: string): string {
   }
 }
 
+function generationDetails(item: ImageHistoryItem): string {
+  const metadata = item.generation;
+  if (!metadata) return "";
+  const cost = metadata.cost
+    ? `${metadata.cost.estimated ? "Est. " : ""}$${metadata.cost.amount.toFixed(4)} USD`
+    : "Cost unavailable";
+  return [metadata.size, metadata.outputFormat?.toUpperCase(), cost].filter(Boolean).join(" · ");
+}
+
 export function formatRelativeTime(timestamp: number): string {
   const diff = Date.now() - timestamp;
   const seconds = Math.floor(diff / 1000);
@@ -108,7 +117,7 @@ function RecentThumb({
       draggable
       onDragStart={(e) => onDragStart(e, item)}
       className="relative h-[52px] cursor-grab overflow-hidden rounded-lg squircle bg-well shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-[box-shadow,transform] duration-[120ms] ease-out hover:shadow-[inset_0_0_0_2px_#3b82f6] hover:scale-[1.04] active:cursor-grabbing focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_2px_#3b82f6]"
-      title={`${formatRelativeTime(item.timestamp)} · ${describeProducer(item.model)}\n${item.prompt?.substring(0, 80) || "No prompt"}`}
+      title={`${formatRelativeTime(item.timestamp)} · ${describeProducer(item.model)}\n${item.prompt?.substring(0, 80) || "No prompt"}${item.generation ? `\n${generationDetails(item)}` : ""}`}
     >
       <img
         src={item.image}
@@ -234,6 +243,7 @@ function HistorySidebar({
               <p className="mt-0.5 text-[10px] text-neutral-500">
                 {formatRelativeTime(item.timestamp)} · {describeProducer(item.model)}
               </p>
+              {item.generation && <p className="mt-0.5 text-[10px] text-neutral-500">{generationDetails(item)}</p>}
             </div>
           </div>
         ))}

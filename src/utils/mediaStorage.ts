@@ -269,6 +269,7 @@ async function externalizeNodeMedia(
               prompt: item.prompt,
               aspectRatio: item.aspectRatio,
               model: item.model,
+              ...(item.generation ? { generation: item.generation } : {}),
             });
           } else {
             cleanedHistory.push(item);

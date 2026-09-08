@@ -76,3 +76,19 @@ export function validateOpenAIImageParameters(modelId: string, params: Record<st
   }
   return null;
 }
+
+/**
+ * USD token rates verified 2026-09-09 on the Sunburst/Flare model pages.
+ * The Images response does not document a reliable cache breakdown, so this
+ * uses uncached rates and remains an estimate even though token counts are real.
+ */
+export function estimateOpenAIImage25Cost(modelId: string, usage?: import("@/types/api").ImageGenerationMetadata["usage"]): import("@/types/api").ImageGenerationMetadata["cost"] {
+  if (!isOpenAIImage25(modelId) || !usage) return undefined;
+  const { textInputTokens, imageInputTokens, imageOutputTokens } = usage;
+  if (![textInputTokens, imageInputTokens, imageOutputTokens].every(value => Number.isSafeInteger(value) && value >= 0)) return undefined;
+  return {
+    amount: (textInputTokens * 5 + imageInputTokens * 8 + imageOutputTokens * 30) / 1_000_000,
+    currency: "USD",
+    estimated: true,
+  };
+}

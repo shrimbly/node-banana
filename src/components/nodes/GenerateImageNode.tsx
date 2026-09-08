@@ -321,8 +321,10 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   useErrorToast(nodeData.status, nodeData.error, "Generation failed");
 
   const selectedHistoryItem = (nodeData.imageHistory || [])[nodeData.selectedHistoryIndex || 0];
+  const openaiSize = nodeData.selectedModel?.provider === "openai" && typeof nodeData.parameters?.size === "string" && nodeData.parameters.size !== "auto"
+    ? nodeData.parameters.size : undefined;
   const configuredAspect = parseAspectRatio(
-    (nodeData.outputImage && selectedHistoryItem?.aspectRatio) || nodeData.aspectRatio || "1:1"
+    (nodeData.outputImage && (selectedHistoryItem?.generation?.size || selectedHistoryItem?.aspectRatio)) || openaiSize || nodeData.aspectRatio || "1:1"
   );
   const mediaAspect =
     nodeData.outputImage && loadedAspect?.src === nodeData.outputImage ? loadedAspect.aspect : configuredAspect;

@@ -1,6 +1,6 @@
 /** Direct OpenAI Images API generation and reference-image editing. */
 import type { GenerationInput, GenerationOutput } from "@/lib/providers/types";
-import { validateOpenAIImageParameters } from "@/lib/providers/openaiImages";
+import { estimateOpenAIImage25Cost, validateOpenAIImageParameters } from "@/lib/providers/openaiImages";
 import type { ImageGenerationMetadata } from "@/types/api";
 
 const OPENAI_API_BASE = "https://api.openai.com/v1/images";
@@ -129,6 +129,7 @@ export async function generateWithOpenAI(requestId: string, apiKey: string, inpu
     if (typeof base64 !== "string" || !base64) return { success: false, error: "No image returned from OpenAI" };
     const format = data.output_format ?? settings.output_format as "png" | "jpeg" | "webp";
     if (!["png", "jpeg", "webp"].includes(format)) return { success: false, statusCode: 502, error: "OpenAI returned an unsupported image format." };
+    const usage = getUsage(data);
     return {
       success: true,
       outputs: [{ type: "image", data: `data:image/${format};base64,${base64}` }],
@@ -139,7 +140,8 @@ export async function generateWithOpenAI(requestId: string, apiKey: string, inpu
         quality: data.quality ?? String(settings.quality),
         background: data.background ?? String(settings.background),
         outputFormat: format,
-        usage: getUsage(data),
+        usage,
+        cost: estimateOpenAIImage25Cost(input.model.id, usage),
       },
     };
   } catch (error) {

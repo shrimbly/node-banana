@@ -16,3 +16,18 @@ describe("OpenAI image settings validation", () => {
     expect(validateOpenAIImageParameters("gpt-image-2.5-flare", { output_compression: 101 })).toBeTruthy();
   });
 });
+
+describe("GPT Image 2.5 usage cost", () => {
+  it.each(["sunburst", "flare"])("estimates %s from usage with the documented token rates", async variant => {
+    const { estimateOpenAIImage25Cost } = await import("../openaiImages");
+    const cost = estimateOpenAIImage25Cost(`gpt-image-2.5-${variant}`, { textInputTokens: 100, imageInputTokens: 250, imageOutputTokens: 1000 });
+    expect(cost).toEqual({ amount: 0.0325, currency: "USD", estimated: true });
+  });
+  it("does not invent zero cost for missing or invalid usage, or reprice legacy models", async () => {
+    const { estimateOpenAIImage25Cost } = await import("../openaiImages");
+    expect(estimateOpenAIImage25Cost("gpt-image-2.5-flare")).toBeUndefined();
+    expect(estimateOpenAIImage25Cost("gpt-image-2.5-flare", { textInputTokens: NaN, imageInputTokens: 0, imageOutputTokens: 0 })).toBeUndefined();
+    expect(estimateOpenAIImage25Cost("gpt-image-1", { textInputTokens: 100, imageInputTokens: 0, imageOutputTokens: 1000 })).toBeUndefined();
+    expect(estimateOpenAIImage25Cost("gpt-image-2.5-flare", { textInputTokens: 0, imageInputTokens: 0, imageOutputTokens: 0 })?.amount).toBe(0);
+  });
+});
