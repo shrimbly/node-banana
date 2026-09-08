@@ -281,7 +281,7 @@ function ParameterInputInner({ param, name, value, onChange }: ParameterInputPro
   const handleChange = useCallback((value: unknown) => {
     onChange(name, value);
   }, [name, onChange]);
-  const displayName = param.name
+  const displayName = (param.name === "output_compression" ? "compression" : param.name)
     .replace(/_/g, " ")
     .replace(/\b\w/g, (c) => c.toUpperCase());
   const description = param.description || undefined;

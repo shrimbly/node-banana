@@ -74,9 +74,9 @@ describe("ModelParameters", () => {
     const props = { ...defaultProps, provider: "openai" as const, modelId: "gpt-image-2.5-flare" };
     const { rerender } = render(<ModelParameters {...props} parameters={{ size: "auto", output_format: "png" }} />);
     await screen.findByLabelText("Output Format");
-    expect(screen.queryByLabelText("Output Compression")).toBeNull();
+    expect(screen.queryByLabelText("Compression")).toBeNull();
     rerender(<ModelParameters {...props} parameters={{ size: "auto", output_format: "jpeg", background: "transparent" }} />);
-    expect(screen.getByLabelText("Output Compression")).toBeInTheDocument();
+    expect(screen.getByLabelText("Compression")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("PNG or WebP");
   });
 

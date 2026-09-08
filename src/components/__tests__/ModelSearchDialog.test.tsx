@@ -145,6 +145,18 @@ describe("ModelSearchDialog", () => {
     vi.restoreAllMocks();
   });
 
+  it("refreshes older OpenAI catalogue caches without waiting for their TTL", async () => {
+    localStorage.setItem("node-banana-models-cache", JSON.stringify({
+      "rf:all:all:": { models: [], availableProviders: ["openai"], timestamp: Date.now() },
+    }));
+    const { OPENAI_IMAGE_25_MODELS } = await import("@/lib/providers/openaiImages");
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, models: OPENAI_IMAGE_25_MODELS, availableProviders: ["openai"] }) });
+    render(<TestWrapper><ModelSearchDialog isOpen onClose={vi.fn()} /></TestWrapper>);
+    expect(await screen.findByText("GPT Image 2.5 Sunburst")).toBeInTheDocument();
+    expect(screen.getByText("GPT Image 2.5 Flare")).toBeInTheDocument();
+    expect(mockFetch).toHaveBeenCalled();
+  });
+
   describe("Visibility", () => {
     it("should not render when isOpen is false", () => {
       render(
