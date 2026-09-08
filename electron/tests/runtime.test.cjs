@@ -20,7 +20,9 @@ test('runtime is atomically provisioned and previous successful build survives u
     }
     assert.deepEqual((await fs.readdir(path.join(user, 'runtimes'))).sort(), ['active.json', 'three', 'two']);
     assert.equal(await fs.readFile(path.join(source, 'asset'), 'utf8'), 'three');
-    await fs.writeFile(path.join(source, 'runtime.json'), JSON.stringify({ buildId: '../escape' }));
-    await assert.rejects(provisionRuntime(source, user), /Invalid/);
+    for (const buildId of ['../escape', '.', '..', null, 123]) {
+      await fs.writeFile(path.join(source, 'runtime.json'), JSON.stringify({ buildId }));
+      await assert.rejects(provisionRuntime(source, user), /Invalid/);
+    }
   } finally { await fs.rm(temp, { recursive: true, force: true }); }
 });

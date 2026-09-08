@@ -6,7 +6,7 @@ const { atomicWrite } = require('./files.cjs');
 
 async function provisionRuntime(source, userData) {
   const manifest = JSON.parse(await fs.readFile(path.join(source, 'runtime.json'), 'utf8'));
-  if (!/^[a-zA-Z0-9._-]+$/.test(manifest.buildId)) throw new Error('Invalid runtime build ID');
+  if (typeof manifest.buildId !== 'string' || !/^[a-zA-Z0-9._-]+$/.test(manifest.buildId) || manifest.buildId === '.' || manifest.buildId === '..') throw new Error('Invalid runtime build ID');
   const runtimes = path.join(userData, 'runtimes');
   const target = path.join(runtimes, manifest.buildId);
   await fs.mkdir(runtimes, { recursive: true, mode: 0o700 });
