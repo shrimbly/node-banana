@@ -115,7 +115,9 @@ Run `npm run electron:smoke` to check the real desktop window, editor interactio
 local file save/load, native dialog bridge, settings persistence, and server
 shutdown using a temporary profile. It needs a graphical desktop (or Xvfb on
 Linux). Add `-- --production` to test an existing production build. These commands
-run from source. Use `npm run electron:package` for an unsigned Apple Silicon app, DMG and ZIP, and `npm run electron:acceptance` for packaged crash/recovery checks. See the [Mac preview guide](docs/desktop-preview.md) for installation, encrypted credentials and recovery details. Signing and automatic updates remain deferred. ComfyUI remains a separately installed or remote service.
+run from source. Use `npm run electron:package` for an unsigned Apple Silicon app, DMG and ZIP, and `npm run electron:acceptance` for packaged crash/recovery checks. See the [Mac preview guide](docs/desktop-preview.md) for installation, encrypted credentials and recovery details. Signing and automatic updates remain deferred for the preview. ComfyUI remains a separately installed or remote service.
+
+The [Node Banana 2.0 launch plan](docs/2.0-launch-plan.md) tracks the remaining Windows x64 and Mac Apple Silicon release work, installer polish, landing page and launch acceptance checks.
 
 For macOS title-bar changes, also run
 `npm run electron:smoke -- --production --native-input` after building. This uses
