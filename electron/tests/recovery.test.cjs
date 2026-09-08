@@ -5,6 +5,71 @@ const path = require('node:path');
 const os = require('node:os');
 const { createRecoveryStore } = require('../lib/recovery.cjs');
 const snapshot = (text, media) => ({ version: 1, activeTabId: 'two', tabs: ['one', 'two'].map(id => ({ id, snapshot: { nodes: [{ id, data: { text, media } }], edges: [] } })) });
+test('collects obsolete media while preserving both checkpoints and unfinished encodes', () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'banana-collect-'));
+  try {
+    const store = createRecoveryStore(temp);
+    store.read();
+    const a = store.putAsset({ bytes: Buffer.from('first'), mime: 'image/png' });
+    store.write(snapshot('a', a));
+    const b = store.putAsset({ bytes: Buffer.from('second'), mime: 'image/png' });
+    store.write(snapshot('b', b));
+    const filename = asset => path.join(temp, 'recovery/assets', asset.$recoveryAsset);
+    const pending = store.putAsset({ bytes: Buffer.from('encoding'), mime: 'image/png' });
+    store.assetChunk({ offset: 0, bytes: Buffer.from('uploading'), mime: 'video/mp4', done: false });
+    assert.ok(fs.existsSync(filename(a)), 'Previous checkpoint still owns a');
+    store.write(snapshot('empty'));
+    assert.equal(fs.existsSync(filename(a)), false);
+    assert.ok(fs.existsSync(filename(b)), 'Previous checkpoint still owns b');
+    assert.ok(fs.existsSync(filename(pending)), 'Uncommitted encode remains available');
+    assert.ok(fs.readdirSync(path.join(temp, 'recovery/assets')).some(name => name.endsWith('.tmp')));
+    store.write(snapshot('empty again'));
+    assert.equal(fs.existsSync(filename(b)), false);
+    createRecoveryStore(temp).read();
+    assert.deepEqual(fs.readdirSync(path.join(temp, 'recovery/assets')), [], 'New renderer collects abandoned encodes and uploads');
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('reuses verified unchanged media and rechecks modified files', () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'banana-verified-'));
+  const original = fs.readSync;
+  let assetReads = 0;
+  fs.readSync = (...args) => { assetReads++; return original(...args); };
+  try {
+    const store = createRecoveryStore(temp);
+    store.read();
+    const asset = store.putAsset({ bytes: Buffer.from('original'), mime: 'image/png' });
+    store.write(snapshot('one', asset));
+    // readFileSync may use readSync too; count only asset-sized buffers.
+    fs.readSync = (...args) => { if (args[1].length === 8) assetReads++; return original(...args); };
+    assetReads = 0;
+    store.write(snapshot('two', asset));
+    assert.equal(assetReads, 0, 'Unchanged asset was not hashed again');
+    fs.writeFileSync(path.join(temp, 'recovery/assets', asset.$recoveryAsset), 'modified');
+    assert.throws(() => store.write(snapshot('three', asset)), /Damaged recovery asset/);
+    assert.ok(assetReads > 0);
+    assert.equal(createRecoveryStore(temp).read().snapshot.tabs[0].snapshot.nodes[0].data.text, 'two');
+  } finally { fs.readSync = original; fs.rmSync(temp, { recursive: true, force: true }); }
+});
+
+test('a failed checkpoint commit never collects media needed by either valid checkpoint', () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'banana-collect-failure-'));
+  const original = fs.renameSync;
+  try {
+    const store = createRecoveryStore(temp);
+    store.read();
+    const asset = store.putAsset({ bytes: Buffer.from('preserve'), mime: 'image/png' });
+    store.write(snapshot('previous', asset));
+    store.write(snapshot('current', asset));
+    fs.renameSync = (from, to) => { if (to.endsWith('checkpoint-v1.json')) throw new Error('Interrupted commit'); return original(from, to); };
+    assert.throws(() => store.write(snapshot('empty')), /Interrupted commit/);
+    assert.ok(fs.existsSync(path.join(temp, 'recovery/assets', asset.$recoveryAsset)));
+    fs.renameSync = original;
+    const recovered = createRecoveryStore(temp).read().snapshot;
+    assert.equal(recovered.tabs[0].snapshot.nodes[0].data.text, 'current');
+    assert.deepEqual(store.hydrate(recovered).warnings, []);
+  } finally { fs.renameSync = original; fs.rmSync(temp, { recursive: true, force: true }); }
+});
 test('recovers previous checkpoint, durable assets and discards across interrupted writes', () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'banana-recovery-'));
   try {

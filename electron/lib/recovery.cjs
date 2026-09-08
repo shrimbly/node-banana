@@ -26,6 +26,8 @@ function createRecoveryStore(userData) {
   const previous = path.join(directory, 'checkpoint-v1.previous.json');
   const marker = path.join(directory, 'session-v1.json');
   const uploads = new Map();
+  const pendingAssets = new Map();
+  const verifiedAssets = new Map();
   let closed = false;
   let acknowledged = false;
   function session() {
@@ -45,8 +47,11 @@ function createRecoveryStore(userData) {
   function assetRead(ref) {
     if (typeof ref.mime !== 'string' || !/^[\w.+-]+\/[\w.+-]+$/.test(ref.mime)) throw new Error('Invalid media type');
     const filename = assetPath(ref.$recoveryAsset);
-    const size = fs.statSync(filename).size;
+    const stat = fs.statSync(filename, { bigint: true });
+    const size = Number(stat.size);
     if (size > MAX_ASSET) throw new Error('Recovery media too large');
+    const signature = [stat.dev, stat.ino, stat.size, stat.mtimeNs, stat.ctimeNs].join(':');
+    if (verifiedAssets.get(ref.$recoveryAsset) === signature) return ref;
     const hash = createHash('sha256');
     const buffer = Buffer.alloc(Math.min(CHUNK_SIZE, size));
     const fd = fs.openSync(filename, 'r');
@@ -58,7 +63,36 @@ function createRecoveryStore(userData) {
       }
     } finally { fs.closeSync(fd); }
     if (hash.digest('hex') !== ref.$recoveryAsset) throw new Error('Damaged recovery asset');
+    verifiedAssets.set(ref.$recoveryAsset, signature);
     return ref;
+  }
+  function collectAssets() {
+    const retained = new Set();
+    for (const filename of [current, previous]) {
+      try { assetReferences(readCheckpoint(filename), ref => retained.add(ref.$recoveryAsset)); }
+      catch (error) {
+        // A checkpoint we cannot inspect may still need its assets. Wait until
+        // it has been replaced successfully before collecting anything.
+        if (error.code !== 'ENOENT') return;
+      }
+    }
+    const now = Date.now();
+    for (const [id, created] of pendingAssets) {
+      if (retained.has(id) || now - created > 60000) pendingAssets.delete(id);
+      else retained.add(id); // An encoder may still be preparing its checkpoint.
+    }
+    for (const [id, upload] of uploads) {
+      if (now - upload.updated > 60000) { fs.rmSync(upload.filename, { force: true }); uploads.delete(id); }
+      else retained.add(path.basename(upload.filename));
+    }
+    const assetDirectory = path.join(directory, 'assets');
+    if (!fs.existsSync(assetDirectory)) return;
+    for (const filename of fs.readdirSync(assetDirectory)) {
+      if (!retained.has(filename) && (/^[a-f0-9]{64}$/.test(filename) || filename.endsWith('.tmp'))) {
+        fs.rmSync(path.join(assetDirectory, filename), { force: true });
+        verifiedAssets.delete(filename);
+      }
+    }
   }
   function filtered(snapshot, discarded) {
     snapshot.tabs = snapshot.tabs.filter(tab => !discarded.includes(tab.id));
@@ -68,6 +102,9 @@ function createRecoveryStore(userData) {
   }
   return {
     read() {
+      // Reading begins a renderer session; abandoned uploads from the old
+      // renderer must not keep assets or temporary files alive indefinitely.
+      uploads.clear(); pendingAssets.clear(); verifiedAssets.clear();
       const state = session();
       const warnings = [];
       let snapshot = null;
@@ -83,6 +120,7 @@ function createRecoveryStore(userData) {
       closed = false;
       acknowledged = !snapshot;
       atomicWrite(marker, JSON.stringify({ clean: false, discarded: state.clean ? [] : (state.discarded || []) }));
+      try { collectAssets(); } catch { warnings.push('Unused recovery media could not be removed. Check disk space and permissions.'); }
       return { snapshot, warnings };
     },
     write(snapshot) {
@@ -100,6 +138,7 @@ function createRecoveryStore(userData) {
       if (validCurrent) atomicWrite(previous, fs.readFileSync(current));
       atomicWrite(current, JSON.stringify({ sha256: createHash('sha256').update(payload).digest('hex'), payload }));
       acknowledged = true;
+      collectAssets();
       return true;
     },
     // Never send media-sized strings or buffers through main-process IPC.
@@ -134,6 +173,7 @@ function createRecoveryStore(userData) {
           try { fs.fsyncSync(dir); } finally { fs.closeSync(dir); }
         }
         uploads.delete(uploadId);
+        pendingAssets.set(id, Date.now());
         return { asset: { $recoveryAsset: id, mime } };
       } catch (error) { fs.rmSync(upload.filename, { force: true }); uploads.delete(uploadId); throw error; }
     },
@@ -154,6 +194,7 @@ function createRecoveryStore(userData) {
       const id = createHash('sha256').update(bytes).digest('hex');
       const filename = assetPath(id);
       if (!fs.existsSync(filename)) atomicWrite(filename, bytes);
+      pendingAssets.set(id, Date.now());
       return { $recoveryAsset: id, mime };
     },
     hydrate(snapshot) {
@@ -206,6 +247,7 @@ function createRecoveryStore(userData) {
       atomicWrite(marker, JSON.stringify({ clean: true, discarded: [] }));
       for (const file of [current, previous]) fs.rmSync(file, { force: true });
       fs.rmSync(path.join(directory, 'assets'), { recursive: true, force: true });
+      uploads.clear(); pendingAssets.clear(); verifiedAssets.clear();
       atomicWrite(marker, JSON.stringify({ clean: false, discarded: [] }));
     },
     markClean(force = false) {
