@@ -50,7 +50,9 @@ Replicate's live model version `b80beec96b7c28035d1ed3e169ebf3e9a47cf50cd8829666
 
 The app misclassified the plural field as a setting and persisted its null default. In the user's saved workflow, that setting overwrote the connected image during fallback request construction. The fix recognises the image-array handle, applies saved settings before connected inputs, and omits null array settings from Replicate requests. It covers existing workflows without editing their saved files.
 
-Five regression cases failed before the fix. All 81 targeted provider, schema and image-executor tests passed afterward, covering connected images, order, stale defaults, dynamic inputs, and prompt-only requests. The isolated production build and packaged smoke tests passed, including a read-only check against Replicate's live schema. No paid Reve prediction was submitted; successful generation with the fixed request remains a user check.
+Five regression cases failed before the fix. All 81 targeted provider, schema and image-executor tests passed afterward, covering connected images, order, stale defaults, dynamic inputs, and prompt-only requests. The isolated production build and packaged smoke tests passed, including a read-only check against Replicate's live schema. The automated checks did not submit a paid Reve prediction.
+
+A subsequent user run passed input validation and created a Replicate prediction, then failed upstream with `PARTNER_API_CLOSED`. [Reve's official notice](https://help.reve.com/hc/en-us/articles/46837930295316-Reve-API) confirms its API was retired on 14 August 2026. Successful Reve generation through this Replicate integration is therefore blocked by upstream availability; the request-format fix does not restore the retired service. No paid predictions were submitted by the automated checks.
 
 ## Release checksums (SHA-256)
 
