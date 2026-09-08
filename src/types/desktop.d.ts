@@ -24,7 +24,7 @@ declare global {
         putAsset: (asset: { bytes: Uint8Array; mime: string }) => Promise<DesktopResult<{ $recoveryAsset: string; mime: string }>>;
         readAsset: (request: { asset: { $recoveryAsset: string; mime: string }; offset: number }) => Promise<DesktopResult<{ bytes: Uint8Array; size: number }>>;
         hydrate: (snapshot: unknown) => Promise<DesktopResult<{ snapshot: unknown; warnings: string[] }>>;
-        discardTab: (id: string) => Promise<DesktopResult<void>>;
+        discardTab: (id: string) => DesktopResult<void>;
         discard: () => Promise<DesktopResult<void>>;
       };
       credentials: {

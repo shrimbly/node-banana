@@ -142,7 +142,7 @@ async function createWindow() {
 }
 function registerBridge() {
   for (const [category, operations, getStore] of [
-    ['recovery', ['read', 'write', 'assetChunk', 'readAsset', 'hydrate', 'discardTab', 'discard'], () => recoveryStore],
+    ['recovery', ['read', 'write', 'assetChunk', 'readAsset', 'hydrate', 'discard'], () => recoveryStore],
     ['credentials', ['read', 'write', 'delete'], () => credentialStore],
   ]) for (const operation of operations) ipcMain.handle(`desktop:${category}:${operation}`, (event, value) => {
     if (!validCaller(event)) throw new Error('Unauthorized desktop request');
@@ -150,6 +150,21 @@ function registerBridge() {
     catch (error) {
       log(error);
       return { ok: false, error: category === 'credentials' ? error.message : 'Recovery could not be read or saved. Check disk space and permissions, and save your workflows to disk.' };
+    }
+  });
+  ipcMain.on('desktop:recovery:discardTab', (event, id) => {
+    // Always reply, including rejection paths. This handler never calls back
+    // into the renderer, which is waiting to finish closing its tab.
+    if (!validCaller(event)) {
+      event.returnValue = { ok: false, error: 'Unauthorized desktop request' };
+      return;
+    }
+    try {
+      recoveryStore.discardTab(id);
+      event.returnValue = { ok: true, value: undefined };
+    } catch (error) {
+      log(error);
+      event.returnValue = { ok: false, error: 'The tab could not close safely. Check disk space and permissions, then try again.' };
     }
   });
   let importingEnvironment = false;

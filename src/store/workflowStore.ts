@@ -3184,6 +3184,18 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     if (!closing) return false;
     if (get().tabsBusyReason()) return false;
 
+    // Keep the busy check, durable discard and graph mutation in one turn.
+    // Both the tab strip and the menu close through this action.
+    if (typeof window !== 'undefined' && window.nodeBananaDesktop) {
+      try {
+        const result = window.nodeBananaDesktop.recovery.discardTab(tabId);
+        if (!result.ok) throw new Error(result.error);
+      } catch (error) {
+        useToast.getState().show(error instanceof Error ? error.message : 'The tab could not close safely. Try again.', 'error');
+        return false;
+      }
+    }
+
     const empty = () => emptyWorkflowTabSnapshot({ edgeStyle, edgeAppearance, useExternalImageStorage });
 
     if (tabs.length === 1) {

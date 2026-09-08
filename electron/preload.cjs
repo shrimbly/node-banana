@@ -30,7 +30,9 @@ contextBridge.exposeInMainWorld('nodeBananaDesktop', {
     },
     readAsset: (value) => ipcRenderer.invoke('desktop:recovery:readAsset', value),
     hydrate: (value) => ipcRenderer.invoke('desktop:recovery:hydrate', value),
-    discardTab: (id) => ipcRenderer.invoke('desktop:recovery:discardTab', id),
+    // Only the small discard marker is synchronous: the store must commit the
+    // close in the same renderer turn as its busy check and durable discard.
+    discardTab: (id) => ipcRenderer.sendSync('desktop:recovery:discardTab', id),
     discard: () => ipcRenderer.invoke('desktop:recovery:discard'),
   },
   credentials: {

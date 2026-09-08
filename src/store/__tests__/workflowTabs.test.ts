@@ -3,7 +3,7 @@
  * Runs against the real store; media hydration is mocked out.
  */
 
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { useWorkflowStore, type WorkflowFile } from "../workflowStore";
 import {
   summarizeWorkflowTabs,
@@ -75,6 +75,7 @@ function resetTabs() {
 }
 
 describe("workflow tabs (store)", () => {
+  afterEach(() => { delete (window as { nodeBananaDesktop?: unknown }).nodeBananaDesktop; });
   beforeEach(() => {
     resetTabs();
   });
@@ -84,6 +85,44 @@ describe("workflow tabs (store)", () => {
     expect(tabs).toHaveLength(1);
     expect(tabs[0].id).toBe(activeTabId);
     expect(tabs[0].snapshot).toBeNull();
+  });
+
+  it.each([{ isSaving: true }, { isRunning: true }, { pendingMediaSaves: 1 }])('never discards recovery when a close is rejected as busy: %j', busy => {
+    const discardTab = vi.fn();
+    Object.defineProperty(window, 'nodeBananaDesktop', { configurable: true, value: { recovery: { discardTab } } });
+    useWorkflowStore.setState(busy);
+    const before = store();
+    expect(store().closeTab(before.activeTabId)).toBe(false);
+    expect(discardTab).not.toHaveBeenCalled();
+    expect(store().tabs).toBe(before.tabs);
+  });
+
+  it('keeps the graph and tab open if durable discard fails', () => {
+    const discardTab = vi.fn(() => ({ ok: false, error: 'Disk full' }));
+    Object.defineProperty(window, 'nodeBananaDesktop', { configurable: true, value: { recovery: { discardTab } } });
+    useWorkflowStore.setState({ nodes: [promptNode('unsaved')], hasUnsavedChanges: true });
+    const before = store();
+    expect(store().closeTab(before.activeTabId)).toBe(false);
+    expect(store().tabs).toBe(before.tabs);
+    expect(store().nodes).toBe(before.nodes);
+    expect(store().hasUnsavedChanges).toBe(true);
+  });
+
+  it('commits discard and closure before queued save work can interleave', async () => {
+    useWorkflowStore.setState({ nodes: [promptNode('unsaved')], hasUnsavedChanges: true });
+    const before = store();
+    const discardTab = vi.fn(() => {
+      expect(store().activeTabId).toBe(before.activeTabId);
+      queueMicrotask(() => useWorkflowStore.setState({ isSaving: true }));
+      return { ok: true, value: undefined };
+    });
+    Object.defineProperty(window, 'nodeBananaDesktop', { configurable: true, value: { recovery: { discardTab } } });
+    expect(store().closeTab(before.activeTabId)).toBe(true);
+    expect(discardTab).toHaveBeenCalledWith(before.activeTabId);
+    expect(store().activeTabId).not.toBe(before.activeTabId);
+    expect(store().isSaving).toBe(false);
+    await Promise.resolve();
+    expect(store().isSaving).toBe(true);
   });
 
   it("newTab parks the live workflow and opens an empty one", () => {
