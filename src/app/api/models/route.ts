@@ -35,6 +35,8 @@ import {
   setCachedModels,
   getCacheKey,
   setCachedWaveSpeedSchemas,
+  setCachedModelRunnerSchemas,
+  ModelRunnerApiSchema,
   WaveSpeedApiSchema,
 } from "@/lib/providers/cache";
 
@@ -43,6 +45,7 @@ const REPLICATE_API_BASE = "https://api.replicate.com/v1";
 const FAL_API_BASE = "https://api.fal.ai/v1";
 
 const WAVESPEED_API_BASE = "https://api.wavespeed.ai/api/v3";
+const MODELRUNNER_API_BASE = "https://modelrunner.run";
 
 // Categories we care about for image/video/3D/audio generation (fal.ai)
 const RELEVANT_CATEGORIES = [
@@ -1187,6 +1190,194 @@ function mapFalModel(model: FalModel): ProviderModel {
   };
 }
 
+/**
+ * ModelRunner catalog entry. The public catalog returns far more than this;
+ * only the fields used for listing are declared.
+ */
+interface ModelRunnerCatalogModel {
+  ownerName?: string;
+  alias?: string;
+  name?: string;
+  shortDescription?: string | null;
+  description?: string | null;
+  category?: string;
+  inputModalities?: string[];
+  outputModalities?: string[];
+  thumbnailUrl?: string | null;
+  pricingMode?: string;
+  pricePerOutput?: number | string;
+  pricePerOutputSecond?: number | string;
+  schema?: ModelRunnerApiSchema;
+}
+
+interface ModelRunnerCatalogResponse {
+  data?: ModelRunnerCatalogModel[];
+  total?: number;
+  page?: number;
+  limit?: number;
+  totalPages?: number;
+}
+
+/**
+ * ModelRunner categories that map onto a capability this app can drive.
+ * Categories with no equivalent here (text-to-text, speech-to-text,
+ * video-to-video, audio-to-audio) are deliberately absent, so those models are
+ * filtered out rather than listed as something they are not.
+ */
+const MODELRUNNER_CATEGORY_CAPABILITIES: Record<string, ModelCapability> = {
+  "text-to-image": "text-to-image",
+  "image-to-image": "image-to-image",
+  upscaler: "image-to-image",
+  "text-to-video": "text-to-video",
+  "image-to-video": "image-to-video",
+  "text-to-3d": "text-to-3d",
+  "image-to-3d": "image-to-3d",
+  sound: "text-to-audio",
+  music: "text-to-audio",
+};
+
+/**
+ * ModelRunner categories with no equivalent capability here.
+ *
+ * Listed explicitly rather than left to the fallback below: a video-to-video
+ * model like a lip-sync or frame-interpolation model has no capability that
+ * expresses "needs a video in", so inferring one from its output modality alone
+ * would advertise it as text-to-video and every generation would fail on the
+ * missing input.
+ */
+const MODELRUNNER_UNSUPPORTED_CATEGORIES = new Set([
+  "text-to-text",
+  "image-to-text",
+  "speech-to-text",
+  "video-to-video",
+  "audio-to-audio",
+]);
+
+/**
+ * Derive capabilities, preferring the explicit category and falling back to the
+ * declared modalities only for a category this app does not yet know about.
+ */
+function inferModelRunnerCapabilities(model: ModelRunnerCatalogModel): ModelCapability[] {
+  if (model.category && MODELRUNNER_UNSUPPORTED_CATEGORIES.has(model.category)) {
+    return [];
+  }
+
+  const fromCategory = model.category
+    ? MODELRUNNER_CATEGORY_CAPABILITIES[model.category]
+    : undefined;
+  if (fromCategory) return [fromCategory];
+
+  const inputs = model.inputModalities || [];
+  const outputs = model.outputModalities || [];
+
+  // A video input cannot be expressed by any capability in this app.
+  if (inputs.includes("video")) return [];
+
+  const takesImage = inputs.includes("image");
+
+  if (outputs.includes("video")) {
+    return [takesImage ? "image-to-video" : "text-to-video"];
+  }
+  if (outputs.includes("image")) {
+    return [takesImage ? "image-to-image" : "text-to-image"];
+  }
+  // Audio in, audio out has no capability here; only generation from text does.
+  if (outputs.includes("audio") && !inputs.includes("audio")) {
+    return ["text-to-audio"];
+  }
+  return [];
+}
+
+/**
+ * Map a catalog entry onto the app's provider-agnostic model shape.
+ *
+ * Pricing is only reported for the two modes that have a single rate. Megapixel,
+ * tiered and per-token models are priced from the request itself, so quoting any
+ * one number for them would be wrong.
+ */
+function mapModelRunnerModel(model: ModelRunnerCatalogModel): ProviderModel {
+  const endpoint = `${model.ownerName}/${model.alias}`;
+  const perOutput = Number(model.pricePerOutput ?? 0);
+  const perSecond = Number(model.pricePerOutputSecond ?? 0);
+
+  let pricing: ProviderModel["pricing"] | undefined;
+  if (model.pricingMode === "per_output" && perOutput > 0) {
+    pricing = { type: "per-run", amount: perOutput, currency: "USD" };
+  } else if (
+    (model.pricingMode === "per_output_second" || model.pricingMode === "per_second") &&
+    perSecond > 0
+  ) {
+    pricing = { type: "per-second", amount: perSecond, currency: "USD" };
+  }
+
+  return {
+    id: endpoint,
+    name: model.name || endpoint,
+    description: model.shortDescription || model.description || null,
+    provider: "modelrunner",
+    capabilities: inferModelRunnerCapabilities(model),
+    coverImage: model.thumbnailUrl || undefined,
+    pricing,
+    pageUrl: `https://modelrunner.ai/models/${endpoint}`,
+  };
+}
+
+/**
+ * Fetch the ModelRunner catalog.
+ *
+ * The catalog is public, but this is only called when a key is configured, so
+ * the list matches what the user can actually run. Models whose category has no
+ * capability in this app are dropped.
+ */
+async function fetchModelRunnerModels(apiKey: string): Promise<ProviderModel[]> {
+  const collected: ProviderModel[] = [];
+  const MAX_PAGES = 10;
+
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const response = await fetch(
+      `${MODELRUNNER_API_BASE}/models?limit=100&page=${page}`,
+      {
+        headers: {
+          Authorization: `Key ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`ModelRunner API error: ${response.status}`);
+    }
+
+    const data: ModelRunnerCatalogResponse = await response.json();
+    const models = data.data || [];
+    if (!Array.isArray(models) || models.length === 0) break;
+
+    // The catalog carries each model's full OpenAPI schema inline, so cache the
+    // whole page here and the schema endpoint never needs a per-model request.
+    const schemaMap = new Map<string, ModelRunnerApiSchema>();
+
+    for (const model of models) {
+      if (!model.ownerName || !model.alias) continue;
+      const mapped = mapModelRunnerModel(model);
+      if (mapped.capabilities.length === 0) continue;
+      collected.push(mapped);
+      if (model.schema) {
+        schemaMap.set(mapped.id, model.schema);
+      }
+    }
+
+    if (schemaMap.size > 0) {
+      setCachedModelRunnerSchemas(schemaMap);
+    }
+
+    const totalPages = data.totalPages ?? 1;
+    if (page >= totalPages) break;
+  }
+
+  console.log(`[ModelRunner] Total usable models: ${collected.length}`);
+  return collected;
+}
+
 async function fetchFalModels(
   apiKey: string | null,
   searchQuery?: string
@@ -1255,6 +1446,7 @@ export async function GET(
   const kieKey = request.headers.get("X-Kie-Key") || process.env.KIE_API_KEY || null;
   const wavespeedKey = request.headers.get("X-WaveSpeed-Key") || process.env.WAVESPEED_API_KEY || null;
   const openaiKey = request.headers.get("X-OpenAI-API-Key") || process.env.OPENAI_API_KEY || null;
+  const modelrunnerKey = request.headers.get("X-ModelRunner-Key") || process.env.MODELRUNNER_KEY || null;
 
   // Build list of all available providers (have keys from env or client headers)
   const availableProviders: string[] = ["gemini"]; // Gemini always available
@@ -1263,6 +1455,7 @@ export async function GET(
   if (kieKey) availableProviders.push("kie");
   if (wavespeedKey) availableProviders.push("wavespeed");
   if (openaiKey) availableProviders.push("openai");
+  if (modelrunnerKey) availableProviders.push("modelrunner");
 
   // Determine which providers to fetch from (gemini/kie/openai handled separately as hardcoded)
   const providersToFetch: ProviderType[] = [];
@@ -1327,6 +1520,9 @@ export async function GET(
     includeOpenai = openaiKey ? true : false; // OpenAI only if API key is configured
     if (wavespeedKey) {
       providersToFetch.push("wavespeed"); // WaveSpeed if key is configured
+    }
+    if (modelrunnerKey) {
+      providersToFetch.push("modelrunner"); // ModelRunner if key is configured
     }
     if (replicateKey) {
       providersToFetch.push("replicate");
@@ -1454,6 +1650,13 @@ export async function GET(
           models = searchQuery
             ? filterModelsBySearch(allWaveSpeedModels, searchQuery)
             : allWaveSpeedModels;
+        } else if (provider === "modelrunner") {
+          // Fetch the full catalog, then filter client-side like Replicate
+          const allModelRunnerModels = await fetchModelRunnerModels(modelrunnerKey!);
+          setCachedModels(cacheKey, allModelRunnerModels);
+          models = searchQuery
+            ? filterModelsBySearch(allModelRunnerModels, searchQuery)
+            : allModelRunnerModels;
         } else {
           models = [];
         }

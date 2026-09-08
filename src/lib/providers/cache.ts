@@ -37,6 +37,16 @@ export interface WaveSpeedApiSchema {
 }
 
 /**
+ * ModelRunner OpenAPI schema for a model.
+ * Structure: { components: { schemas: { Input: {...}, ...enums } } }
+ */
+export interface ModelRunnerApiSchema {
+  components?: {
+    schemas?: Record<string, unknown>;
+  };
+}
+
+/**
  * Default cache TTL: 1 hour
  */
 const DEFAULT_TTL = 60 * 60 * 1000;
@@ -104,6 +114,11 @@ const cache: Map<string, CacheEntry<ProviderModel[]>> = new Map();
  * This allows the schema endpoint to retrieve schemas without re-fetching all models
  */
 const wavespeedSchemaCache: Map<string, CacheEntry<WaveSpeedApiSchema>> = new Map();
+
+/**
+ * ModelRunner OpenAPI schemas, keyed by "owner/alias" endpoint.
+ */
+const modelrunnerSchemaCache: Map<string, CacheEntry<ModelRunnerApiSchema>> = new Map();
 
 /**
  * Get cached models for a key if not expired
@@ -258,4 +273,55 @@ export function getWaveSpeedSchemaCacheStats(): { size: number; modelIds: string
     size: wavespeedSchemaCache.size,
     modelIds: Array.from(wavespeedSchemaCache.keys()),
   };
+}
+
+
+// ============ ModelRunner Schema Cache ============
+
+/**
+ * Get cached ModelRunner schema for a model
+ *
+ * @param modelId - ModelRunner endpoint (e.g., "wan-video/wan/v3.0/text-to-video")
+ * @param ttl - Optional custom TTL in milliseconds
+ * @returns Cached schema or null if not in cache or expired
+ */
+export function getCachedModelRunnerSchema(
+  modelId: string,
+  ttl: number = DEFAULT_TTL
+): ModelRunnerApiSchema | null {
+  const entry = modelrunnerSchemaCache.get(modelId);
+
+  if (!entry) {
+    return null;
+  }
+
+  const now = Date.now();
+  if (now - entry.timestamp > ttl) {
+    modelrunnerSchemaCache.delete(modelId);
+    return null;
+  }
+
+  return entry.data;
+}
+
+/**
+ * Store multiple ModelRunner schemas at once.
+ *
+ * The catalog returns every model's full OpenAPI schema inline, so the whole set
+ * is cached in one pass when the model list is fetched and no per-model request
+ * is needed afterwards.
+ *
+ * @param schemas - Map of endpoint to schema
+ */
+export function setCachedModelRunnerSchemas(
+  schemas: Map<string, ModelRunnerApiSchema>
+): void {
+  const now = Date.now();
+  for (const [modelId, schema] of schemas) {
+    modelrunnerSchemaCache.set(modelId, {
+      data: schema,
+      timestamp: now,
+    });
+  }
+  pruneCache(modelrunnerSchemaCache, DEFAULT_TTL, MAX_SCHEMA_CACHE_SIZE);
 }
