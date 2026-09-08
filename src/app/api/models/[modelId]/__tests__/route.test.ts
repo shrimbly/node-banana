@@ -898,3 +898,24 @@ describe("/api/models/[modelId] schema endpoint", () => {
     });
   });
 });
+
+describe("OpenAI GPT Image 2.5 schemas", () => {
+  it.each(["gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gpt-image-2.5-flare-2026-09-08"])("exposes supported settings for %s", async modelId => {
+    const response = await GET(createMockSchemaRequest(modelId, "openai"), { params: Promise.resolve({ modelId }) });
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data.parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "quality", enum: ["auto", "low", "medium", "high", "xhigh", "max"] }),
+      expect.objectContaining({ name: "size", type: "string", default: "auto" }),
+      expect.objectContaining({ name: "output_format", enum: ["png", "jpeg", "webp"] }),
+    ]));
+    expect(data.inputs).toEqual(expect.arrayContaining([expect.objectContaining({ name: "image", isArray: true })]));
+  });
+
+  it("does not expose 2.5 quality settings on older models", async () => {
+    const modelId = "gpt-image-1";
+    const response = await GET(createMockSchemaRequest(modelId, "openai"), { params: Promise.resolve({ modelId }) });
+    const data = await response.json();
+    expect(data.parameters.find((p: { name: string }) => p.name === "quality").enum).not.toContain("max");
+  });
+});

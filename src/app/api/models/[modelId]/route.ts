@@ -24,6 +24,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { ProviderType } from "@/types";
+import { isOpenAIImage25, OPENAI_IMAGE_25_PARAMETERS } from "@/lib/providers/openaiImages";
 import { ModelParameter, ModelInput } from "@/lib/providers/types";
 import {
   getCachedWaveSpeedSchema,
@@ -1278,6 +1279,7 @@ function getOpenAiSchema(modelId: string): ExtractedSchema {
     "gpt-image-1": { parameters, inputs },
   };
 
+  if (isOpenAIImage25(modelId)) return { parameters: OPENAI_IMAGE_25_PARAMETERS, inputs };
   return schemas[modelId] || { parameters: [], inputs: [] };
 }
 

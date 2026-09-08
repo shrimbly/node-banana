@@ -29,6 +29,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { ProviderType } from "@/types";
+import { OPENAI_IMAGE_25_MODELS } from "@/lib/providers/openaiImages";
 import { ProviderModel, ModelCapability } from "@/lib/providers";
 import {
   getCachedModels,
@@ -585,6 +586,7 @@ const GEMINI_VIDEO_MODELS: ProviderModel[] = [
 // NOTE: `pricing.amount` is a flat per-run ESTIMATE. OpenAI image pricing varies
 // by size and quality; cost tracking treats this as an approximation.
 const OPENAI_IMAGE_MODELS: ProviderModel[] = [
+  ...OPENAI_IMAGE_25_MODELS,
   {
     id: "gpt-image-2",
     name: "GPT Image 2",

@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { ProviderType, ModelInputDef } from "@/types";
 import { ModelParameter } from "@/lib/providers/types";
+import { isOpenAIImage25, validateOpenAIImageParameters } from "@/lib/providers/openaiImages";
+import { OpenAIImageSizeField } from "./OpenAIImageSizeField";
 import { useProviderApiKeys } from "@/store/workflowStore";
 import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
 import { CheckboxField, FieldList, NumberField, SelectField, TextField } from "./ui/Field";
@@ -208,8 +210,10 @@ function ModelParametersInner({
     [parameters, onParametersChange]
   );
 
+  const isOpenAI25 = provider === "openai" && isOpenAIImage25(modelId);
+  const parameterError = isOpenAI25 ? validateOpenAIImageParameters(modelId, { ...parameters, size: "auto" }) : null;
   const sortedSchema = useMemo(() => {
-    return [...schema].sort((a, b) => {
+    return schema.filter(param => !isOpenAI25 || param.name !== "output_compression" || ["jpeg", "webp"].includes(String(parameters.output_format))).sort((a, b) => {
       // Sort order: dropdowns first, then numbers, then strings, then checkboxes last
       const typeOrder = (p: ModelParameter) => {
         if (p.enum && p.enum.length > 0) return 0; // dropdowns first
@@ -219,7 +223,7 @@ function ModelParametersInner({
       };
       return typeOrder(a) - typeOrder(b);
     });
-  }, [schema]);
+  }, [schema, isOpenAI25, parameters.output_format]);
 
   // Don't render if no model selected
   if (!modelId) {
@@ -242,7 +246,11 @@ function ModelParametersInner({
       ) : (
         <FieldList>
           {sortedSchema.map((param) => (
-            <ParameterInput
+            isOpenAI25 && param.name === "size" ? <OpenAIImageSizeField
+              key={`${provider}:${modelId}:size`}
+              value={String(parameters.size ?? "auto")}
+              onChange={size => handleParameterChange("size", size)}
+            /> : <ParameterInput
               key={param.name}
               param={param}
               name={param.name}
@@ -250,6 +258,7 @@ function ModelParametersInner({
               onChange={handleParameterChange}
             />
           ))}
+          {parameterError && <p role="alert" className="text-node text-red-400">{parameterError}</p>}
         </FieldList>
       )}
     </div>

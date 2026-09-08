@@ -65,6 +65,21 @@ describe("ModelParameters", () => {
     vi.stubGlobal("fetch", vi.fn());
   });
 
+  it("shows OpenAI compression only for JPEG/WebP and flags transparent JPEG", async () => {
+    const { OPENAI_IMAGE_25_PARAMETERS } = await import("@/lib/providers/openaiImages");
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ parameters: OPENAI_IMAGE_25_PARAMETERS }),
+    } as Response);
+    const props = { ...defaultProps, provider: "openai" as const, modelId: "gpt-image-2.5-flare" };
+    const { rerender } = render(<ModelParameters {...props} parameters={{ size: "auto", output_format: "png" }} />);
+    await screen.findByLabelText("Output Format");
+    expect(screen.queryByLabelText("Output Compression")).toBeNull();
+    rerender(<ModelParameters {...props} parameters={{ size: "auto", output_format: "jpeg", background: "transparent" }} />);
+    expect(screen.getByLabelText("Output Compression")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("PNG or WebP");
+  });
+
   describe("Initial Rendering", () => {
     it("should fetch schema for Gemini provider", () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(

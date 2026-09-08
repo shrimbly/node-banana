@@ -967,3 +967,16 @@ describe("/api/models route", () => {
     });
   });
 });
+
+describe("OpenAI GPT Image 2.5 catalogue", () => {
+  it("lists both variants under OpenAI without a fabricated per-image price", async () => {
+    const response = await GET(createMockGetRequest({ provider: "openai", search: "2.5" }, { "X-OpenAI-API-Key": "test-key" }));
+    const data = await response.json();
+    expect(data.models.map((model: { id: string }) => model.id)).toEqual(["gpt-image-2.5-flare", "gpt-image-2.5-sunburst"]);
+    for (const model of data.models) {
+      expect(model.provider).toBe("openai");
+      expect(model.capabilities).toContain("image-to-image");
+      expect(model.pricing).toBeUndefined();
+    }
+  });
+});
