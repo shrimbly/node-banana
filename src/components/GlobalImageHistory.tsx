@@ -107,7 +107,7 @@ function RecentThumb({
       type="button"
       draggable
       onDragStart={(e) => onDragStart(e, item)}
-      className="relative h-[52px] cursor-grab overflow-hidden rounded-md squircle bg-well shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-[box-shadow,transform] duration-[120ms] ease-out hover:shadow-[inset_0_0_0_2px_#3b82f6] hover:scale-[1.04] active:cursor-grabbing focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_2px_#3b82f6]"
+      className="relative h-[52px] cursor-grab overflow-hidden rounded-lg squircle bg-well shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-[box-shadow,transform] duration-[120ms] ease-out hover:shadow-[inset_0_0_0_2px_#3b82f6] hover:scale-[1.04] active:cursor-grabbing focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_2px_#3b82f6]"
       title={`${formatRelativeTime(item.timestamp)} · ${describeProducer(item.model)}\n${item.prompt?.substring(0, 80) || "No prompt"}`}
     >
       <img
@@ -217,7 +217,7 @@ function HistorySidebar({
             className="group flex cursor-grab gap-3 rounded-lg p-2 transition-colors hover:bg-white/5 active:cursor-grabbing"
           >
             {/* Thumbnail */}
-            <div className="h-14 w-14 shrink-0 overflow-hidden rounded-md shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-shadow group-hover:shadow-[inset_0_0_0_2px_#3b82f6]">
+            <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg squircle shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-shadow group-hover:shadow-[inset_0_0_0_2px_#3b82f6]">
               <img
                 src={item.image}
                 alt={`History ${index + 1}`}
