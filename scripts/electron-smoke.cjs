@@ -128,10 +128,13 @@ async function checkStartupWindowControls(desktop, page) {
   await controlInput(desktop, controls.getByRole('button', { name: 'Toggle fullscreen' }), 'click');
   await windowed;
   if (nativeInput) {
+    // macOS can still be finishing its Space animation after Electron emits
+    // leave-full-screen. OS coordinates must wait for that transition to settle.
+    await new Promise(resolve => setTimeout(resolve, 750));
     const before = await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBounds());
-    await nativeMouse(desktop, 'dd', before.width - 100, 20);
-    await nativeMouse(desktop, 'dm', before.width - 60, 60);
-    await nativeMouse(desktop, 'du', before.width - 60, 60);
+    const content = await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getContentBounds());
+    const x = content.x + content.width - 100, y = content.y + 20;
+    await run('cliclick', ['-w', '250', `dd:${x},${y}`, `dm:${x + 40},${y + 40}`, `du:${x + 40},${y + 40}`]);
     const after = await desktop.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].getBounds());
     assert.notDeepEqual({ x: after.x, y: after.y }, { x: before.x, y: before.y });
   }
