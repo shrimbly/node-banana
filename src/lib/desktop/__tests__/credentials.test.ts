@@ -42,6 +42,26 @@ it('failed migration preserves legacy and session edits never touch plaintext st
   expect(localStorage.getItem('node-banana-provider-settings')).toBe(legacy);
   expect(credentials.desktopCredentialsReady()).toBe(true);
 });
+it('keeps decrypted keys and endpoints for session-only use when startup writing fails', async () => {
+  const write = bridge(false);
+  vi.mocked(window.nodeBananaDesktop!.credentials.read).mockResolvedValue({ ok: true, value: {
+    'provider.gemini': 'encrypted-existing-key',
+    'comfy.localUrl': 'http://127.0.0.1:9000',
+    'provider.openai': null,
+  } });
+  const credentials = await import('../credentials');
+  await expect(credentials.initializeDesktopCredentials()).rejects.toThrow('Keychain locked');
+  expect(credentials.desktopCredentialsReady()).toBe(false);
+  credentials.useSessionCredentials();
+  expect(credentials.desktopCredentialsReady()).toBe(true);
+  expect(credentials.desktopCredential('provider.gemini')).toBe('encrypted-existing-key');
+  expect(credentials.desktopCredential('comfy.localUrl')).toBe('http://127.0.0.1:9000');
+  expect(credentials.desktopCredential('provider.openai')).toBeNull();
+  credentials.saveDesktopCredentials({ 'provider.gemini': 'session-replacement' });
+  expect(write).toHaveBeenCalledOnce();
+  expect(JSON.stringify(localStorage)).not.toContain('encrypted-existing-key');
+  expect(JSON.stringify(localStorage)).not.toContain('session-replacement');
+});
 it('session-only saves retain old secrets while persisting new non-secret preferences', async () => {
   bridge(false);
   localStorage.setItem('node-banana-provider-settings', JSON.stringify({ providers: { gemini: { apiKey: 'old-secret', enabled: true } } }));

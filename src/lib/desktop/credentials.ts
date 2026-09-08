@@ -53,6 +53,9 @@ export function initializeDesktopCredentials(): Promise<void> {
     if (!result.ok) throw new Error(result.error);
     // Encrypted values (including deletion tombstones) always win over old storage.
     const merged = { ...legacy, ...result.value, ...pending };
+    // A readable keychain can still have an unwritable credentials file. Keep
+    // decrypted values available if the user chooses session-only use.
+    memory = merged;
     const persisted = await bridge.write(merged);
     if (!persisted.ok) throw new Error(persisted.error);
     memory = persisted.value;
