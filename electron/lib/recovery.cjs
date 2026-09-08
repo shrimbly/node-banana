@@ -239,7 +239,14 @@ function createRecoveryStore(userData) {
     discardTab(id) {
       if (typeof id !== 'string' || id.length > 200) throw new Error('Invalid tab');
       const state = session();
-      atomicWrite(marker, JSON.stringify({ ...state, discarded: [...new Set([...(state.discarded || []), id])] }));
+      try {
+        atomicWrite(marker, JSON.stringify({ ...state, discarded: [...new Set([...(state.discarded || []), id])] }));
+      } catch (error) {
+        if (!error.atomicWriteCommitted) throw error;
+        // The marker already excludes this tab. Complete its closure instead
+        // of leaving an open tab that future checkpoints cannot protect.
+        return { warning: 'The tab closed, but its recovery discard could not be fully synced to disk. Check disk space and permissions.' };
+      }
     },
     discard() {
       acknowledged = true;

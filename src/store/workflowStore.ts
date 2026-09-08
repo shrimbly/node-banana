@@ -3190,6 +3190,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       try {
         const result = window.nodeBananaDesktop.recovery.discardTab(tabId);
         if (!result.ok) throw new Error(result.error);
+        if (result.value?.warning) useToast.getState().show(result.value.warning, 'warning');
       } catch (error) {
         useToast.getState().show(error instanceof Error ? error.message : 'The tab could not close safely. Try again.', 'error');
         return false;

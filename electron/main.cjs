@@ -160,8 +160,9 @@ function registerBridge() {
       return;
     }
     try {
-      recoveryStore.discardTab(id);
-      event.returnValue = { ok: true, value: undefined };
+      const value = recoveryStore.discardTab(id);
+      if (value?.warning) log(value.warning);
+      event.returnValue = { ok: true, value };
     } catch (error) {
       log(error);
       event.returnValue = { ok: false, error: 'The tab could not close safely. Check disk space and permissions, then try again.' };

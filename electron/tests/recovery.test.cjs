@@ -5,6 +5,19 @@ const path = require('node:path');
 const os = require('node:os');
 const { createRecoveryStore } = require('../lib/recovery.cjs');
 const snapshot = (text, media) => ({ version: 1, activeTabId: 'two', tabs: ['one', 'two'].map(id => ({ id, snapshot: { nodes: [{ id, data: { text, media } }], edges: [] } })) });
+test('reports a committed discard after directory fsync failure so the renderer completes closure', () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'banana-discard-sync-'));
+  const original = fs.fsyncSync;
+  try {
+    const store = createRecoveryStore(temp);
+    store.read(); store.write(snapshot('unsaved'));
+    fs.fsyncSync = fd => { if (fs.fstatSync(fd).isDirectory()) throw Object.assign(new Error('Directory sync failed'), { code: 'EIO' }); return original(fd); };
+    const result = store.discardTab('one');
+    assert.match(result.warning, /could not be fully synced/);
+    fs.fsyncSync = original;
+    assert.deepEqual(createRecoveryStore(temp).read().snapshot.tabs.map(tab => tab.id), ['two']);
+  } finally { fs.fsyncSync = original; fs.rmSync(temp, { recursive: true, force: true }); }
+});
 test('collects obsolete media while preserving both checkpoints and unfinished encodes', () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'banana-collect-'));
   try {

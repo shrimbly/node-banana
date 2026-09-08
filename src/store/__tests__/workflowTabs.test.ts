@@ -108,6 +108,15 @@ describe("workflow tabs (store)", () => {
     expect(store().hasUnsavedChanges).toBe(true);
   });
 
+  it('finishes closing when the marker committed with a directory-sync warning', () => {
+    const id = store().activeTabId;
+    Object.defineProperty(window, 'nodeBananaDesktop', { configurable: true, value: { recovery: {
+      discardTab: () => ({ ok: true, value: { warning: 'Directory sync failed after commit' } }),
+    } } });
+    expect(store().closeTab(id)).toBe(true);
+    expect(store().tabs.some(tab => tab.id === id)).toBe(false);
+  });
+
   it('commits discard and closure before queued save work can interleave', async () => {
     useWorkflowStore.setState({ nodes: [promptNode('unsaved')], hasUnsavedChanges: true });
     const before = store();
