@@ -1,5 +1,6 @@
 'use client';
 
+import { watchDesktopConnection } from "@/lib/desktop/connection";
 import { DesktopRecovery } from './DesktopRecovery';
 import { DesktopWindowControls, DesktopStartupDragRegion } from './DesktopWindowControls';
 import { useEffect, useState, type ReactNode } from 'react';
@@ -43,6 +44,11 @@ function DisconnectedBanner() {
 }
 
 export function DesktopSession({ children }: { children: ReactNode }) {
+  const setDesktopConnected = useWorkflowStore(state => state.setDesktopConnected);
+  useEffect(() => {
+    if (!isDesktop()) return;
+    return watchDesktopConnection(window.nodeBananaDesktop!.backend, setDesktopConnected);
+  }, [setDesktopConnected]);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const hydrate = () => {
@@ -52,13 +58,10 @@ export function DesktopSession({ children }: { children: ReactNode }) {
   const initialize = () => initializeDesktopCredentials().then(() => { hydrate(); setError(null); }).catch(error => setError(error.message));
   useEffect(() => {
     if (!isDesktop()) { setReady(true); return; }
-    const update = (online: boolean) => useWorkflowStore.getState().setDesktopConnected(online);
-    const unsubscribe = window.nodeBananaDesktop!.backend.onStatus(update);
-    void window.nodeBananaDesktop!.backend.state().then(update);
     void initialize();
     const failed = (event: Event) => setError((event as CustomEvent<string>).detail);
     window.addEventListener('desktop-credential-error', failed);
-    return () => { unsubscribe(); window.removeEventListener('desktop-credential-error', failed); };
+    return () => { window.removeEventListener('desktop-credential-error', failed); };
     // Initialization is a shared, repeatable promise across StrictMode mounts.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

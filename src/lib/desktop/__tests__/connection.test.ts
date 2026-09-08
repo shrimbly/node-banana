@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest';
+import { useToast } from '@/components/Toast';
 import { useWorkflowStore } from '@/store/workflowStore';
 import { executeNanoBanana } from '@/store/execution';
 vi.mock('@/store/execution', async importOriginal => ({
@@ -24,6 +25,7 @@ it('disconnect aborts existing work and blocks all new execution entry points', 
     await useWorkflowStore.getState().executeSelectedNodes([nodeId]);
     await useWorkflowStore.getState().regenerateNode(nodeId);
     expect(executeNanoBanana).not.toHaveBeenCalled();
+    expect(useToast.getState().message).toContain("Local server disconnected");
     expect(useWorkflowStore.getState().nodes).toBe(graph);
     useWorkflowStore.getState().setDesktopConnected(true);
     expect(useWorkflowStore.getState().isRunning).toBe(false);

@@ -776,6 +776,17 @@ function applyTabSnapshot(
   get().recomputeDimmedNodes();
 }
 
+/** Explain blocked run attempts instead of silently dropping node-button clicks. */
+function canStartExecution(connected: boolean): boolean {
+  const reason = !desktopCredentialsReady()
+    ? "Provider keys are still loading. Wait for setup to finish before running."
+    : !connected ? "Local server disconnected. Use Help → Restart Local Server to reconnect." : null;
+  if (!reason) return true;
+  logger.warn('workflow.start', reason);
+  useToast.getState().show(reason, "warning");
+  return false;
+}
+
 const initialTabId = createTabId();
 
 const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
@@ -2035,7 +2046,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   }),
 
   executeWorkflow: async (startFromNodeId?: string) => {
-    if (!desktopCredentialsReady() || !get().desktopConnected) return;
+    if (!canStartExecution(get().desktopConnected)) return;
     // Resume support: if Run is pressed with no explicit start node while the
     // workflow is paused at a node (pause edge), resume from that node instead
     // of restarting the whole graph (which would re-run/re-bill upstream nodes
@@ -2578,7 +2589,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   regenerateNode: async (nodeId: string) => {
-    if (!desktopCredentialsReady() || !get().desktopConnected) return;
+    if (!canStartExecution(get().desktopConnected)) return;
     const { nodes, updateNodeData, isRunning } = get();
 
     if (isRunning) {
@@ -2721,7 +2732,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   executeSelectedNodes: async (nodeIds: string[]) => {
-    if (!desktopCredentialsReady() || !get().desktopConnected) return;
+    if (!canStartExecution(get().desktopConnected)) return;
     if (get().isRunning) {
       logger.warn('node.execution', 'Cannot execute nodes, workflow already running');
       return;
