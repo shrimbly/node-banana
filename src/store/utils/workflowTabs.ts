@@ -57,7 +57,7 @@ let tabIdCounter = 0;
 
 export function createTabId(): string {
   tabIdCounter += 1;
-  return `tab-${tabIdCounter}`;
+  return `tab-${Date.now().toString(36)}-${tabIdCounter}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 /** Copy the workflow fields out of the live store state. */

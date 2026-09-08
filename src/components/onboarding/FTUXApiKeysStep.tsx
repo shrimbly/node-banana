@@ -7,6 +7,10 @@ import { ProviderType } from "@/types";
 import { EnvStatusResponse } from "@/app/api/env-status/route";
 import { useWorkflowStore } from "@/store/workflowStore";
 
+import { EnvironmentImport } from '@/components/settings/EnvironmentImport';
+import { isDesktop } from '@/lib/desktop/credentials';
+import { getProviderSettings } from '@/store/utils/localStorage';
+
 // Provider icons
 const GeminiIcon = () => (
   <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -131,10 +135,14 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
         API Keys
       </h3>
       <p className="text-sm text-neutral-400 mb-4">
-        Add keys here to use AI providers (stored in browser), or save them to your .env file for better security and persistence.
+        {isDesktop() ? 'Add keys to use AI providers. Keys are encrypted and saved in your desktop profile.' : 'Add keys here to use AI providers (stored in browser), or configure them in your server environment.'}
       </p>
 
-      <div className="space-y-2">
+      <EnvironmentImport onImported={() => {
+        const settings = getProviderSettings();
+        setLocalKeys(previous => Object.fromEntries(Object.entries(previous).map(([id, value]) => [id, value || settings.providers[id as ProviderType]?.apiKey || ''])) as Record<ProviderType, string>);
+      }} />
+      <div className="space-y-2 mt-3">
         {providers.map((provider) => {
           const Icon = provider.icon;
           const hasKey = hasEnvKey(provider.id);

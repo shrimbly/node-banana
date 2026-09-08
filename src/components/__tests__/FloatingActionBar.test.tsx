@@ -80,6 +80,7 @@ const createDefaultState = (overrides = {}) => ({
     { id: "p", type: "prompt", position: { x: 0, y: 0 }, data: { prompt: "hi" } },
     { id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: {} },
   ],
+  desktopConnected: true,
   isRunning: false,
   currentNodeIds: [],
   executeWorkflow: mockExecuteWorkflow,

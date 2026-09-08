@@ -32,7 +32,7 @@ export async function saveSession(session: LogSession): Promise<void> {
     return;
   }
 
-  const logsDir = path.join(process.cwd(), 'logs');
+  const logsDir = process.env.NODE_BANANA_LOGS_DIR || path.join(process.cwd(), 'logs');
   const filename = `session-${session.sessionId}.json`;
   const filepath = path.join(logsDir, filename);
 
@@ -46,7 +46,12 @@ export async function saveSession(session: LogSession): Promise<void> {
 
   // Write session to file
   try {
-    await fs.writeFile(filepath, JSON.stringify(session, null, 2), 'utf-8');
+    const json = JSON.stringify(session, (key, value) => /api.?key|authorization|password|secret|token/i.test(key) ? '[REDACTED]' : value, 2);
+    const redact = (globalThis as typeof globalThis & { __nodeBananaRedact?: (value: string) => string }).__nodeBananaRedact;
+    const output = redact ? redact(json) : json;
+    // Bound session diagnostics too; the main process log retains lifecycle details.
+    if (Buffer.byteLength(output) > 2 * 1024 * 1024) return;
+    await fs.writeFile(filepath, output, { encoding: 'utf-8', mode: 0o600 });
   } catch (error) {
     console.error('Failed to write log file:', error);
   }
@@ -61,7 +66,7 @@ export async function rotateLogFiles(): Promise<void> {
     return;
   }
 
-  const logsDir = path.join(process.cwd(), 'logs');
+  const logsDir = process.env.NODE_BANANA_LOGS_DIR || path.join(process.cwd(), 'logs');
 
   // Ensure logs directory exists
   try {

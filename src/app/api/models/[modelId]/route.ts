@@ -49,6 +49,7 @@ const IMAGE_INPUT_PATTERNS = [
   "start_image",
   "end_image",
   "reference_image",
+  "reference_images",
   "init_image",
   "mask_image",
   "control_image",

@@ -2,6 +2,10 @@
 
 @theme {
   --color-canvas-bg: #171717;
+  --color-window-close: #ff5f57;
+  --color-window-minimize: #febc2e;
+  --color-window-fullscreen: #28c840;
+  --color-window-control-symbol: #1b1b1b;
 
   /* Node anatomy (see docs/node-redesign.md) */
   --color-card: #262626;
@@ -25,6 +29,8 @@
   --radius-media: 8px;
   --radius-controls: 10px;
   --radius-well: 8px;
+  /* Concentric with the 16px macOS window curve at the canvas's 4px inset. */
+  --radius-desktop-canvas: 12px;
 
   /* Faint recess for input wells on the settings panel */
   --shadow-well: inset 0 1px 1.5px rgb(0 0 0 / 0.3), inset 0 0 0 1px rgb(0 0 0 / 0.12), 0 1px 0 rgb(255 255 255 / 0.025);
@@ -53,6 +59,111 @@
 :root {
   --background: #0a0a0a;
   --foreground: #fafafa;
+  /* Window-control geometry aligns their centres with the workflow tab labels. */
+  --desktop-window-controls-inset: 84px;
+  --desktop-window-controls-left: 10px;
+  --desktop-window-controls-top: 11px;
+  --desktop-window-control-width: 22px;
+  --desktop-window-control-height: 24px;
+  --desktop-window-control-dot-size: 14px;
+  --desktop-window-control-rest-opacity: 0.45;
+  --desktop-window-controls-layer: 10001;
+}
+
+/* Match the inset graph frame to the surrounding macOS window curve. */
+html[data-desktop-platform="darwin"] .workflow-canvas-frame {
+  border-bottom-left-radius: var(--radius-desktop-canvas);
+  border-bottom-right-radius: var(--radius-desktop-canvas);
+}
+
+/* The workflow strip doubles as the macOS title bar inside Electron. */
+html[data-desktop-platform="darwin"] .workflow-tabs {
+  /* Keep the native drag rectangle entirely outside the controls' gutter.
+     Padding would still make that area draggable beneath the fixed controls. */
+  margin-left: var(--desktop-window-controls-inset);
+  padding-left: 0;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+html[data-desktop-platform="darwin"] .workflow-tabs [role="tab"],
+html[data-desktop-platform="darwin"] .workflow-tabs button {
+  -webkit-app-region: no-drag;
+}
+
+.desktop-window-controls {
+  display: none;
+}
+
+.desktop-startup-drag-region { display: none; }
+html[data-desktop-platform="darwin"] .desktop-startup-drag-region {
+  display: block;
+  position: fixed;
+  z-index: var(--desktop-window-controls-layer);
+  top: 0;
+  left: var(--desktop-window-controls-inset);
+  right: 0;
+  height: 38px;
+  -webkit-app-region: drag;
+}
+
+html[data-desktop-platform="darwin"] .desktop-window-controls {
+  /* Stay usable above app dialogs, like native window chrome. */
+  position: fixed;
+  z-index: var(--desktop-window-controls-layer);
+  left: var(--desktop-window-controls-left);
+  top: var(--desktop-window-controls-top);
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+
+.desktop-window-control {
+  -webkit-app-region: no-drag;
+  display: flex;
+  width: var(--desktop-window-control-width);
+  height: var(--desktop-window-control-height);
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-controls);
+}
+
+.desktop-window-close { --window-control-color: var(--color-window-close); }
+.desktop-window-minimize { --window-control-color: var(--color-window-minimize); }
+.desktop-window-fullscreen { --window-control-color: var(--color-window-fullscreen); }
+
+.desktop-window-control-dot {
+  width: var(--desktop-window-control-dot-size);
+  height: var(--desktop-window-control-dot-size);
+  border-radius: 50%;
+  background: var(--window-control-color);
+  opacity: var(--desktop-window-control-rest-opacity);
+  pointer-events: none;
+}
+
+.desktop-window-control:hover .desktop-window-control-dot,
+.desktop-window-control:focus-visible .desktop-window-control-dot {
+  opacity: 1;
+}
+
+.desktop-window-control:focus-visible {
+  outline: 2px solid var(--color-selection);
+  outline-offset: -2px;
+}
+
+.desktop-window-control-dot svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: var(--color-window-control-symbol);
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+
+.desktop-window-control:hover svg,
+.desktop-window-control:focus-visible svg {
+  opacity: 1;
 }
 
 html {

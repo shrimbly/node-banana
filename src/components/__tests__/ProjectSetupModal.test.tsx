@@ -3,6 +3,10 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ProjectSetupModal } from "@/components/ProjectSetupModal";
 import { ProviderSettings } from "@/types";
 
+vi.mock('@/components/settings/EnvironmentImport', () => ({
+  EnvironmentImport: ({ onImported }: { onImported: (value: unknown) => void }) => <button onClick={() => onImported({ preferences: {} })}>Complete environment import</button>,
+}));
+
 // Mock the workflow store
 const mockSetUseExternalImageStorage = vi.fn();
 const mockUpdateProviderApiKey = vi.fn();
@@ -45,7 +49,7 @@ global.confirm = mockConfirm;
 
 // Ensure localStorage is always available in this test environment
 const localStorageMock = {
-  getItem: vi.fn(() => null),
+  getItem: vi.fn((_key?: string): string | null => null),
   setItem: vi.fn(),
   removeItem: vi.fn(),
   clear: vi.fn(),
@@ -89,6 +93,7 @@ const createDefaultState = (overrides = {}) => ({
 describe("ProjectSetupModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorageMock.getItem.mockImplementation(() => null);
     // Default mock for env-status API (called on modal open)
     mockFetch.mockImplementation((url: string) => {
       if (url === "/api/env-status") {
@@ -110,6 +115,26 @@ describe("ProjectSetupModal", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('keeps a provider key explicitly cleared before an unrelated environment import', async () => {
+    const settings = { providers: { ...defaultProviderSettings.providers, gemini: { ...defaultProviderSettings.providers.gemini, apiKey: 'saved-gemini-key' } } };
+    mockUseWorkflowStore.mockImplementation(selector => selector(createDefaultState({ providerSettings: settings })));
+    localStorageMock.getItem.mockImplementation((key?: string) => key === 'node-banana-provider-settings' ? JSON.stringify({ providers: {
+      ...settings.providers, openai: { ...settings.providers.openai, apiKey: 'imported-openai-key' },
+    } }) : null);
+    render(<ProjectSetupModal isOpen onClose={vi.fn()} onSave={vi.fn()} mode="settings" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Providers' }));
+    const key = await screen.findByPlaceholderText('AIza...');
+    expect(key).toHaveValue('saved-gemini-key');
+    fireEvent.change(key, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Complete environment import' }));
+    expect(key).toHaveValue('');
+    expect(screen.getByPlaceholderText('sk-...')).toHaveValue('imported-openai-key');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(mockUpdateProviderApiKey).toHaveBeenCalledWith('gemini', null);
+    expect(mockUpdateProviderApiKey).toHaveBeenCalledWith('openai', 'imported-openai-key');
+    localStorageMock.getItem.mockImplementation(() => null);
   });
 
   describe("Visibility", () => {

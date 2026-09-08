@@ -1,3 +1,4 @@
+import { desktopCredentialsReady } from "@/lib/desktop/credentials";
 import { create, StateCreator } from "zustand";
 import { useShallow } from "zustand/shallow";
 import {
@@ -401,6 +402,9 @@ export interface WorkflowStore {
   clearWorkflow: () => void;
 
   // Workflow tabs: several workflows open, one live in the canvas
+  desktopConnected: boolean;
+  setDesktopConnected: (online: boolean) => void;
+  restoreDesktopSession: (tabs: { id: string; snapshot: WorkflowTabSnapshot }[], activeTabId: string) => void;
   tabs: WorkflowTab[];
   activeTabId: string;
   /** Last known pan/zoom of the live workflow, parked with its tab. */
@@ -773,6 +777,12 @@ function applyTabSnapshot(
 const initialTabId = createTabId();
 
 const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
+  setDesktopConnected: (online) => {
+    // Stop the old execution chain before a replacement backend can accept work.
+    if (!online) get()._abortController?.abort("desktop-backend-disconnected");
+    set({ desktopConnected: online });
+  },
+  desktopConnected: typeof window === "undefined" || !window.nodeBananaDesktop,
   nodes: [],
   edges: [],
   edgeStyle: getEdgeDefaults().edgeStyle,
@@ -2013,6 +2023,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   }),
 
   executeWorkflow: async (startFromNodeId?: string) => {
+    if (!desktopCredentialsReady() || !get().desktopConnected) return;
     // Resume support: if Run is pressed with no explicit start node while the
     // workflow is paused at a node (pause edge), resume from that node instead
     // of restarting the whole graph (which would re-run/re-bill upstream nodes
@@ -2555,6 +2566,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   regenerateNode: async (nodeId: string) => {
+    if (!desktopCredentialsReady() || !get().desktopConnected) return;
     const { nodes, updateNodeData, isRunning } = get();
 
     if (isRunning) {
@@ -2697,6 +2709,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   executeSelectedNodes: async (nodeIds: string[]) => {
+    if (!desktopCredentialsReady() || !get().desktopConnected) return;
     if (get().isRunning) {
       logger.warn('node.execution', 'Cannot execute nodes, workflow already running');
       return;
@@ -3126,6 +3139,13 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     get().recomputeDimmedNodes();
   },
 
+  restoreDesktopSession: (tabs, activeTabId) => {
+    const active = tabs.find(tab => tab.id === activeTabId);
+    if (!active) return;
+    set({ tabs: tabs.map(tab => ({ ...tab, snapshot: tab.id === activeTabId ? null : tab.snapshot })), activeTabId });
+    applyTabSnapshot(set, get, active.snapshot);
+  },
+
   newTab: () => {
     if (get().tabsBusyReason()) return null;
     const { tabs, activeTabId, edgeStyle, edgeAppearance, useExternalImageStorage } = get();
@@ -3163,6 +3183,19 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     const closing = tabs.find((tab) => tab.id === tabId);
     if (!closing) return false;
     if (get().tabsBusyReason()) return false;
+
+    // Keep the busy check, durable discard and graph mutation in one turn.
+    // Both the tab strip and the menu close through this action.
+    if (typeof window !== 'undefined' && window.nodeBananaDesktop) {
+      try {
+        const result = window.nodeBananaDesktop.recovery.discardTab(tabId);
+        if (!result.ok) throw new Error(result.error);
+        if (result.value?.warning) useToast.getState().show(result.value.warning, 'warning');
+      } catch (error) {
+        useToast.getState().show(error instanceof Error ? error.message : 'The tab could not close safely. Try again.', 'error');
+        return false;
+      }
+    }
 
     const empty = () => emptyWorkflowTabSnapshot({ edgeStyle, edgeAppearance, useExternalImageStorage });
 

@@ -1,3 +1,5 @@
+import { isDesktop, desktopCredential, desktopCredentialsMigrated, saveDesktopCredentials, comfySecretFields } from "@/lib/desktop/credentials";
+import type { DesktopCredentials } from "@/types/desktop";
 /**
  * ComfyUI backend settings.
  *
@@ -127,7 +129,9 @@ export function getComfySettings(): ComfySettings {
   if (typeof window === "undefined") return { ...defaultComfySettings };
   try {
     const stored = localStorage.getItem(COMFY_SETTINGS_KEY);
-    return normalizeComfySettings(stored ? JSON.parse(stored) : null);
+    const preferences = stored ? JSON.parse(stored) : {};
+    if (isDesktop()) for (const key of comfySecretFields) preferences[key] = desktopCredential(`comfy.${key}`) ?? null;
+    return normalizeComfySettings(preferences);
   } catch {
     return { ...defaultComfySettings };
   }
@@ -135,7 +139,20 @@ export function getComfySettings(): ComfySettings {
 
 export function saveComfySettings(settings: ComfySettings): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(COMFY_SETTINGS_KEY, JSON.stringify(normalizeComfySettings(settings)));
+  const preferences = { ...normalizeComfySettings(settings) } as Partial<ComfySettings>;
+  if (isDesktop()) {
+    const secrets: DesktopCredentials = {};
+    for (const key of comfySecretFields) { secrets[`comfy.${key}`] = preferences[key] ?? null; delete preferences[key]; }
+    saveDesktopCredentials(secrets);
+    if (!desktopCredentialsMigrated()) {
+      const legacy = localStorage.getItem(COMFY_SETTINGS_KEY);
+      const saved = legacy ? JSON.parse(legacy) : {};
+      for (const key of comfySecretFields) if (saved[key] !== undefined) preferences[key] = saved[key];
+    }
+    localStorage.setItem(COMFY_SETTINGS_KEY, JSON.stringify(preferences));
+    return;
+  }
+  localStorage.setItem(COMFY_SETTINGS_KEY, JSON.stringify(preferences));
 }
 
 /* ── connection resolution ─────────────────────────────────────── */

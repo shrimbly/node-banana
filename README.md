@@ -78,6 +78,54 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
+### Local Electron app
+
+Use Node.js 22.12 or newer for the Electron tooling. After `npm install`, launch
+the desktop development app:
+
+```bash
+npm run electron:dev
+```
+
+This opens Node Banana in an Electron window and starts its own local Next.js
+server. UI edits reload automatically. Restart the command after changing files
+in `electron/`. No separate `npm run dev` process is needed.
+
+To run a production build locally:
+
+```bash
+npm run build
+npm run electron:start
+```
+
+When running from source, the app reads the same `.env.local` as the browser version, and API keys can also
+be entered in Settings. Desktop settings use a separate persistent Electron
+profile; existing browser settings are not imported automatically. Workflows
+remain ordinary files that either version can open. Folder selection uses a
+native desktop dialog.
+
+The desktop server binds to `127.0.0.1:47831` and only accepts authenticated
+requests from the Electron session. Set `NODE_BANANA_ELECTRON_PORT` to override
+the port if it is occupied. Keep that port consistent: browser storage is tied
+to the origin. `NODE_BANANA_ELECTRON_USER_DATA` can point to an alternate absolute
+profile directory. Electron development output lives in `.next-electron`, so
+the browser dev server can run separately.
+
+Run `npm run electron:smoke` to check the real desktop window, editor interaction,
+local file save/load, native dialog bridge, settings persistence, and server
+shutdown using a temporary profile. It needs a graphical desktop (or Xvfb on
+Linux). Add `-- --production` to test an existing production build. These commands
+run from source. Use `npm run electron:package` for an unsigned Apple Silicon app, DMG and ZIP, and `npm run electron:acceptance` for packaged crash/recovery checks. See the [Mac preview guide](docs/desktop-preview.md) for installation, encrypted credentials and recovery details. Signing and automatic updates remain deferred for the preview. ComfyUI remains a separately installed or remote service.
+
+The [Node Banana 2.0 launch plan](docs/2.0-launch-plan.md) tracks the remaining Windows x64 and Mac Apple Silicon release work, installer polish, landing page and launch acceptance checks.
+
+For macOS title-bar changes, also run
+`npm run electron:smoke -- --production --native-input` after building. This uses
+`cliclick` (installed separately) with macOS Accessibility permission to test real
+mouse hover, clicks, and window dragging; browser automation alone bypasses the
+native draggable-region hit testing. It brings the test window to the front and
+moves the mouse, so let it finish before interacting with the desktop.
+
 ### Environment Variables
 
 Create a `.env.local` file in the root directory:

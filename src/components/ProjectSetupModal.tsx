@@ -1,16 +1,18 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { generateWorkflowId, useWorkflowStore } from "@/store/workflowStore";
 import { ProviderType, ProviderSettings, NodeDefaultsConfig, LLMProvider, LLMModelType, EdgeAppearance, EdgeStyle } from "@/types";
 import { CanvasNavigationSettings, PanMode, ZoomMode, SelectionMode } from "@/types/canvas";
 import { EnvStatusResponse } from "@/app/api/env-status/route";
-import { loadNodeDefaults, saveNodeDefaults, getLastProjectBaseDir, setLastProjectBaseDir, saveEdgeDefaults } from "@/store/utils/localStorage";
+import { loadNodeDefaults, saveNodeDefaults, getLastProjectBaseDir, setLastProjectBaseDir, saveEdgeDefaults, getProviderSettings } from "@/store/utils/localStorage";
 import { clearFetchCache } from "@/utils/deduplicatedFetch";
 import { ProviderModel } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { ComfySettingsTab, useComfySettingsDraft } from "@/components/settings/ComfySettingsTab";
-import { saveComfySettings } from "@/lib/comfy/settings";
+import { saveComfySettings, getComfySettings } from "@/lib/comfy/settings";
+import { EnvironmentImport } from '@/components/settings/EnvironmentImport';
+import { isDesktop, comfySecretFields } from '@/lib/desktop/credentials';
 import { ConnectionSettings } from "@/components/settings/ConnectionSettings";
 import {
   Dialog,
@@ -183,6 +185,7 @@ export function ProjectSetupModal({
 
   // Provider tab state
   const [localProviders, setLocalProviders] = useState<ProviderSettings>(providerSettings);
+  const editedProviderKeys = useRef(new Set<ProviderType>());
   const [showApiKey, setShowApiKey] = useState<Record<ProviderType, boolean>>({
     gemini: false,
     openai: false,
@@ -217,7 +220,7 @@ export function ProjectSetupModal({
   const [edgeDefaultSaved, setEdgeDefaultSaved] = useState(false);
 
   // ComfyUI tab state
-  const [localComfySettings, setLocalComfySettings] = useComfySettingsDraft(isOpen);
+  const [localComfySettings, setLocalComfySettings, applyImportedComfySettings] = useComfySettingsDraft(isOpen);
 
   // Pre-fill when opening in settings mode
   useEffect(() => {
@@ -238,6 +241,7 @@ export function ProjectSetupModal({
       }
 
       // Sync local providers state
+      editedProviderKeys.current.clear();
       setLocalProviders(providerSettings);
       setShowApiKey({ gemini: false, openai: false, anthropic: false, replicate: false, fal: false, kie: false, wavespeed: false });
       // Initialize override as active if user already has a key set
@@ -269,7 +273,9 @@ export function ProjectSetupModal({
         .then((data: EnvStatusResponse) => setEnvStatus(data))
         .catch(() => setEnvStatus(null));
     }
-  }, [isOpen, mode, workflowName, saveDirectoryPath, useExternalImageStorage, providerSettings, canvasNavigationSettings]);
+    // Provider edits/imports must not reset other unsaved settings drafts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, mode, workflowName, saveDirectoryPath, useExternalImageStorage, canvasNavigationSettings]);
 
   const handleBrowse = async () => {
     setIsBrowsing(true);
@@ -431,6 +437,7 @@ export function ProjectSetupModal({
     providerId: ProviderType,
     updates: { enabled?: boolean; apiKey?: string | null }
   ) => {
+    if ('apiKey' in updates) editedProviderKeys.current.add(providerId);
     setLocalProviders((prev) => ({
       providers: {
         ...prev.providers,
@@ -560,6 +567,17 @@ export function ProjectSetupModal({
         {/* Providers Tab Content */}
         {activeTab === "providers" && (
           <div className="space-y-3">
+            <EnvironmentImport onImported={result => {
+              const imported = getProviderSettings();
+              setLocalProviders(previous => ({ providers: Object.fromEntries(Object.entries(previous.providers).map(([id, config]) => [id, {
+                ...config, apiKey: editedProviderKeys.current.has(id as ProviderType) ? config.apiKey : imported.providers[id as ProviderType]?.apiKey,
+              }])) as ProviderSettings['providers'] }));
+              const comfy = getComfySettings();
+              applyImportedComfySettings(comfy, [
+                ...comfySecretFields,
+                ...Object.keys(result.preferences) as (keyof typeof result.preferences)[],
+              ]);
+            }} />
             {/* Gemini Provider */}
             <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
               <div className="flex items-center justify-between">
@@ -897,7 +915,7 @@ export function ProjectSetupModal({
             </div>
 
             <p className="text-xs text-neutral-400 mt-2">
-              Add API keys via <code className="px-1 py-0.5 bg-neutral-800 rounded">.env.local</code> for better security. Keys added here override .env and are stored in your browser.
+              {isDesktop() ? 'Keys are encrypted in your desktop profile. Imported keys are saved immediately.' : <>Add API keys via <code className="px-1 py-0.5 bg-neutral-800 rounded">.env.local</code> for server-side storage. Keys added here override .env and are stored in your browser.</>}
             </p>
           </div>
         )}

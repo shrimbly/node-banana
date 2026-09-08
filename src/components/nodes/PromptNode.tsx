@@ -61,8 +61,10 @@ export function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLTextAreaElement>) => {
       setLocalPrompt(e.target.value);
+      // Desktop checkpoints must include text while the field still has focus.
+      if (window.nodeBananaDesktop) updateNodeData(id, { prompt: e.target.value });
     },
-    []
+    [id, updateNodeData]
   );
 
   const handleFocus = useCallback(() => {

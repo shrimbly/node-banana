@@ -1,3 +1,5 @@
+import { isDesktop, desktopCredential, desktopCredentialsMigrated, saveDesktopCredentials } from "@/lib/desktop/credentials";
+import type { CredentialName, DesktopCredentials } from "@/types/desktop";
 import {
   WorkflowSaveConfig,
   WorkflowCostData,
@@ -127,7 +129,7 @@ export const saveGenerateImageDefaults = (settings: Partial<GenerateImageDefault
 };
 
 // Provider settings helpers
-export const getProviderSettings = (): ProviderSettings => {
+const readProviderPreferences = (): ProviderSettings => {
   if (typeof window === "undefined") return defaultProviderSettings;
   const stored = localStorage.getItem(PROVIDER_SETTINGS_KEY);
   if (stored) {
@@ -152,8 +154,35 @@ export const getProviderSettings = (): ProviderSettings => {
   return defaultProviderSettings;
 };
 
+export const getProviderSettings = (): ProviderSettings => {
+  const settings = readProviderPreferences();
+  if (!isDesktop()) return settings;
+  return { providers: Object.fromEntries(Object.entries(settings.providers).map(([id, config]) => [id, {
+    ...config, apiKey: desktopCredential(`provider.${id}` as CredentialName) ?? null,
+  }])) as ProviderSettings["providers"] };
+};
+
 export const saveProviderSettings = (settings: ProviderSettings): void => {
   if (typeof window === "undefined") return;
+  if (isDesktop()) {
+    const secrets: DesktopCredentials = {};
+    const providers = Object.fromEntries(Object.entries(settings.providers).map(([id, config]) => {
+      secrets[`provider.${id}` as CredentialName] = config.apiKey ?? null;
+      const { apiKey: _secret, ...preferences } = config;
+      return [id, preferences];
+    }));
+    saveDesktopCredentials(secrets);
+    // Preserve legacy keys if encrypted migration failed; never add plaintext keys.
+    if (!desktopCredentialsMigrated()) {
+      const legacy = localStorage.getItem(PROVIDER_SETTINGS_KEY);
+      const saved = legacy ? JSON.parse(legacy).providers || {} : {};
+      for (const [id, preferences] of Object.entries(providers)) {
+        if (saved[id]?.apiKey !== undefined) Object.assign(preferences, { apiKey: saved[id].apiKey });
+      }
+    }
+    localStorage.setItem(PROVIDER_SETTINGS_KEY, JSON.stringify({ providers }));
+    return;
+  }
   localStorage.setItem(PROVIDER_SETTINGS_KEY, JSON.stringify(settings));
 };
 

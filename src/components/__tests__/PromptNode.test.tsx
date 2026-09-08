@@ -55,6 +55,19 @@ describe("PromptNode", () => {
     dragHandle: undefined,
   };
 
+  it("checkpoints desktop prompt edits before blur", () => {
+    Object.defineProperty(window, "nodeBananaDesktop", { configurable: true, value: {} });
+    try {
+      render(<PromptNode {...defaultProps} />, { wrapper: TestWrapper });
+      const input = screen.getByPlaceholderText("Describe what to generate...");
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: "Still typing at the crash" } });
+      expect(mockUpdateNodeData).toHaveBeenCalledWith("test-prompt-1", { prompt: "Still typing at the crash" });
+    } finally {
+      delete (window as { nodeBananaDesktop?: unknown }).nodeBananaDesktop;
+    }
+  });
+
   it("should render the textarea with placeholder", () => {
     render(
       <TestWrapper>

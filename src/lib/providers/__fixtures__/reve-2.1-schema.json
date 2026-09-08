@@ -1,0 +1,199 @@
+{
+  "info": {
+    "title": "Cog",
+    "version": "0.1.0"
+  },
+  "paths": {},
+  "openapi": "3.0.2",
+  "components": {
+    "schemas": {
+      "Input": {
+        "type": "object",
+        "title": "Input",
+        "properties": {
+          "prompt": {
+            "type": "string",
+            "title": "Prompt",
+            "default": "A serene mountain landscape at sunset with snow-capped peaks",
+            "x-order": 0,
+            "description": "Text prompt describing the image to generate. When reference images are provided, describes how to edit or combine them. Refer to a specific reference image by frame using <frame>N</frame>, where N is its 0-based position in reference_images (e.g. 'put the hat from <frame>0</frame> on the person in <frame>1</frame>')."
+          },
+          "aspect_ratio": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/aspect_ratio"
+              }
+            ],
+            "default": "auto",
+            "x-order": 2,
+            "description": "The desired aspect ratio of the generated image. Use 'auto' to let the model choose an appropriate aspect ratio for the request."
+          },
+          "reference_images": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "title": "Reference Images",
+            "default": null,
+            "x-order": 1,
+            "nullable": true,
+            "description": "Optional ordered list of up to 8 reference images to edit or remix. Leave empty for text-to-image generation. Address individual images from the prompt with <frame>N</frame> (0-based)."
+          }
+        }
+      },
+      "Output": {
+        "type": "string",
+        "title": "Output",
+        "format": "uri"
+      },
+      "Status": {
+        "enum": [
+          "starting",
+          "processing",
+          "succeeded",
+          "canceled",
+          "failed"
+        ],
+        "type": "string",
+        "title": "Status",
+        "description": "An enumeration."
+      },
+      "aspect_ratio": {
+        "enum": [
+          "auto",
+          "4:1",
+          "3:1",
+          "21:9",
+          "2:1",
+          "17:9",
+          "16:9",
+          "3:2",
+          "4:3",
+          "5:4",
+          "1:1",
+          "4:5",
+          "3:4",
+          "2:3",
+          "9:16",
+          "1:2",
+          "1:3",
+          "1:4"
+        ],
+        "type": "string",
+        "title": "aspect_ratio",
+        "description": "An enumeration."
+      },
+      "ValidationError": {
+        "type": "object",
+        "title": "ValidationError",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "properties": {
+          "loc": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        }
+      },
+      "PredictionRequest": {
+        "type": "object",
+        "title": "PredictionRequest",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "input": {
+            "$ref": "#/components/schemas/Input"
+          }
+        }
+      },
+      "PredictionResponse": {
+        "type": "object",
+        "title": "PredictionResponse",
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "logs": {
+            "type": "string",
+            "title": "Logs"
+          },
+          "error": {
+            "type": "string",
+            "title": "Error"
+          },
+          "input": {
+            "$ref": "#/components/schemas/Input"
+          },
+          "output": {
+            "$ref": "#/components/schemas/Output"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "metrics": {
+            "type": "object",
+            "title": "Metrics"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At",
+            "format": "date-time"
+          },
+          "started_at": {
+            "type": "string",
+            "title": "Started At",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": "string",
+            "title": "Completed At",
+            "format": "date-time"
+          }
+        }
+      },
+      "HTTPValidationError": {
+        "type": "object",
+        "title": "HTTPValidationError",
+        "properties": {
+          "detail": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail"
+          }
+        }
+      }
+    }
+  }
+}
