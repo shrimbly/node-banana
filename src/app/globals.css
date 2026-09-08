@@ -450,34 +450,31 @@ html {
 }
 
 /* Fan animation for image history */
-@keyframes fanEnter {
-  0% {
+/* Top-right chrome: the history drop-down and generation cards fall in
+   from the button they hang under. */
+@keyframes dropIn {
+  from {
     opacity: 0;
-    transform: scale(0.3) translate(0, 0);
+    transform: translateY(-4px) scale(0.98);
   }
-  100% {
+  to {
     opacity: 1;
-    transform: scale(1) translate(var(--fan-x), var(--fan-y));
+    transform: none;
   }
 }
 
-@keyframes fanExit {
-  0% {
-    opacity: 1;
-    transform: scale(1) translate(var(--fan-x), var(--fan-y));
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0.3) translate(0, 0);
-  }
+.animate-drop-in {
+  animation: dropIn 0.15s ease-out both;
 }
 
-.animate-fan-enter {
-  animation: fanEnter 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+/* Auto-dismiss countdown along the bottom edge of a generation card. */
+@keyframes toastTimer {
+  from { width: 100%; }
+  to { width: 0%; }
 }
 
-.animate-fan-exit {
-  animation: fanExit 0.15s ease-in forwards;
+.animate-toast-timer {
+  animation: toastTimer linear both;
 }
 
 /* Dialog entrance: the backdrop fades, the panel rises under it, and the

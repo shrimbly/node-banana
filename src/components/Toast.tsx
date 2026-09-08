@@ -2,6 +2,16 @@
 
 import { useEffect, useState } from "react";
 import { create } from "zustand";
+import { GenerationToasts } from "./GenerationToast";
+
+/**
+ * Where notifications stack: under the history button, which sits at the
+ * canvas's top-right inset (tab strip 38px + frame border 1px + 16px margin,
+ * then the 42px button and an 8px gap; 4px frame margin + 1px border + 16px
+ * from the right).
+ */
+const STACK_TOP = 38 + 1 + 16 + 42 + 8;
+const STACK_RIGHT = 4 + 1 + 16;
 
 interface ToastState {
   message: string | null;
@@ -80,12 +90,15 @@ export function Toast() {
     }
   }, [message, persistent, hide]);
 
-  if (!message) return null;
-
   return (
-    <div className="fixed top-14 right-6 z-[200] animate-in fade-in slide-in-from-top-4 duration-300 max-w-md">
+    <div
+      className="pointer-events-none fixed z-[200] flex max-w-md flex-col items-end gap-2 [&>*]:pointer-events-auto"
+      style={{ top: STACK_TOP, right: STACK_RIGHT }}
+    >
+      <GenerationToasts />
+      {message && (
       <div
-        className={`flex flex-col rounded-lg border shadow-xl ${typeStyles[type]}`}
+        className={`animate-drop-in flex flex-col rounded-lg border shadow-xl ${typeStyles[type]}`}
       >
         <div className="flex items-center gap-3 px-4 py-3">
           {typeIcons[type]}
@@ -133,6 +146,7 @@ export function Toast() {
           </>
         )}
       </div>
+      )}
     </div>
   );
 }
