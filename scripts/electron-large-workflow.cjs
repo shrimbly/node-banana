@@ -62,17 +62,39 @@ async function main() {
     await until(async () => { try { await fetch(`http://127.0.0.1:${port}`); return false; } catch { return true; } }, 'Backend survived app exit');
   };
   try {
+    const fixture = path.join(profile, 'workflow-fixture.json');
+    await fs.writeFile(fixture, JSON.stringify(workflow));
     await attach();
     await page.locator('.react-flow').waitFor();
     await page.getByRole('button', { name: 'Close', exact: true }).last().click();
     await page.getByRole('button', { name: 'Skip', exact: true }).click();
     await page.keyboard.press('Escape');
-    await page.evaluate(value => {
+    // Supply the file by path so embedded media never travels through CDP's
+    // size-limited JSON transport. Exercise the same File/drop path as the UI.
+    await page.evaluate(() => {
+      const input = document.createElement('input');
+      input.type = 'file'; input.id = 'large-workflow-fixture'; input.hidden = true;
+      document.body.appendChild(input);
+    });
+    await page.locator('#large-workflow-fixture').setInputFiles(fixture);
+    await page.evaluate(() => {
+      const input = document.querySelector('#large-workflow-fixture');
       const transfer = new DataTransfer();
-      transfer.items.add(new File([JSON.stringify(value)], 'workflow.json', { type: 'application/json' }));
+      transfer.items.add(input.files[0]);
       document.querySelector('.react-flow').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer, clientX: 400, clientY: 300 }));
-    }, workflow);
-    await until(async () => (await read())?.tabs[0]?.snapshot.nodes.length === expectedNodes, 'Loaded workflow did not checkpoint');
+      input.remove();
+    });
+    try {
+      await until(async () => (await read())?.tabs[0]?.snapshot.nodes.length === expectedNodes, 'Loaded workflow did not checkpoint');
+    } catch (error) {
+      console.error('Load diagnostics:', {
+        expectedNodes,
+        renderedNodes: await page.locator('.react-flow__node').count(),
+        checkpointNodes: (await read())?.tabs.map(tab => tab.snapshot.nodes.length),
+        recoveryNotice: await page.locator('[role="status"]').allTextContents(),
+      });
+      throw error;
+    }
     const checkpoint = await read();
     assert.ok(JSON.stringify(checkpoint).includes('$recoveryAsset'), 'Fixture must contain recoverable media');
     assert.ok(!JSON.stringify(checkpoint).includes('data:video/'), 'Video payload leaked into checkpoint');
