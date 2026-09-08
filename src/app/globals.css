@@ -477,6 +477,11 @@ html {
   animation: toastTimer linear both;
 }
 
+/* Sonner pauses every card's timer while the stack is hovered; hold the bars with it. */
+[data-sonner-toaster]:hover .animate-toast-timer {
+  animation-play-state: paused;
+}
+
 /* Dialog entrance: the backdrop fades, the panel rises under it, and the
    panel's own sections follow in sequence so the eye lands on the title
    before the list. Staged and run once, hence keyframes over transitions. */

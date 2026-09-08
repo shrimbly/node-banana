@@ -1,5 +1,5 @@
 import { desktopCredentialsReady } from "@/lib/desktop/credentials";
-import { useGenerationToast } from "./generationToastStore";
+import { pushGenerationToast } from "@/components/GenerationToast";
 import { create, StateCreator } from "zustand";
 import { useShallow } from "zustand/shallow";
 import {
@@ -3321,7 +3321,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         MAX_GLOBAL_IMAGE_HISTORY
       ),
     }));
-    useGenerationToast.getState().push({
+    pushGenerationToast({
       image: newItem.image,
       model: newItem.model,
       aspectRatio: newItem.aspectRatio,
