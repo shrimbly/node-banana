@@ -12,6 +12,7 @@ import {
 const mockUpdateNodeData = vi.fn();
 const mockRegenerateNode = vi.fn();
 const mockUseWorkflowStore = vi.fn();
+const mockAdaptiveImageSrc = vi.fn();
 
 vi.mock("@/store/workflowStore", () => ({
   useWorkflowStore: (selector: (state: unknown) => unknown) => mockUseWorkflowStore(selector),
@@ -28,7 +29,7 @@ vi.mock("@/components/splitgrid/SplitGridTemplateModal", () => ({
 
 // Pass the full-resolution source straight through (skips thumbnail generation)
 vi.mock("@/hooks/useAdaptiveImageSrc", () => ({
-  useAdaptiveImageSrc: (fullSrc: string | null | undefined) => fullSrc ?? null,
+  useAdaptiveImageSrc: (fullSrc: string | null | undefined) => mockAdaptiveImageSrc(fullSrc),
 }));
 
 const NODE_ID = "split-grid-node-1";
@@ -111,8 +112,8 @@ function materialized(rows: number, cols: number) {
   };
 }
 
-function renderNode(dataOverrides: Partial<SplitGridNodeData> = {}) {
-  return render(
+function nodeElement(dataOverrides: Partial<SplitGridNodeData> = {}) {
+  return (
     <ReactFlowProvider>
       <SplitGridNode
         id={NODE_ID}
@@ -134,9 +135,14 @@ function renderNode(dataOverrides: Partial<SplitGridNodeData> = {}) {
   );
 }
 
+function renderNode(dataOverrides: Partial<SplitGridNodeData> = {}) {
+  return render(nodeElement(dataOverrides));
+}
+
 describe("SplitGridNode", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAdaptiveImageSrc.mockImplementation((src) => src ?? null);
     setStoreState();
   });
 
@@ -343,6 +349,51 @@ describe("SplitGridNode", () => {
   });
 
   describe("Preview", () => {
+    it("keeps the source aspect through thumbnail swaps and split completion", () => {
+      setStoreState(connectedImageState(SOURCE_IMAGE));
+      const { container, rerender } = renderNode({ sourceImage: SOURCE_IMAGE });
+      const img = screen.getByAltText("Source grid");
+      Object.defineProperties(img, {
+        naturalWidth: { value: 3200 },
+        naturalHeight: { value: 1000 },
+      });
+      fireEvent.load(img);
+      const clip = container.querySelector("[data-media-clip]") as HTMLElement;
+      expect(clip.style.aspectRatio).toBe("3.2");
+
+      mockAdaptiveImageSrc.mockReturnValue("data:image/jpeg;base64,thumbnail");
+      rerender(nodeElement({ sourceImage: SOURCE_IMAGE, status: "complete", ...materialized(5, 9).data }));
+      expect(clip.style.aspectRatio).toBe("3.2");
+      fireEvent.load(img);
+      expect(clip.style.aspectRatio).toBe("3.2");
+
+      mockAdaptiveImageSrc.mockImplementation((src) => src ?? null);
+      rerender(nodeElement({ sourceImage: SOURCE_IMAGE, status: "complete" }));
+      expect(clip.style.aspectRatio).toBe("3.2");
+    });
+
+    it("does not reuse a previous source's aspect for a different image", () => {
+      setStoreState(connectedImageState(SOURCE_IMAGE));
+      const { container, rerender } = renderNode({ sourceImage: SOURCE_IMAGE });
+      const img = screen.getByAltText("Source grid");
+      Object.defineProperties(img, {
+        naturalWidth: { value: 3200, configurable: true },
+        naturalHeight: { value: 1000, configurable: true },
+      });
+      fireEvent.load(img);
+      const nextImage = "data:image/png;base64,portrait";
+      setStoreState(connectedImageState(nextImage));
+      rerender(nodeElement({ sourceImage: nextImage }));
+      const clip = container.querySelector("[data-media-clip]") as HTMLElement;
+      expect(clip.style.aspectRatio).toBe("1");
+      Object.defineProperties(img, {
+        naturalWidth: { value: 1000 },
+        naturalHeight: { value: 2000 },
+      });
+      fireEvent.load(img);
+      expect(clip.style.aspectRatio).toBe("0.5");
+    });
+
     it("shows the source image when set", () => {
       setStoreState(connectedImageState(SOURCE_IMAGE));
       renderNode({ sourceImage: SOURCE_IMAGE });
