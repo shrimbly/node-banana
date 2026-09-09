@@ -6,9 +6,10 @@ import { NodeShell } from "./NodeShell";
 import { ModelParameters } from "./ModelParameters";
 import { useWorkflowStore, useProviderApiKeys } from "@/store/workflowStore";
 import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
-import { GenerateVideoNodeData, ProviderType, SelectedModel, ModelInputDef } from "@/types";
+import { GenerateVideoNodeData, ProviderType, ModelInputDef } from "@/types";
 import { ProviderModel, ModelCapability } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
+import { modelSelectionData } from "@/store/utils/modelSelection";
 import { ProviderBadge } from "./ProviderBadge";
 import { useVideoBlobUrl } from "@/hooks/useVideoBlobUrl";
 import { useVideoAutoplay } from "@/hooks/useVideoAutoplay";
@@ -36,26 +37,6 @@ import {
 const VIDEO_CAPABILITIES: ModelCapability[] = ["text-to-video", "image-to-video", "audio-to-video"];
 
 const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "video", type: "video", label: "Video" }];
-
-/** Returns true for Gemini-native Veo video models */
-function isVeoModel(modelId: string | undefined): boolean {
-  if (!modelId) return false;
-  return modelId.startsWith("veo-");
-}
-
-/** Build the hardcoded inputSchema for a Veo model, or undefined for non-Veo */
-function buildVeoInputSchema(modelId: string): ModelInputDef[] | undefined {
-  if (!isVeoModel(modelId)) return undefined;
-  const isI2V = modelId.includes("image-to-video");
-  const inputs: ModelInputDef[] = [
-    { name: "prompt", type: "text", required: true, label: "Prompt" },
-    { name: "negative_prompt", type: "text", required: false, label: "Neg. Prompt" },
-  ];
-  if (isI2V) {
-    inputs.unshift({ name: "image", type: "image", required: true, label: "Image" });
-  }
-  return inputs;
-}
 
 type GenerateVideoNodeType = Node<GenerateVideoNodeData, "generateVideo">;
 
@@ -193,17 +174,8 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
 
   // Handle model selection from browse dialog
   const handleBrowseModelSelect = useCallback((model: ProviderModel) => {
-    const newSelectedModel: SelectedModel = {
-      provider: model.provider,
-      modelId: model.id,
-      displayName: model.name,
-    };
-    // Set inputSchema immediately for Veo models so handles render in the same update
-    updateNodeData(id, {
-      selectedModel: newSelectedModel,
-      parameters: {},
-      inputSchema: buildVeoInputSchema(model.id),
-    });
+    // A Veo model brings its input schema so the handles render in the same update
+    updateNodeData(id, modelSelectionData("generateVideo", model));
     setIsBrowseDialogOpen(false);
   }, [id, updateNodeData]);
 

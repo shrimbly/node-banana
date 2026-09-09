@@ -9,6 +9,7 @@ import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
 import { NanoBananaNodeData, AspectRatio, Resolution, MODEL_DISPLAY_NAMES, ProviderType, SelectedModel, ModelInputDef, GEMINI_IMAGE_MODELS, ModelType } from "@/types";
 import { ProviderModel, ModelCapability } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
+import { modelSelectionData } from "@/store/utils/modelSelection";
 import { ProviderBadge } from "./ProviderBadge";
 import { SettingsTabBar } from "./SettingsTabBar";
 import { browseRegistry } from "@/utils/browseRegistry";
@@ -286,13 +287,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
 
   // Handle model selection from browse dialog
   const handleBrowseModelSelect = useCallback((model: ProviderModel) => {
-    const newSelectedModel: SelectedModel = {
-      provider: model.provider,
-      modelId: model.id,
-      displayName: model.name,
-      capabilities: model.capabilities,
-    };
-    updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+    updateNodeData(id, modelSelectionData("nanoBanana", model));
     setIsBrowseDialogOpen(false);
   }, [id, updateNodeData]);
 

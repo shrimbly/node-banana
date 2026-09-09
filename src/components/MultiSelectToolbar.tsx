@@ -13,6 +13,8 @@ import type {
   OutputNodeData,
 } from "@/types";
 import { getNodeSize } from "@/utils/nodeDimensions";
+import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
+import { GENERATE_NODE_LABEL, capabilityForGenerateNode, sharedGenerateType } from "@/store/utils/modelSelection";
 
 const STACK_GAP = 20;
 type Arrangement = "horizontal" | "vertical" | "grid";
@@ -26,6 +28,10 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
   const removeNodesFromGroup = useWorkflowStore((state) => state.removeNodesFromGroup);
   const executeSelectedNodes = useWorkflowStore((state) => state.executeSelectedNodes);
   const isRunning = useWorkflowStore((state) => state.isRunning);
+  const applyModelToNodes = useWorkflowStore((state) => state.applyModelToNodes);
+  // One model for the whole selection, offered when every node is the same kind of generator
+  const generateType = useMemo(() => sharedGenerateType(selectedNodes), [selectedNodes]);
+  const [modelDialogOpen, setModelDialogOpen] = useState(false);
   const { getViewport } = useReactFlow();
   const selectionKey = JSON.stringify(selectedNodes.map((node) => node.id).sort());
   const [arrangement, setArrangement] = useState<{
@@ -331,6 +337,21 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
       {/* Separator */}
       <MenuDivider variant="bar" className="mx-0.5" />
 
+      {generateType && (
+        <>
+          <MenuIconButton
+            onClick={() => setModelDialogOpen(true)}
+            title={`Change model for ${selectedNodes.length} ${GENERATE_NODE_LABEL[generateType]} nodes`}
+            aria-label="Change model for selected nodes"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25zm.75-12h9v9h-9v-9z" />
+            </svg>
+          </MenuIconButton>
+          <MenuDivider variant="bar" className="mx-0.5" />
+        </>
+      )}
+
       {/* Download images button */}
       <MenuIconButton
         onClick={handleDownloadImages}
@@ -369,6 +390,18 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
             {activeArrangement.gap}px
           </span>
         </MenuSurface>
+      )}
+      {modelDialogOpen && generateType && (
+        <ModelSearchDialog
+          isOpen
+          onClose={() => setModelDialogOpen(false)}
+          title={`Change model for ${selectedNodes.length} nodes`}
+          initialCapabilityFilter={capabilityForGenerateNode(generateType)}
+          onModelSelected={(model) => {
+            applyModelToNodes(selectedNodes.map((node) => node.id), model);
+            setModelDialogOpen(false);
+          }}
+        />
       )}
     </MenuSurface>
   );

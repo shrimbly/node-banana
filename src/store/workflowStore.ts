@@ -36,6 +36,8 @@ import { UndoManager, UndoSnapshot, clonePreservingStrings } from "./undoHistory
 import { useToast } from "@/components/Toast";
 import { logger } from "@/utils/logger";
 import { hasHistoryEntries, pruneMissingHistory } from "./utils/historyPruning";
+import type { ProviderModel } from "@/lib/providers/types";
+import { isGenerateNodeType, modelSelectionData } from "./utils/modelSelection";
 import { externalizeWorkflowMedia, hydrateWorkflowMedia } from "@/utils/mediaStorage";
 import { EditOperation, applyEditOperations as executeEditOps } from "@/lib/chat/editOperations";
 import { findNearestFreePosition } from "@/utils/spatialLayout";
@@ -295,6 +297,8 @@ export interface WorkflowStore {
   // Node operations
   addNode: (type: NodeType, position: XYPosition, initialData?: Partial<WorkflowNodeData>) => string;
   updateNodeData: (nodeId: string, data: Partial<WorkflowNodeData>) => void;
+  /** Put one model on several generation nodes of the same type, as one undo step. */
+  applyModelToNodes: (nodeIds: string[], model: ProviderModel) => void;
   removeNode: (nodeId: string) => void;
   onNodesChange: (changes: NodeChange<WorkflowNode>[]) => void;
 
@@ -1066,6 +1070,21 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     if (node?.type === "conditionalSwitch" && ("rules" in data || "evaluationPaused" in data)) {
       get().recomputeDimmedNodes();
     }
+  },
+
+  applyModelToNodes: (nodeIds: string[], model: ProviderModel) => {
+    const ids = new Set(nodeIds);
+    const targets = get().nodes.filter((node) => ids.has(node.id) && isGenerateNodeType(node.type));
+    if (targets.length === 0) return;
+    pushUndoCheckpoint(get, set);
+    set((state) => ({
+      nodes: state.nodes.map((node) =>
+        ids.has(node.id) && isGenerateNodeType(node.type)
+          ? { ...node, data: { ...node.data, ...modelSelectionData(node.type, model) } as WorkflowNodeData }
+          : node
+      ) as WorkflowNode[],
+      hasUnsavedChanges: true,
+    }));
   },
 
   removeNode: (nodeId: string) => {

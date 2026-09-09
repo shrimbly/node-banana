@@ -6,9 +6,10 @@ import { NodeShell } from "./NodeShell";
 import { ProviderBadge } from "./ProviderBadge";
 import { ModelParameters } from "./ModelParameters";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { GenerateAudioNodeData, ProviderType, SelectedModel, ModelInputDef } from "@/types";
+import { GenerateAudioNodeData, ProviderType, ModelInputDef } from "@/types";
 import { ProviderModel } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
+import { modelSelectionData } from "@/store/utils/modelSelection";
 import { useAudioVisualization } from "@/hooks/useAudioVisualization";
 import { useAudioPlayback } from "@/hooks/useAudioPlayback";
 import { SettingsTabBar } from "./SettingsTabBar";
@@ -137,12 +138,7 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
   });
 
   const handleBrowseModelSelect = useCallback((model: ProviderModel) => {
-    const newSelectedModel: SelectedModel = {
-      provider: model.provider,
-      modelId: model.id,
-      displayName: model.name,
-    };
-    updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+    updateNodeData(id, modelSelectionData("generateAudio", model));
     setIsBrowseDialogOpen(false);
   }, [id, updateNodeData]);
 
