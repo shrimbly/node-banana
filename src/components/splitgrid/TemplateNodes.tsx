@@ -10,7 +10,7 @@
  * multi-provider model catalog.
  */
 
-import { createContext, memo, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   BaseEdge,
   getBezierPath,
@@ -23,6 +23,7 @@ import type {
   LLMModelType,
   LLMProvider,
   ModelType,
+  ModelInputDef,
   NodeType,
   Resolution,
   SelectedModel,
@@ -43,10 +44,11 @@ import {
   SummaryValues,
   SOCKET_PITCH,
   SOCKET_TOP,
+  sameInputSchema,
   type SocketSpec,
   type SocketType,
 } from "../nodes/ui";
-import { getTemplateEntry, getTemplateNodeIcon, type TemplateHandleDef } from "./templateCatalog";
+import { getTemplateEntry, getTemplateNodeIcon, templateHandleKind, type TemplateHandleDef } from "./templateCatalog";
 
 export interface TemplateNodeData extends Record<string, unknown> {
   nodeType: NodeType;
@@ -137,7 +139,7 @@ export function templateHandleTop(index: number): number {
 
 /** Template handle defs → shell sockets. The catalog's ids double as types. */
 function toSockets(handles: TemplateHandleDef[]): SocketSpec[] {
-  return handles.map((handle) => ({ id: handle.id, type: handle.id as SocketType, title: handle.label }));
+  return handles.map(({ label, ...handle }) => ({ ...handle, type: templateHandleKind(handle.id) as SocketType, title: label }));
 }
 
 const EMPTY_MEDIA_HEIGHT = 120;
@@ -225,7 +227,7 @@ function PromptBody({ nodeId, overrides }: { nodeId: string; overrides: Record<s
  * gemini selects, external-provider ModelParameters, ModelSearchDialog browse.
  * Returns the controls card and the header's Browse button.
  */
-function useGenerateControls(nodeId: string, overrides: Record<string, unknown>) {
+function useGenerateControls(nodeId: string, overrides: Record<string, unknown>, isVideo = false) {
   const { setOverrides } = useContext(TemplateEditorContext);
   const [isParamsExpanded, setIsParamsExpanded] = useState(true);
   const [isBrowseDialogOpen, setIsBrowseDialogOpen] = useState(false);
@@ -245,8 +247,16 @@ function useGenerateControls(nodeId: string, overrides: Record<string, unknown>)
   }, [isBrowseDialogOpen]);
 
   const selectedModel = overrides.selectedModel as SelectedModel | undefined;
-  const currentProvider = selectedModel?.provider ?? "gemini";
-  const isGeminiProvider = currentProvider === "gemini";
+  const currentProvider = selectedModel?.provider ?? (isVideo ? "fal" : "gemini");
+  const isGeminiProvider = !isVideo && currentProvider === "gemini";
+  const overridesRef = useRef(overrides);
+  overridesRef.current = overrides;
+  const handleInputsLoaded = useCallback((inputs: ModelInputDef[]) => {
+    const current = overridesRef.current;
+    if (!sameInputSchema(current.inputSchema as ModelInputDef[] | undefined, inputs)) {
+      setOverrides(nodeId, { ...current, inputSchema: inputs });
+    }
+  }, [nodeId, setOverrides]);
   const currentModelId = isGeminiProvider
     ? selectedModel?.modelId ?? ((overrides.model as ModelType | undefined) || "nano-banana-pro")
     : null;
@@ -285,7 +295,7 @@ function useGenerateControls(nodeId: string, overrides: Record<string, unknown>)
         displayName: model.name,
         capabilities: model.capabilities,
       };
-      setOverrides(nodeId, { ...overrides, selectedModel: newSelectedModel, parameters: {} });
+      setOverrides(nodeId, { ...overrides, selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined });
       setIsBrowseDialogOpen(false);
     },
     [nodeId, overrides, setOverrides]
@@ -346,6 +356,7 @@ function useGenerateControls(nodeId: string, overrides: Record<string, unknown>)
       provider={currentProvider}
       parameters={(overrides.parameters as Record<string, unknown>) || {}}
       onParametersChange={handleParametersChange}
+      onInputsLoaded={isVideo ? handleInputsLoaded : undefined}
     />
   ) : undefined;
 
@@ -377,7 +388,7 @@ function useGenerateControls(nodeId: string, overrides: Record<string, unknown>)
           isOpen={isBrowseDialogOpen}
           onClose={() => setIsBrowseDialogOpen(false)}
           onModelSelected={handleBrowseModelSelect}
-          initialCapabilityFilter="image"
+          initialCapabilityFilter={isVideo ? "video" : "image"}
         />
       )}
     </>
@@ -453,20 +464,21 @@ function useLlmControls(nodeId: string, overrides: Record<string, unknown>) {
 }
 
 function GenerateTemplateNode({ id, data, selected }: NodeProps<TemplateRFNode>) {
-  const entry = getTemplateEntry(data.nodeType);
-  const { controls, browse, provider, title } = useGenerateControls(id, data.overrides);
+  const entry = getTemplateEntry(data.nodeType, data.overrides);
+  const isVideo = data.nodeType === "generateVideo";
+  const { controls, browse, provider, title } = useGenerateControls(id, data.overrides, isVideo);
   return (
     <div className="relative w-full">
       <MiniFloatingHeader title={title} provider={provider} right={browse} />
       <NodeShell
         id={id}
         selected={selected}
-        media={{ kind: "aspect", aspect: parseAspectRatio(data.overrides.aspectRatio as string | undefined) }}
+        media={{ kind: "aspect", aspect: isVideo ? 16 / 9 : parseAspectRatio(data.overrides.aspectRatio as string | undefined) }}
         inputs={toSockets(entry.inputs)}
         outputs={toSockets(entry.outputs)}
         controls={controls}
       >
-        <EmptyState message="Run to generate" />
+        <EmptyState message={isVideo ? "Run to generate video" : "Run to generate"} />
       </NodeShell>
     </div>
   );
@@ -505,7 +517,7 @@ function TemplateNodeComponent(props: NodeProps<TemplateRFNode>) {
   const entry = getTemplateEntry(data.nodeType);
   const [sourceAspect, setSourceAspect] = useState<number | null>(null);
 
-  if (!data.isBase && data.nodeType === "nanoBanana") return <GenerateTemplateNode {...props} />;
+  if (!data.isBase && (data.nodeType === "nanoBanana" || data.nodeType === "generateVideo")) return <GenerateTemplateNode {...props} />;
   if (!data.isBase && data.nodeType === "llmGenerate") return <LlmTemplateNode {...props} />;
 
   const media =

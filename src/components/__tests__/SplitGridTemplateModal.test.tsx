@@ -4,6 +4,15 @@ import { SplitGridTemplateModal } from "@/components/splitgrid/SplitGridTemplate
 import { TEMPLATE_NODE_CATALOG } from "@/components/splitgrid/templateCatalog";
 import type { SplitGridNodeData } from "@/types";
 import type { FinalConnectionState } from "@xyflow/react";
+import type { ProviderModel } from "@/lib/providers/types";
+
+vi.mock("@/components/modals/ModelSearchDialog", () => ({
+  ModelSearchDialog: ({ initialCapabilityFilter, onModelSelected }: {
+    initialCapabilityFilter: string; onModelSelected: (model: ProviderModel) => void;
+  }) => <button onClick={() => onModelSelected({
+    id: "test-video", provider: "fal", name: "Test Video", capabilities: ["image-to-video"],
+  } as ProviderModel)}>Choose {initialCapabilityFilter} model</button>,
+}));
 
 const reactFlowCapture = vi.hoisted(() => ({
   props: null as Record<string, unknown> | null,
@@ -29,6 +38,7 @@ const mockDecrementModalCount = vi.fn();
 let mockIsRunning = false;
 
 vi.mock("@/store/workflowStore", () => ({
+  useProviderApiKeys: () => ({}),
   useWorkflowStore: (selector: (state: unknown) => unknown) =>
     selector({
       updateNodeData: mockUpdateNodeData,
@@ -197,6 +207,45 @@ describe("SplitGridTemplateModal", () => {
   });
 
   describe("Adding Nodes", () => {
+    it("adds video generation with model settings and indexed image/prompt connections", async () => {
+      localStorage.setItem("node-banana-schema-cache", JSON.stringify({ "fal:test-video": {
+        timestamp: Date.now(),
+        parameters: [{ name: "duration", type: "string", enum: ["5", "10"], default: "5" }],
+        inputs: [
+          { name: "image_url", type: "image", label: "Start frame", required: true },
+          { name: "tail_image_url", type: "image", label: "End frame", required: false },
+          { name: "prompt", type: "text", label: "Prompt", required: true },
+        ],
+      } }));
+      renderModal();
+      fireEvent.contextMenu(document.querySelector(".react-flow__pane")!);
+      fireEvent.click(screen.getByRole("button", { name: "Generate Video" }));
+      expect(screen.getByText("Run to generate video")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Browse"));
+      fireEvent.click(screen.getByText("Choose video model"));
+      fireEvent.change(await screen.findByLabelText("Duration"), { target: { value: "10" } });
+      fireEvent.contextMenu(document.querySelector(".react-flow__pane")!);
+      fireEvent.click(screen.getByRole("button", { name: "Prompt" }));
+      const nodes = reactFlowCapture.props!.nodes as Array<{ id: string; data: { nodeType: string } }>;
+      const videoId = nodes.find((node) => node.data.nodeType === "generateVideo")!.id;
+      const promptId = nodes.find((node) => node.data.nodeType === "prompt")!.id;
+      const connect = reactFlowCapture.props!.onConnect as (connection: unknown) => void;
+      act(() => connect({ source: "cell-image", sourceHandle: "image", target: videoId, targetHandle: "image-1" }));
+      act(() => connect({ source: promptId, sourceHandle: "text", target: videoId, targetHandle: "text-0" }));
+      expect(screen.queryByText("Generate Video nodes need a Prompt connected to their text input")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Apply to 6 cells" }));
+      const template = mockMaterializeSplitGridCells.mock.calls[0][1].template;
+      expect(template.nodes.find((node: { id: string }) => node.id === videoId).data).toMatchObject({
+        selectedModel: { provider: "fal", modelId: "test-video" }, parameters: { duration: "10" },
+        inputSchema: expect.arrayContaining([expect.objectContaining({ name: "tail_image_url" })]),
+      });
+      expect(template.edges).toEqual(expect.arrayContaining([
+        expect.objectContaining({ target: videoId, targetHandle: "image-1" }),
+        expect.objectContaining({ target: videoId, targetHandle: "text-0" }),
+      ]));
+      localStorage.removeItem("node-banana-schema-cache");
+    });
+
     it.each(["double-click", "right-click"])("adds an unconnected node at the %s location", (gesture) => {
       renderModal();
       const pane = document.querySelector(".react-flow__pane")!;
@@ -204,7 +253,7 @@ describe("SplitGridTemplateModal", () => {
       else fireEvent.contextMenu(pane, { clientX: 400, clientY: 250 });
 
       const search = screen.getByRole("textbox", { name: "Search nodes" });
-      expect(screen.queryByRole("button", { name: "Generate Video" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Split Grid" })).not.toBeInTheDocument();
       fireEvent.change(search, { target: { value: "prompt" } });
       fireEvent.keyDown(search, { key: "Enter" });
       expect(screen.queryByRole("textbox", { name: "Search nodes" })).not.toBeInTheDocument();

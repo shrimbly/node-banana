@@ -128,6 +128,32 @@ describe("materializeSplitGridCells", () => {
       });
     });
 
+    it("creates a configured video generator in every cell with its typed connections", () => {
+      const template = createClassicSplitGridTemplate();
+      const generator = template.nodes.find((node) => node.type === "nanoBanana")!;
+      generator.type = "generateVideo";
+      generator.data = {
+        selectedModel: { provider: "fal", modelId: "test-video", displayName: "Test Video" },
+        parameters: { duration: "10" },
+        inputSchema: [{ name: "image_url", type: "image", label: "Start frame", required: true }],
+      };
+      template.edges[0].targetHandle = "image-0";
+      template.edges[1].targetHandle = "text-0";
+      template.router = [{ source: generator.id, sourceHandle: "video", targetHandle: "video" }];
+      act(() => useWorkflowStore.getState().materializeSplitGridCells(SPLIT_ID, { force: true, template }));
+      const state = useWorkflowStore.getState();
+      const videos = state.nodes.filter((node) => node.type === "generateVideo");
+      expect(videos).toHaveLength(4);
+      for (const video of videos) {
+        expect(video.data).toMatchObject(generator.data);
+        expect(state.edges).toEqual(expect.arrayContaining([
+          expect.objectContaining({ target: video.id, targetHandle: "image-0", sourceHandle: "image" }),
+          expect.objectContaining({ target: video.id, targetHandle: "text-0", sourceHandle: "text" }),
+          expect.objectContaining({ source: video.id, sourceHandle: "video", target: getSplitData().routerNodeId, targetHandle: "video" }),
+        ]));
+      }
+    });
+
     it.each(["grid", "vertical", "horizontal"] as const)("persists and places cells in %s layout without changing their source order", (layout) => {
       const template = { ...createClassicSplitGridTemplate(), layout };
       act(() => {

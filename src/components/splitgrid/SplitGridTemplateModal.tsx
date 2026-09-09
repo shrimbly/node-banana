@@ -42,6 +42,7 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { useWheelPanZoom } from "@/hooks/useWheelPanZoom";
 import type {
   LLMGenerateNodeData,
+  GenerateVideoNodeData,
   NanoBananaNodeData,
   NodeType,
   SplitGridNodeData,
@@ -66,6 +67,7 @@ import {
 import {
   getTemplateEntry,
   getTemplateNodeIcon,
+  templateHandleKind,
   TEMPLATE_NODE_CATALOG,
   type TemplateCatalogEntry,
   type TemplateHandleKind,
@@ -99,10 +101,12 @@ const isMacOS =
 const EDGE_COLOR: Record<TemplateHandleKind, string> = {
   image: "#0d9668",
   text: "#2563eb",
+  video: "#ec4899",
+  audio: "#a78bfa",
 };
 
 function edgeStyleFor(sourceHandle: string | null | undefined): React.CSSProperties {
-  const kind = (sourceHandle === "text" ? "text" : "image") as TemplateHandleKind;
+  const kind = templateHandleKind(sourceHandle ?? "image");
   return { stroke: EDGE_COLOR[kind], strokeWidth: 2 };
 }
 
@@ -145,6 +149,10 @@ function seedLlmOverrides(): Record<string, unknown> {
 
 function seedOverridesFor(type: NodeType): Record<string, unknown> {
   if (type === "nanoBanana") return seedGenerateOverrides();
+  if (type === "generateVideo") {
+    const defaults = createDefaultNodeData(type) as GenerateVideoNodeData;
+    return { selectedModel: defaults.selectedModel, parameters: defaults.parameters ?? {} };
+  }
   if (type === "llmGenerate") return seedLlmOverrides();
   return {};
 }
@@ -269,7 +277,7 @@ interface TemplateDropMenuState {
   screen: { x: number; y: number };
   flow: { x: number; y: number };
   fromNodeId: string;
-  fromHandleId: TemplateHandleKind;
+  fromHandleId: string;
   fromHandleType: "source" | "target";
 }
 
@@ -335,7 +343,7 @@ function TemplateConnectionMenu({
       }}
     >
       <MenuHeader>
-        <MenuSectionLabel>Add {menu.fromHandleId} node</MenuSectionLabel>
+        <MenuSectionLabel>Add {templateHandleKind(menu.fromHandleId)} node</MenuSectionLabel>
       </MenuHeader>
       <MenuList>
         {options.map((option, index) => (
@@ -653,11 +661,11 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
       const sourceNode = rfNodes.find((node) => node.id === source);
       const targetNode = rfNodes.find((node) => node.id === target);
       if (!sourceNode || !targetNode) return false;
-      const sourceEntry = getTemplateEntry(sourceNode.data.nodeType);
-      const targetEntry = getTemplateEntry(targetNode.data.nodeType);
+      const sourceEntry = getTemplateEntry(sourceNode.data.nodeType, sourceNode.data.overrides);
+      const targetEntry = getTemplateEntry(targetNode.data.nodeType, targetNode.data.overrides);
       const output = sourceEntry.outputs.find((handle) => handle.id === sourceHandle);
       const input = targetEntry.inputs.find((handle) => handle.id === targetHandle);
-      if (!output || !input || output.id !== input.id) return false;
+      if (!output || !input || templateHandleKind(output.id) !== templateHandleKind(input.id)) return false;
       return !createsCycle(source, target);
     },
     [rfNodes, createsCycle]
@@ -668,7 +676,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
       setRfEdges((edges) => {
         let next = edges;
         // Text inputs accept a single connection — replace the existing one
-        if (connection.targetHandle === "text") {
+        if (templateHandleKind(connection.targetHandle ?? "") === "text") {
           next = next.filter(
             (edge) =>
               !(edge.target === connection.target && edge.targetHandle === connection.targetHandle)
@@ -718,7 +726,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
         screen: { x: point.clientX, y: point.clientY },
         flow: screenToFlowPosition({ x: point.clientX, y: point.clientY }),
         fromNodeId: fromNode.id,
-        fromHandleId: (fromHandle.id === "text" ? "text" : "image") as TemplateHandleKind,
+        fromHandleId: fromHandle.id,
         fromHandleType: fromHandle.type,
       });
     },
@@ -729,8 +737,8 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
     if (!dropMenu) return [];
     return TEMPLATE_NODE_CATALOG.filter((entry) =>
       dropMenu.fromHandleType === "source"
-        ? entry.inputs.some((handle) => handle.id === dropMenu.fromHandleId)
-        : entry.outputs.some((handle) => handle.id === dropMenu.fromHandleId)
+        ? entry.inputs.some((handle) => templateHandleKind(handle.id) === templateHandleKind(dropMenu.fromHandleId))
+        : entry.outputs.some((handle) => templateHandleKind(handle.id) === templateHandleKind(dropMenu.fromHandleId))
     );
   }, [dropMenu]);
 
@@ -739,7 +747,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
       if (!dropMenu) return;
       const dims = editorNodeDimensions(type);
       const entry = getTemplateEntry(type);
-      const kind = dropMenu.fromHandleId;
+      const kind = templateHandleKind(dropMenu.fromHandleId);
       const newId = makeTemplateNodeId(type, rfNodes);
 
       let position: { x: number; y: number };
@@ -748,12 +756,12 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
         // Forward drag: align the new node's input socket with the drop point
         const inputIndex = Math.max(0, entry.inputs.findIndex((handle) => handle.id === kind));
         position = { x: dropMenu.flow.x, y: dropMenu.flow.y - templateHandleTop(inputIndex) };
-        connection = { source: dropMenu.fromNodeId, sourceHandle: kind, target: newId, targetHandle: kind };
+        connection = { source: dropMenu.fromNodeId, sourceHandle: dropMenu.fromHandleId, target: newId, targetHandle: kind };
       } else {
         // Backward drag: align the new node's output socket with the drop point
         const outputIndex = Math.max(0, entry.outputs.findIndex((handle) => handle.id === kind));
         position = { x: dropMenu.flow.x - dims.width, y: dropMenu.flow.y - templateHandleTop(outputIndex) };
-        connection = { source: newId, sourceHandle: kind, target: dropMenu.fromNodeId, targetHandle: kind };
+        connection = { source: newId, sourceHandle: kind, target: dropMenu.fromNodeId, targetHandle: dropMenu.fromHandleId };
       }
 
       setRfNodes((nodes) => [
@@ -793,8 +801,12 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
     if (generateMissingPrompt) {
       list.push("Generate Image nodes need a Prompt connected to their text input");
     }
+    if (rfNodes.some((node) => node.data.nodeType === "generateVideo" &&
+      !rfEdges.some((edge) => edge.target === node.id && templateHandleKind(edge.targetHandle ?? "") === "text"))) {
+      list.push("Generate Video nodes need a Prompt connected to their text input");
+    }
     // Image-processing/output nodes are dead (or fail validation) without an image
-    const IMAGE_OPTIONAL = new Set(["nanoBanana", "llmGenerate"]);
+    const IMAGE_OPTIONAL = new Set(["nanoBanana", "llmGenerate", "generateVideo"]);
     const unwired = rfNodes.filter((node) => {
       if (node.data.isBase || IMAGE_OPTIONAL.has(node.data.nodeType)) return false;
       const entry = getTemplateEntry(node.data.nodeType);
