@@ -61,79 +61,90 @@
       <div class="canvas">
         <div class="stage" data-stage>
           <svg class="edges edges--desktop" viewBox="0 0 1382 780" width="1382" height="780">
-            <path data-from="n1" data-to="n3" data-in="0" pathLength="1" d="M 345.5 72 C 440.0 72, 440.0 144, 534.5 144" class="edge edge--image"></path>
-            <path data-from="n2" data-to="n3" data-in="1" pathLength="1" d="M 345.5 292 C 440.0 292, 440.0 174, 534.5 174" class="edge edge--text"></path>
-            <path data-from="n3" data-to="n4" data-in="0" pathLength="1" d="M 765.5 144 C 850.0 144, 850.0 84, 934.5 84" class="edge edge--image"></path>
+            <path data-from="n1" data-to="n3" data-in="0" pathLength="1" d="M 385.5 54 C 470.0 54, 470.0 144, 554.5 144" class="edge edge--image"></path>
+            <path data-from="n2" data-to="n3" data-in="1" pathLength="1" d="M 405.5 324 C 480.0 324, 480.0 174, 554.5 174" class="edge edge--text"></path>
+            <path data-from="n3" data-to="n4" data-in="0" pathLength="1" d="M 865.5 144 C 930.0 144, 930.0 64, 994.5 64" class="edge edge--image"></path>
           </svg>
-          <svg class="edges edges--tablet" viewBox="0 0 710 620" width="710" height="620">
-            <path data-from="n1" data-to="n3" data-in="0" pathLength="1" d="M 249.5 56 C 309.5 56, 224.5 134, 284.5 134" class="edge edge--image"></path>
-            <path data-from="n2" data-to="n3" data-in="1" pathLength="1" d="M 249.5 274 C 309.5 274, 224.5 164, 284.5 164" class="edge edge--text"></path>
-            <path data-from="n3" data-to="n4" data-in="0" pathLength="1" d="M 515.5 134 C 575.5 134, 370.5 354, 430.5 354" class="edge edge--image"></path>
+          <svg class="edges edges--tablet" viewBox="0 0 710 700" width="710" height="700">
+            <path data-from="n1" data-to="n3" data-in="0" pathLength="1" d="M 329.5 54 C 389.5 54, 320.5 124, 380.5 124" class="edge edge--image"></path>
+            <path data-from="n2" data-to="n3" data-in="1" pathLength="1" d="M 349.5 324 C 409.5 324, 320.5 154, 380.5 154" class="edge edge--text"></path>
+            <path data-from="n3" data-to="n4" data-in="0" pathLength="1" d="M 691.5 124 C 847.0 124, 225.0 390, 380.5 390" class="edge edge--image"></path>
           </svg>
-          <svg class="edges edges--phone" viewBox="0 0 340 440" width="340" height="440">
-            <path data-from="n1" data-to="n3" data-in="0" pathLength="1" d="M 241.5 44 C 308.0 44, 42.0 246, 108.5 246" class="edge edge--image"></path>
+          <svg class="edges edges--phone" viewBox="0 0 340 600" width="340" height="600">
+            <path data-from="n1" data-to="n3" data-in="0" pathLength="1" d="M 325.5 54 C 481.0 54, -141.0 324, 14.5 324" class="edge edge--image"></path>
           </svg>
 
           <div class="node node--image" data-node="n1">
+            <div class="node__header"><span class="node__title">Image Input</span></div>
             <div class="card">
-              <img class="media" src="assets/node-desert.jpg" width="424" height="282" alt="" draggable="false">
+              <img class="media" src="assets/node-desert.jpg" width="440" height="294" alt="" draggable="false">
+              <span class="socket socket--in socket--reference" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
               <span class="socket socket--out socket--image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
             </div>
-            <div class="controls">
-              <span class="controls__icon controls__icon--square"></span>
-              <span class="controls__title">Image</span>
-              <span class="controls__values">1536 × 1024</span>
-              <svg class="controls__chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"></path></svg>
+            <div class="gap"></div>
+            <div class="controls controls--plain">
+              <span class="controls__title">desert.jpg</span>
+              <span class="controls__values"><span>1536×1024</span></span>
+              <span class="controls__end"></span>
             </div>
           </div>
 
           <div class="node node--prompt" data-node="n2">
+            <div class="node__header"><span class="node__title">Prompt</span></div>
             <div class="card">
-              <div class="well">A donkey standing on a dune at golden hour, wearing a tailored linen coat. Editorial fashion photograph, 35mm, soft shadows.</div>
+              <div class="prompt">
+                <div class="prompt__text">A donkey standing on a dune at golden hour, wearing a tailored linen coat. Editorial fashion photograph, 35mm, soft shadows.</div>
+                <span class="prompt__grip"></span>
+              </div>
+              <span class="socket socket--in socket--text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
               <span class="socket socket--out socket--text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
             </div>
-            <div class="controls">
-              <svg class="controls__icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"><path d="M2 3h8M2 6h8M2 9h5"></path></svg>
-              <span class="controls__title">Prompt</span>
-              <span class="controls__values">22 words</span>
-              <svg class="controls__chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"></path></svg>
+            <div class="gap"></div>
+            <div class="controls controls--plain">
+              <span class="controls__title controls__title--link">Add variable</span>
+              <span class="controls__values"><span>124 chars</span></span>
+              <span class="controls__end"></span>
             </div>
           </div>
 
           <div class="node node--generate" data-node="n3">
+            <div class="node__header"><span class="node__title"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg>Generate Image</span></div>
             <div class="card">
-              <img class="media" src="assets/node-donkey.jpg" width="424" height="282" alt="" draggable="false">
+              <img class="media" src="assets/node-donkey.jpg" width="440" height="294" alt="" draggable="false">
               <span class="socket socket--in socket--image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
               <span class="socket socket--in socket--text" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
               <span class="socket socket--out socket--image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
             </div>
+            <div class="gap"></div>
             <div class="controls">
-              <span class="controls__icon controls__icon--round"></span>
-              <span class="controls__title">nano-banana-pro</span>
-              <span class="controls__values">3:2 · 2K</span>
-              <svg class="controls__chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"></path></svg>
+              <span class="controls__icon"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg></span>
+              <span class="controls__title">Nano Banana Pro</span>
+              <span class="controls__values"><span>3:2</span><span aria-hidden="true">·</span><span>2K</span></span>
+              <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
             </div>
           </div>
 
           <div class="node node--video" data-node="n4">
+            <div class="node__header"><span class="node__title"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg>Generate Video</span></div>
             <div class="card">
-              <span class="media-wrap">
-                <img class="media" src="assets/node-donkey.jpg" width="424" height="282" alt="" draggable="false">
-                <span class="play"><svg viewBox="0 0 14 14"><path d="M4 2.5v9l7-4.5z"></path></svg></span>
-              </span>
+              <img class="media media--video" src="assets/node-donkey.jpg" width="440" height="294" alt="" draggable="false">
               <span class="socket socket--in socket--image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+              <span class="socket socket--in socket--video" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+              <span class="socket socket--in socket--text" style="--row: 2"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
               <span class="socket socket--out socket--video" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
             </div>
-            <div class="scrub">
-              <span class="scrub__time">0:00</span>
-              <span class="scrub__track"><span class="scrub__played"></span></span>
-              <span class="scrub__time">0:05</span>
+            <div class="gap gap--row">
+              <span class="scrub">
+                <span class="scrub__play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg></span>
+                <span class="scrub__range"><span class="scrub__fill"></span><span class="scrub__thumb"></span></span>
+                <span class="scrub__time">0:02 / 0:05</span>
+              </span>
             </div>
-            <div class="controls controls--tight">
-              <span class="controls__icon controls__icon--film"></span>
-              <span class="controls__title">veo-3.1</span>
-              <span class="controls__values">5s · 1080p</span>
-              <svg class="controls__chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"></path></svg>
+            <div class="controls">
+              <span class="controls__icon"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg></span>
+              <span class="controls__title">Veo 3</span>
+              <span class="controls__values"></span>
+              <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
             </div>
           </div>
         </div>

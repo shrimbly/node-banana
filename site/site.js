@@ -69,8 +69,8 @@
   var stage = document.querySelector("[data-stage]");
   if (!stage || !window.PointerEvent) return;
 
-  var OUT = { n1: [220, 24], n2: [220, 24], n3: [220, 24] };
-  var IN = { n3: [[0, 24], [0, 54]], n4: [[0, 24]] };
+  var OUT = { n1: [300, 24], n2: [320, 24], n3: [300, 24] };
+  var IN = { n3: [[0, 24], [0, 54]], n4: [[0, 24], [0, 54], [0, 84]] };
 
   function scale() {
     var t = getComputedStyle(stage).transform;

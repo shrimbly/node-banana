@@ -14,7 +14,12 @@
   --ink: #e5e5e5;
   --ink-2: #a3a3a3;
   --ink-3: #8a8a8a;
-  --ink-dim: #9a9a9a;
+  --ink-dim: #737373;      /* neutral-500, as the app */
+  --node-title: #e5e5e5;   /* neutral-200 */
+  --node-header: #a3a3a3;  /* neutral-400 */
+  --node-text: #f5f5f5;    /* neutral-100 */
+  --handle-reference: #6b7280;
+  --link: #60a5fa;         /* blue-400 */
   --dark: #171717;
   --selection: #3b82f6;
   --handle-image: #10b981;
@@ -27,7 +32,7 @@
   /* Type */
   --font-display: "Space Grotesk", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
-  --font-ui: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   /* Width of "NODE BANANA" / "NODE" / "BANANA" in em at 700, -0.06em tracking (measured). */
   --wordmark-ratio: 6.038;
   --wordmark-ratio-node: 2.304;
@@ -101,8 +106,8 @@ ul { margin: 0; padding: 0; list-style: none; }
   border-bottom: 0;
   border-radius: var(--radius-window) var(--radius-window) 0 0;
   box-shadow: 0 24px 64px -12px rgb(0 0 0 / 0.65);
-  -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 78%, transparent 100%);
   overflow: hidden;
 }
 
@@ -203,7 +208,7 @@ ul { margin: 0; padding: 0; list-style: none; }
   border-bottom: 0;
   border-radius: 8px 8px 0 0;
   background-color: var(--canvas);
-  background-image: radial-gradient(var(--border) 1px, transparent 1px);
+  background-image: radial-gradient(circle, var(--border) 0.5px, transparent 0.75px);
   background-size: 20px 20px;
   background-position: 10px 10px;
   overflow: hidden;
@@ -230,14 +235,22 @@ ul { margin: 0; padding: 0; list-style: none; }
 .edge--image { stroke: var(--handle-image); }
 .edge--text { stroke: var(--handle-text); }
 
-/* ---------- Nodes (anatomy from docs/node-redesign.md) ------------------- */
+/* ---------- Nodes (anatomy from src/components/nodes/NodeShell.tsx) ------ */
+/* Media card (4px pad, 12px squircle, sockets on the border), a gap row
+   (28px with content, 8px spacer without) and a controls card that is the
+   node width minus 24px with a 28px summary row. Node widths are the app's
+   defaults: Image Input 300, Prompt 320, Generate Image 300, Generate Video 300. */
 
 .node {
   position: absolute;
   left: 0;
   top: 0;
-  width: 220px;
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   transform: translate(var(--x), var(--y));
+  font-family: var(--font-ui);
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
@@ -245,47 +258,78 @@ ul { margin: 0; padding: 0; list-style: none; }
 }
 .node.is-dragging { cursor: grabbing; z-index: 2; }
 .node img { pointer-events: none; }
-.node--video { width: 260px; }
+.node--prompt { width: 320px; }
 
 /* Desktop layout (stage 1382 × 780) */
-.node--image    { --x: 120px; --y: 48px; }
-.node--prompt   { --x: 120px; --y: 268px; }
-.node--generate { --x: 540px; --y: 120px; }
-.node--video    { --x: 940px; --y: 60px; }
+.node--image    { --x: 80px;   --y: 30px; }
+.node--prompt   { --x: 80px;   --y: 300px; }
+.node--generate { --x: 560px;  --y: 120px; }
+.node--video    { --x: 1000px; --y: 40px; }
+
+/* Floating header: 26px above the node, 12px uppercase semibold, neutral-400. */
+.node__header {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -26px;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+}
+.node__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 60%;
+  padding-left: 8px;
+  font-size: 12px;
+  line-height: 16px;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  text-transform: uppercase;
+  color: var(--node-header);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.badge { width: 16px; height: 16px; flex-shrink: 0; color: var(--ink-dim); }
 
 .card {
   position: relative;
+  width: 100%;
   background: var(--card);
   border: 1px solid var(--card-border);
   border-radius: var(--radius-card);
   padding: 4px;
 }
 .media { width: 100%; height: auto; border-radius: var(--radius-media); }
-.media-wrap { position: relative; display: block; }
-.play {
+.media--video { aspect-ratio: 16 / 9; object-fit: cover; }
+
+/* Prompt: a fixed-height media clip holding the textarea surface. */
+.prompt {
+  position: relative;
+  height: 120px; /* the app default is 160; the prompt has been resized down, as the grip allows */
+  border-radius: var(--radius-media);
+  overflow: hidden;
+  background: rgb(23 23 23 / 0.4);
+}
+.prompt__text {
+  position: absolute;
+  inset: 0;
+  padding: 12px 12px 16px;
+  font-size: 12px;
+  line-height: 1.625;
+  color: var(--node-text);
+}
+.prompt__grip {
   position: absolute;
   left: 50%;
-  top: 50%;
-  width: 36px;
-  height: 36px;
-  margin: -18px 0 0 -18px;
-  border-radius: 50%;
-  background: rgb(23 23 23 / 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.play svg { width: 14px; height: 14px; fill: var(--ink); }
-.well {
-  height: 88px;
-  padding: 8px 10px;
-  border-radius: var(--radius-media);
-  background: var(--well);
-  color: #d4d4d4;
-  font-family: var(--font-ui);
-  font-size: 10px;
-  line-height: 14px;
-  box-shadow: inset 0 1px 1.5px rgb(0 0 0 / 0.3), inset 0 0 0 1px rgb(0 0 0 / 0.12);
+  bottom: 3px;
+  width: 32px;
+  height: 3px;
+  margin-left: -16px;
+  border-radius: 999px;
+  background: rgb(115 115 115 / 0.7);
 }
 
 /* Sockets sit in the card border: first centred 24px from the top, then every 30px. */
@@ -299,52 +343,53 @@ ul { margin: 0; padding: 0; list-style: none; }
 .socket--out { right: -15px; transform: scaleX(-1); }
 .socket svg { display: block; width: 18px; height: 28px; overflow: visible; }
 .socket__fill { fill: var(--card); }
-.socket__swell { fill: none; stroke-width: 1; }
-.socket__hole { fill: var(--canvas); stroke-width: 1.5; stroke-opacity: 0.6; }
-.socket__hole--on { stroke-opacity: 1; }
+.socket__swell { fill: none; stroke: var(--card-border); stroke-width: 1; }
+.socket__hole { fill: var(--canvas); stroke: currentColor; stroke-width: 1.5; stroke-opacity: 0.6; }
+.socket__hole--on { fill: currentColor; stroke-opacity: 1; }
 .socket--image { color: var(--handle-image); }
 .socket--text { color: var(--handle-text); }
 .socket--video { color: var(--handle-video); }
-.socket__swell { stroke: currentColor; }
-.socket__hole { stroke: currentColor; }
-.socket__hole--on { fill: currentColor; }
+.socket--reference { color: var(--handle-reference); }
+
+.gap { width: 100%; height: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.gap--row { height: 28px; }
 
 .controls {
+  width: calc(100% - 24px);
+  max-width: 360px;
   height: 28px;
-  margin: 8px 12px 0;
   padding: 0 8px;
   border: 1px solid var(--card-border);
   border-radius: var(--radius-controls);
   background: var(--card);
   display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) auto 12px;
+  grid-template-columns: 16px minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 6px;
-  font-family: var(--font-ui);
   font-size: 10px;
   line-height: 14px;
 }
-.controls--tight { margin-top: 0; }
-.controls__icon { display: block; width: 12px; height: 12px; margin-left: 2px; color: var(--ink-dim); }
-.controls__icon--square { border: 1.5px solid currentColor; border-radius: 3px; }
-.controls__icon--round { border: 1.5px solid currentColor; border-radius: 50%; }
-.controls__icon--film { border: 1.5px solid currentColor; border-radius: 2px; }
-.controls__title { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.controls__values { color: var(--ink-dim); white-space: nowrap; }
-.controls__chevron { width: 12px; height: 12px; color: var(--ink-dim); }
-.scrub {
-  height: 28px;
-  margin: 0 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--font-ui);
-  font-size: 10px;
-  color: var(--ink-dim);
-  font-variant-numeric: tabular-nums;
+.controls--plain { grid-template-columns: minmax(0, 1fr) auto auto; }
+.controls__icon { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; color: var(--ink-dim); }
+.controls__title { color: var(--node-title); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.controls__title--link { color: var(--link); }
+.controls__values { display: flex; align-items: center; gap: 4px; min-width: 0; color: var(--ink-dim); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.controls__end { width: 0; }
+.controls__toggle { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; color: var(--ink-dim); }
+.controls__toggle svg { width: 12px; height: 12px; }
+
+/* Scrub row: play, range, elapsed / duration. */
+.scrub { display: flex; align-items: center; gap: 6px; width: 100%; height: 100%; padding: 0 4px; }
+.scrub__play { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 6px; color: var(--ink-2); flex-shrink: 0; }
+.scrub__play svg { width: 12px; height: 12px; }
+.scrub__range { position: relative; flex: 1 1 0; min-width: 0; height: 4px; border-radius: 2px; background: var(--border); }
+.scrub__fill { position: absolute; left: 0; top: 0; height: 4px; width: 40%; border-radius: 2px; background: #d4d4d4; }
+.scrub__thumb { position: absolute; left: 40%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #d4d4d4; }
+.scrub__time { color: var(--ink-2); font-size: 10px; line-height: 14px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+@supports (corner-shape: squircle) {
+  .card, .controls, .media, .prompt, .scrub__play { corner-shape: squircle; }
 }
-.scrub__track { position: relative; flex-grow: 1; height: 2px; border-radius: 1px; background: var(--border); }
-.scrub__played { position: absolute; left: 0; top: 0; width: 34%; height: 2px; border-radius: 1px; background: var(--ink-2); }
 
 /* ---------- Line: points, links, actions --------------------------------- */
 
@@ -487,27 +532,27 @@ ul { margin: 0; padding: 0; list-style: none; }
 
 /* Tablet: 2×2 node layout on a 710-wide stage. */
 @media (max-width: 899px) {
-  .stage { --stage-w: 710px; --stage-h: 620px; }
+  .stage { --stage-w: 710px; --stage-h: 700px; }
   .edges--desktop { display: none; }
   .edges--tablet { display: block; }
-  .node--image    { --x: 24px;  --y: 32px; }
-  .node--prompt   { --x: 24px;  --y: 250px; }
-  .node--generate { --x: 290px; --y: 110px; }
-  .node--video    { --x: 436px; --y: 330px; }
+  .node--image    { --x: 24px;  --y: 30px; }
+  .node--prompt   { --x: 24px;  --y: 300px; }
+  .node--generate { --x: 386px; --y: 100px; }
+  .node--video    { --x: 386px; --y: 366px; }
 }
 
 /* Phone: one tab, two nodes, stacked wordmark. */
 @media (max-width: 599px) {
   :root { --margin: 20px; --gap-wordmark: 40px; }
   .fold { padding-bottom: 0; }
-  .app { -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%); mask-image: linear-gradient(to bottom, #000 72%, transparent 100%); }
+  .app { -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent 100%); mask-image: linear-gradient(to bottom, #000 70%, transparent 100%); }
   .tab--rest, .tab__new { display: none; }
-  .stage { --stage-w: 340px; --stage-h: 440px; }
+  .stage { --stage-w: 340px; --stage-h: 600px; }
   .edges--desktop, .edges--tablet { display: none; }
   .edges--phone { display: block; }
   .node--prompt, .node--video { display: none; }
-  .node--image    { --x: 16px;  --y: 20px; }
-  .node--generate { --x: 114px; --y: 222px; }
+  .node--image    { --x: 20px; --y: 30px; }
+  .node--generate { --x: 20px; --y: 300px; }
 
   .line { display: flex; flex-direction: column; align-items: stretch; gap: 16px; margin-top: 20px; padding-left: 0; }
   .nav { display: contents; }
