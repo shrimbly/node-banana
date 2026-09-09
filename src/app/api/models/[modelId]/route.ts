@@ -25,6 +25,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ProviderType } from "@/types";
 import { isOpenAIImage25, OPENAI_IMAGE_25_PARAMETERS } from "@/lib/providers/openaiImages";
+import { isGeminiOmni, GEMINI_OMNI_PARAMETERS, GEMINI_OMNI_INPUTS } from "@/lib/providers/geminiOmni";
 import { ModelParameter, ModelInput } from "@/lib/providers/types";
 import {
   getCachedWaveSpeedSchema,
@@ -1216,6 +1217,7 @@ function getKieSchema(modelId: string): ExtractedSchema {
  * Returns null if the model is not a Gemini video model.
  */
 function getGeminiVideoSchema(modelId: string): ExtractedSchema | null {
+  if (isGeminiOmni(modelId)) return { parameters: GEMINI_OMNI_PARAMETERS, inputs: GEMINI_OMNI_INPUTS };
   const commonParams: ModelParameter[] = [
     { name: "aspectRatio", type: "string", description: "Output aspect ratio", enum: ["16:9", "9:16"], default: "16:9" },
     { name: "durationSeconds", type: "string", description: "Video duration in seconds", enum: ["4", "6", "8"], default: "8" },

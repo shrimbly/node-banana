@@ -30,6 +30,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { ProviderType } from "@/types";
 import { OPENAI_IMAGE_25_MODELS } from "@/lib/providers/openaiImages";
+import { GEMINI_OMNI_MODELS } from "@/lib/providers/geminiOmni";
 import { ProviderModel, ModelCapability } from "@/lib/providers";
 import {
   getCachedModels,
@@ -544,6 +545,7 @@ const GEMINI_IMAGE_MODELS: ProviderModel[] = [
 
 // Gemini video models (native Veo via Gemini API)
 const GEMINI_VIDEO_MODELS: ProviderModel[] = [
+  ...GEMINI_OMNI_MODELS,
   {
     id: "veo-3.1/text-to-video",
     name: "Veo 3.1",

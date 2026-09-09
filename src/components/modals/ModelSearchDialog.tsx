@@ -12,12 +12,14 @@ import { ProviderModel, ModelCapability } from "@/lib/providers/types";
 const MODELS_CACHE_KEY = "node-banana-models-cache";
 // Bump when the built-in OpenAI catalogue changes so existing users see new models.
 const OPENAI_CATALOGUE_VERSION = 1;
+const GEMINI_CATALOGUE_VERSION = 1;
 const MODELS_CACHE_TTL = 48 * 60 * 60 * 1000; // 48 hours
 // Cap the number of cached entries to avoid unbounded localStorage growth.
 // Entries are pruned LRU-style (oldest timestamp first) on write.
 const MODELS_CACHE_MAX_ENTRIES = 20;
 
 interface ModelsCacheEntry {
+  geminiCatalogueVersion?: number;
   openaiCatalogueVersion?: number;
   models: ProviderModel[];
   availableProviders?: string[];
@@ -31,6 +33,8 @@ function getCachedModels(cacheKey: string): ModelsCacheEntry | null {
     const provider = cacheKey.split(":")[1];
     const includesOpenAI = provider === "all" || provider === "openai";
     if (includesOpenAI && entry?.openaiCatalogueVersion !== OPENAI_CATALOGUE_VERSION) return null;
+    // Gemini models are included in the combined catalogue and the Gemini filter.
+    if ((provider === "all" || provider === "gemini") && entry?.geminiCatalogueVersion !== GEMINI_CATALOGUE_VERSION) return null;
     if (entry && Date.now() - entry.timestamp < MODELS_CACHE_TTL) {
       return entry;
     }
@@ -55,7 +59,7 @@ function setCachedModels(cacheKey: string, models: ProviderModel[], availablePro
       }
     }
 
-    cache[cacheKey] = { models, availableProviders, timestamp: now, openaiCatalogueVersion: OPENAI_CATALOGUE_VERSION };
+    cache[cacheKey] = { models, availableProviders, timestamp: now, openaiCatalogueVersion: OPENAI_CATALOGUE_VERSION, geminiCatalogueVersion: GEMINI_CATALOGUE_VERSION };
 
     // Cap total entries (LRU): drop oldest by timestamp until under the limit.
     const keys = Object.keys(cache);

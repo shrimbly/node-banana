@@ -919,3 +919,22 @@ describe("OpenAI GPT Image 2.5 schemas", () => {
     expect(data.parameters.find((p: { name: string }) => p.name === "quality").enum).not.toContain("max");
   });
 });
+
+describe("Gemini Omni schemas", () => {
+  it.each(["gemini-omni-1.1-flash", "gemini-omni-flash-preview"])("exposes multimodal inputs and supported video settings for %s", async (modelId) => {
+    const response = await GET(createMockSchemaRequest(modelId, "gemini"), { params: Promise.resolve({ modelId }) });
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data.parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "resolution", enum: ["360p", "720p", "1080p", "4k"] }),
+      expect.objectContaining({ name: "task", enum: expect.arrayContaining(["auto", "edit", "extend"]) }),
+    ]));
+    expect(data.inputs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "image", type: "image", isArray: true }),
+      expect.objectContaining({ name: "video", type: "video" }),
+      expect.objectContaining({ name: "audio", type: "audio" }),
+      expect.objectContaining({ name: "prompt", type: "text" }),
+    ]));
+    expect(data.parameters.some((p: { name: string }) => p.name === "durationSeconds")).toBe(false);
+  });
+});
