@@ -18,7 +18,7 @@
  */
 
 import { useMemo } from "react";
-import { useStore, useViewport, type InternalNode, type ReactFlowState } from "@xyflow/react";
+import { useConnection, useStore, useViewport, type InternalNode, type ReactFlowState } from "@xyflow/react";
 import { useShallow } from "zustand/shallow";
 import { socketCenter, SOCKET_W } from "../nodes/ui/tokens";
 import { getTemplateEntry } from "./templateCatalog";
@@ -246,6 +246,13 @@ export function RouterRail({
 }) {
   const viewport = useViewport();
   const sourceNodes = useSourceNodes(wires);
+  const dropType = useConnection((connection) => {
+    // pointer is pane-relative, just like the release hit test. `to` may be
+    // snapped to another handle or transformed into graph coordinates.
+    if (!connection.inProgress || connection.fromHandle.type !== "source" || connection.isValid) return null;
+    return isInRailDropZone(connection.pointer, size, wires) ? connection.fromHandle.id : null;
+  });
+  const dropColor = dropType ? TYPE_COLORS[dropType] ?? EMPTY_COLOR : null;
   const { types, railH, blockTop, contentLeft } = useMemo(
     () => railMetrics(wires, size),
     [wires, size]
@@ -305,7 +312,8 @@ export function RouterRail({
         >
           <path
             d={bracePath(railH)}
-            stroke="#9a9a9a"
+            stroke={dropColor ?? "#9a9a9a"}
+            className="transition-colors duration-150 motion-reduce:transition-none"
             strokeWidth="1.75"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -315,7 +323,8 @@ export function RouterRail({
         {rows.map((type, i) => {
           const top = i * ROW_H + ROW_H / 2;
           const label = type ? TYPE_LABELS[type] ?? type : null;
-          const color = type ? TYPE_COLORS[type] ?? EMPTY_COLOR : EMPTY_COLOR;
+          const isDropTarget = dropType != null && type === (types.includes(dropType) ? dropType : null);
+          const color = isDropTarget ? dropColor! : type ? TYPE_COLORS[type] ?? EMPTY_COLOR : EMPTY_COLOR;
           // Type is conveyed by socket color (matching the main-canvas handles);
           // the label lives in the hover tooltip so the rail can hug the edge.
           return (
@@ -335,16 +344,18 @@ export function RouterRail({
                 />
               )}
               <div
-                className="absolute rounded-full transition-shadow group-hover:ring-2 group-hover:ring-white/30"
+                data-router-socket={type ?? "empty"}
+                data-drop-active={isDropTarget ? "true" : undefined}
+                className="absolute rounded-full transition-[transform,box-shadow,background-color] duration-150 ease-out motion-reduce:transition-none group-hover:ring-2 group-hover:ring-white/30"
                 style={{
                   top,
                   left: SOCKET_LEFT,
                   width: 11,
                   height: 11,
-                  transform: "translate(-50%, -50%)",
+                  transform: `translate(-50%, -50%) scale(${isDropTarget ? 1.5 : 1})`,
                   backgroundColor: color,
                   border: "2px solid #1e1e1e",
-                  boxShadow: "0 0 0 1px rgba(0,0,0,.35)",
+                  boxShadow: isDropTarget ? `0 0 0 3px ${color}, 0 0 18px ${color}` : "0 0 0 1px rgba(0,0,0,.35)",
                 }}
               />
             </div>
@@ -356,7 +367,7 @@ export function RouterRail({
           className="absolute text-[11px] font-semibold text-neutral-300 whitespace-nowrap select-none"
           style={{ top: railH + CAPTION_GAP, left: SOCKET_LEFT, transform: "translateX(-50%)" }}
         >
-          Router
+          {dropType ? "Drop to connect" : "Router"}
         </span>
       </div>
     </>

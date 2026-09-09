@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import type { InternalNode } from "@xyflow/react";
-import { routerWireGeoms } from "../splitgrid/RouterRail";
+import { act, render, screen } from "@testing-library/react";
+import { ReactFlowProvider, useStoreApi, type InternalNode, type ReactFlowState } from "@xyflow/react";
+import { RouterRail, routerWireGeoms, type RouterWire } from "../splitgrid/RouterRail";
 import type { TemplateRFNode } from "../splitgrid/TemplateNodes";
 
 const node: TemplateRFNode = {
@@ -40,5 +41,57 @@ describe("router wire source socket", () => {
   it("omits wires whose source node or output socket no longer exists", () => {
     expect(routerWireGeoms(wires, [], size, viewport)).toEqual([]);
     expect(routerWireGeoms([{ source: node.id, sourceHandle: "image" }], [node], size, viewport)).toEqual([]);
+  });
+});
+
+describe("router drop feedback", () => {
+  function renderRail(existingWires: RouterWire[] = []) {
+    let store: ReturnType<typeof useStoreApi>;
+    function Harness() {
+      store = useStoreApi();
+      return <RouterRail wires={existingWires} nodes={[node]} size={size} onDisconnectType={() => {}} />;
+    }
+    const view = render(<ReactFlowProvider><Harness /></ReactFlowProvider>);
+    const drag = (x: number, sourceType = "source", isValid: boolean | null = null) => act(() => {
+      store.setState({
+        transform: [300, -200, 0.5],
+        connection: {
+          ...store.getState().connection, inProgress: true, isValid,
+          fromHandle: { id: "video", type: sourceType },
+          to: { x: 0, y: 0 }, pointer: { x, y: 350 },
+        } as ReactFlowState["connection"],
+      });
+    });
+    const finish = () => act(() => store.getState().cancelConnection());
+    return { ...view, drag, finish };
+  }
+
+  it("highlights the empty socket on entry, and clears it on exit or cancellation", () => {
+    const { container, drag, finish } = renderRail();
+    const socket = container.querySelector('[data-router-socket="empty"]')!;
+    drag(950);
+    expect(socket).toHaveAttribute("data-drop-active", "true");
+    expect(screen.getByText("Drop to connect")).toBeInTheDocument();
+    drag(450);
+    expect(socket).not.toHaveAttribute("data-drop-active");
+    drag(950);
+    finish();
+    expect(socket).not.toHaveAttribute("data-drop-active");
+    expect(screen.getByText("Router")).toBeInTheDocument();
+  });
+
+  it("highlights the existing matching socket instead of the empty socket", () => {
+    const { container, drag } = renderRail(wires);
+    drag(950);
+    expect(container.querySelector('[data-router-socket="video"]')).toHaveAttribute("data-drop-active", "true");
+    expect(container.querySelector('[data-router-socket="empty"]')).not.toHaveAttribute("data-drop-active");
+  });
+
+  it("does not offer a drop for backwards drags or a connection already snapped to a valid handle", () => {
+    const { container, drag } = renderRail();
+    drag(950, "target");
+    expect(container.querySelector('[data-drop-active="true"]')).toBeNull();
+    drag(950, "source", true);
+    expect(container.querySelector('[data-drop-active="true"]')).toBeNull();
   });
 });
