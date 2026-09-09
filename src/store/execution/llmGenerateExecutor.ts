@@ -76,6 +76,7 @@ export async function executeLlmGenerate(
     inputImages: images,
     status: "loading",
     error: null,
+    __modelNote: undefined,
   });
 
   const runOnce = async (modelToUse: SelectedModel, parametersOverride?: Record<string, unknown>): Promise<void> => {
@@ -120,10 +121,15 @@ export async function executeLlmGenerate(
       const result = await response.json();
 
       if (result.success && result.text) {
+        // The route may have replaced a retired id; adopt the replacement on the
+        // primary so the workflow heals itself, and keep the note for the badge.
+        const isPrimary = modelToUse.modelId === nodeData.model;
+        const replaced = isPrimary && typeof result.model === "string" && result.model !== nodeData.model;
         updateNodeData(node.id, {
           outputText: result.text,
           status: "complete",
           error: null,
+          ...(replaced && { model: result.model, __modelNote: result.note }),
         });
       } else {
         updateNodeData(node.id, {

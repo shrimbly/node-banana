@@ -313,4 +313,47 @@ describe("executeLlmGenerate", () => {
     expect(secondBody.provider).toBe("google");
     expect(secondBody.model).toBe("gemini-2.5-flash");
   });
+
+  it("adopts the replacement when the route retires the primary model", async () => {
+    const node = makeNode({ model: "gemini-3-pro-preview" });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          success: true,
+          text: "result text",
+          model: "gemini-3.1-pro-preview",
+          note: "Gemini 3 Pro (preview) is no longer available; used Gemini 3.1 Pro (preview) instead.",
+        }),
+    });
+
+    const ctx = makeCtx(node);
+    await executeLlmGenerate(ctx);
+
+    expect(ctx.updateNodeData).toHaveBeenCalledWith(
+      "llm-1",
+      expect.objectContaining({
+        status: "complete",
+        model: "gemini-3.1-pro-preview",
+        __modelNote: expect.stringContaining("Gemini 3.1 Pro"),
+      })
+    );
+  });
+
+  it("leaves the primary model alone when the route ran it unchanged", async () => {
+    const node = makeNode();
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ success: true, text: "result text", model: "gemini-2.5-flash" }),
+    });
+
+    const ctx = makeCtx(node);
+    await executeLlmGenerate(ctx);
+
+    const completeCall = (ctx.updateNodeData as ReturnType<typeof vi.fn>).mock.calls.find(
+      (c: unknown[]) => (c[1] as Record<string, unknown>).status === "complete"
+    );
+    expect(completeCall?.[1]).not.toHaveProperty("model");
+    expect(completeCall?.[1]).not.toHaveProperty("__modelNote");
+  });
 });

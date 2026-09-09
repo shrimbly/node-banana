@@ -72,4 +72,8 @@ export interface LLMGenerateResponse {
   success: boolean;
   text?: string;
   error?: string;
+  /** The catalogue model id that ran, which differs from the request when a retired id was replaced. */
+  model?: string;
+  /** Explains a model replacement, for the node to show. */
+  note?: string;
 }

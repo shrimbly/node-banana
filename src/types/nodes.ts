@@ -323,6 +323,7 @@ export interface LLMGenerateNodeData extends BaseNodeData {
   __usedFallback?: boolean; // Set by runWithFallback on successful fallback
   __fallbackModelUsed?: string; // Display name of fallback model that succeeded
   __primaryError?: string; // Error message from the primary attempt
+  __modelNote?: string; // Set when /api/llm replaced a retired model id
 }
 
 /**
