@@ -69,7 +69,7 @@ export function Toast() {
     // Reset expanded state when toast changes
     setIsExpanded(false);
     setCopied(false);
-  }, [message]);
+  }, [message, details]);
 
   const handleCopy = async () => {
     const textToCopy = details ? `${message}\n\n${details}` : message;
@@ -91,19 +91,20 @@ export function Toast() {
 
   return (
     <div
-      className="pointer-events-none fixed z-[200] flex max-w-md flex-col items-end gap-2 [&>*]:pointer-events-auto"
-      style={{ top: STACK_TOP, right: STACK_RIGHT }}
+      className="pointer-events-none fixed z-[200] flex w-96 min-w-0 flex-col items-end gap-2 [&>*]:pointer-events-auto"
+      style={{ top: STACK_TOP, right: STACK_RIGHT, maxWidth: `calc(100vw - ${STACK_RIGHT * 2}px)` }}
     >
       {message && (
       <div
-        className={`animate-drop-in flex flex-col rounded-lg border shadow-xl ${typeStyles[type]}`}
+        className={`animate-drop-in flex w-full min-w-0 flex-col overflow-hidden rounded-lg border shadow-xl ${typeStyles[type]}`}
+        style={{ maxHeight: `min(360px, calc(100dvh - ${STACK_TOP + 16}px))` }}
       >
-        <div className="flex items-center gap-3 px-4 py-3">
-          {typeIcons[type]}
-          <span className="text-sm font-medium flex-1">{message}</span>
+        <div className="flex shrink-0 items-start gap-3 px-4 py-3">
+          <span className="shrink-0 pt-0.5">{typeIcons[type]}</span>
+          <span className="min-w-0 max-h-24 flex-1 overflow-y-auto overscroll-contain text-sm font-medium [overflow-wrap:anywhere]">{message}</span>
           <button
             onClick={handleCopy}
-            className="p-1 rounded hover:bg-white/10 transition-colors"
+            className="shrink-0 p-1 rounded hover:bg-white/10 transition-colors"
             title="Copy message"
           >
             {copied ? (
@@ -118,7 +119,7 @@ export function Toast() {
           </button>
           <button
             onClick={hide}
-            className="p-1 rounded hover:bg-white/10 transition-colors"
+            className="shrink-0 p-1 rounded hover:bg-white/10 transition-colors"
             title="Dismiss"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -130,13 +131,14 @@ export function Toast() {
           <>
             <button
               onClick={() => setIsExpanded(!isExpanded)}
-              className="px-4 py-1 text-xs opacity-70 hover:opacity-100 transition-opacity text-left border-t border-white/10"
+              aria-expanded={isExpanded}
+              className="shrink-0 px-4 py-1 text-xs opacity-70 hover:opacity-100 transition-opacity text-left border-t border-white/10"
             >
               {isExpanded ? "Hide details" : "Show details"}
             </button>
             {isExpanded && (
-              <div className="px-4 pb-3">
-                <pre className="bg-black/30 rounded p-2 max-h-40 overflow-auto text-xs font-mono whitespace-pre-wrap break-words">
+              <div className="min-h-0 overflow-y-auto overscroll-contain px-4 pb-3">
+                <pre className="max-h-40 overflow-auto overscroll-contain whitespace-pre-wrap rounded bg-black/30 p-2 text-xs font-mono [overflow-wrap:anywhere]">
                   {details}
                 </pre>
               </div>

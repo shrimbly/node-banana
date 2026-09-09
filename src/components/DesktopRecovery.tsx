@@ -16,13 +16,15 @@ export function DesktopRecovery({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   // Warnings and the post-restore summary use the app's own notification
   // stack; they stay until dismissed, like any other persistent toast.
-  const setNotice = (message: string | null) => { if (message) useToast.getState().show(message, 'info', true); };
+  const setNotice = (message: string, details?: string) => useToast.getState().show(message, 'info', true, details);
   useEffect(() => {
     if (!isDesktop()) { setReady(true); return; }
     recoveryRead ??= window.nodeBananaDesktop!.recovery.read();
     void recoveryRead.then(result => {
       if (!result.ok) { setError(result.error); return; }
-      setNotice(result.value.warnings.join(' ') || null);
+      if (result.value.warnings.length) {
+        setNotice('Session recovery needs attention.', result.value.warnings.join('\n\n'));
+      }
       if (result.value.snapshot) setCheckpoint(result.value.snapshot);
       else setReady(true);
     }).catch(() => setError('Recovery could not be opened. Restart Node Banana to retry.'));
@@ -33,7 +35,7 @@ export function DesktopRecovery({ children }: { children: ReactNode }) {
       const encoded = await encodeRecovery(snapshot);
       const result = await window.nodeBananaDesktop!.recovery.write(encoded);
       if (!result.ok) throw new Error(result.error);
-    }, error => setNotice(error instanceof Error ? error.message : 'Recovery checkpoint failed. Save your workflows to disk.'));
+    }, error => setNotice('Recovery checkpoint failed. Save your workflows to disk.', error instanceof Error ? error.message : undefined));
     const unsubscribe = useWorkflowStore.subscribe((state, previous) => {
       const snapshot = captureWorkflowTabSnapshot(state);
       if (state.tabs !== previous.tabs || state.activeTabId !== previous.activeTabId || Object.keys(snapshot).some(key => state[key as keyof typeof state] !== previous[key as keyof typeof previous])) writer.changed();
@@ -47,7 +49,11 @@ export function DesktopRecovery({ children }: { children: ReactNode }) {
       if (!result.ok) throw new Error(result.error);
       const snapshot = await hydrateRecovery(result.value.snapshot);
       useWorkflowStore.getState().restoreDesktopSession(snapshot.tabs, snapshot.activeTabId);
-      setNotice(['Session restored. Interrupted generations were stopped. Remote jobs may still be running; no requests were resubmitted.', ...result.value.warnings].join(' '));
+      const warnings = result.value.warnings;
+      setNotice(
+        warnings.length ? `Session restored with ${warnings.length} recovery warning${warnings.length === 1 ? '' : 's'}.` : 'Session restored.',
+        ['Interrupted generations were stopped. Remote jobs may still be running; no requests were resubmitted.', ...warnings].join('\n\n'),
+      );
       setCheckpoint(null); setError(null); setReady(true);
     } catch (error) { setError(error instanceof Error ? error.message : 'Recovery failed.'); }
   }
