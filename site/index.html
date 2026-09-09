@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Node Banana</title>
+  <meta name="description" content="Node Banana is a free, open source generative media canvas for Mac and Windows. Bring your own API keys and generate images, video, audio and 3D on one node graph.">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0a0a0a">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Node Banana">
+  <meta property="og:description" content="Free, open source, bring your own key. A generative media canvas for Mac and Windows.">
+  <!-- og:image and og:url must be absolute once the site has a domain. -->
+  <meta property="og:image" content="assets/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Node Banana">
+  <meta name="twitter:description" content="Free, open source, bring your own key. A generative media canvas for Mac and Windows.">
+  <meta name="twitter:image" content="assets/og.png">
+
+  <link rel="icon" type="image/png" href="assets/banana.png">
+  <link rel="apple-touch-icon" href="assets/banana.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    /* Entry animation gate. Lives here, not in site.js, so a failed script can never leave the page hidden. */
+    (function (root) {
+      root.classList.replace("no-js", "js");
+      var go = function () { root.classList.add("ready"); };
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(go, go);
+      setTimeout(go, 900);
+    })(document.documentElement);
+  </script>
+</head>
+<body>
+  <main class="fold">
+
+    <!-- The app, as a Mac window. Decorative: the nodes can be dragged, but nothing here is content. -->
+    <div class="app" aria-hidden="true">
+      <div class="app__lights">
+        <span class="app__light app__light--close"></span>
+        <span class="app__light app__light--minimize"></span>
+        <span class="app__light app__light--fullscreen"></span>
+      </div>
+      <div class="app__tabs">
+        <div class="tab tab--active">
+          <svg class="tab__ear tab__ear--left" viewBox="0 0 9 9" fill="none"><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5 L0.5 9 L9 9 L9 0 Z" class="tab__ear-fill"></path><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5" class="tab__ear-line"></path></svg>
+          <svg class="tab__ear tab__ear--right" viewBox="0 0 9 9" fill="none"><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5 L0.5 9 L9 9 L9 0 Z" class="tab__ear-fill"></path><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5" class="tab__ear-line"></path></svg>
+          <span class="tab__label">Fashion ad automation</span>
+          <span class="tab__close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></span>
+        </div>
+        <div class="tab tab--rest"><span class="tab__label">Product shots</span></div>
+        <span class="tab__new"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+      </div>
+
+      <div class="canvas">
+        <div class="stage" data-stage>
+          <svg class="edges edges--desktop" viewBox="0 0 1382 780" width="1382" height="780">
+            <path data-from="n1" data-to="n3" data-in="0" pathLength="1" d="M 345.5 72 C 440.0 72, 440.0 144, 534.5 144" class="edge edge--image"></path>
+            <path data-from="n2" data-to="n3" data-in="1" pathLength="1" d="M 345.5 292 C 440.0 292, 440.0 174, 534.5 174" class="edge edge--text"></path>
+            <path data-from="n3" data-to="n4" data-in="0" pathLength="1" d="M 765.5 144 C 850.0 144, 850.0 84, 934.5 84" class="edge edge--image"></path>
+          </svg>
+          <svg class="edges edges--tablet" viewBox="0 0 710 620" width="710" height="620">
+            <path data-from="n1" data-to="n3" data-in="0" pathLength="1" d="M 249.5 56 C 309.5 56, 224.5 134, 284.5 134" class="edge edge--image"></path>
+            <path data-from="n2" data-to="n3" data-in="1" pathLength="1" d="M 249.5 274 C 309.5 274, 224.5 164, 284.5 164" class="edge edge--text"></path>
+            <path data-from="n3" data-to="n4" data-in="0" pathLength="1" d="M 515.5 134 C 575.5 134, 370.5 354, 430.5 354" class="edge edge--image"></path>
+          </svg>
+          <svg class="edges edges--phone" viewBox="0 0 340 440" width="340" height="440">
+            <path data-from="n1" data-to="n3" data-in="0" pathLength="1" d="M 241.5 44 C 308.0 44, 42.0 246, 108.5 246" class="edge edge--image"></path>
+          </svg>
+
+          <div class="node node--image" data-node="n1">
+            <div class="card">
+              <img class="media" src="assets/node-desert.jpg" width="424" height="282" alt="" draggable="false">
+              <span class="socket socket--out socket--image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="controls">
+              <span class="controls__icon controls__icon--square"></span>
+              <span class="controls__title">Image</span>
+              <span class="controls__values">1536 × 1024</span>
+              <svg class="controls__chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"></path></svg>
+            </div>
+          </div>
+
+          <div class="node node--prompt" data-node="n2">
+            <div class="card">
+              <div class="well">A donkey standing on a dune at golden hour, wearing a tailored linen coat. Editorial fashion photograph, 35mm, soft shadows.</div>
+              <span class="socket socket--out socket--text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="controls">
+              <svg class="controls__icon" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"><path d="M2 3h8M2 6h8M2 9h5"></path></svg>
+              <span class="controls__title">Prompt</span>
+              <span class="controls__values">22 words</span>
+              <svg class="controls__chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"></path></svg>
+            </div>
+          </div>
+
+          <div class="node node--generate" data-node="n3">
+            <div class="card">
+              <img class="media" src="assets/node-donkey.jpg" width="424" height="282" alt="" draggable="false">
+              <span class="socket socket--in socket--image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+              <span class="socket socket--in socket--text" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+              <span class="socket socket--out socket--image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="controls">
+              <span class="controls__icon controls__icon--round"></span>
+              <span class="controls__title">nano-banana-pro</span>
+              <span class="controls__values">3:2 · 2K</span>
+              <svg class="controls__chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"></path></svg>
+            </div>
+          </div>
+
+          <div class="node node--video" data-node="n4">
+            <div class="card">
+              <span class="media-wrap">
+                <img class="media" src="assets/node-donkey.jpg" width="424" height="282" alt="" draggable="false">
+                <span class="play"><svg viewBox="0 0 14 14"><path d="M4 2.5v9l7-4.5z"></path></svg></span>
+              </span>
+              <span class="socket socket--in socket--image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+              <span class="socket socket--out socket--video" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="scrub">
+              <span class="scrub__time">0:00</span>
+              <span class="scrub__track"><span class="scrub__played"></span></span>
+              <span class="scrub__time">0:05</span>
+            </div>
+            <div class="controls controls--tight">
+              <span class="controls__icon controls__icon--film"></span>
+              <span class="controls__title">veo-3.1</span>
+              <span class="controls__values">5s · 1080p</span>
+              <svg class="controls__chevron" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5l3 3 3-3"></path></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="line">
+      <ul class="points">
+        <li>Free</li>
+        <li>Open source</li>
+        <li>Bring your own key</li>
+        <li>Generative media canvas</li>
+      </ul>
+
+      <nav class="nav" aria-label="Site">
+        <div class="nav__links">
+          <a class="nav__link" href="https://node-banana-docs.vercel.app/">Documentation</a>
+          <a class="nav__link" href="https://discord.com/invite/89Nr6EKkTf">Discord</a>
+        </div>
+
+        <div class="actions">
+          <a class="btn btn--secondary" href="https://github.com/shrimbly/node-banana">
+            <svg class="btn__icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3z"></path></svg>
+            <span data-stars>1.6k</span><span class="sr-only"> stars on GitHub</span>
+          </a>
+
+          <!-- Both downloads point at the latest release for now. Once 2.0 artifacts exist,
+               put the per-platform asset URLs in the two href attributes below (the main
+               button copies whichever platform the visitor is on). -->
+          <div class="download" data-download>
+            <a class="btn btn--primary download__main" href="https://github.com/shrimbly/node-banana/releases/latest" data-download-main><span>Download for <span data-platform-label>Mac</span></span></a>
+            <details class="download__more" data-download-more>
+              <summary class="download__toggle" aria-label="Choose another platform">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"></path></svg>
+              </summary>
+              <ul class="menu">
+                <li><a class="menu__item" href="https://github.com/shrimbly/node-banana/releases/latest" data-platform="mac" data-label="Mac"><span class="menu__name">Mac</span><span class="menu__meta">Apple Silicon · <span class="version"></span></span></a></li>
+                <li><a class="menu__item" href="https://github.com/shrimbly/node-banana/releases/latest" data-platform="windows" data-label="Windows"><span class="menu__name">Windows</span><span class="menu__meta">x64 · <span class="version"></span></span></a></li>
+              </ul>
+            </details>
+          </div>
+        </div>
+      </nav>
+    </div>
+
+    <h1 class="wordmark"><span class="wordmark__text"><span class="word">Node</span> <span class="word">Banana</span></span></h1>
+  </main>
+
+  <script src="site.js" defer></script>
+</body>
+</html>
