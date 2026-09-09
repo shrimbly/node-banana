@@ -5,6 +5,7 @@ import { NodeProps, Node } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { LLMGenerateNodeData, LLMProvider, LLMModelType } from "@/types";
+import { LLM_PROVIDER_OPTIONS, defaultLLMModel, llmModelLabel, llmModelOptions } from "@/lib/llm/catalog";
 import { SettingsTabBar } from "./SettingsTabBar";
 import {
   ControlsCard,
@@ -18,31 +19,6 @@ import {
   ellipsisClass,
   type SocketSpec,
 } from "./ui";
-
-// LLM providers and models
-const LLM_PROVIDERS: { value: LLMProvider; label: string }[] = [
-  { value: "google", label: "Google" },
-  { value: "openai", label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic" },
-];
-
-const LLM_MODELS: Record<LLMProvider, { value: LLMModelType; label: string }[]> = {
-  google: [
-    { value: "gemini-3-flash-preview", label: "Gemini 3 Flash" },
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-    { value: "gemini-3-pro-preview", label: "Gemini 3.0 Pro" },
-    { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro" },
-  ],
-  openai: [
-    { value: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
-    { value: "gpt-4.1-nano", label: "GPT-4.1 Nano" },
-  ],
-  anthropic: [
-    { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5" },
-    { value: "claude-haiku-4.5", label: "Claude Haiku 4.5" },
-    { value: "claude-opus-4.6", label: "Claude Opus 4.6" },
-  ],
-};
 
 const INPUT_SOCKETS: SocketSpec[] = [
   { id: "image", type: "image", label: "Image" },
@@ -108,7 +84,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
   const handleProviderChange = useCallback(
     (value: string) => {
       const newProvider = value as LLMProvider;
-      const firstModelForProvider = LLM_MODELS[newProvider][0].value;
+      const firstModelForProvider = defaultLLMModel(newProvider);
       const updates: Partial<LLMGenerateNodeData> = {
         provider: newProvider,
         model: firstModelForProvider,
@@ -129,9 +105,9 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
   );
 
   const provider = nodeData.provider || "google";
-  const availableModels = LLM_MODELS[provider] || LLM_MODELS.google;
-  const currentModel = nodeData.model || availableModels[0].value;
-  const modelLabel = availableModels.find((m) => m.value === currentModel)?.label || currentModel;
+  const currentModel = nodeData.model || defaultLLMModel(provider);
+  const availableModels = llmModelOptions(provider, currentModel);
+  const modelLabel = llmModelLabel(currentModel);
   const temperature = nodeData.temperature ?? 0.7;
   const maxTokens = nodeData.maxTokens || 2048;
 
@@ -154,7 +130,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
 
       {settingsTab === "primary" && (
         <>
-          <SelectField label="Provider" value={provider} options={LLM_PROVIDERS} onChange={handleProviderChange} />
+          <SelectField label="Provider" value={provider} options={LLM_PROVIDER_OPTIONS} onChange={handleProviderChange} />
           <SelectField label="Model" value={currentModel} options={availableModels} onChange={handleModelChange} />
           <RangeField
             label="Temperature"
@@ -252,6 +228,14 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
               title={`Primary failed: ${nodeData.__primaryError ?? "unknown"}\nUsed fallback: ${nodeData.__fallbackModelUsed ?? ""}`}
             >
               Fallback used
+            </div>
+          )}
+          {nodeData.__modelNote && (
+            <div
+              className="mb-1 ml-1 inline-block px-1.5 py-0.5 rounded bg-amber-900/70 text-amber-300 text-[9px] font-medium"
+              title={nodeData.__modelNote}
+            >
+              Model replaced
             </div>
           )}
           <p className="text-[10px] text-neutral-300 whitespace-pre-wrap break-words">

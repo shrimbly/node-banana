@@ -5,6 +5,7 @@ import { buildWorkflowContext } from '@/lib/chat/contextBuilder';
 import { extractSubgraph } from '@/lib/chat/subgraphExtractor';
 import { WorkflowNode } from '@/types';
 import { WorkflowEdge } from '@/types/workflow';
+import { ASSISTANT_MODEL } from '@/lib/llm/catalog';
 
 export const maxDuration = 60; // 1 minute timeout
 
@@ -52,7 +53,7 @@ export async function POST(request: Request) {
 
     // Create streaming response with tool calling
     const result = streamText({
-      model: google('gemini-3-flash-preview'),
+      model: google(ASSISTANT_MODEL),
       system: systemPrompt,
       messages: modelMessages,
       tools: tools,

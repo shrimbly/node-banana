@@ -37,6 +37,7 @@ import {
 } from "@/types";
 import { loadGenerateImageDefaults, loadNodeDefaults } from "./localStorage";
 import { getEasingBezier } from "@/lib/easing-presets";
+import { DEFAULT_LLM_MODEL, DEFAULT_LLM_PROVIDER } from "@/lib/llm/catalog";
 
 /**
  * Default dimensions for each node type.
@@ -281,8 +282,8 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         inputPrompt: null,
         inputImages: [],
         outputText: null,
-        provider: llmDefaults?.provider ?? "google",
-        model: llmDefaults?.model ?? "gemini-3-flash-preview",
+        provider: llmDefaults?.provider ?? DEFAULT_LLM_PROVIDER,
+        model: llmDefaults?.model ?? DEFAULT_LLM_MODEL,
         temperature: llmDefaults?.temperature ?? 0.7,
         maxTokens: llmDefaults?.maxTokens ?? 8192,
         status: "idle",

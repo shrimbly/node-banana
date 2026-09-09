@@ -306,7 +306,7 @@ describe("nodeDefaults utilities", () => {
       const data = createDefaultNodeData("llmGenerate");
 
       expect((data as any).provider).toBe("google");
-      expect((data as any).model).toBe("gemini-3-flash-preview");
+      expect((data as any).model).toBe("gemini-3.8-flash");
       expect((data as any).temperature).toBe(0.7);
       expect((data as any).maxTokens).toBe(8192);
     });
@@ -328,7 +328,7 @@ describe("nodeDefaults utilities", () => {
       expect((data as any).temperature).toBe(0.9);
       // Should fall back to hardcoded for others
       expect((data as any).provider).toBe("google");
-      expect((data as any).model).toBe("gemini-3-flash-preview");
+      expect((data as any).model).toBe("gemini-3.8-flash");
       expect((data as any).maxTokens).toBe(8192);
     });
   });

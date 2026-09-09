@@ -3,6 +3,7 @@ import { GoogleGenAI } from "@google/genai";
 import { buildProposalPrompt } from "@/lib/quickstart/proposalPrompt";
 import { parseJSONFromResponse } from "@/lib/quickstart/validation";
 import type { WorkflowProposal, WorkflowComplexity, NodeType } from "@/types";
+import { ASSISTANT_MODEL } from "@/lib/llm/catalog";
 
 export const maxDuration = 60; // 1 minute timeout
 
@@ -213,7 +214,7 @@ export async function POST(request: NextRequest) {
     const startTime = Date.now();
 
     const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
+      model: ASSISTANT_MODEL,
       contents: prompt,
       config: {
         temperature: 0.3, // Lower for more consistent JSON output

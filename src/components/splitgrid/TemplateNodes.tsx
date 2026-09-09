@@ -49,6 +49,7 @@ import {
   type SocketType,
 } from "../nodes/ui";
 import { getTemplateEntry, getTemplateNodeIcon, templateHandleKind, type TemplateHandleDef } from "./templateCatalog";
+import { LLM_PROVIDER_OPTIONS, defaultLLMModel, llmModelLabel, llmModelOptions } from "@/lib/llm/catalog";
 
 export interface TemplateNodeData extends Record<string, unknown> {
   nodeType: NodeType;
@@ -107,30 +108,6 @@ const BASE_ASPECT_RATIOS: AspectRatio[] = ["1:1", "2:3", "3:2", "3:4", "4:3", "4
 const EXTENDED_ASPECT_RATIOS: AspectRatio[] = ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"];
 const RESOLUTIONS_PRO: Resolution[] = ["1K", "2K", "4K"];
 const RESOLUTIONS_NB2: Resolution[] = ["512", "1K", "2K", "4K"];
-
-// Mirrors LLMGenerateNode's provider/model lists
-const LLM_PROVIDERS: { value: LLMProvider; label: string }[] = [
-  { value: "google", label: "Google" },
-  { value: "openai", label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic" },
-];
-const LLM_MODELS: Record<LLMProvider, { value: LLMModelType; label: string }[]> = {
-  google: [
-    { value: "gemini-3-flash-preview", label: "Gemini 3 Flash" },
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-    { value: "gemini-3-pro-preview", label: "Gemini 3.0 Pro" },
-    { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro" },
-  ],
-  openai: [
-    { value: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
-    { value: "gpt-4.1-nano", label: "GPT-4.1 Nano" },
-  ],
-  anthropic: [
-    { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5" },
-    { value: "claude-haiku-4.5", label: "Claude Haiku 4.5" },
-    { value: "claude-opus-4.6", label: "Claude Opus 4.6" },
-  ],
-};
 
 /** Centre of the n-th socket on a side, from the media card's top edge. */
 export function templateHandleTop(index: number): number {
@@ -406,11 +383,11 @@ function useLlmControls(nodeId: string, overrides: Record<string, unknown>) {
   const [isParamsExpanded, setIsParamsExpanded] = useState(true);
 
   const provider = (overrides.provider as LLMProvider | undefined) ?? "google";
-  const availableModels = LLM_MODELS[provider] ?? LLM_MODELS.google;
-  const model = (overrides.model as LLMModelType | undefined) ?? availableModels[0].value;
+  const model = (overrides.model as LLMModelType | undefined) ?? defaultLLMModel(provider);
+  const availableModels = llmModelOptions(provider, model);
   const temperature = typeof overrides.temperature === "number" ? overrides.temperature : 0.7;
   const maxTokens = typeof overrides.maxTokens === "number" ? overrides.maxTokens : 2048;
-  const modelLabel = availableModels.find((m) => m.value === model)?.label ?? model;
+  const modelLabel = llmModelLabel(model);
 
   const handleProviderChange = useCallback(
     (value: string) => {
@@ -418,7 +395,7 @@ function useLlmControls(nodeId: string, overrides: Record<string, unknown>) {
       const next: Record<string, unknown> = {
         ...overrides,
         provider: newProvider,
-        model: LLM_MODELS[newProvider][0].value,
+        model: defaultLLMModel(newProvider),
       };
       // Anthropic caps temperature at 1, mirroring the main node
       if (newProvider === "anthropic" && temperature > 1) next.temperature = 1;
@@ -434,7 +411,7 @@ function useLlmControls(nodeId: string, overrides: Record<string, unknown>) {
       expanded={isParamsExpanded}
       onToggle={() => setIsParamsExpanded((prev) => !prev)}
     >
-      <SelectField label="Provider" value={provider} options={LLM_PROVIDERS} onChange={handleProviderChange} />
+      <SelectField label="Provider" value={provider} options={LLM_PROVIDER_OPTIONS} onChange={handleProviderChange} />
       <SelectField
         label="Model"
         value={model}
