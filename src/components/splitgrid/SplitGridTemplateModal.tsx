@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/Dialog";
 import { MenuHeader, MenuIconButton, MenuItem, MenuList, MenuSectionLabel, MenuSurface } from "@/components/ui/Menu";
+import { NodeSearchMenu } from "@/components/NodeSearchMenu";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
@@ -88,6 +89,7 @@ const edgeTypes: EdgeTypes = {
 };
 
 const TEMPLATE_EDGE_TYPE = "templateEditable";
+const TEMPLATE_NODE_TYPES = TEMPLATE_NODE_CATALOG.map((entry) => entry.type);
 
 // Match the main canvas: on macOS a left-drag must not pan (that reads as
 // "dragging a connection moved everything"); panning is via the trackpad.
@@ -380,6 +382,10 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
   const [wrapperSize, setWrapperSize] = useState<RailSize>({ width: 0, height: 0 });
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [dropMenu, setDropMenu] = useState<TemplateDropMenuState | null>(null);
+  const [nodeMenu, setNodeMenu] = useState<{
+    screen: { x: number; y: number };
+    flow: { x: number; y: number };
+  } | null>(null);
   // Floating delete toolbar — same interaction as the main canvas: click a
   // noodle (or a router wire) and a toolbar appears just above the cursor.
   const [edgeToolbar, setEdgeToolbar] = useState<
@@ -540,7 +546,9 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (edgeToolbar) {
+      if (nodeMenu) {
+        setNodeMenu(null);
+      } else if (edgeToolbar) {
         setEdgeToolbar(null);
       } else if (dropMenu) {
         setDropMenu(null);
@@ -552,7 +560,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [edgeToolbar, dropMenu, showDiscardConfirm, requestClose]);
+  }, [nodeMenu, edgeToolbar, dropMenu, showDiscardConfirm, requestClose]);
 
   const setOverrides = useCallback(
     (id: string, overrides: Record<string, unknown>) => {
@@ -586,6 +594,31 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
     },
     [nodeData, setRfNodes, setRfEdges, refitSoon]
   );
+
+  const openNodeMenu = useCallback((event: React.MouseEvent | MouseEvent) => {
+    if (!(event.target as HTMLElement).classList?.contains("react-flow__pane")) return;
+    event.preventDefault();
+    setDropMenu(null);
+    setEdgeToolbar(null);
+    const screen = { x: event.clientX, y: event.clientY };
+    setNodeMenu({ screen, flow: screenToFlowPosition(screen) });
+  }, [screenToFlowPosition]);
+
+  const handleNodeMenuSelect = useCallback((type: NodeType) => {
+    if (!nodeMenu || !TEMPLATE_NODE_TYPES.includes(type)) return;
+    const dims = editorNodeDimensions(type);
+    const id = makeTemplateNodeId(type, rfNodes);
+    setRfNodes((nodes) => [...nodes, {
+      id,
+      type: "splitGridTemplateNode",
+      position: nodeMenu.flow,
+      deletable: true,
+      width: dims.width,
+      style: { width: dims.width },
+      data: { nodeType: type, overrides: seedOverridesFor(type), isBase: false },
+    }]);
+    setNodeMenu(null);
+  }, [nodeMenu, makeTemplateNodeId, rfNodes, setRfNodes]);
 
   // Cycles would materialize as cells the scheduler silently never executes
   const createsCycle = useCallback(
@@ -673,6 +706,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
 
       const targetElement = event.target as HTMLElement | null;
       if (!targetElement?.closest(".react-flow__pane")) return;
+      setNodeMenu(null);
       setDropMenu({
         screen: { x: point.clientX, y: point.clientY },
         flow: screenToFlowPosition({ x: point.clientX, y: point.clientY }),
@@ -794,7 +828,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
       closeOnBackdrop={false}
       stopWheel={false}
       portal
-      className="w-[min(1080px,94vw)] h-[min(720px,88vh)] max-h-none"
+      className="w-[96vw] h-[94dvh] max-h-none mx-0"
       overlayProps={{
         // Bubble-phase (not capture): the mini-canvas's native wheel-to-pan
         // listener on the wrapper must run first; we still stop the wheel from
@@ -863,6 +897,8 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
               onEdgesChange={onEdgesChange}
               onConnect={handleConnect}
               onConnectEnd={handleConnectEnd}
+              onDoubleClick={openNodeMenu}
+              onPaneContextMenu={openNodeMenu}
               isValidConnection={isValidConnection}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
@@ -871,6 +907,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
               minZoom={0.2}
               maxZoom={1.5}
               zoomOnScroll={false}
+              zoomOnDoubleClick={false}
               panOnDrag={!isMacOS}
               // The router is a fixed, always-visible overlay on the right, so
               // panning toward it mid-connection only jostles the graph.
@@ -892,6 +929,15 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
             size={wrapperSize}
             onDisconnectType={disconnectRouterType}
           />
+
+          {nodeMenu && (
+            <NodeSearchMenu
+              position={nodeMenu.screen}
+              allowedTypes={TEMPLATE_NODE_TYPES}
+              onSelect={handleNodeMenuSelect}
+              onClose={() => setNodeMenu(null)}
+            />
+          )}
 
           {/* Connection drop menu */}
           {dropMenu && (

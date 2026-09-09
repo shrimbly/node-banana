@@ -197,6 +197,38 @@ describe("SplitGridTemplateModal", () => {
   });
 
   describe("Adding Nodes", () => {
+    it.each(["double-click", "right-click"])("adds an unconnected node at the %s location", (gesture) => {
+      renderModal();
+      const pane = document.querySelector(".react-flow__pane")!;
+      if (gesture === "double-click") fireEvent.doubleClick(pane, { clientX: 400, clientY: 250 });
+      else fireEvent.contextMenu(pane, { clientX: 400, clientY: 250 });
+
+      const search = screen.getByRole("textbox", { name: "Search nodes" });
+      expect(screen.queryByRole("button", { name: "Generate Video" })).not.toBeInTheDocument();
+      fireEvent.change(search, { target: { value: "prompt" } });
+      fireEvent.keyDown(search, { key: "Enter" });
+      expect(screen.queryByRole("textbox", { name: "Search nodes" })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Apply to 6 cells" }));
+      const template = mockMaterializeSplitGridCells.mock.calls[0][1].template;
+      expect(template.nodes).toHaveLength(2);
+      expect(template.nodes[1]).toMatchObject({ type: "prompt", position: { x: 400, y: 250 } });
+      expect(template.edges).toHaveLength(0);
+    });
+
+    it("dismisses the node menu with Escape without closing the editor", () => {
+      const { onClose } = renderModal();
+      fireEvent.contextMenu(document.querySelector(".react-flow__pane")!);
+      fireEvent.keyDown(screen.getByRole("textbox", { name: "Search nodes" }), { key: "Escape" });
+      expect(screen.queryByRole("textbox", { name: "Search nodes" })).not.toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it("does not open the node menu when double-clicking a node", () => {
+      renderModal();
+      fireEvent.doubleClick(screen.getByText("Split image lands here"));
+      expect(screen.queryByRole("textbox", { name: "Search nodes" })).not.toBeInTheDocument();
+    });
+
     it("adds prompt and generate cards when the classic preset is applied", () => {
       renderModal();
 
