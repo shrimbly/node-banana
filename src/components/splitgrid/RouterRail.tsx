@@ -18,7 +18,10 @@
  */
 
 import { useMemo } from "react";
-import { useViewport } from "@xyflow/react";
+import { useStore, useViewport, type InternalNode, type ReactFlowState } from "@xyflow/react";
+import { useShallow } from "zustand/shallow";
+import { socketCenter, SOCKET_W } from "../nodes/ui/tokens";
+import { getTemplateEntry } from "./templateCatalog";
 import type { TemplateRFNode } from "./TemplateNodes";
 
 export interface RouterWire {
@@ -35,6 +38,16 @@ interface RouterViewport {
   x: number;
   y: number;
   zoom: number;
+}
+
+type SourceNodes = ReadonlyMap<string, InternalNode>;
+
+/** Subscribe to handle measurements as well as node movement. */
+function useSourceNodes(wires: RouterWire[]): SourceNodes {
+  const nodes = useStore(useShallow((state: ReactFlowState) =>
+    wires.map((wire) => state.nodeLookup.get(wire.source))
+  ));
+  return useMemo(() => new Map(nodes.flatMap((node) => node ? [[node.id, node] as const] : [])), [nodes]);
 }
 
 export interface RouterWireGeom {
@@ -104,22 +117,32 @@ export function isInRailDropZone(
 function terminalPos(
   wire: RouterWire,
   nodes: TemplateRFNode[],
-  viewport: RouterViewport
+  viewport: RouterViewport,
+  sourceNodes?: SourceNodes,
 ): { x: number; y: number } | null {
   const node = nodes.find((n) => n.id === wire.source);
   if (!node) return null;
+  const internal = sourceNodes?.get(wire.source);
+  const handle = internal?.internals.handleBounds?.source?.find((handle) => handle.id === wire.sourceHandle);
+  if (internal && handle) {
+    return {
+      x: (internal.internals.positionAbsolute.x + handle.x + handle.width / 2) * viewport.zoom + viewport.x,
+      y: (internal.internals.positionAbsolute.y + handle.y + handle.height / 2) * viewport.zoom + viewport.y,
+    };
+  }
+  // Before React Flow measures the socket, use the same row layout as
+  // NodeShell. Controls below the media card never affect output positions.
+  const outputs = getTemplateEntry(node.data.nodeType, node.data.overrides).outputs;
+  const row = outputs.findIndex((handle) => handle.id === wire.sourceHandle);
+  if (row < 0) return null;
   const width =
     node.measured?.width ??
     (node.width as number | undefined) ??
     (node.style?.width as number | undefined) ??
     300;
-  const height =
-    node.measured?.height ??
-    (node.height as number | undefined) ??
-    (node.style?.height as number | undefined) ??
-    200;
-  const flowX = node.position.x + width;
-  const flowY = node.position.y + height / 2;
+  // Media-card border is 1px; Socket sits -(SOCKET_W - 3) outside it.
+  const flowX = node.position.x + width - 1 + (SOCKET_W - 3) - SOCKET_W / 2;
+  const flowY = node.position.y + 1 + socketCenter(row);
   return { x: flowX * viewport.zoom + viewport.x, y: flowY * viewport.zoom + viewport.y };
 }
 
@@ -132,7 +155,8 @@ export function routerWireGeoms(
   wires: RouterWire[],
   nodes: TemplateRFNode[],
   size: RailSize,
-  viewport: RouterViewport
+  viewport: RouterViewport,
+  sourceNodes?: SourceNodes,
 ): RouterWireGeom[] {
   const { types, blockTop, contentLeft } = railMetrics(wires, size);
   const typeIndex = new Map(types.map((type, i) => [type, i]));
@@ -141,7 +165,7 @@ export function routerWireGeoms(
 
   const geoms: RouterWireGeom[] = [];
   for (const wire of wires) {
-    const from = terminalPos(wire, nodes, viewport);
+    const from = terminalPos(wire, nodes, viewport, sourceNodes);
     if (!from) continue;
     const to = { x: socketX, y: socketY(typeIndex.get(wire.sourceHandle) ?? 0) };
     const dx = Math.max(40, (to.x - from.x) * 0.5);
@@ -171,9 +195,10 @@ export function RouterWires({
   size: RailSize;
 }) {
   const viewport = useViewport();
+  const sourceNodes = useSourceNodes(wires);
   const geoms = useMemo(
-    () => routerWireGeoms(wires, nodes, size, viewport),
-    [wires, nodes, size, viewport]
+    () => routerWireGeoms(wires, nodes, size, viewport, sourceNodes),
+    [wires, nodes, size, viewport, sourceNodes]
   );
   if (size.width === 0 || size.height === 0) return null;
   return (
@@ -220,14 +245,15 @@ export function RouterRail({
   onDisconnectType: (type: string) => void;
 }) {
   const viewport = useViewport();
+  const sourceNodes = useSourceNodes(wires);
   const { types, railH, blockTop, contentLeft } = useMemo(
     () => railMetrics(wires, size),
     [wires, size]
   );
   // Wire geometry for the invisible click targets (same paths as the strokes)
   const geoms = useMemo(
-    () => routerWireGeoms(wires, nodes, size, viewport),
-    [wires, nodes, size, viewport]
+    () => routerWireGeoms(wires, nodes, size, viewport, sourceNodes),
+    [wires, nodes, size, viewport, sourceNodes]
   );
 
   if (size.width === 0 || size.height === 0) return null;
