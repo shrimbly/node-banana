@@ -216,7 +216,8 @@ function serializeTemplate(
   baseNodeId: string,
   rfNodes: TemplateRFNode[],
   rfEdges: Edge[],
-  routerWires: RouterWire[]
+  routerWires: RouterWire[],
+  layout: SplitGridTemplate["layout"] = "grid",
 ): SplitGridTemplate {
   // The fixed rail's wires become the router wiring (sorted for a stable,
   // non-dirty baseline); targetHandle equals the source handle's type.
@@ -234,6 +235,7 @@ function serializeTemplate(
     );
   return {
     baseNodeId,
+    ...(layout === "vertical" || layout === "horizontal" ? { layout } : {}),
     nodes: rfNodes.map((node) => {
       // Persist the node's width and its measured height. Real nodes derive
       // their height from content at runtime, so the height is only a hint
@@ -369,6 +371,10 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
   useWheelPanZoom(canvasWrapperRef, canvasNavigationSettings, true);
 
   const initialTemplate = useMemo(() => getSplitGridTemplate(nodeData), [nodeData]);
+  const [cellLayout, setCellLayout] = useState<NonNullable<SplitGridTemplate["layout"]>>(
+    initialTemplate.layout === "vertical" || initialTemplate.layout === "horizontal"
+      ? initialTemplate.layout : "grid"
+  );
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<TemplateRFNode>(
     templateToRfNodes(initialTemplate, nodeData.sourceImage, nodeData)
   );
@@ -523,15 +529,16 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
         baseNodeId,
         templateToRfNodes(initialTemplate, nodeData.sourceImage, nodeData),
         templateToRfEdges(initialTemplate),
-        templateToRouterWires(initialTemplate)
+        templateToRouterWires(initialTemplate),
+        initialTemplate.layout,
       )
     );
   }
   const isDirty = useCallback(
     () =>
-      JSON.stringify(serializeTemplate(baseNodeId, rfNodes, rfEdges, routerWires)) !==
+      JSON.stringify(serializeTemplate(baseNodeId, rfNodes, rfEdges, routerWires, cellLayout)) !==
       initialSerializedRef.current,
-    [baseNodeId, rfNodes, rfEdges, routerWires]
+    [baseNodeId, rfNodes, rfEdges, routerWires, cellLayout]
   );
 
   const requestClose = useCallback(() => {
@@ -812,10 +819,10 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
     // one undo checkpoint, so one Cmd+Z reverts the whole apply
     materializeSplitGridCells(nodeId, {
       force: true,
-      template: serializeTemplate(baseNodeId, rfNodes, rfEdges, routerWires),
+      template: serializeTemplate(baseNodeId, rfNodes, rfEdges, routerWires, cellLayout),
     });
     onClose();
-  }, [isRunning, baseNodeId, rfNodes, rfEdges, routerWires, nodeId, materializeSplitGridCells, onClose]);
+  }, [isRunning, baseNodeId, rfNodes, rfEdges, routerWires, cellLayout, nodeId, materializeSplitGridCells, onClose]);
 
   return (
     <Dialog
@@ -989,6 +996,18 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
             ))}
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <label className="flex items-center gap-2 mr-3 text-xs text-neutral-400">
+              Cell layout
+              <select
+                value={cellLayout}
+                onChange={(event) => setCellLayout(event.target.value as NonNullable<SplitGridTemplate["layout"]>)}
+                className="h-8 rounded-md border border-chrome-border bg-well px-2 text-xs text-neutral-100 outline-none focus-visible:border-neutral-500"
+              >
+                <option value="grid">Grid</option>
+                <option value="vertical">Vertical</option>
+                <option value="horizontal">Horizontal</option>
+              </select>
+            </label>
             <DialogButton variant="ghost" onClick={requestClose}>
               Cancel
             </DialogButton>

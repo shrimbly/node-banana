@@ -524,6 +524,8 @@ export interface SplitGridTemplateRouterConnection {
  */
 export interface SplitGridTemplate {
   baseNodeId: string;
+  /** Arrangement of the generated cell groups; omitted on older saves means grid. */
+  layout?: "grid" | "vertical" | "horizontal";
   nodes: SplitGridTemplateNode[];
   edges: SplitGridTemplateEdge[];
   /**

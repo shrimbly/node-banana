@@ -128,6 +128,46 @@ describe("materializeSplitGridCells", () => {
       });
     });
 
+    it.each(["grid", "vertical", "horizontal"] as const)("persists and places cells in %s layout without changing their source order", (layout) => {
+      const template = { ...createClassicSplitGridTemplate(), layout };
+      act(() => {
+        useWorkflowStore.getState().materializeSplitGridCells(SPLIT_ID, { force: true, template });
+      });
+      const state = useWorkflowStore.getState();
+      const data = getSplitData();
+      expect(data.template?.layout).toBe(layout);
+      const groups = data.cells!.map((cell) => state.groups[cell.groupId!]);
+      expect(groups.map((group) => group.name)).toEqual(["Cell 1-1", "Cell 1-2", "Cell 2-1", "Cell 2-2"]);
+      expect(new Set(groups.map((group) => group.position.x)).size).toBe(layout === "vertical" ? 1 : layout === "horizontal" ? 4 : 2);
+      expect(new Set(groups.map((group) => group.position.y)).size).toBe(layout === "horizontal" ? 1 : layout === "vertical" ? 4 : 2);
+      for (let i = 0; i < groups.length; i++) {
+        for (let j = i + 1; j < groups.length; j++) {
+          const a = groups[i], b = groups[j];
+          expect(b.position.x >= a.position.x + a.size.width || b.position.y >= a.position.y + a.size.height).toBe(true);
+        }
+      }
+      // Running again preserves the saved arrangement and existing cell IDs.
+      expect(useWorkflowStore.getState().materializeSplitGridCells(SPLIT_ID)).toBe(false);
+      expect(getSplitData().cells).toEqual(data.cells);
+    });
+
+    it("rebuilds when the saved layout changes, and undo restores the previous layout", () => {
+      act(() => {
+        useWorkflowStore.getState().materializeSplitGridCells(SPLIT_ID);
+      });
+      const originalCells = getSplitData().cells;
+      act(() => {
+        useWorkflowStore.getState().materializeSplitGridCells(SPLIT_ID, {
+          template: { ...createDefaultSplitGridTemplate(), layout: "horizontal" },
+        });
+      });
+      expect(getSplitData().template?.layout).toBe("horizontal");
+      expect(getSplitData().cells).not.toEqual(originalCells);
+      act(() => useWorkflowStore.getState().undo());
+      expect(getSplitData().template?.layout ?? "grid").toBe("grid");
+      expect(getSplitData().cells).toEqual(originalCells);
+    });
+
     it("creates 4 imageInput nodes, 4 groups, and 4 reference edges", () => {
       let result = false;
       act(() => {

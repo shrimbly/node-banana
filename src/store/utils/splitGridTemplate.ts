@@ -278,6 +278,8 @@ export function computeMaterializedKey(
   return JSON.stringify({
     rows,
     cols,
+    ...(template.layout === "vertical" || template.layout === "horizontal"
+      ? { layout: template.layout } : {}),
     baseNodeId: template.baseNodeId,
     nodes: [...template.nodes].sort((a, b) => a.id.localeCompare(b.id)),
     edges: [...template.edges].sort((a, b) => a.id.localeCompare(b.id)),
@@ -445,12 +447,15 @@ export function buildCellInstances(options: BuildCellInstancesOptions): CellInst
   const groups: Record<string, NodeGroup> = {};
   const cells: SplitGridCell[] = [];
   const routerEdges: WorkflowEdge[] = [];
+  const displayCols = template.layout === "vertical" ? 1
+    : template.layout === "horizontal" ? rows * cols : cols;
 
   for (let index = 0; index < rows * cols; index++) {
+    // Names and image assignment keep their source-grid order in every layout.
     const row = Math.floor(index / cols);
     const col = index % cols;
-    const originX = startX + col * (clusterWidth + GROUP_PADDING * 2 + CLUSTER_GAP);
-    const originY = startY + row * (clusterHeight + GROUP_PADDING * 2 + CLUSTER_GAP);
+    const originX = startX + (index % displayCols) * (clusterWidth + GROUP_PADDING * 2 + CLUSTER_GAP);
+    const originY = startY + Math.floor(index / displayCols) * (clusterHeight + GROUP_PADDING * 2 + CLUSTER_GAP);
 
     // Instantiate nodes
     const idMap = new Map<string, string>();

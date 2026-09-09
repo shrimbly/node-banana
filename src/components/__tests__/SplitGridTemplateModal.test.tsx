@@ -258,6 +258,34 @@ describe("SplitGridTemplateModal", () => {
   });
 
   describe("Apply", () => {
+    it.each(["grid", "vertical", "horizontal"] as const)("applies the %s cell layout", (layout) => {
+      renderModal();
+      expect(screen.getByRole("combobox", { name: "Cell layout" })).toHaveValue("grid");
+      fireEvent.change(screen.getByRole("combobox", { name: "Cell layout" }), { target: { value: layout } });
+      fireEvent.click(screen.getByRole("button", { name: "Apply to 6 cells" }));
+      const template = mockMaterializeSplitGridCells.mock.calls[0][1].template;
+      expect(template.layout ?? "grid").toBe(layout);
+    });
+
+    it("restores a saved layout and preserves it when changing presets", () => {
+      renderModal({ nodeData: { template: {
+        baseNodeId: "cell-image", layout: "vertical",
+        nodes: [{ id: "cell-image", type: "imageInput", position: { x: 0, y: 0 } }], edges: [],
+      } } });
+      expect(screen.getByRole("combobox", { name: "Cell layout" })).toHaveValue("vertical");
+      fireEvent.click(screen.getByRole("button", { name: "Prompt + Generate" }));
+      fireEvent.click(screen.getByRole("button", { name: "Apply to 6 cells" }));
+      expect(mockMaterializeSplitGridCells.mock.calls[0][1].template.layout).toBe("vertical");
+    });
+
+    it("treats a layout change as an unsaved edit", () => {
+      const { onClose } = renderModal();
+      fireEvent.change(screen.getByRole("combobox", { name: "Cell layout" }), { target: { value: "horizontal" } });
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(screen.getByText("Discard changes?")).toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
     it("should materialize with force and the built template in one call, then close", () => {
       const { onClose } = renderModal();
 
