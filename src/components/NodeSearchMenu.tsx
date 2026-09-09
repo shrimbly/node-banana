@@ -12,6 +12,8 @@ interface NodeSearchMenuProps {
   /** `savedNodeId` is set when the pick is a saved Comfy node. */
   onSelect: (type: NodeType, savedNodeId?: string) => void;
   onClose: () => void;
+  /** Limit a nested editor to the node types it supports. */
+  allowedTypes?: readonly NodeType[];
 }
 
 const MENU_WIDTH = 224; // matches w-56
@@ -21,7 +23,7 @@ const MENU_MAX_HEIGHT = 336; // header + max-h-64 list + footer, approx
  * Searchable list of every addable node type, shown when the user double-clicks
  * the empty canvas. Styled to match ConnectionDropMenu (the handle-drag menu).
  */
-export function NodeSearchMenu({ position, onSelect, onClose }: NodeSearchMenuProps) {
+export function NodeSearchMenu({ position, onSelect, onClose, allowedTypes }: NodeSearchMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -37,8 +39,10 @@ export function NodeSearchMenu({ position, onSelect, onClose }: NodeSearchMenuPr
   // being sorted in among them: the built-in list has a shape people learn, and
   // it should not shuffle every time a workflow is saved.
   const options = useMemo(
-    () => [...ALL_NODE_OPTIONS, ...savedComfyOptions(savedNodes)],
-    [savedNodes]
+    () => allowedTypes
+      ? ALL_NODE_OPTIONS.filter((option) => allowedTypes.includes(option.type as NodeType))
+      : [...ALL_NODE_OPTIONS, ...savedComfyOptions(savedNodes)],
+    [savedNodes, allowedTypes]
   );
 
   const filtered = useMemo(() => {
@@ -109,6 +113,7 @@ export function NodeSearchMenu({ position, onSelect, onClose }: NodeSearchMenuPr
       if (option) onSelect(option.type as NodeType, option.savedNodeId);
     } else if (e.key === "Escape") {
       e.preventDefault();
+      e.stopPropagation();
       onClose();
     }
   };

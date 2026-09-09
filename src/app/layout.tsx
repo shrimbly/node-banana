@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Toast } from "@/components/Toast";
+import { GenerationToaster } from "@/components/GenerationToast";
 
 export const metadata: Metadata = {
   title: "Node Banana - AI Image Workflow",
@@ -18,6 +19,7 @@ export default function RootLayout({
       <body className="antialiased">
         {children}
         <Toast />
+        <GenerationToaster />
       </body>
     </html>
   );

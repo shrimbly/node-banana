@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/Dialog";
 import { MenuHeader, MenuIconButton, MenuItem, MenuList, MenuSectionLabel, MenuSurface } from "@/components/ui/Menu";
+import { NodeSearchMenu } from "@/components/NodeSearchMenu";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ReactFlow,
@@ -41,6 +42,7 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { useWheelPanZoom } from "@/hooks/useWheelPanZoom";
 import type {
   LLMGenerateNodeData,
+  GenerateVideoNodeData,
   NanoBananaNodeData,
   NodeType,
   SplitGridNodeData,
@@ -52,6 +54,8 @@ import {
   createClassicSplitGridTemplate,
   createDefaultSplitGridTemplate,
   getSplitGridTemplate,
+  gridFractions,
+  resolveGridOffsets,
 } from "@/store/utils/splitGridTemplate";
 import {
   RouterRail,
@@ -63,6 +67,7 @@ import {
 import {
   getTemplateEntry,
   getTemplateNodeIcon,
+  templateHandleKind,
   TEMPLATE_NODE_CATALOG,
   type TemplateCatalogEntry,
   type TemplateHandleKind,
@@ -86,6 +91,7 @@ const edgeTypes: EdgeTypes = {
 };
 
 const TEMPLATE_EDGE_TYPE = "templateEditable";
+const TEMPLATE_NODE_TYPES = TEMPLATE_NODE_CATALOG.map((entry) => entry.type);
 
 // Match the main canvas: on macOS a left-drag must not pan (that reads as
 // "dragging a connection moved everything"); panning is via the trackpad.
@@ -95,10 +101,12 @@ const isMacOS =
 const EDGE_COLOR: Record<TemplateHandleKind, string> = {
   image: "#0d9668",
   text: "#2563eb",
+  video: "#ec4899",
+  audio: "#a78bfa",
 };
 
 function edgeStyleFor(sourceHandle: string | null | undefined): React.CSSProperties {
-  const kind = (sourceHandle === "text" ? "text" : "image") as TemplateHandleKind;
+  const kind = templateHandleKind(sourceHandle ?? "image");
   return { stroke: EDGE_COLOR[kind], strokeWidth: 2 };
 }
 
@@ -141,6 +149,10 @@ function seedLlmOverrides(): Record<string, unknown> {
 
 function seedOverridesFor(type: NodeType): Record<string, unknown> {
   if (type === "nanoBanana") return seedGenerateOverrides();
+  if (type === "generateVideo") {
+    const defaults = createDefaultNodeData(type) as GenerateVideoNodeData;
+    return { selectedModel: defaults.selectedModel, parameters: defaults.parameters ?? {} };
+  }
   if (type === "llmGenerate") return seedLlmOverrides();
   return {};
 }
@@ -151,8 +163,15 @@ function editorNodeDimensions(type: NodeType): { width: number; height: number }
 
 function templateToRfNodes(
   template: SplitGridTemplate,
-  sourceImage: string | null
+  sourceImage: string | null,
+  grid: Pick<SplitGridNodeData, "gridRows" | "gridCols" | "rowOffsets" | "colOffsets">
 ): TemplateRFNode[] {
+  const cols = clampGridDimension(grid.gridCols);
+  const rows = clampGridDimension(grid.gridRows);
+  const slice = {
+    width: gridFractions(cols, resolveGridOffsets(cols, grid.colOffsets))[0],
+    height: gridFractions(rows, resolveGridOffsets(rows, grid.rowOffsets))[0],
+  };
   return template.nodes.map((templateNode) => {
     // Nodes with an in-flow settings panel auto-grow to fit it on mount
     const dims = templateNode.size ?? editorNodeDimensions(templateNode.type);
@@ -174,6 +193,7 @@ function templateToRfNodes(
         overrides,
         isBase,
         sourceImage: isBase ? sourceImage : undefined,
+        slice: isBase ? slice : undefined,
       } satisfies TemplateNodeData,
     };
   });
@@ -204,7 +224,8 @@ function serializeTemplate(
   baseNodeId: string,
   rfNodes: TemplateRFNode[],
   rfEdges: Edge[],
-  routerWires: RouterWire[]
+  routerWires: RouterWire[],
+  layout: SplitGridTemplate["layout"] = "grid",
 ): SplitGridTemplate {
   // The fixed rail's wires become the router wiring (sorted for a stable,
   // non-dirty baseline); targetHandle equals the source handle's type.
@@ -222,6 +243,7 @@ function serializeTemplate(
     );
   return {
     baseNodeId,
+    ...(layout === "vertical" || layout === "horizontal" ? { layout } : {}),
     nodes: rfNodes.map((node) => {
       // Persist the node's width and its measured height. Real nodes derive
       // their height from content at runtime, so the height is only a hint
@@ -255,7 +277,7 @@ interface TemplateDropMenuState {
   screen: { x: number; y: number };
   flow: { x: number; y: number };
   fromNodeId: string;
-  fromHandleId: TemplateHandleKind;
+  fromHandleId: string;
   fromHandleType: "source" | "target";
 }
 
@@ -321,7 +343,7 @@ function TemplateConnectionMenu({
       }}
     >
       <MenuHeader>
-        <MenuSectionLabel>Add {menu.fromHandleId} node</MenuSectionLabel>
+        <MenuSectionLabel>Add {templateHandleKind(menu.fromHandleId)} node</MenuSectionLabel>
       </MenuHeader>
       <MenuList>
         {options.map((option, index) => (
@@ -357,8 +379,12 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
   useWheelPanZoom(canvasWrapperRef, canvasNavigationSettings, true);
 
   const initialTemplate = useMemo(() => getSplitGridTemplate(nodeData), [nodeData]);
+  const [cellLayout, setCellLayout] = useState<NonNullable<SplitGridTemplate["layout"]>>(
+    initialTemplate.layout === "vertical" || initialTemplate.layout === "horizontal"
+      ? initialTemplate.layout : "grid"
+  );
   const [rfNodes, setRfNodes, onNodesChange] = useNodesState<TemplateRFNode>(
-    templateToRfNodes(initialTemplate, nodeData.sourceImage)
+    templateToRfNodes(initialTemplate, nodeData.sourceImage, nodeData)
   );
   const [rfEdges, setRfEdges, onEdgesChange] = useEdgesState<Edge>(
     templateToRfEdges(initialTemplate)
@@ -370,6 +396,10 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
   const [wrapperSize, setWrapperSize] = useState<RailSize>({ width: 0, height: 0 });
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [dropMenu, setDropMenu] = useState<TemplateDropMenuState | null>(null);
+  const [nodeMenu, setNodeMenu] = useState<{
+    screen: { x: number; y: number };
+    flow: { x: number; y: number };
+  } | null>(null);
   // Floating delete toolbar — same interaction as the main canvas: click a
   // noodle (or a router wire) and a toolbar appears just above the cursor.
   const [edgeToolbar, setEdgeToolbar] = useState<
@@ -505,17 +535,18 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
     initialSerializedRef.current = JSON.stringify(
       serializeTemplate(
         baseNodeId,
-        templateToRfNodes(initialTemplate, nodeData.sourceImage),
+        templateToRfNodes(initialTemplate, nodeData.sourceImage, nodeData),
         templateToRfEdges(initialTemplate),
-        templateToRouterWires(initialTemplate)
+        templateToRouterWires(initialTemplate),
+        initialTemplate.layout,
       )
     );
   }
   const isDirty = useCallback(
     () =>
-      JSON.stringify(serializeTemplate(baseNodeId, rfNodes, rfEdges, routerWires)) !==
+      JSON.stringify(serializeTemplate(baseNodeId, rfNodes, rfEdges, routerWires, cellLayout)) !==
       initialSerializedRef.current,
-    [baseNodeId, rfNodes, rfEdges, routerWires]
+    [baseNodeId, rfNodes, rfEdges, routerWires, cellLayout]
   );
 
   const requestClose = useCallback(() => {
@@ -530,7 +561,9 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
-      if (edgeToolbar) {
+      if (nodeMenu) {
+        setNodeMenu(null);
+      } else if (edgeToolbar) {
         setEdgeToolbar(null);
       } else if (dropMenu) {
         setDropMenu(null);
@@ -542,7 +575,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [edgeToolbar, dropMenu, showDiscardConfirm, requestClose]);
+  }, [nodeMenu, edgeToolbar, dropMenu, showDiscardConfirm, requestClose]);
 
   const setOverrides = useCallback(
     (id: string, overrides: Record<string, unknown>) => {
@@ -568,14 +601,39 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
 
   const applyPreset = useCallback(
     (template: SplitGridTemplate) => {
-      setRfNodes(templateToRfNodes(template, nodeData.sourceImage));
+      setRfNodes(templateToRfNodes(template, nodeData.sourceImage, nodeData));
       setRfEdges(templateToRfEdges(template));
       setRouterWires([]); // presets carry no router wiring
       idCounterRef.current = 0;
       refitSoon();
     },
-    [nodeData.sourceImage, setRfNodes, setRfEdges, refitSoon]
+    [nodeData, setRfNodes, setRfEdges, refitSoon]
   );
+
+  const openNodeMenu = useCallback((event: React.MouseEvent | MouseEvent) => {
+    if (!(event.target as HTMLElement).classList?.contains("react-flow__pane")) return;
+    event.preventDefault();
+    setDropMenu(null);
+    setEdgeToolbar(null);
+    const screen = { x: event.clientX, y: event.clientY };
+    setNodeMenu({ screen, flow: screenToFlowPosition(screen) });
+  }, [screenToFlowPosition]);
+
+  const handleNodeMenuSelect = useCallback((type: NodeType) => {
+    if (!nodeMenu || !TEMPLATE_NODE_TYPES.includes(type)) return;
+    const dims = editorNodeDimensions(type);
+    const id = makeTemplateNodeId(type, rfNodes);
+    setRfNodes((nodes) => [...nodes, {
+      id,
+      type: "splitGridTemplateNode",
+      position: nodeMenu.flow,
+      deletable: true,
+      width: dims.width,
+      style: { width: dims.width },
+      data: { nodeType: type, overrides: seedOverridesFor(type), isBase: false },
+    }]);
+    setNodeMenu(null);
+  }, [nodeMenu, makeTemplateNodeId, rfNodes, setRfNodes]);
 
   // Cycles would materialize as cells the scheduler silently never executes
   const createsCycle = useCallback(
@@ -603,11 +661,11 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
       const sourceNode = rfNodes.find((node) => node.id === source);
       const targetNode = rfNodes.find((node) => node.id === target);
       if (!sourceNode || !targetNode) return false;
-      const sourceEntry = getTemplateEntry(sourceNode.data.nodeType);
-      const targetEntry = getTemplateEntry(targetNode.data.nodeType);
+      const sourceEntry = getTemplateEntry(sourceNode.data.nodeType, sourceNode.data.overrides);
+      const targetEntry = getTemplateEntry(targetNode.data.nodeType, targetNode.data.overrides);
       const output = sourceEntry.outputs.find((handle) => handle.id === sourceHandle);
       const input = targetEntry.inputs.find((handle) => handle.id === targetHandle);
-      if (!output || !input || output.id !== input.id) return false;
+      if (!output || !input || templateHandleKind(output.id) !== templateHandleKind(input.id)) return false;
       return !createsCycle(source, target);
     },
     [rfNodes, createsCycle]
@@ -618,7 +676,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
       setRfEdges((edges) => {
         let next = edges;
         // Text inputs accept a single connection — replace the existing one
-        if (connection.targetHandle === "text") {
+        if (templateHandleKind(connection.targetHandle ?? "") === "text") {
           next = next.filter(
             (edge) =>
               !(edge.target === connection.target && edge.targetHandle === connection.targetHandle)
@@ -663,11 +721,12 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
 
       const targetElement = event.target as HTMLElement | null;
       if (!targetElement?.closest(".react-flow__pane")) return;
+      setNodeMenu(null);
       setDropMenu({
         screen: { x: point.clientX, y: point.clientY },
         flow: screenToFlowPosition({ x: point.clientX, y: point.clientY }),
         fromNodeId: fromNode.id,
-        fromHandleId: (fromHandle.id === "text" ? "text" : "image") as TemplateHandleKind,
+        fromHandleId: fromHandle.id,
         fromHandleType: fromHandle.type,
       });
     },
@@ -678,8 +737,8 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
     if (!dropMenu) return [];
     return TEMPLATE_NODE_CATALOG.filter((entry) =>
       dropMenu.fromHandleType === "source"
-        ? entry.inputs.some((handle) => handle.id === dropMenu.fromHandleId)
-        : entry.outputs.some((handle) => handle.id === dropMenu.fromHandleId)
+        ? entry.inputs.some((handle) => templateHandleKind(handle.id) === templateHandleKind(dropMenu.fromHandleId))
+        : entry.outputs.some((handle) => templateHandleKind(handle.id) === templateHandleKind(dropMenu.fromHandleId))
     );
   }, [dropMenu]);
 
@@ -688,7 +747,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
       if (!dropMenu) return;
       const dims = editorNodeDimensions(type);
       const entry = getTemplateEntry(type);
-      const kind = dropMenu.fromHandleId;
+      const kind = templateHandleKind(dropMenu.fromHandleId);
       const newId = makeTemplateNodeId(type, rfNodes);
 
       let position: { x: number; y: number };
@@ -697,12 +756,12 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
         // Forward drag: align the new node's input socket with the drop point
         const inputIndex = Math.max(0, entry.inputs.findIndex((handle) => handle.id === kind));
         position = { x: dropMenu.flow.x, y: dropMenu.flow.y - templateHandleTop(inputIndex) };
-        connection = { source: dropMenu.fromNodeId, sourceHandle: kind, target: newId, targetHandle: kind };
+        connection = { source: dropMenu.fromNodeId, sourceHandle: dropMenu.fromHandleId, target: newId, targetHandle: kind };
       } else {
         // Backward drag: align the new node's output socket with the drop point
         const outputIndex = Math.max(0, entry.outputs.findIndex((handle) => handle.id === kind));
         position = { x: dropMenu.flow.x - dims.width, y: dropMenu.flow.y - templateHandleTop(outputIndex) };
-        connection = { source: newId, sourceHandle: kind, target: dropMenu.fromNodeId, targetHandle: kind };
+        connection = { source: newId, sourceHandle: kind, target: dropMenu.fromNodeId, targetHandle: dropMenu.fromHandleId };
       }
 
       setRfNodes((nodes) => [
@@ -742,8 +801,12 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
     if (generateMissingPrompt) {
       list.push("Generate Image nodes need a Prompt connected to their text input");
     }
+    if (rfNodes.some((node) => node.data.nodeType === "generateVideo" &&
+      !rfEdges.some((edge) => edge.target === node.id && templateHandleKind(edge.targetHandle ?? "") === "text"))) {
+      list.push("Generate Video nodes need a Prompt connected to their text input");
+    }
     // Image-processing/output nodes are dead (or fail validation) without an image
-    const IMAGE_OPTIONAL = new Set(["nanoBanana", "llmGenerate"]);
+    const IMAGE_OPTIONAL = new Set(["nanoBanana", "llmGenerate", "generateVideo"]);
     const unwired = rfNodes.filter((node) => {
       if (node.data.isBase || IMAGE_OPTIONAL.has(node.data.nodeType)) return false;
       const entry = getTemplateEntry(node.data.nodeType);
@@ -768,10 +831,10 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
     // one undo checkpoint, so one Cmd+Z reverts the whole apply
     materializeSplitGridCells(nodeId, {
       force: true,
-      template: serializeTemplate(baseNodeId, rfNodes, rfEdges, routerWires),
+      template: serializeTemplate(baseNodeId, rfNodes, rfEdges, routerWires, cellLayout),
     });
     onClose();
-  }, [isRunning, baseNodeId, rfNodes, rfEdges, routerWires, nodeId, materializeSplitGridCells, onClose]);
+  }, [isRunning, baseNodeId, rfNodes, rfEdges, routerWires, cellLayout, nodeId, materializeSplitGridCells, onClose]);
 
   return (
     <Dialog
@@ -784,7 +847,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
       closeOnBackdrop={false}
       stopWheel={false}
       portal
-      className="w-[min(1080px,94vw)] h-[min(720px,88vh)] max-h-none"
+      className="w-[96vw] h-[94dvh] max-h-none mx-0"
       overlayProps={{
         // Bubble-phase (not capture): the mini-canvas's native wheel-to-pan
         // listener on the wrapper must run first; we still stop the wheel from
@@ -853,6 +916,8 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
               onEdgesChange={onEdgesChange}
               onConnect={handleConnect}
               onConnectEnd={handleConnectEnd}
+              onDoubleClick={openNodeMenu}
+              onPaneContextMenu={openNodeMenu}
               isValidConnection={isValidConnection}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
@@ -861,6 +926,7 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
               minZoom={0.2}
               maxZoom={1.5}
               zoomOnScroll={false}
+              zoomOnDoubleClick={false}
               panOnDrag={!isMacOS}
               // The router is a fixed, always-visible overlay on the right, so
               // panning toward it mid-connection only jostles the graph.
@@ -882,6 +948,15 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
             size={wrapperSize}
             onDisconnectType={disconnectRouterType}
           />
+
+          {nodeMenu && (
+            <NodeSearchMenu
+              position={nodeMenu.screen}
+              allowedTypes={TEMPLATE_NODE_TYPES}
+              onSelect={handleNodeMenuSelect}
+              onClose={() => setNodeMenu(null)}
+            />
+          )}
 
           {/* Connection drop menu */}
           {dropMenu && (
@@ -933,6 +1008,18 @@ function SplitGridTemplateModalInner({ nodeId, nodeData, onClose }: SplitGridTem
             ))}
           </div>
           <div className="flex items-center gap-2 shrink-0">
+            <label className="flex items-center gap-2 mr-3 text-xs text-neutral-400">
+              Cell layout
+              <select
+                value={cellLayout}
+                onChange={(event) => setCellLayout(event.target.value as NonNullable<SplitGridTemplate["layout"]>)}
+                className="h-8 rounded-md border border-chrome-border bg-well px-2 text-xs text-neutral-100 outline-none focus-visible:border-neutral-500"
+              >
+                <option value="grid">Grid</option>
+                <option value="vertical">Vertical</option>
+                <option value="horizontal">Horizontal</option>
+              </select>
+            </label>
             <DialogButton variant="ghost" onClick={requestClose}>
               Cancel
             </DialogButton>

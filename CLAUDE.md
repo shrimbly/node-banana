@@ -70,9 +70,7 @@ Image generation models (these exist and are recently released):
 - `gemini-2.5-flash-image` → internal name: `nano-banana`
 - `gemini-3-pro-image-preview` → internal name: `nano-banana-pro`
 
-LLM models:
-- Google: `gemini-2.5-flash`, `gemini-3-flash-preview`, `gemini-3-pro-preview`
-- OpenAI: `gpt-4.1-mini`, `gpt-4.1-nano`
+LLM models are defined once in `src/lib/llm/catalog.ts`: the current list per provider, legacy ids saved workflows may carry, their replacements, and the defaults. Add or retire a model there; every dropdown, `/api/llm` and the assistant read it.
 
 ## Node Types
 

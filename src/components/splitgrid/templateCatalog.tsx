@@ -8,13 +8,21 @@
  */
 
 import type { ReactNode } from "react";
-import type { NodeType } from "@/types";
+import type { ModelInputDef, NodeType } from "@/types";
+import { schemaSockets } from "../nodes/ui/schemaSockets";
 import { ALL_NODE_OPTIONS } from "../ConnectionDropMenu";
 
-export type TemplateHandleKind = "image" | "text";
+export type TemplateHandleKind = "image" | "text" | "video" | "audio";
+
+export function templateHandleKind(id: string): TemplateHandleKind {
+  return id.split("-")[0] as TemplateHandleKind;
+}
 
 export interface TemplateHandleDef {
-  id: TemplateHandleKind;
+  id: string;
+  hidden?: boolean;
+  placeholder?: boolean;
+  schemaName?: string;
   label: string;
   /** Vertical position matching the real node component (default 50%) */
   top?: string;
@@ -66,6 +74,14 @@ export const TEMPLATE_NODE_CATALOG: TemplateCatalogEntry[] = [
       { id: "text", label: "Prompt", top: "65%" },
     ],
     outputs: [IMAGE_OUT],
+  },
+  {
+    type: "generateVideo",
+    label: "Generate Video",
+    title: "Generate Video",
+    description: "AI video generation for this cell",
+    inputs: [IMAGE_IN, { id: "video", label: "Video" }, { id: "text", label: "Prompt" }],
+    outputs: [{ id: "video", label: "Video" }],
   },
   {
     type: "llmGenerate",
@@ -120,8 +136,15 @@ export const TEMPLATE_NODE_CATALOG: TemplateCatalogEntry[] = [
   },
 ];
 
-export function getTemplateEntry(type: NodeType): TemplateCatalogEntry {
+export function getTemplateEntry(type: NodeType, overrides?: Record<string, unknown>): TemplateCatalogEntry {
   if (type === TEMPLATE_BASE_ENTRY.type) return TEMPLATE_BASE_ENTRY;
+  if (type === "generateVideo") {
+    return {
+      ...TEMPLATE_NODE_CATALOG.find((entry) => entry.type === type)!,
+      inputs: schemaSockets(overrides?.inputSchema as ModelInputDef[] | undefined, { videoPlaceholder: true })
+        .map((socket) => ({ ...socket, label: socket.label ?? socket.type })),
+    };
+  }
   return (
     TEMPLATE_NODE_CATALOG.find((entry) => entry.type === type) ?? {
       type,

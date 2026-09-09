@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { DesktopSession } from '../DesktopSession';
 
@@ -8,9 +8,10 @@ vi.mock('@/lib/desktop/credentials', () => ({
   useSessionCredentials: vi.fn(),
 }));
 vi.mock('@/store/utils/localStorage', () => ({ getProviderSettings: () => ({ providers: {} }) }));
+const connectionState = vi.hoisted(() => ({ desktopConnected: true, setDesktopConnected: vi.fn<(online: boolean) => void>() }));
 vi.mock('@/store/workflowStore', () => ({ useWorkflowStore: Object.assign(
-  (selector: (state: { desktopConnected: boolean }) => unknown) => selector({ desktopConnected: true }),
-  { setState: vi.fn(), getState: () => ({ setDesktopConnected: vi.fn() }) },
+  (selector: (state: typeof connectionState) => unknown) => selector(connectionState),
+  { setState: vi.fn(), getState: () => connectionState },
 ) }));
 afterEach(() => {
   delete (window as { nodeBananaDesktop?: unknown }).nodeBananaDesktop;
@@ -39,4 +40,24 @@ it('keeps window actions and dragging available through credential failure and r
   expect(container.querySelector('.desktop-startup-drag-region')).toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Close window' }));
   expect(close).toHaveBeenCalledTimes(2);
+});
+
+
+it('resynchronizes when the store connection action changes during a dev refresh', async () => {
+  const unsubscribe = vi.fn();
+  const state = vi.fn(async () => true);
+  Object.defineProperty(window, 'nodeBananaDesktop', { configurable: true, value: {
+    backend: { onStatus: () => unsubscribe, state },
+  } });
+  const first = connectionState.setDesktopConnected;
+  first.mockClear();
+  const { rerender, unmount } = render(<DesktopSession><div>Editor</div></DesktopSession>);
+  await waitFor(() => expect(first).toHaveBeenCalledWith(true));
+  const replacement = vi.fn<(online: boolean) => void>();
+  connectionState.setDesktopConnected = replacement;
+  rerender(<DesktopSession><div>Editor</div></DesktopSession>);
+  await waitFor(() => expect(replacement).toHaveBeenCalledWith(true));
+  expect(unsubscribe).toHaveBeenCalled();
+  unmount();
+  connectionState.setDesktopConnected = first;
 });

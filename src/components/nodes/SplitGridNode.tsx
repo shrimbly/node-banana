@@ -102,12 +102,9 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
 
   // The clip takes the image's own proportions, so the grid overlay filling
   // the clip tracks the image exactly.
-  const [imageAspect, setImageAspect] = useState<number | null>(null);
-
-  // A new source image invalidates the measured aspect until it re-loads.
-  useEffect(() => {
-    setImageAspect(null);
-  }, [adaptiveSourceImage]);
+  const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
+  // Thumbnail swaps and cached load events must not reset the source geometry.
+  const imageAspect = loadedAspect?.src === nodeData.sourceImage ? loadedAspect?.aspect : null;
 
   // Reactively track the connected source image
   const hasIncomingImageConnection = useMemo(() => {
@@ -267,8 +264,8 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
               draggable={false}
               onLoad={(e) => {
                 const { naturalWidth, naturalHeight } = e.currentTarget;
-                if (naturalWidth > 0 && naturalHeight > 0) {
-                  setImageAspect(naturalWidth / naturalHeight);
+                if (naturalWidth > 0 && naturalHeight > 0 && nodeData.sourceImage) {
+                  setLoadedAspect({ src: nodeData.sourceImage, aspect: naturalWidth / naturalHeight });
                 }
               }}
             />

@@ -10,7 +10,7 @@
  * multi-provider model catalog.
  */
 
-import { createContext, memo, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, memo, useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   BaseEdge,
   getBezierPath,
@@ -23,11 +23,13 @@ import type {
   LLMModelType,
   LLMProvider,
   ModelType,
+  ModelInputDef,
   NodeType,
   Resolution,
   SelectedModel,
 } from "@/types";
 import { GEMINI_IMAGE_MODELS } from "@/types";
+import { parseAspectRatio } from "@/utils/nodeDimensions";
 import type { ProviderModel } from "@/lib/providers/types";
 import { ModelSearchDialog } from "../modals/ModelSearchDialog";
 import { ModelParameters } from "../nodes/ModelParameters";
@@ -42,16 +44,19 @@ import {
   SummaryValues,
   SOCKET_PITCH,
   SOCKET_TOP,
+  sameInputSchema,
   type SocketSpec,
   type SocketType,
 } from "../nodes/ui";
-import { getTemplateEntry, getTemplateNodeIcon, type TemplateHandleDef } from "./templateCatalog";
+import { getTemplateEntry, getTemplateNodeIcon, templateHandleKind, type TemplateHandleDef } from "./templateCatalog";
+import { LLM_PROVIDER_OPTIONS, defaultLLMModel, llmModelLabel, llmModelOptions } from "@/lib/llm/catalog";
 
 export interface TemplateNodeData extends Record<string, unknown> {
   nodeType: NodeType;
   overrides: Record<string, unknown>;
   isBase: boolean;
   sourceImage?: string | null;
+  slice?: { width: number; height: number };
 }
 
 export type TemplateRFNode = Node<TemplateNodeData, "splitGridTemplateNode">;
@@ -104,30 +109,6 @@ const EXTENDED_ASPECT_RATIOS: AspectRatio[] = ["1:1", "1:4", "1:8", "2:3", "3:2"
 const RESOLUTIONS_PRO: Resolution[] = ["1K", "2K", "4K"];
 const RESOLUTIONS_NB2: Resolution[] = ["512", "1K", "2K", "4K"];
 
-// Mirrors LLMGenerateNode's provider/model lists
-const LLM_PROVIDERS: { value: LLMProvider; label: string }[] = [
-  { value: "google", label: "Google" },
-  { value: "openai", label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic" },
-];
-const LLM_MODELS: Record<LLMProvider, { value: LLMModelType; label: string }[]> = {
-  google: [
-    { value: "gemini-3-flash-preview", label: "Gemini 3 Flash" },
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-    { value: "gemini-3-pro-preview", label: "Gemini 3.0 Pro" },
-    { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro" },
-  ],
-  openai: [
-    { value: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
-    { value: "gpt-4.1-nano", label: "GPT-4.1 Nano" },
-  ],
-  anthropic: [
-    { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5" },
-    { value: "claude-haiku-4.5", label: "Claude Haiku 4.5" },
-    { value: "claude-opus-4.6", label: "Claude Opus 4.6" },
-  ],
-};
-
 /** Centre of the n-th socket on a side, from the media card's top edge. */
 export function templateHandleTop(index: number): number {
   return SOCKET_TOP + SOCKET_PITCH * index;
@@ -135,7 +116,7 @@ export function templateHandleTop(index: number): number {
 
 /** Template handle defs → shell sockets. The catalog's ids double as types. */
 function toSockets(handles: TemplateHandleDef[]): SocketSpec[] {
-  return handles.map((handle) => ({ id: handle.id, type: handle.id as SocketType, title: handle.label }));
+  return handles.map(({ label, ...handle }) => ({ ...handle, type: templateHandleKind(handle.id) as SocketType, title: label }));
 }
 
 const EMPTY_MEDIA_HEIGHT = 120;
@@ -169,16 +150,19 @@ function MiniFloatingHeader({
 function BaseImageBody({
   sourceImage,
   onAspect,
+  slice,
 }: {
   sourceImage?: string | null;
   onAspect: (aspect: number) => void;
+  slice?: { width: number; height: number };
 }) {
   return sourceImage ? (
     <>
       <img
         src={sourceImage}
         alt="Source"
-        className="absolute inset-0 w-full h-full object-cover opacity-50"
+        className="absolute top-0 left-0 max-w-none opacity-50"
+        style={{ width: `${100 / (slice?.width ?? 1)}%`, height: `${100 / (slice?.height ?? 1)}%` }}
         onLoad={(e) => {
           const img = e.currentTarget;
           if (img.naturalWidth > 0 && img.naturalHeight > 0) onAspect(img.naturalWidth / img.naturalHeight);
@@ -186,7 +170,7 @@ function BaseImageBody({
       />
       <div className="absolute inset-0 flex items-center justify-center">
         <span className="px-2 py-1 rounded bg-neutral-950/80 text-[10px] text-neutral-300">
-          One slice of this image per cell
+          One slice per cell · preview of cell 1-1
         </span>
       </div>
     </>
@@ -220,7 +204,7 @@ function PromptBody({ nodeId, overrides }: { nodeId: string; overrides: Record<s
  * gemini selects, external-provider ModelParameters, ModelSearchDialog browse.
  * Returns the controls card and the header's Browse button.
  */
-function useGenerateControls(nodeId: string, overrides: Record<string, unknown>) {
+function useGenerateControls(nodeId: string, overrides: Record<string, unknown>, isVideo = false) {
   const { setOverrides } = useContext(TemplateEditorContext);
   const [isParamsExpanded, setIsParamsExpanded] = useState(true);
   const [isBrowseDialogOpen, setIsBrowseDialogOpen] = useState(false);
@@ -240,8 +224,16 @@ function useGenerateControls(nodeId: string, overrides: Record<string, unknown>)
   }, [isBrowseDialogOpen]);
 
   const selectedModel = overrides.selectedModel as SelectedModel | undefined;
-  const currentProvider = selectedModel?.provider ?? "gemini";
-  const isGeminiProvider = currentProvider === "gemini";
+  const currentProvider = selectedModel?.provider ?? (isVideo ? "fal" : "gemini");
+  const isGeminiProvider = !isVideo && currentProvider === "gemini";
+  const overridesRef = useRef(overrides);
+  overridesRef.current = overrides;
+  const handleInputsLoaded = useCallback((inputs: ModelInputDef[]) => {
+    const current = overridesRef.current;
+    if (!sameInputSchema(current.inputSchema as ModelInputDef[] | undefined, inputs)) {
+      setOverrides(nodeId, { ...current, inputSchema: inputs });
+    }
+  }, [nodeId, setOverrides]);
   const currentModelId = isGeminiProvider
     ? selectedModel?.modelId ?? ((overrides.model as ModelType | undefined) || "nano-banana-pro")
     : null;
@@ -280,7 +272,7 @@ function useGenerateControls(nodeId: string, overrides: Record<string, unknown>)
         displayName: model.name,
         capabilities: model.capabilities,
       };
-      setOverrides(nodeId, { ...overrides, selectedModel: newSelectedModel, parameters: {} });
+      setOverrides(nodeId, { ...overrides, selectedModel: newSelectedModel, parameters: {}, inputSchema: undefined });
       setIsBrowseDialogOpen(false);
     },
     [nodeId, overrides, setOverrides]
@@ -341,6 +333,7 @@ function useGenerateControls(nodeId: string, overrides: Record<string, unknown>)
       provider={currentProvider}
       parameters={(overrides.parameters as Record<string, unknown>) || {}}
       onParametersChange={handleParametersChange}
+      onInputsLoaded={isVideo ? handleInputsLoaded : undefined}
     />
   ) : undefined;
 
@@ -372,7 +365,7 @@ function useGenerateControls(nodeId: string, overrides: Record<string, unknown>)
           isOpen={isBrowseDialogOpen}
           onClose={() => setIsBrowseDialogOpen(false)}
           onModelSelected={handleBrowseModelSelect}
-          initialCapabilityFilter="image"
+          initialCapabilityFilter={isVideo ? "video" : "image"}
         />
       )}
     </>
@@ -390,11 +383,11 @@ function useLlmControls(nodeId: string, overrides: Record<string, unknown>) {
   const [isParamsExpanded, setIsParamsExpanded] = useState(true);
 
   const provider = (overrides.provider as LLMProvider | undefined) ?? "google";
-  const availableModels = LLM_MODELS[provider] ?? LLM_MODELS.google;
-  const model = (overrides.model as LLMModelType | undefined) ?? availableModels[0].value;
+  const model = (overrides.model as LLMModelType | undefined) ?? defaultLLMModel(provider);
+  const availableModels = llmModelOptions(provider, model);
   const temperature = typeof overrides.temperature === "number" ? overrides.temperature : 0.7;
   const maxTokens = typeof overrides.maxTokens === "number" ? overrides.maxTokens : 2048;
-  const modelLabel = availableModels.find((m) => m.value === model)?.label ?? model;
+  const modelLabel = llmModelLabel(model);
 
   const handleProviderChange = useCallback(
     (value: string) => {
@@ -402,7 +395,7 @@ function useLlmControls(nodeId: string, overrides: Record<string, unknown>) {
       const next: Record<string, unknown> = {
         ...overrides,
         provider: newProvider,
-        model: LLM_MODELS[newProvider][0].value,
+        model: defaultLLMModel(newProvider),
       };
       // Anthropic caps temperature at 1, mirroring the main node
       if (newProvider === "anthropic" && temperature > 1) next.temperature = 1;
@@ -418,7 +411,7 @@ function useLlmControls(nodeId: string, overrides: Record<string, unknown>) {
       expanded={isParamsExpanded}
       onToggle={() => setIsParamsExpanded((prev) => !prev)}
     >
-      <SelectField label="Provider" value={provider} options={LLM_PROVIDERS} onChange={handleProviderChange} />
+      <SelectField label="Provider" value={provider} options={LLM_PROVIDER_OPTIONS} onChange={handleProviderChange} />
       <SelectField
         label="Model"
         value={model}
@@ -448,20 +441,21 @@ function useLlmControls(nodeId: string, overrides: Record<string, unknown>) {
 }
 
 function GenerateTemplateNode({ id, data, selected }: NodeProps<TemplateRFNode>) {
-  const entry = getTemplateEntry(data.nodeType);
-  const { controls, browse, provider, title } = useGenerateControls(id, data.overrides);
+  const entry = getTemplateEntry(data.nodeType, data.overrides);
+  const isVideo = data.nodeType === "generateVideo";
+  const { controls, browse, provider, title } = useGenerateControls(id, data.overrides, isVideo);
   return (
     <div className="relative w-full">
       <MiniFloatingHeader title={title} provider={provider} right={browse} />
       <NodeShell
         id={id}
         selected={selected}
-        media={{ kind: "fixed", height: EMPTY_MEDIA_HEIGHT }}
+        media={{ kind: "aspect", aspect: isVideo ? 16 / 9 : parseAspectRatio(data.overrides.aspectRatio as string | undefined) }}
         inputs={toSockets(entry.inputs)}
         outputs={toSockets(entry.outputs)}
         controls={controls}
       >
-        <EmptyState message="Run to generate" />
+        <EmptyState message={isVideo ? "Run to generate video" : "Run to generate"} />
       </NodeShell>
     </div>
   );
@@ -500,14 +494,14 @@ function TemplateNodeComponent(props: NodeProps<TemplateRFNode>) {
   const entry = getTemplateEntry(data.nodeType);
   const [sourceAspect, setSourceAspect] = useState<number | null>(null);
 
-  if (!data.isBase && data.nodeType === "nanoBanana") return <GenerateTemplateNode {...props} />;
+  if (!data.isBase && (data.nodeType === "nanoBanana" || data.nodeType === "generateVideo")) return <GenerateTemplateNode {...props} />;
   if (!data.isBase && data.nodeType === "llmGenerate") return <LlmTemplateNode {...props} />;
 
   const media =
     data.isBase && data.sourceImage
-      ? { kind: "aspect" as const, aspect: sourceAspect ?? 1 }
+      ? { kind: "aspect" as const, aspect: (sourceAspect ?? 1) * (data.slice?.width ?? 1) / (data.slice?.height ?? 1) }
       : data.nodeType === "prompt"
-        ? { kind: "fixed" as const, height: 140 }
+        ? { kind: "fixed" as const, height: (data.overrides.mediaHeight as number | undefined) ?? 160 }
         : { kind: "fixed" as const, height: EMPTY_MEDIA_HEIGHT };
 
   return (
@@ -528,9 +522,18 @@ function TemplateNodeComponent(props: NodeProps<TemplateRFNode>) {
         media={media}
         inputs={toSockets(entry.inputs)}
         outputs={toSockets(entry.outputs)}
+        controls={data.isBase || data.nodeType === "prompt" ? (
+          <ControlsCard
+            id={id}
+            summary={{
+              title: data.isBase ? "split-1-1.png" : "Add variable",
+              values: !data.isBase ? <SummaryValues items={[`${String(data.overrides.prompt ?? "").length} chars`]} /> : undefined,
+            }}
+          />
+        ) : undefined}
       >
         {data.isBase ? (
-          <BaseImageBody sourceImage={data.sourceImage} onAspect={setSourceAspect} />
+          <BaseImageBody sourceImage={data.sourceImage} slice={data.slice} onAspect={setSourceAspect} />
         ) : data.nodeType === "prompt" ? (
           <PromptBody nodeId={id} overrides={data.overrides} />
         ) : (

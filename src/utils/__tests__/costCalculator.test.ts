@@ -327,3 +327,14 @@ describe("calculatePredictedCost - nano-banana-2-lite", () => {
     expect(result.totalCost).toBeCloseTo(0.034);
   });
 });
+
+describe("GPT Image 2.5 predictions", () => {
+  it("reports unknown price instead of inheriting the node's legacy Gemini model price", () => {
+    const result = calculatePredictedCost([{
+      id: "openai", type: "nanoBanana", position: { x: 0, y: 0 },
+      data: { model: "nano-banana-pro", selectedModel: { provider: "openai", modelId: "gpt-image-2.5-flare", displayName: "GPT Image 2.5 Flare" } },
+    }] as WorkflowNode[]);
+    expect(result.unknownPricingCount).toBe(1);
+    expect(result.breakdown[0].unitCost).toBeNull();
+  });
+});

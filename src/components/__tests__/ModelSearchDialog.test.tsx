@@ -145,6 +145,30 @@ describe("ModelSearchDialog", () => {
     vi.restoreAllMocks();
   });
 
+  it("refreshes older OpenAI catalogue caches without waiting for their TTL", async () => {
+    localStorage.setItem("node-banana-models-cache", JSON.stringify({
+      "rf:all:all:": { models: [], availableProviders: ["openai"], timestamp: Date.now() },
+    }));
+    const { OPENAI_IMAGE_25_MODELS } = await import("@/lib/providers/openaiImages");
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, models: OPENAI_IMAGE_25_MODELS, availableProviders: ["openai"] }) });
+    render(<TestWrapper><ModelSearchDialog isOpen onClose={vi.fn()} /></TestWrapper>);
+    expect(await screen.findByText("GPT Image 2.5 Sunburst")).toBeInTheDocument();
+    expect(screen.getByText("GPT Image 2.5 Flare")).toBeInTheDocument();
+    expect(mockFetch).toHaveBeenCalled();
+  });
+
+  it("refreshes older Gemini catalogues so Omni appears immediately", async () => {
+    localStorage.setItem("node-banana-models-cache", JSON.stringify({
+      "rf:all:all:": { models: [], availableProviders: ["gemini"], timestamp: Date.now(), openaiCatalogueVersion: 1 },
+    }));
+    const { GEMINI_OMNI_MODELS } = await import("@/lib/providers/geminiOmni");
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true, models: GEMINI_OMNI_MODELS, availableProviders: ["gemini"] }) });
+    render(<TestWrapper><ModelSearchDialog isOpen onClose={vi.fn()} /></TestWrapper>);
+    expect(await screen.findByText("Gemini Omni 1.1 Flash")).toBeInTheDocument();
+    expect(screen.getByText("Gemini Omni Flash Preview")).toBeInTheDocument();
+    expect(mockFetch).toHaveBeenCalled();
+  });
+
   describe("Visibility", () => {
     it("should not render when isOpen is false", () => {
       render(

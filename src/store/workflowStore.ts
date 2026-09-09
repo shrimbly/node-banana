@@ -1,4 +1,5 @@
 import { desktopCredentialsReady } from "@/lib/desktop/credentials";
+import { pushGenerationToast } from "@/components/GenerationToast";
 import { create, StateCreator } from "zustand";
 import { useShallow } from "zustand/shallow";
 import {
@@ -89,6 +90,7 @@ import { getConnectedInputsPure, validateWorkflowPure, nodeReadinessPure, type C
 import { isMissingInputError } from "./execution/missingInput";
 import {
   buildCellInstances,
+  fitSplitGridCellMeasurements,
   clampGridDimension,
   computeMaterializedKey,
   getRouterConnections,
@@ -774,6 +776,17 @@ function applyTabSnapshot(
   get().recomputeDimmedNodes();
 }
 
+/** Explain blocked run attempts instead of silently dropping node-button clicks. */
+function canStartExecution(connected: boolean): boolean {
+  const reason = !desktopCredentialsReady()
+    ? "Provider keys are still loading. Wait for setup to finish before running."
+    : !connected ? "Local server disconnected. Use Help → Restart Local Server to reconnect." : null;
+  if (!reason) return true;
+  logger.warn('workflow.start', reason);
+  useToast.getState().show(reason, "warning");
+  return false;
+}
+
 const initialTabId = createTabId();
 
 const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
@@ -1107,8 +1120,18 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     }
 
     set((state) => {
+      const measuredIds = new Set(changes.filter((change) => change.type === "dimensions").map((change) => change.id));
+      // React Flow mutates the nested measured object while applying changes.
+      const previousNodes = measuredIds.size > 0 ? state.nodes.map((node) =>
+        measuredIds.has(node.id) ? { ...node, measured: { ...node.measured } } : node
+      ) : state.nodes;
       let nextNodes = applyNodeChanges(changes, state.nodes);
       let groups = state.groups;
+      if (measuredIds.size > 0) {
+        const fitted = fitSplitGridCellMeasurements(previousNodes, nextNodes, groups, measuredIds);
+        nextNodes = fitted.nodes;
+        groups = fitted.groups;
+      }
       if (hasRemoveChange) {
         const removedIds = new Set(
           changes.filter((c) => c.type === "remove").map((c) => c.id)
@@ -2023,7 +2046,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   }),
 
   executeWorkflow: async (startFromNodeId?: string) => {
-    if (!desktopCredentialsReady() || !get().desktopConnected) return;
+    if (!canStartExecution(get().desktopConnected)) return;
     // Resume support: if Run is pressed with no explicit start node while the
     // workflow is paused at a node (pause edge), resume from that node instead
     // of restarting the whole graph (which would re-run/re-bill upstream nodes
@@ -2566,7 +2589,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   regenerateNode: async (nodeId: string) => {
-    if (!desktopCredentialsReady() || !get().desktopConnected) return;
+    if (!canStartExecution(get().desktopConnected)) return;
     const { nodes, updateNodeData, isRunning } = get();
 
     if (isRunning) {
@@ -2709,7 +2732,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   },
 
   executeSelectedNodes: async (nodeIds: string[]) => {
-    if (!desktopCredentialsReady() || !get().desktopConnected) return;
+    if (!canStartExecution(get().desktopConnected)) return;
     if (get().isRunning) {
       logger.warn('node.execution', 'Cannot execute nodes, workflow already running');
       return;
@@ -3298,6 +3321,11 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         MAX_GLOBAL_IMAGE_HISTORY
       ),
     }));
+    pushGenerationToast({
+      image: newItem.image,
+      model: newItem.model,
+      aspectRatio: newItem.aspectRatio,
+    });
   },
 
   clearGlobalHistory: () => {

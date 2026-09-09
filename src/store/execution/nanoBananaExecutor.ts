@@ -7,8 +7,10 @@
 
 import type {
   NanoBananaNodeData,
+  ImageGenerationMetadata,
   SelectedModel,
 } from "@/types";
+import { isOpenAIImage25 } from "@/lib/providers/openaiImages";
 import { calculateGenerationCost } from "@/utils/costCalculator";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
@@ -176,13 +178,17 @@ export async function executeNanoBanana(
         const timestamp = Date.now();
         const imageId = `${timestamp}`;
 
+        const generation: ImageGenerationMetadata | undefined = provider === "openai" ? result.generation : undefined;
+        const historyModel = provider === "openai" ? modelToUse.displayName : nodeData.model;
+
         // Save to global history
         addToGlobalHistory({
           image: result.image,
           timestamp,
           prompt: finalPrompt,
           aspectRatio: nodeData.aspectRatio,
-          model: nodeData.model,
+          model: historyModel,
+          ...(generation ? { generation } : {}),
         });
 
         // Add to node's carousel history
@@ -191,7 +197,8 @@ export async function executeNanoBanana(
           timestamp,
           prompt: finalPrompt,
           aspectRatio: nodeData.aspectRatio,
-          model: nodeData.model,
+          model: historyModel,
+          ...(generation ? { generation } : {}),
         };
         const updatedHistory = [newHistoryItem, ...(nodeData.imageHistory || [])].slice(0, 50);
 
@@ -216,7 +223,9 @@ export async function executeNanoBanana(
           });
 
         // Track cost
-        if ((modelToUse.provider === "fal" || modelToUse.provider === "openai") && modelToUse.pricing) {
+        if (provider === "openai" && generation?.cost && Number.isFinite(generation.cost.amount) && generation.cost.amount >= 0) {
+          addIncurredCost(generation.cost.amount);
+        } else if ((provider === "fal" || (provider === "openai" && !isOpenAIImage25(modelToUse.modelId))) && modelToUse.pricing) {
           addIncurredCost(modelToUse.pricing.amount);
         } else if (modelToUse.provider === "gemini") {
           const generationCost = calculateGenerationCost(nodeData.model, nodeData.resolution);

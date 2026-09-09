@@ -24,30 +24,7 @@ import {
 } from "@/components/ui/Dialog";
 import { cn } from "@/components/nodes/ui/cn";
 
-// LLM provider and model options (mirrored from LLMGenerateNode)
-const LLM_PROVIDERS: { value: LLMProvider; label: string }[] = [
-  { value: "google", label: "Google" },
-  { value: "openai", label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic" },
-];
-
-const LLM_MODELS: Record<LLMProvider, { value: LLMModelType; label: string }[]> = {
-  google: [
-    { value: "gemini-3-flash-preview", label: "Gemini 3 Flash" },
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-    { value: "gemini-3-pro-preview", label: "Gemini 3.0 Pro" },
-    { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro" },
-  ],
-  openai: [
-    { value: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
-    { value: "gpt-4.1-nano", label: "GPT-4.1 Nano" },
-  ],
-  anthropic: [
-    { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5" },
-    { value: "claude-haiku-4.5", label: "Claude Haiku 4.5" },
-    { value: "claude-opus-4.6", label: "Claude Opus 4.6" },
-  ],
-};
+import { DEFAULT_LLM_MODEL, LLM_PROVIDER_OPTIONS, defaultLLMModel, llmModelLabel, llmModelOptions } from "@/lib/llm/catalog";
 
 // Provider icons
 const GeminiIcon = () => (
@@ -1037,7 +1014,7 @@ export function ProjectSetupModal({
                 </div>
 
                 {!localNodeDefaults.llm ? (
-                  <p className="text-xs text-neutral-400">Using system defaults (Google Gemini 3 Flash)</p>
+                  <p className="text-xs text-neutral-400">{`Using system defaults (Google ${llmModelLabel(DEFAULT_LLM_MODEL)})`}</p>
                 ) : null}
 
                 {/* Provider dropdown */}
@@ -1047,7 +1024,7 @@ export function ProjectSetupModal({
                     value={localNodeDefaults.llm?.provider || "google"}
                     onChange={(e) => {
                       const newProvider = e.target.value as LLMProvider;
-                      const firstModelForProvider = LLM_MODELS[newProvider][0].value;
+                      const firstModelForProvider = defaultLLMModel(newProvider);
                       const currentTemp = localNodeDefaults.llm?.temperature ?? 0.7;
                       setLocalNodeDefaults(prev => ({
                         ...prev,
@@ -1062,7 +1039,7 @@ export function ProjectSetupModal({
                     }}
                     className="flex-1 px-2 py-1 text-xs bg-neutral-800 border border-neutral-600 rounded text-neutral-100 focus:outline-none focus:border-neutral-500"
                   >
-                    {LLM_PROVIDERS.map((p) => (
+                    {LLM_PROVIDER_OPTIONS.map((p) => (
                       <option key={p.value} value={p.value}>{p.label}</option>
                     ))}
                   </select>
@@ -1072,7 +1049,7 @@ export function ProjectSetupModal({
                 <div className="flex items-center gap-2">
                   <label className="text-xs text-neutral-400 w-20">Model</label>
                   <select
-                    value={localNodeDefaults.llm?.model || LLM_MODELS[localNodeDefaults.llm?.provider || "google"][0].value}
+                    value={localNodeDefaults.llm?.model || defaultLLMModel(localNodeDefaults.llm?.provider || "google")}
                     onChange={(e) => {
                       setLocalNodeDefaults(prev => ({
                         ...prev,
@@ -1081,7 +1058,7 @@ export function ProjectSetupModal({
                     }}
                     className="flex-1 px-2 py-1 text-xs bg-neutral-800 border border-neutral-600 rounded text-neutral-100 focus:outline-none focus:border-neutral-500"
                   >
-                    {LLM_MODELS[localNodeDefaults.llm?.provider || "google"].map((m) => (
+                    {llmModelOptions(localNodeDefaults.llm?.provider || "google", localNodeDefaults.llm?.model).map((m) => (
                       <option key={m.value} value={m.value}>{m.label}</option>
                     ))}
                   </select>
