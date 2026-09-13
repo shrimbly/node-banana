@@ -386,12 +386,30 @@ describe("executeNanoBanana", () => {
   });
 });
 
+describe("carousel history", () => {
+  it("records no entry when there is no generations folder to reload it from", async () => {
+    const node = makeNode({ imageHistory: [{ id: "old", timestamp: 1, prompt: "p", aspectRatio: "1:1", model: "m" }] });
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, image: "data:image/png;base64,new" }) });
+    const ctx = makeCtx(node, { generationsPath: null });
+    await executeNanoBanana(ctx);
+
+    const complete = (ctx.updateNodeData as ReturnType<typeof vi.fn>).mock.calls.find(
+      (c: unknown[]) => (c[1] as Record<string, unknown>).status === "complete"
+    );
+    expect(complete?.[1]).toMatchObject({ outputImage: "data:image/png;base64,new" });
+    expect(complete?.[1]).not.toHaveProperty("imageHistory");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe("OpenAI generation usage and history", () => {
   it("records usage cost once and preserves the selected variant and output settings", async () => {
     const node = makeNode({ selectedModel: { provider: "openai", modelId: "gpt-image-2.5-flare", displayName: "GPT Image 2.5 Flare", pricing: { amount: 0.05 } } });
     const generation = { modelId: "gpt-image-2.5-flare", size: "1536x864", outputFormat: "webp", parameters: { quality: "max" }, cost: { amount: 0.0325, currency: "USD", estimated: true } };
     mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, image: "data:image/webp;base64,result", generation }) });
-    const ctx = makeCtx(node);
+    // The save to the generations folder that a configured path triggers
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true }) });
+    const ctx = makeCtx(node, { generationsPath: "/proj/generations" });
     await executeNanoBanana(ctx);
     expect(ctx.addIncurredCost).toHaveBeenCalledExactlyOnceWith(0.0325);
     expect(ctx.addToGlobalHistory).toHaveBeenCalledWith(expect.objectContaining({ model: "GPT Image 2.5 Flare", generation }));

@@ -191,7 +191,8 @@ export async function executeNanoBanana(
           ...(generation ? { generation } : {}),
         });
 
-        // Add to node's carousel history
+        // The carousel reloads entries from the generations folder, so only a
+        // generation that is being saved there gets an entry.
         const newHistoryItem = {
           id: imageId,
           timestamp,
@@ -206,8 +207,7 @@ export async function executeNanoBanana(
           outputImage: result.image,
           status: "complete",
           error: null,
-          imageHistory: updatedHistory,
-          selectedHistoryIndex: 0,
+          ...(generationsPath ? { imageHistory: updatedHistory, selectedHistoryIndex: 0 } : {}),
         });
 
         // Push new image to connected downstream outputGallery nodes (atomic append)

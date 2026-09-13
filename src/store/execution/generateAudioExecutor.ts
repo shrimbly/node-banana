@@ -152,7 +152,8 @@ export async function executeGenerateAudio(
         const timestamp = Date.now();
         const audioId = `${timestamp}`;
 
-        // Add to node's audio history
+        // The carousel reloads entries from the generations folder, so only a
+        // generation that is being saved there gets an entry.
         const newHistoryItem = {
           id: audioId,
           timestamp,
@@ -165,8 +166,7 @@ export async function executeGenerateAudio(
           outputAudio: audioData,
           status: "complete",
           error: null,
-          audioHistory: updatedHistory,
-          selectedAudioHistoryIndex: 0,
+          ...(generationsPath ? { audioHistory: updatedHistory, selectedAudioHistoryIndex: 0 } : {}),
         });
 
         // Track cost
