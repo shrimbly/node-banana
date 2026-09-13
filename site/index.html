@@ -40,114 +40,179 @@
 <body>
   <main class="fold">
 
-    <!-- The app, as a Mac window. Decorative: the nodes can be dragged, but nothing here is content. -->
+    <!-- The app, as a Mac window. Decorative: the tabs switch, the canvas pans and the nodes drag, but nothing here is content. -->
     <div class="app" aria-hidden="true">
       <div class="app__lights">
         <span class="app__light app__light--close"></span>
         <span class="app__light app__light--minimize"></span>
         <span class="app__light app__light--fullscreen"></span>
       </div>
-      <div class="app__tabs">
-        <div class="tab tab--active">
-          <svg class="tab__ear tab__ear--left" viewBox="0 0 9 9" fill="none"><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5 L0.5 9 L9 9 L9 0 Z" class="tab__ear-fill"></path><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5" class="tab__ear-line"></path></svg>
-          <svg class="tab__ear tab__ear--right" viewBox="0 0 9 9" fill="none"><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5 L0.5 9 L9 9 L9 0 Z" class="tab__ear-fill"></path><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5" class="tab__ear-line"></path></svg>
-          <span class="tab__label">Fashion ad automation</span>
-          <span class="tab__close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></span>
-        </div>
-        <div class="tab tab--rest"><span class="tab__label">Product shots</span></div>
-        <span class="tab__new"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
+      <div class="app__tabs" data-tabs>
+        <div class="tab tab--active" data-tab="mannequin"><svg class="tab__ear tab__ear--left" viewBox="0 0 9 9" fill="none"><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5 L0.5 9 L9 9 L9 0 Z" class="tab__ear-fill"></path><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5" class="tab__ear-line"></path></svg><svg class="tab__ear tab__ear--right" viewBox="0 0 9 9" fill="none"><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5 L0.5 9 L9 9 L9 0 Z" class="tab__ear-fill"></path><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5" class="tab__ear-line"></path></svg><span class="tab__label">Invisible Mannequin</span><span class="tab__close" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></span></div>
+        <div class="tab tab--rest" data-tab="fashion"><svg class="tab__ear tab__ear--left" viewBox="0 0 9 9" fill="none"><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5 L0.5 9 L9 9 L9 0 Z" class="tab__ear-fill"></path><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5" class="tab__ear-line"></path></svg><svg class="tab__ear tab__ear--right" viewBox="0 0 9 9" fill="none"><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5 L0.5 9 L9 9 L9 0 Z" class="tab__ear-fill"></path><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5" class="tab__ear-line"></path></svg><span class="tab__label">Fashion ad automation</span><span class="tab__close" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></span></div>
+        <span class="tab__new" data-new-tab><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
       </div>
 
-      <div class="canvas">
-        <div class="stage" data-stage>
-          <svg class="edges edges--desktop" viewBox="0 0 1382 780" width="1382" height="780">
-            <path data-from="n1" data-to="n3" data-in="0" pathLength="1" d="M 385.5 54 C 470.0 54, 470.0 144, 554.5 144" class="edge edge--image"></path>
-            <path data-from="n2" data-to="n3" data-in="1" pathLength="1" d="M 405.5 324 C 480.0 324, 480.0 174, 554.5 174" class="edge edge--text"></path>
-            <path data-from="n3" data-to="n4" data-in="0" pathLength="1" d="M 865.5 144 C 930.0 144, 930.0 64, 994.5 64" class="edge edge--image"></path>
+      <div class="canvas" data-canvas>
+        <!-- World coordinates are the workflow's own; the stage is panned and zoomed as one. -->
+        <div class="stage stage--active" data-stage="mannequin" style="--cx: 723px; --cy: 700px; --zoom-desktop: 0.62; --zoom-tablet: 0.5; --zoom-phone: 0.42;">
+          <svg class="edges" width="1" height="1" overflow="visible">
+            <path data-from="imageInput-22" data-from-handle="image" data-to="nanoBanana-3" data-to-handle="image-0" pathLength="1" d="M 74.5 386 C 304.0 386, 304.0 393, 533.5 393" class="edge edge--image"></path>
+            <path data-from="prompt-23" data-from-handle="text" data-to="nanoBanana-3" data-to-handle="text-0" pathLength="1" d="M 495.5 471 C 555.5 471, 473.5 423, 533.5 423" class="edge edge--text"></path>
+            <path data-from="nanoBanana-3" data-from-handle="image" data-to="generateVideo-17" data-to-handle="image-0" pathLength="1" d="M 931.5 393 C 1224.0 393, 1224.0 417, 1516.5 417" class="edge edge--image"></path>
+            <path data-from="nanoBanana-3" data-from-handle="image" data-to="generateVideo-17" data-to-handle="image-1" pathLength="1" d="M 931.5 393 C 1224.0 393, 1224.0 447, 1516.5 447" class="edge edge--image"></path>
+            <path data-from="promptConstructor-13" data-from-handle="text" data-to="generateVideo-17" data-to-handle="text-0" pathLength="1" d="M 1425.5 538 C 1485.5 538, 1456.5 507, 1516.5 507" class="edge edge--text"></path>
           </svg>
-          <svg class="edges edges--tablet" viewBox="0 0 710 700" width="710" height="700">
-            <path data-from="n1" data-to="n3" data-in="0" pathLength="1" d="M 329.5 54 C 389.5 54, 320.5 124, 380.5 124" class="edge edge--image"></path>
-            <path data-from="n2" data-to="n3" data-in="1" pathLength="1" d="M 349.5 324 C 409.5 324, 320.5 154, 380.5 154" class="edge edge--text"></path>
-            <path data-from="n3" data-to="n4" data-in="0" pathLength="1" d="M 691.5 124 C 847.0 124, 225.0 390, 380.5 390" class="edge edge--image"></path>
-          </svg>
-          <svg class="edges edges--phone" viewBox="0 0 340 600" width="340" height="600">
-            <path data-from="n1" data-to="n3" data-in="0" pathLength="1" d="M 325.5 54 C 481.0 54, -141.0 324, 14.5 324" class="edge edge--image"></path>
-          </svg>
-
-          <div class="node node--image" data-node="n1">
-            <div class="node__header"><span class="node__title">Image Input</span></div>
+          <div class="node node--image" data-node="imageInput-22" data-i="1" style="--x: -375px; --y: 362px; --w: 444px;">
+              <div class="node__header"><span class="node__title">Image Input</span></div>
             <div class="card">
-              <img class="media" src="assets/node-desert.jpg" width="440" height="294" alt="" draggable="false">
-              <span class="socket socket--in socket--reference" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
-              <span class="socket socket--out socket--image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+              <img class="media" src="assets/im-input.jpg" width="825" height="1100" alt="" draggable="false">
+                <span class="socket socket--in socket--reference" data-handle="reference" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--image" data-handle="image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
             </div>
             <div class="gap"></div>
-            <div class="controls controls--plain">
-              <span class="controls__title">desert.jpg</span>
-              <span class="controls__values"><span>1536×1024</span></span>
-              <span class="controls__end"></span>
-            </div>
-          </div>
-
-          <div class="node node--prompt" data-node="n2">
-            <div class="node__header"><span class="node__title">Prompt</span></div>
-            <div class="card">
-              <div class="prompt">
-                <div class="prompt__text">A donkey standing on a dune at golden hour, wearing a tailored linen coat. Editorial fashion photograph, 35mm, soft shadows.</div>
-                <span class="prompt__grip"></span>
+              <div class="controls controls--plain">
+                <span class="controls__title">image-1789315934377.png</span>
+                <span class="controls__values"><span>1086×1448</span></span>
+                <span class="controls__end"></span>
               </div>
-              <span class="socket socket--in socket--text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
-              <span class="socket socket--out socket--text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+          </div>
+          <div class="node node--prompt" data-node="prompt-23" data-i="2" style="--x: 170px; --y: 447px; --w: 320px;">
+              <div class="node__header"><span class="node__title">Prompt</span></div>
+            <div class="card">
+              <div class="prompt" style="--h: 253px;"><div class="prompt__text">A denim jacket floating in a liminal white space, as if worn by an invisible mannequin. The denim jacket floats in the air, a subtle visible shadow beneath it. It is filled out as if worn by a person, but there is no visible person in the scene.
+
+The image should show the front of the denim jacket at a slight angle. </div><span class="prompt__grip"></span></div>
+                <span class="socket socket--in socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
             </div>
             <div class="gap"></div>
-            <div class="controls controls--plain">
-              <span class="controls__title controls__title--link">Add variable</span>
-              <span class="controls__values"><span>124 chars</span></span>
-              <span class="controls__end"></span>
-            </div>
+              <div class="controls controls--plain">
+                <span class="controls__title controls__title--link">Add variable</span>
+                <span class="controls__values"><span>319 chars</span></span>
+                <span class="controls__end"></span>
+              </div>
           </div>
-
-          <div class="node node--generate" data-node="n3">
-            <div class="node__header"><span class="node__title"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg>Generate Image</span></div>
+          <div class="node node--generate" data-node="nanoBanana-3" data-i="3" style="--x: 539px; --y: 369px; --w: 387px;">
+              <div class="node__header"><span class="node__title"><svg class="badge" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.896zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"></path></svg>Generate Image</span></div>
             <div class="card">
-              <img class="media" src="assets/node-donkey.jpg" width="440" height="294" alt="" draggable="false">
-              <span class="socket socket--in socket--image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
-              <span class="socket socket--in socket--text" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
-              <span class="socket socket--out socket--image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+              <img class="media" src="assets/im-jacket.jpg" width="585" height="780" alt="" draggable="false">
+                <span class="socket socket--in socket--image" data-handle="image-0" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--in socket--text" data-handle="text-0" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--image" data-handle="image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="gap gap--row"><span class="carousel"><span class="carousel__btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg></span><span class="carousel__dots"><span class="carousel__dot carousel__dot--on"></span><span class="carousel__dot"></span><span class="carousel__dot"></span><span class="carousel__dot"></span><span class="carousel__dot"></span></span><span class="carousel__count">1 / 7</span><span class="carousel__btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg></span></span></div>
+              <div class="controls">
+                <span class="controls__icon"><svg class="badge" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M22.282 9.821a5.985 5.985 0 0 0-.516-4.91 6.046 6.046 0 0 0-6.51-2.9A6.065 6.065 0 0 0 4.981 4.18a5.985 5.985 0 0 0-3.998 2.9 6.046 6.046 0 0 0 .743 7.097 5.98 5.98 0 0 0 .51 4.911 6.051 6.051 0 0 0 6.515 2.9A5.985 5.985 0 0 0 13.26 24a6.056 6.056 0 0 0 5.772-4.206 5.99 5.99 0 0 0 3.997-2.9 6.056 6.056 0 0 0-.747-7.073zM13.26 22.43a4.476 4.476 0 0 1-2.876-1.04l.141-.081 4.779-2.758a.795.795 0 0 0 .392-.681v-6.737l2.02 1.168a.071.071 0 0 1 .038.052v5.583a4.504 4.504 0 0 1-4.494 4.494zM3.6 18.304a4.47 4.47 0 0 1-.535-3.014l.142.085 4.783 2.759a.771.771 0 0 0 .78 0l5.843-3.369v2.332a.08.08 0 0 1-.033.062L9.74 19.95a4.5 4.5 0 0 1-6.14-1.646zM2.34 7.896a4.485 4.485 0 0 1 2.366-1.973V11.6a.766.766 0 0 0 .388.676l5.815 3.355-2.02 1.168a.076.076 0 0 1-.071 0l-4.83-2.786A4.504 4.504 0 0 1 2.34 7.896zm16.597 3.855l-5.833-3.387L15.119 7.2a.076.076 0 0 1 .071 0l4.83 2.791a4.494 4.494 0 0 1-.676 8.105v-5.678a.79.79 0 0 0-.407-.667zm2.01-3.023l-.141-.085-4.774-2.782a.776.776 0 0 0-.785 0L9.409 9.23V6.897a.066.066 0 0 1 .028-.061l4.83-2.787a4.5 4.5 0 0 1 6.68 4.66zm-12.64 4.135l-2.02-1.164a.08.08 0 0 1-.038-.057V6.075a4.5 4.5 0 0 1 7.375-3.453l-.142.08L8.704 5.46a.795.795 0 0 0-.393.681zm1.097-2.365l2.602-1.5 2.607 1.5v2.999l-2.597 1.5-2.607-1.5z"></path></svg></span>
+                <span class="controls__title">GPT Image 2.5 Flare</span>
+                <span class="controls__values"></span>
+                <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </div>
+          </div>
+          <div class="node node--constructor" data-node="promptConstructor-13" data-i="4" style="--x: 1080px; --y: 514px; --w: 340px;">
+              <div class="node__header"><span class="node__title">Prompt Constructor</span></div>
+            <div class="card">
+              <div class="prompt"><div class="prompt__text">Continuous video with no cuts. The camera smoothly orbits around the denim jacket at a fixed distance on a dolly in a perfect 360 degree loop, perfectly completing a full 360 degree rotation in 5 seconds.
+
+The denim jacket is completely steady during the rotation. </div><span class="prompt__grip"></span></div>
+                <span class="socket socket--in socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
             </div>
             <div class="gap"></div>
-            <div class="controls">
-              <span class="controls__icon"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg></span>
-              <span class="controls__title">Nano Banana Pro</span>
-              <span class="controls__values"><span>3:2</span><span aria-hidden="true">·</span><span>2K</span></span>
-              <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
-            </div>
+              <div class="controls controls--plain">
+                <span class="controls__title">Type @ to insert variables</span>
+                <span class="controls__values"></span>
+                <span class="controls__end"></span>
+              </div>
           </div>
-
-          <div class="node node--video" data-node="n4">
-            <div class="node__header"><span class="node__title"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg>Generate Video</span></div>
+          <div class="node node--video" data-node="generateVideo-17" data-i="5" style="--x: 1522px; --y: 393px; --w: 300px;">
+              <div class="node__header"><span class="node__title"><svg class="badge" viewBox="0 0 1855 1855" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M1181.65 78C1212.05 78 1236.42 101.947 1239.32 131.261C1265.25 392.744 1480.07 600.836 1750.02 625.948C1780.28 628.764 1805 652.366 1805 681.816V1174.18C1805 1203.63 1780.28 1227.24 1750.02 1230.05C1480.07 1255.16 1265.25 1463.26 1239.32 1724.74C1236.42 1754.05 1212.05 1778 1181.65 1778H673.354C642.951 1778 618.585 1754.05 615.678 1724.74C589.754 1463.26 374.927 1255.16 104.984 1230.05C74.7212 1227.24 50 1203.63 50 1174.18V681.816C50 652.366 74.7213 628.764 104.984 625.948C374.927 600.836 589.754 392.744 615.678 131.261C618.585 101.946 642.951 78 673.353 78H1181.65ZM402.377 926.561C402.377 1209.41 638.826 1438.71 930.501 1438.71C1222.18 1438.71 1458.63 1209.41 1458.63 926.561C1458.63 643.709 1222.18 414.412 930.501 414.412C638.826 414.412 402.377 643.709 402.377 926.561Z"></path></svg>Generate Video</span></div>
             <div class="card">
-              <img class="media media--video" src="assets/node-donkey.jpg" width="440" height="294" alt="" draggable="false">
-              <span class="socket socket--in socket--image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
-              <span class="socket socket--in socket--video" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
-              <span class="socket socket--in socket--text" style="--row: 2"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
-              <span class="socket socket--out socket--video" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+              <video class="media" src="assets/im-video.mp4" poster="assets/im-video-poster.jpg" width="600" height="800" muted loop playsinline preload="metadata" data-video></video>
+                <span class="socket socket--in socket--image" data-handle="image-0" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--in socket--image" data-handle="image-1" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--in socket--video socket--placeholder" data-handle="video" style="--row: 2"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--in socket--text" data-handle="text-0" style="--row: 3"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--video" data-handle="video" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
             </div>
-            <div class="gap gap--row">
-              <span class="scrub">
-                <span class="scrub__play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg></span>
-                <span class="scrub__range"><span class="scrub__fill"></span><span class="scrub__thumb"></span></span>
-                <span class="scrub__time">0:02 / 0:05</span>
-              </span>
-            </div>
-            <div class="controls">
-              <span class="controls__icon"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg></span>
-              <span class="controls__title">Veo 3</span>
-              <span class="controls__values"></span>
-              <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
-            </div>
+            <div class="gap gap--row"><span class="scrub"><span class="scrub__play" data-play><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg></span><span class="scrub__range"><span class="scrub__fill" data-scrub-fill></span><span class="scrub__thumb" data-scrub-thumb></span></span><span class="scrub__time" data-scrub-time>0:00 / 0:05</span><span class="carousel carousel--compact"><span class="carousel__btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg></span><span class="carousel__count">1 / 12</span><span class="carousel__btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg></span></span></span></div>
+              <div class="controls">
+                <span class="controls__icon"><svg class="badge" viewBox="0 0 1855 1855" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M1181.65 78C1212.05 78 1236.42 101.947 1239.32 131.261C1265.25 392.744 1480.07 600.836 1750.02 625.948C1780.28 628.764 1805 652.366 1805 681.816V1174.18C1805 1203.63 1780.28 1227.24 1750.02 1230.05C1480.07 1255.16 1265.25 1463.26 1239.32 1724.74C1236.42 1754.05 1212.05 1778 1181.65 1778H673.354C642.951 1778 618.585 1754.05 615.678 1724.74C589.754 1463.26 374.927 1255.16 104.984 1230.05C74.7212 1227.24 50 1203.63 50 1174.18V681.816C50 652.366 74.7213 628.764 104.984 625.948C374.927 600.836 589.754 392.744 615.678 131.261C618.585 101.946 642.951 78 673.353 78H1181.65ZM402.377 926.561C402.377 1209.41 638.826 1438.71 930.501 1438.71C1222.18 1438.71 1458.63 1209.41 1458.63 926.561C1458.63 643.709 1222.18 414.412 930.501 414.412C638.826 414.412 402.377 643.709 402.377 926.561Z"></path></svg></span>
+                <span class="controls__title">Seedance 2.0 Fast Image to Video</span>
+                <span class="controls__values"></span>
+                <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </div>
           </div>
         </div>
+        <div class="stage" data-stage="fashion" style="--cx: 690px; --cy: 290px; --zoom-desktop: 0.9; --zoom-tablet: 0.7; --zoom-phone: 0.55;">
+          <svg class="edges" width="1" height="1" overflow="visible">
+            <path data-from="d-image" data-from-handle="image" data-to="d-generate" data-to-handle="image" pathLength="1" d="M 385.5 54 C 470.0 54, 470.0 144, 554.5 144" class="edge edge--image"></path>
+            <path data-from="d-prompt" data-from-handle="text" data-to="d-generate" data-to-handle="text" pathLength="1" d="M 405.5 324 C 480.0 324, 480.0 174, 554.5 174" class="edge edge--text"></path>
+            <path data-from="d-generate" data-from-handle="image" data-to="d-video" data-to-handle="image" pathLength="1" d="M 865.5 144 C 930.0 144, 930.0 64, 994.5 64" class="edge edge--image"></path>
+          </svg>
+          <div class="node node--image" data-node="d-image" data-i="1" style="--x: 80px; --y: 30px; --w: 300px;">
+              <div class="node__header"><span class="node__title">Image Input</span></div>
+            <div class="card">
+              <img class="media" src="assets/node-desert.jpg" width="440" height="294" alt="" draggable="false">
+                <span class="socket socket--in socket--reference" data-handle="reference" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--image" data-handle="image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="gap"></div>
+              <div class="controls controls--plain">
+                <span class="controls__title">desert.jpg</span>
+                <span class="controls__values"><span>1536×1024</span></span>
+                <span class="controls__end"></span>
+              </div>
+          </div>
+          <div class="node node--prompt" data-node="d-prompt" data-i="2" style="--x: 80px; --y: 300px; --w: 320px;">
+              <div class="node__header"><span class="node__title">Prompt</span></div>
+            <div class="card">
+              <div class="prompt" style="--h: 120px;"><div class="prompt__text">A donkey standing on a dune at golden hour, wearing a tailored linen coat. Editorial fashion photograph, 35mm, soft shadows.</div><span class="prompt__grip"></span></div>
+                <span class="socket socket--in socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="gap"></div>
+              <div class="controls controls--plain">
+                <span class="controls__title controls__title--link">Add variable</span>
+                <span class="controls__values"><span>124 chars</span></span>
+                <span class="controls__end"></span>
+              </div>
+          </div>
+          <div class="node node--generate" data-node="d-generate" data-i="3" style="--x: 560px; --y: 120px; --w: 300px;">
+              <div class="node__header"><span class="node__title"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg>Generate Image</span></div>
+            <div class="card">
+              <img class="media" src="assets/node-donkey.jpg" width="440" height="294" alt="" draggable="false">
+                <span class="socket socket--in socket--image" data-handle="image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--in socket--text" data-handle="text" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--image" data-handle="image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="gap"></div>
+              <div class="controls">
+                <span class="controls__icon"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg></span>
+                <span class="controls__title">Nano Banana Pro</span>
+                <span class="controls__values"><span>3:2</span><span aria-hidden="true">·</span><span>2K</span></span>
+                <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </div>
+          </div>
+          <div class="node node--video" data-node="d-video" data-i="4" style="--x: 1000px; --y: 40px; --w: 300px;">
+              <div class="node__header"><span class="node__title"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg>Generate Video</span></div>
+            <div class="card">
+              <img class="media media--wide" src="assets/node-donkey.jpg" width="440" height="294" alt="" draggable="false">
+                <span class="socket socket--in socket--image" data-handle="image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--in socket--video" data-handle="video" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--in socket--text" data-handle="text" style="--row: 2"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--video" data-handle="video" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="gap gap--row"><span class="scrub"><span class="scrub__play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg></span><span class="scrub__range"><span class="scrub__fill" style="--pct: 40%"></span><span class="scrub__thumb" style="--pct: 40%"></span></span><span class="scrub__time">0:02 / 0:05</span></span></div>
+              <div class="controls">
+                <span class="controls__icon"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg></span>
+                <span class="controls__title">Veo 3</span>
+                <span class="controls__values"></span>
+                <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </div>
+          </div>
+        </div>
+        <template data-empty-stage><div class="stage" style="--cx: 0px; --cy: 0px;"></div></template>
       </div>
     </div>
 

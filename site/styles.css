@@ -154,6 +154,7 @@ ul { margin: 0; padding: 0; list-style: none; }
   position: relative;
   display: flex;
   align-items: center;
+  cursor: pointer;
   height: 30px;
   min-width: 72px;
   max-width: 220px;
@@ -169,7 +170,12 @@ ul { margin: 0; padding: 0; list-style: none; }
   color: #f5f5f5;
   box-shadow: inset 1px 0 0 var(--card-border), inset -1px 0 0 var(--card-border), inset 0 1px 0 var(--card-border);
 }
+.tab--rest:hover { background: rgb(255 255 255 / 0.04); color: var(--node-title); }
+.tab--untitled .tab__label { font-style: italic; color: var(--ink-dim); }
 .tab__label { padding-right: 20px; overflow: hidden; text-overflow: ellipsis; }
+.tab--rest .tab__ear { display: none; }
+.tab--rest .tab__close { display: none; }
+.tab--rest:hover .tab__close { display: flex; }
 .tab__ear { position: absolute; bottom: 1px; width: 9px; height: 9px; }
 .tab__ear--left { left: -8px; }
 .tab__ear--right { right: -8px; transform: scaleX(-1); }
@@ -188,6 +194,7 @@ ul { margin: 0; padding: 0; list-style: none; }
   color: var(--ink-dim);
 }
 .tab__close svg { width: 10px; height: 10px; }
+.tab__close:hover { background: var(--border); color: #f5f5f5; border-radius: 4px; }
 .tab__new {
   display: flex;
   width: 28px;
@@ -198,6 +205,8 @@ ul { margin: 0; padding: 0; list-style: none; }
   color: var(--ink-dim);
 }
 .tab__new svg { width: 14px; height: 14px; }
+.tab__new { cursor: pointer; border-radius: 6px; }
+.tab__new:hover { background: rgb(255 255 255 / 0.06); color: var(--node-title); }
 
 .canvas {
   position: relative;
@@ -212,26 +221,34 @@ ul { margin: 0; padding: 0; list-style: none; }
   background-size: 20px 20px;
   background-position: 10px 10px;
   overflow: hidden;
-  container-type: inline-size;
+  container-type: size;
+  cursor: grab;
 }
+.canvas.is-panning { cursor: grabbing; }
 
-/* The stage is designed at a fixed size per layout and scaled to the canvas
-   width, so node coordinates stay in px and the drag maths stays simple. */
+/* The stage holds one workflow in its own world coordinates (the positions
+   saved in the workflow file). It is panned and zoomed as one: --zoom, and a
+   pan that centres world point (--cx, --cy) until the script takes over. */
 .stage {
-  --stage-w: 1382px;
-  --stage-h: 780px;
-  --k: tan(atan2(100cqw, var(--stage-w)));
+  --zoom-desktop: 0.72;
+  --zoom-tablet: 0.55;
+  --zoom-phone: 0.42;
+  --zoom: var(--zoom-desktop);
+  --pan-x: calc(50cqw - var(--cx) * var(--zoom));
+  --pan-y: calc(50cqh - var(--cy) * var(--zoom));
   position: absolute;
   left: 0;
   top: 0;
-  width: var(--stage-w);
-  height: var(--stage-h);
-  transform: scale(var(--k));
+  width: 0;
+  height: 0;
+  display: none;
+  transform: translate(var(--pan-x), var(--pan-y)) scale(var(--zoom));
   transform-origin: 0 0;
+  will-change: transform;
 }
-.edges { position: absolute; left: 0; top: 0; display: none; pointer-events: none; overflow: visible; }
-.edges--desktop { display: block; }
-.edge { fill: none; stroke-width: 2; stroke-opacity: 0.85; stroke-linecap: round; }
+.stage--active { display: block; }
+.edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
+.edge { fill: none; stroke-width: 3; stroke-linecap: round; }
 .edge--image { stroke: var(--handle-image); }
 .edge--text { stroke: var(--handle-text); }
 
@@ -245,7 +262,7 @@ ul { margin: 0; padding: 0; list-style: none; }
   position: absolute;
   left: 0;
   top: 0;
-  width: 300px;
+  width: var(--w, 300px);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -258,13 +275,6 @@ ul { margin: 0; padding: 0; list-style: none; }
 }
 .node.is-dragging { cursor: grabbing; z-index: 2; }
 .node img { pointer-events: none; }
-.node--prompt { width: 320px; }
-
-/* Desktop layout (stage 1382 × 780) */
-.node--image    { --x: 80px;   --y: 30px; }
-.node--prompt   { --x: 80px;   --y: 300px; }
-.node--generate { --x: 560px;  --y: 120px; }
-.node--video    { --x: 1000px; --y: 40px; }
 
 /* Floating header: 26px above the node, 12px uppercase semibold, neutral-400. */
 .node__header {
@@ -302,13 +312,13 @@ ul { margin: 0; padding: 0; list-style: none; }
   border-radius: var(--radius-card);
   padding: 4px;
 }
-.media { width: 100%; height: auto; border-radius: var(--radius-media); }
-.media--video { aspect-ratio: 16 / 9; object-fit: cover; }
+.media { display: block; width: 100%; height: auto; border-radius: var(--radius-media); background: var(--well); }
+.media--wide { aspect-ratio: 16 / 9; object-fit: cover; }
 
 /* Prompt: a fixed-height media clip holding the textarea surface. */
 .prompt {
   position: relative;
-  height: 120px; /* the app default is 160; the prompt has been resized down, as the grip allows */
+  height: var(--h, 160px);
   border-radius: var(--radius-media);
   overflow: hidden;
   background: rgb(23 23 23 / 0.4);
@@ -320,6 +330,8 @@ ul { margin: 0; padding: 0; list-style: none; }
   font-size: 12px;
   line-height: 1.625;
   color: var(--node-text);
+  white-space: pre-wrap;
+  overflow: hidden;
 }
 .prompt__grip {
   position: absolute;
@@ -350,6 +362,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 .socket--text { color: var(--handle-text); }
 .socket--video { color: var(--handle-video); }
 .socket--reference { color: var(--handle-reference); }
+.socket--placeholder { opacity: 0.3; }
 
 .gap { width: 100%; height: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
 .gap--row { height: 28px; }
@@ -383,9 +396,20 @@ ul { margin: 0; padding: 0; list-style: none; }
 .scrub__play { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 6px; color: var(--ink-2); flex-shrink: 0; }
 .scrub__play svg { width: 12px; height: 12px; }
 .scrub__range { position: relative; flex: 1 1 0; min-width: 0; height: 4px; border-radius: 2px; background: var(--border); }
-.scrub__fill { position: absolute; left: 0; top: 0; height: 4px; width: 40%; border-radius: 2px; background: #d4d4d4; }
-.scrub__thumb { position: absolute; left: 40%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #d4d4d4; }
+.scrub__fill { position: absolute; left: 0; top: 0; height: 4px; width: var(--pct, 0%); border-radius: 2px; background: #d4d4d4; }
+.scrub__thumb { position: absolute; left: var(--pct, 0%); top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #d4d4d4; }
 .scrub__time { color: var(--ink-2); font-size: 10px; line-height: 14px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+/* History carousel (CarouselControls): prev, dots, "1 / 7", next. */
+.carousel { display: flex; align-items: center; justify-content: center; gap: 6px; height: 100%; }
+.carousel--compact { gap: 2px; }
+.carousel__btn { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 6px; color: var(--ink-2); }
+.carousel__btn svg { width: 12px; height: 12px; }
+.carousel__dots { display: flex; align-items: center; gap: 3px; }
+.carousel__dot { display: block; width: 4px; height: 4px; border-radius: 50%; background: #525252; }
+.carousel__dot--on { width: 5px; height: 5px; background: #d4d4d4; }
+.carousel__count { min-width: 32px; text-align: center; color: var(--ink-2); font-size: 10px; line-height: 14px; font-variant-numeric: tabular-nums; }
+.carousel--compact .carousel__count { min-width: 28px; }
 
 @supports (corner-shape: squircle) {
   .card, .controls, .media, .prompt, .scrub__play { corner-shape: squircle; }
@@ -532,13 +556,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 
 /* Tablet: 2×2 node layout on a 710-wide stage. */
 @media (max-width: 899px) {
-  .stage { --stage-w: 710px; --stage-h: 700px; }
-  .edges--desktop { display: none; }
-  .edges--tablet { display: block; }
-  .node--image    { --x: 24px;  --y: 30px; }
-  .node--prompt   { --x: 24px;  --y: 300px; }
-  .node--generate { --x: 386px; --y: 100px; }
-  .node--video    { --x: 386px; --y: 366px; }
+  .stage { --zoom: var(--zoom-tablet); }
 }
 
 /* Phone: one tab, two nodes, stacked wordmark. */
@@ -547,12 +565,7 @@ ul { margin: 0; padding: 0; list-style: none; }
   .fold { padding-bottom: 0; }
   .app { -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent 100%); mask-image: linear-gradient(to bottom, #000 70%, transparent 100%); }
   .tab--rest, .tab__new { display: none; }
-  .stage { --stage-w: 340px; --stage-h: 600px; }
-  .edges--desktop, .edges--tablet { display: none; }
-  .edges--phone { display: block; }
-  .node--prompt, .node--video { display: none; }
-  .node--image    { --x: 20px; --y: 30px; }
-  .node--generate { --x: 20px; --y: 300px; }
+  .stage { --zoom: var(--zoom-phone); }
 
   .line { display: flex; flex-direction: column; align-items: stretch; gap: 16px; margin-top: 20px; padding-left: 0; }
   .nav { display: contents; }
@@ -579,14 +592,17 @@ ul { margin: 0; padding: 0; list-style: none; }
 
   .js.ready .app { animation: rise 700ms var(--ease-out) 0ms both; }
   .js.ready .node { animation: node-in 480ms var(--ease-out) both; }
-  .js.ready .node--image    { animation-delay: 260ms; }
-  .js.ready .node--prompt   { animation-delay: 350ms; }
-  .js.ready .node--generate { animation-delay: 440ms; }
-  .js.ready .node--video    { animation-delay: 530ms; }
+  .js.ready .node[data-i="1"] { animation-delay: 260ms; }
+  .js.ready .node[data-i="2"] { animation-delay: 350ms; }
+  .js.ready .node[data-i="3"] { animation-delay: 440ms; }
+  .js.ready .node[data-i="4"] { animation-delay: 530ms; }
+  .js.ready .node[data-i="5"] { animation-delay: 620ms; }
   .js.ready .edge { animation: draw 560ms var(--ease-draw) both; }
   .js.ready .edge:nth-child(1) { animation-delay: 520ms; }
   .js.ready .edge:nth-child(2) { animation-delay: 600ms; }
   .js.ready .edge:nth-child(3) { animation-delay: 700ms; }
+  .js.ready .edge:nth-child(4) { animation-delay: 760ms; }
+  .js.ready .edge:nth-child(5) { animation-delay: 820ms; }
   .js.ready .points { animation: fade-up 600ms var(--ease-out) 700ms both; }
   .js.ready .nav__link { animation: fade-up 600ms var(--ease-out) 760ms both; }
   .js.ready .actions { animation: fade-up 600ms var(--ease-out) 820ms both; }
