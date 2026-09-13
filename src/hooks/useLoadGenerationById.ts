@@ -1,5 +1,6 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 import { useWorkflowStore } from "@/store/workflowStore";
+import { useToast } from "@/components/Toast";
 
 /**
  * Returns a loader that fetches a previously-generated asset by ID from the
@@ -11,11 +12,20 @@ import { useWorkflowStore } from "@/store/workflowStore";
  */
 export function useLoadGenerationById(resultField: string, label: string) {
   const generationsPath = useWorkflowStore((state) => state.generationsPath);
+  const saveDirectoryPath = useWorkflowStore((state) => state.saveDirectoryPath);
+  // Said once per node, not on every arrow press
+  const warnedRef = useRef(false);
 
   return useCallback(
     async (id: string): Promise<string | null> => {
-      if (!generationsPath) {
-        console.error("Generations path not configured");
+      // A workflow with a folder keeps its generations beside it even when the
+      // path was never recorded; only a workflow with no folder has nowhere to look.
+      const directoryPath = generationsPath ?? (saveDirectoryPath ? `${saveDirectoryPath}/generations` : null);
+      if (!directoryPath) {
+        if (!warnedRef.current) {
+          warnedRef.current = true;
+          useToast.getState().show(`Set a project folder to browse ${label.toLowerCase()} history`, "warning");
+        }
         return null;
       }
 
@@ -24,7 +34,7 @@ export function useLoadGenerationById(resultField: string, label: string) {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            directoryPath: generationsPath,
+            directoryPath,
             imageId: id,
           }),
         });
@@ -41,6 +51,6 @@ export function useLoadGenerationById(resultField: string, label: string) {
         return null;
       }
     },
-    [generationsPath, resultField, label]
+    [generationsPath, saveDirectoryPath, resultField, label]
   );
 }
