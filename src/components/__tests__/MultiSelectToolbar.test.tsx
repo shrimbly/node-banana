@@ -16,6 +16,7 @@ const mockOnNodesChange = vi.fn();
 const mockCreateGroup = vi.fn();
 const mockRemoveNodesFromGroup = vi.fn();
 const mockExecuteSelectedNodes = vi.fn();
+const mockApplyModelToNodes = vi.fn();
 const mockUseWorkflowStore = vi.fn();
 
 vi.mock("@/store/workflowStore", () => ({
@@ -25,6 +26,7 @@ vi.mock("@/store/workflowStore", () => ({
     }
     return mockUseWorkflowStore((s: unknown) => s);
   },
+  useProviderApiKeys: () => ({}),
 }));
 
 // Mock useReactFlow
@@ -63,6 +65,11 @@ const createDefaultState = (overrides = {}) => ({
   createGroup: mockCreateGroup,
   removeNodesFromGroup: mockRemoveNodesFromGroup,
   executeSelectedNodes: mockExecuteSelectedNodes,
+  applyModelToNodes: mockApplyModelToNodes,
+  // Read by the model browser the change-model button opens
+  recentModels: [],
+  addNode: vi.fn(),
+  trackModelUsage: vi.fn(),
   isRunning: false,
   ...overrides,
 });
@@ -614,6 +621,45 @@ describe("MultiSelectToolbar", () => {
 
       const toolbar = container.firstChild as HTMLElement;
       expect(toolbar).toBeInTheDocument();
+    });
+  });
+
+  describe("Change model", () => {
+    const videoNodes = () => [
+      createMockNode("v1", { type: "generateVideo" }),
+      createMockNode("v2", { type: "generateVideo" }),
+      createMockNode("v3", { type: "generateVideo" }),
+    ];
+
+    it("offers to change the model when every selected node is the same generator", () => {
+      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes: videoNodes() })));
+      render(<TestWrapper><MultiSelectToolbar /></TestWrapper>);
+
+      const button = screen.getByRole("button", { name: "Change model for selected nodes" });
+      expect(button).toHaveAttribute("title", "Change model for 3 Generate Video nodes");
+    });
+
+    it("hides it for a mixed selection or one without generators", () => {
+      mockUseWorkflowStore.mockImplementation((selector) =>
+        selector(createDefaultState({ nodes: [createMockNode("v1", { type: "generateVideo" }), createMockNode("g1", { type: "nanoBanana" })] }))
+      );
+      const { unmount } = render(<TestWrapper><MultiSelectToolbar /></TestWrapper>);
+      expect(screen.queryByRole("button", { name: "Change model for selected nodes" })).not.toBeInTheDocument();
+      unmount();
+
+      mockUseWorkflowStore.mockImplementation((selector) =>
+        selector(createDefaultState({ nodes: [createMockNode("p1"), createMockNode("p2")] }))
+      );
+      render(<TestWrapper><MultiSelectToolbar /></TestWrapper>);
+      expect(screen.queryByRole("button", { name: "Change model for selected nodes" })).not.toBeInTheDocument();
+    });
+
+    it("opens the model browser for the selection's capability", () => {
+      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes: videoNodes() })));
+      render(<TestWrapper><MultiSelectToolbar /></TestWrapper>);
+
+      fireEvent.click(screen.getByRole("button", { name: "Change model for selected nodes" }));
+      expect(screen.getByText("Change model for 3 nodes")).toBeInTheDocument();
     });
   });
 });

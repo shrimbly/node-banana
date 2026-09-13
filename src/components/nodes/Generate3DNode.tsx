@@ -5,9 +5,10 @@ import { NodeProps, Node } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
 import { ModelParameters } from "./ModelParameters";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { Generate3DNodeData, ProviderType, SelectedModel, ModelInputDef } from "@/types";
+import { Generate3DNodeData, ProviderType, ModelInputDef } from "@/types";
 import { ProviderModel } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
+import { modelSelectionData } from "@/store/utils/modelSelection";
 import { useToast } from "@/components/Toast";
 import { ProviderBadge } from "./ProviderBadge";
 import { SettingsTabBar } from "./SettingsTabBar";
@@ -77,12 +78,7 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
 
   // Handle model selection from browse dialog
   const handleBrowseModelSelect = useCallback((model: ProviderModel) => {
-    const newSelectedModel: SelectedModel = {
-      provider: model.provider,
-      modelId: model.id,
-      displayName: model.name,
-    };
-    updateNodeData(id, { selectedModel: newSelectedModel, parameters: {} });
+    updateNodeData(id, modelSelectionData("generate3d", model));
     setIsBrowseDialogOpen(false);
   }, [id, updateNodeData]);
 
