@@ -94,6 +94,19 @@ export const PromptConstructorEditorModal: React.FC<PromptConstructorEditorModal
     return resolved;
   }, [template, availableVariables]);
 
+  // Copy the resolved text, not the template, so what is pasted is what runs
+  const [copied, setCopied] = useState(false);
+  const handleCopyPreview = useCallback(async () => {
+    if (!resolvedPreview) return;
+    try {
+      await navigator.clipboard.writeText(resolvedPreview);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch (err) {
+      console.error("Failed to copy resolved prompt:", err);
+    }
+  }, [resolvedPreview]);
+
   const handleAttemptClose = useCallback(() => {
     if (hasUnsavedChanges) {
       setShowConfirmation(true);
@@ -266,11 +279,32 @@ export const PromptConstructorEditorModal: React.FC<PromptConstructorEditorModal
           </div>
         </div>
 
-        {/* Resolved preview */}
-        {availableVariables.length > 0 && (
+        {/* Resolved preview: shown whenever there is something to preview, so the
+            resolved text can be copied even before any variable is connected */}
+        {(availableVariables.length > 0 || template.trim().length > 0) && (
           <div className="mx-6 mb-4 border border-neutral-700 rounded bg-neutral-900/30 overflow-hidden">
-            <div className="px-4 py-2 bg-neutral-900 border-b border-neutral-700 text-[11px] text-neutral-400 uppercase tracking-wide font-semibold">
-              Resolved Preview
+            <div className="flex items-center justify-between px-4 py-2 bg-neutral-900 border-b border-neutral-700 text-[11px] text-neutral-400 uppercase tracking-wide font-semibold">
+              <span>Resolved Preview</span>
+              <button
+                type="button"
+                onClick={handleCopyPreview}
+                disabled={!resolvedPreview}
+                aria-label={copied ? "Copied" : "Copy resolved prompt"}
+                className={`flex items-center gap-1 rounded px-1.5 py-0.5 normal-case tracking-normal font-medium transition-colors ${
+                  copied ? "text-green-400" : "text-neutral-400 hover:text-white hover:bg-neutral-700/60"
+                } disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-neutral-400`}
+              >
+                {copied ? (
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                ) : (
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                )}
+                {copied ? "Copied" : "Copy"}
+              </button>
             </div>
             <div className="p-4 text-sm text-neutral-300 whitespace-pre-wrap max-h-32 overflow-y-auto leading-relaxed">
               {resolvedPreview || <span className="text-neutral-500 italic">Empty template</span>}
