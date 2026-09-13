@@ -35,6 +35,7 @@ import {
 import { UndoManager, UndoSnapshot, clonePreservingStrings } from "./undoHistory";
 import { useToast } from "@/components/Toast";
 import { logger } from "@/utils/logger";
+import { hasHistoryEntries, pruneMissingHistory } from "./utils/historyPruning";
 import { externalizeWorkflowMedia, hydrateWorkflowMedia } from "@/utils/mediaStorage";
 import { EditOperation, applyEditOperations as executeEditOps } from "@/lib/chat/editOperations";
 import { findNearestFreePosition } from "@/utils/spatialLayout";
@@ -401,6 +402,8 @@ export interface WorkflowStore {
   // Save/Load
   saveWorkflow: (name?: string) => void;
   loadWorkflow: (workflow: WorkflowFile, workflowPath?: string, options?: { preserveSnapshot?: boolean }) => Promise<void>;
+  /** Drop carousel entries whose files are no longer in the generations folder. */
+  pruneMissingHistory: () => Promise<void>;
   clearWorkflow: () => void;
 
   // Workflow tabs: several workflows open, one live in the canvas
@@ -3176,6 +3179,27 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     // Recompute dimming after loading workflow
     get().recomputeDimmedNodes();
+
+    // The carousels show only what the generations folder still holds
+    await get().pruneMissingHistory();
+  },
+
+  pruneMissingHistory: async () => {
+    const { generationsPath, nodes } = get();
+    if (!generationsPath || !hasHistoryEntries(nodes)) return;
+    let ids: string[];
+    try {
+      const response = await fetch(`/api/list-generations?path=${encodeURIComponent(generationsPath)}`);
+      const result = await response.json();
+      if (!result?.success || !Array.isArray(result.ids)) return;
+      ids = result.ids;
+    } catch {
+      // The folder could not be listed: keep the history rather than guess
+      return;
+    }
+    const pruned = pruneMissingHistory(get().nodes, new Set(ids));
+    if (!pruned.changed) return;
+    set({ nodes: pruned.nodes, hasUnsavedChanges: true });
   },
 
   restoreDesktopSession: (tabs, activeTabId) => {

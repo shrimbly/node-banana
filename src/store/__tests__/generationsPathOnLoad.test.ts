@@ -1,7 +1,7 @@
 /**
  * The generations folder a loaded workflow browses its history from.
  */
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { useWorkflowStore } from "../workflowStore";
 import { STORAGE_KEY } from "../utils/localStorage";
 
@@ -72,5 +72,50 @@ describe("generations path on load", () => {
 
     expect(useWorkflowStore.getState().generationsPath).toBeNull();
     expect(localStorage.getItem(STORAGE_KEY)).toBeNull();
+  });
+
+  it("drops carousel entries whose files are gone from the folder", async () => {
+    const entry = (id: string) => ({ id, timestamp: 1, prompt: "", aspectRatio: "1:1", model: "m" });
+    const fetchMock = vi.fn().mockResolvedValue({ json: async () => ({ success: true, ids: ["kept-1", "kept-2"] }) });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      await useWorkflowStore.getState().loadWorkflow(
+        file({
+          directoryPath: "/projects/mannequin",
+          nodes: [
+            {
+              id: "gen-1",
+              type: "nanoBanana",
+              position: { x: 0, y: 0 },
+              data: { imageHistory: [entry("kept-1"), entry("missing"), entry("kept-2")], selectedHistoryIndex: 2, status: "idle" },
+            } as never,
+          ],
+        })
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+
+    expect(fetchMock).toHaveBeenCalledWith(`/api/list-generations?path=${encodeURIComponent("/projects/mannequin/generations")}`);
+    const data = useWorkflowStore.getState().nodes.find((n) => n.id === "gen-1")!.data as { imageHistory: { id: string }[]; selectedHistoryIndex: number };
+    expect(data.imageHistory.map((e) => e.id)).toEqual(["kept-1", "kept-2"]);
+    expect(data.selectedHistoryIndex).toBe(1);
+  });
+
+  it("keeps the history when the folder cannot be listed", async () => {
+    const entry = (id: string) => ({ id, timestamp: 1, prompt: "", aspectRatio: "1:1", model: "m" });
+    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
+    try {
+      await useWorkflowStore.getState().loadWorkflow(
+        file({
+          directoryPath: "/projects/mannequin",
+          nodes: [{ id: "gen-1", type: "nanoBanana", position: { x: 0, y: 0 }, data: { imageHistory: [entry("a")], selectedHistoryIndex: 0, status: "idle" } } as never],
+        })
+      );
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    const data = useWorkflowStore.getState().nodes.find((n) => n.id === "gen-1")!.data as { imageHistory: { id: string }[] };
+    expect(data.imageHistory.map((e) => e.id)).toEqual(["a"]);
   });
 });
