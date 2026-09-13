@@ -407,7 +407,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 }
 .mono, .points, .nav__link, .menu__meta {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   line-height: 16px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
