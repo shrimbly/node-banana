@@ -230,12 +230,16 @@ ul { margin: 0; padding: 0; list-style: none; }
    saved in the workflow file). It is panned and zoomed as one: --zoom, and a
    pan that centres world point (--cx, --cy) until the script takes over. */
 .stage {
-  --zoom-desktop: 0.72;
+  /* Desktop: fit the workflow to the canvas width with a 48px margin, top
+     40px under the tab strip. --gx/--gy/--gw are the graph's bounds (with
+     headers) in world px; --cx/--cy its centre, used on smaller screens. */
+  --pad: 48px;
+  --top: 40px;
   --zoom-tablet: 0.55;
   --zoom-phone: 0.42;
-  --zoom: var(--zoom-desktop);
-  --pan-x: calc(50cqw - var(--cx) * var(--zoom));
-  --pan-y: calc(50cqh - var(--cy) * var(--zoom));
+  --zoom: min(1, tan(atan2(100cqw - var(--pad) * 2, var(--gw, 1000px))));
+  --pan-x: calc((100cqw - var(--gw, 1000px) * var(--zoom)) / 2 - var(--gx, 0px) * var(--zoom));
+  --pan-y: calc(var(--top) - var(--gy, 0px) * var(--zoom));
   position: absolute;
   left: 0;
   top: 0;
@@ -556,7 +560,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 
 /* Tablet: 2×2 node layout on a 710-wide stage. */
 @media (max-width: 899px) {
-  .stage { --zoom: var(--zoom-tablet); }
+  .stage { --zoom: var(--zoom-tablet); --pan-x: calc(50cqw - var(--cx, 0px) * var(--zoom)); --pan-y: calc(50cqh - var(--cy, 0px) * var(--zoom)); }
 }
 
 /* Phone: one tab, two nodes, stacked wordmark. */
