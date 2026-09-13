@@ -160,7 +160,8 @@ export async function executeGenerateVideo(
         const timestamp = Date.now();
         const videoId = `${timestamp}`;
 
-        // Add to node's video history
+        // The carousel reloads entries from the generations folder, so only a
+        // generation that is being saved there gets an entry.
         const newHistoryItem = {
           id: videoId,
           timestamp,
@@ -173,8 +174,7 @@ export async function executeGenerateVideo(
           outputVideo: outputContent,
           status: "complete",
           error: null,
-          videoHistory: updatedHistory,
-          selectedVideoHistoryIndex: 0,
+          ...(generationsPath ? { videoHistory: updatedHistory, selectedVideoHistoryIndex: 0 } : {}),
         });
 
         // Push this result to downstream outputGallery nodes so a batch run

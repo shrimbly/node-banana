@@ -35,6 +35,7 @@ import {
 import { UndoManager, UndoSnapshot, clonePreservingStrings } from "./undoHistory";
 import { useToast } from "@/components/Toast";
 import { logger } from "@/utils/logger";
+import { hasHistoryEntries, pruneMissingHistory } from "./utils/historyPruning";
 import { externalizeWorkflowMedia, hydrateWorkflowMedia } from "@/utils/mediaStorage";
 import { EditOperation, applyEditOperations as executeEditOps } from "@/lib/chat/editOperations";
 import { findNearestFreePosition } from "@/utils/spatialLayout";
@@ -401,6 +402,8 @@ export interface WorkflowStore {
   // Save/Load
   saveWorkflow: (name?: string) => void;
   loadWorkflow: (workflow: WorkflowFile, workflowPath?: string, options?: { preserveSnapshot?: boolean }) => Promise<void>;
+  /** Drop carousel entries whose files are no longer in the generations folder. */
+  pruneMissingHistory: () => Promise<void>;
   clearWorkflow: () => void;
 
   // Workflow tabs: several workflows open, one live in the canvas
@@ -3078,6 +3081,22 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     // Determine the workflow directory path (passed in, from saved config, or embedded in legacy workflow JSON)
     const directoryPath = workflowPath || savedConfig?.directoryPath || workflow.directoryPath || null;
+    // The generations folder used to come from the saved config alone, so a
+    // workflow opened without one (another profile, a dropped file, a cleared
+    // canvas) lost its carousel history. Derive it from the workflow folder
+    // the way setWorkflowMetadata does, and remember it for the next open.
+    const generationsPath =
+      savedConfig?.generationsPath ?? (directoryPath ? `${directoryPath}/generations` : null);
+    if (workflow.id && directoryPath && generationsPath && savedConfig?.generationsPath !== generationsPath) {
+      saveSaveConfig({
+        workflowId: workflow.id,
+        name: workflow.name,
+        directoryPath,
+        generationsPath,
+        lastSavedAt: savedConfig?.lastSavedAt ?? null,
+        useExternalImageStorage: savedConfig?.useExternalImageStorage,
+      });
+    }
 
     // Hydrate media if we have a directory path and the workflow has media refs
     let hydratedWorkflow = workflow;
@@ -3126,7 +3145,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       workflowName: workflow.name,
       workflowLoadCount: get().workflowLoadCount + 1,
       saveDirectoryPath: directoryPath || null,
-      generationsPath: savedConfig?.generationsPath || null,
+      generationsPath,
       lastSavedAt: savedConfig?.lastSavedAt || null,
       hasUnsavedChanges: false,
       // Restore cost data
@@ -3160,6 +3179,27 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     // Recompute dimming after loading workflow
     get().recomputeDimmedNodes();
+
+    // The carousels show only what the generations folder still holds
+    await get().pruneMissingHistory();
+  },
+
+  pruneMissingHistory: async () => {
+    const { generationsPath, nodes } = get();
+    if (!generationsPath || !hasHistoryEntries(nodes)) return;
+    let ids: string[];
+    try {
+      const response = await fetch(`/api/list-generations?path=${encodeURIComponent(generationsPath)}`);
+      const result = await response.json();
+      if (!result?.success || !Array.isArray(result.ids)) return;
+      ids = result.ids;
+    } catch {
+      // The folder could not be listed: keep the history rather than guess
+      return;
+    }
+    const pruned = pruneMissingHistory(get().nodes, new Set(ids));
+    if (!pruned.changed) return;
+    set({ nodes: pruned.nodes, hasUnsavedChanges: true });
   },
 
   restoreDesktopSession: (tabs, activeTabId) => {
