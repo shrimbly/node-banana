@@ -149,17 +149,15 @@ export function EaseCurveNode({ id, data, selected }: NodeProps<EaseCurveNodeTyp
       ? { kind: "aspect" as const, aspect: loadedAspect?.src === nodeData.outputVideo ? loadedAspect.aspect : 16 / 9 }
       : { kind: "fixed" as const, height: EMPTY_HEIGHT };
 
-  const settings = (
-    <div className="relative flex flex-col gap-1">
-      {isInherited && (
-        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-panel/95 rounded-well text-center">
-          <p className="text-[11px] text-neutral-200 font-medium">Settings inherited</p>
-          <p className="text-node text-neutral-400 mt-0.5">Break connection to edit manually</p>
-          <PanelButton className="mt-2" onClick={handleBreakInheritance}>
-            Control manually
-          </PanelButton>
-        </div>
-      )}
+  // Inherited settings collapse the panel to one row: the editor only comes
+  // back once the connection is broken.
+  const settings = isInherited ? (
+    <FieldRow className="justify-between">
+      <span className="text-node text-neutral-400">Settings inherited</span>
+      <PanelButton onClick={handleBreakInheritance}>Control manually</PanelButton>
+    </FieldRow>
+  ) : (
+    <div className="flex flex-col gap-1">
       <FieldRow className="justify-between">
         <span className="text-node text-neutral-400">Easing function</span>
         <button
@@ -218,9 +216,15 @@ export function EaseCurveNode({ id, data, selected }: NodeProps<EaseCurveNodeTyp
         controls={
           <ControlsCard
             id={id}
+            // Narrow, so the square editor sets the card width and the rows sit flush with it.
+            className="max-w-[216px]"
             summary={{
               title: "Ease curve",
-              values: <SummaryValues items={[nodeData.easingPreset ?? "custom", `${duration.toFixed(1)}s`]} />,
+              values: (
+                <SummaryValues
+                  items={[isInherited ? "inherited" : null, nodeData.easingPreset ?? "custom", `${duration.toFixed(1)}s`]}
+                />
+              ),
             }}
             expanded={expanded}
             onToggle={() => setExpanded((v) => !v)}

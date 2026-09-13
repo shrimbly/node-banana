@@ -158,7 +158,7 @@ export function Socket({ nodeId, side, row, spec, showLabel = false, outline = "
           label={spec.label}
           side={handleType}
           color={color}
-          top={socketCenter(row) - 7}
+          top={socketCenter(row) - 18}
           offset="22px"
           visible={showLabel}
           opacity={spec.placeholder ? 0.5 : undefined}

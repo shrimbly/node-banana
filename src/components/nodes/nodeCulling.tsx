@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useSyncExternalStore } from "react";
-import { useStore, useStoreApi, type ReactFlowState } from "@xyflow/react";
+import { useCallback, useDeferredValue, useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
+import { useStore, useStoreApi, useUpdateNodeInternals, type ReactFlowState } from "@xyflow/react";
 
 /**
  * Which nodes are rendered. A node more than a viewport away from the view
@@ -129,6 +129,11 @@ export function useNodeMounted(id: string, type: string, selected: boolean, drag
         const node = s.nodeLookup.get(id);
         // A node is rendered until it, and the canvas, are measured
         if (!node || !s.width || !s.height) return true;
+        // ...and until React Flow has read its handles from the component. A
+        // node created off screen (a split grid cell) arrives with layout-hint
+        // dimensions that pass for a measurement; a placeholder built before
+        // the first read would carry no handles, and no edge could reach it.
+        if (!node.internals.handleBounds) return true;
         const width = node.measured.width ?? node.width ?? 0;
         const height = node.measured.height ?? node.height ?? 0;
         if (!width || !height) return true;
@@ -145,6 +150,15 @@ export function useNodeMounted(id: string, type: string, selected: boolean, drag
   const inAreaDeferred = useDeferredValue(inArea);
   const focused = useNodeHasFocus(id);
   const mounted = (inArea && inAreaDeferred) || focused || selected || dragging || ALWAYS_MOUNTED.has(type);
+  // React Flow re-reads handles only when a node changes size. A component
+  // that returns at exactly its placeholder's size would keep the placeholder's
+  // handle set, so ask for a read on every return from the placeholder.
+  const updateNodeInternals = useUpdateNodeInternals();
+  const wasPlaceholder = useRef(false);
+  useLayoutEffect(() => {
+    if (mounted && wasPlaceholder.current) updateNodeInternals(id);
+    wasPlaceholder.current = !mounted;
+  }, [id, mounted, updateNodeInternals]);
   // Watch the wrapper's exact size while the component is rendered, for the placeholder
   useLayoutEffect(() => {
     if (!mounted) return;

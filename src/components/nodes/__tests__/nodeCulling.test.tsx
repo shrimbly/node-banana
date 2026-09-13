@@ -37,7 +37,12 @@ function Seed({ children }: { children: React.ReactNode }) {
       { id: "near", position: { x: 100, y: 100 }, data: {}, measured: { width: 200, height: 100 } },
       { id: "far", position: { x: 4000, y: 4000 }, data: {}, measured: { width: 200, height: 100 } },
       { id: "unmeasured", position: { x: 4000, y: 4000 }, data: {} },
+      { id: "unread", position: { x: 4000, y: 4000 }, data: {}, measured: { width: 200, height: 100 } },
     ]);
+    // React Flow has read the handles of every node but "unread"
+    for (const id of ["near", "far"]) {
+      store.getState().nodeLookup.get(id)!.internals.handleBounds = { source: [], target: [] };
+    }
     setReady(true);
   }, [store]);
   return ready ? <>{children}</> : null;
@@ -65,6 +70,11 @@ describe("useNodeMounted", () => {
   it("keeps a node that has not been measured yet", () => {
     renderProbes(<Probe id="unmeasured" />);
     expect(screen.getByTestId("probe-unmeasured")).toHaveTextContent("component");
+  });
+
+  it("keeps a far node until React Flow has read its handles, so its placeholder can carry them", () => {
+    renderProbes(<Probe id="unread" />);
+    expect(screen.getByTestId("probe-unread")).toHaveTextContent("component");
   });
 
   it("keeps a far node while it is selected", () => {

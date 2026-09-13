@@ -103,6 +103,9 @@ const EDGE_COLOR: Record<TemplateHandleKind, string> = {
   text: "#2563eb",
   video: "#ec4899",
   audio: "#a78bfa",
+  "3d": "#f97316",
+  easeCurve: "#bef264",
+  reference: "#6b7280",
 };
 
 function edgeStyleFor(sourceHandle: string | null | undefined): React.CSSProperties {
