@@ -55,7 +55,7 @@
 
       <div class="canvas" data-canvas>
         <!-- World coordinates are the workflow's own; the stage is panned and zoomed as one. -->
-        <div class="stage stage--active" data-stage="mannequin" style="--gx: -375px; --gy: 336px; --gw: 2197px; --cx: 723px; --cy: 700px; --zoom-tablet: 0.5; --zoom-phone: 0.42;">
+        <div class="stage stage--active" data-stage="mannequin" data-fit="width" style="--gx: -375px; --gy: 336px; --gw: 2197px; --cx: 723px; --cy: 700px; --zoom-tablet: 0.5; --zoom-phone: 0.42;">
           <svg class="edges" width="1" height="1" overflow="visible">
             <path data-from="imageInput-22" data-from-handle="image" data-to="nanoBanana-3" data-to-handle="image-0" pathLength="1" d="M 74.5 386 C 304.0 386, 304.0 393, 533.5 393" class="edge edge--image"></path>
             <path data-from="prompt-23" data-from-handle="text" data-to="nanoBanana-3" data-to-handle="text-0" pathLength="1" d="M 495.5 471 C 555.5 471, 473.5 423, 533.5 423" class="edge edge--text"></path>
@@ -144,15 +144,19 @@ The denim jacket is completely steady during the rotation. </div><span class="pr
               </div>
           </div>
         </div>
-        <div class="stage" data-stage="cars" style="--gx: 0px; --gy: -26px; --gw: 2460px; --cx: 1230px; --cy: 220px; --zoom-tablet: 0.5; --zoom-phone: 0.42;">
+        <div class="stage" data-stage="cars" style="--gx: 0px; --gy: -26px; --gw: 3967px; --cx: 1200px; --cy: 300px; --zoom-fixed: 0.58; --zoom-tablet: 0.5; --zoom-phone: 0.42;">
           <svg class="edges" width="1" height="1" overflow="visible">
             <path data-from="imageInput-6" data-from-handle="image" data-to="llmGenerate-10" data-to-handle="image" pathLength="1" d="M 305.5 24 C 365.5 24, 354.5 144, 414.5 144" class="edge edge--image"></path>
             <path data-from="prompt-9" data-from-handle="text" data-to="llmGenerate-10" data-to-handle="text" pathLength="1" d="M 325.5 314 C 385.5 314, 354.5 174, 414.5 174" class="edge edge--text"></path>
             <path data-from="imageInput-6" data-from-handle="image" data-to="nanoBanana-11" data-to-handle="image-0" pathLength="1" d="M 305.5 24 C 570.0 24, 570.0 24, 834.5 24" class="edge edge--image"></path>
             <path data-from="llmGenerate-10" data-from-handle="text" data-to="nanoBanana-11" data-to-handle="text-0" pathLength="1" d="M 745.5 174 C 805.5 174, 774.5 54, 834.5 54" class="edge edge--text"></path>
             <path data-from="nanoBanana-11" data-from-handle="image" data-to="splitGrid-13" data-to-handle="image" pathLength="1" d="M 1465.5 24 C 1525.5 24, 1494.5 84, 1554.5 84" class="edge edge--image"></path>
-            <path data-from="nanoBanana-11" data-from-handle="image" data-to="generateVideo-69" data-to-handle="image-0" pathLength="1" d="M 1465.5 24 C 1720.0 24, 1720.0 84, 1974.5 84" class="edge edge--image"></path>
-            <path data-from="prompt-78" data-from-handle="text" data-to="generateVideo-69" data-to-handle="text-0" pathLength="1" d="M 1885.5 404 C 1945.5 404, 1914.5 174, 1974.5 174" class="edge edge--text"></path>
+            <path data-from="splitGrid-13" data-from-handle="reference" data-to="imageInput-59" data-to-handle="reference" pathLength="1" d="M 1865.5 84 C 1925.5 84, 1894.5 84, 1954.5 84" class="edge edge--reference"></path>
+            <path data-from="imageInput-59" data-from-handle="image" data-to="nanoBanana-60" data-to-handle="image-0" pathLength="1" d="M 2265.5 84 C 2325.5 84, 2314.5 144, 2374.5 144" class="edge edge--image"></path>
+            <path data-from="prompt-61" data-from-handle="text" data-to="nanoBanana-60" data-to-handle="text-0" pathLength="1" d="M 2285.5 384 C 2345.5 384, 2314.5 174, 2374.5 174" class="edge edge--text"></path>
+            <path data-from="nanoBanana-60" data-from-handle="image" data-to="generateVideo-69" data-to-handle="image-0" pathLength="1" d="M 2865.5 144 C 2925.5 144, 2894.5 84, 2954.5 84" class="edge edge--image"></path>
+            <path data-from="prompt-78" data-from-handle="text" data-to="generateVideo-69" data-to-handle="text-0" pathLength="1" d="M 2705.5 524 C 2830.0 524, 2830.0 174, 2954.5 174" class="edge edge--text"></path>
+            <path data-from="generateVideo-69" data-from-handle="video" data-to="easeCurve-102" data-to-handle="video" pathLength="1" d="M 3445.5 84 C 3505.5 84, 3474.5 84, 3534.5 84" class="edge edge--video"></path>
           </svg>
           <div class="node node--image" data-node="imageInput-6" data-i="1" style="--x: 0px; --y: 0px; --w: 300px;">
               <div class="node__header"><span class="node__title">Image Input</span></div>
@@ -284,7 +288,7 @@ A) 3×3 Contact Sheet Image</div><span class="prompt__grip"></span></div>
           <div class="node node--llm" data-node="llmGenerate-10" data-i="3" style="--x: 420px; --y: 120px; --w: 320px;">
               <div class="node__header"><span class="node__title">LLM Generate</span></div>
             <div class="card">
-              <div class="llm"><div class="llm__text">Analyze the input image and silently inventory all automotive-critical details: the specific vehicle make, model, and year (1973 MGB GT V8), custom modifications (factory-original chrome bumpers with overriders, period-correct multi-spoke alloy wheels with black centers and polished rims, and a custom '73MGV8' license plate), tire tread design, interior visibility through glass, engineering details, light direction, and reflection quality.
+              <div class="llm" style="--h: 200px;"><div class="llm__text">Analyze the input image and silently inventory all automotive-critical details: the specific vehicle make, model, and year (1973 MGB GT V8), custom modifications (factory-original chrome bumpers with overriders, period-correct multi-spoke alloy wheels with black centers and polished rims, and a custom '73MGV8' license plate), tire tread design, interior visibility through glass, engineering details, light direction, and reflection quality.
 
 The setting is a pristine, high-budget automotive photography studio. A massive softbox downlight (large diffusion bank) hangs directly overhead, creating long, clean highlights on the vehicle. The background is a seamless, dark studio cyclorama. Outside the area with the car it is extremely dark, with the walls of the studio only faintly visible. Render the vehicle with hyper-realistic detail, capturing the precise texture of the materials, distinct mechanical components, and accurate light reflections.
 
@@ -412,7 +416,51 @@ A) 3×3 Contact Sheet Image</div></div>
                 <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
               </div>
           </div>
-          <div class="node node--prompt" data-node="prompt-78" data-i="6" style="--x: 1560px; --y: 380px; --w: 320px;">
+          <div class="node node--image" data-node="imageInput-59" data-i="6" style="--x: 1960px; --y: 60px; --w: 300px;">
+              <div class="node__header"><span class="node__title">Image Input</span></div>
+            <div class="card">
+              <img class="media" src="assets/cars-cell.jpg" width="600" height="402" alt="" draggable="false">
+                <span class="socket socket--in socket--reference" data-handle="reference" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--image" data-handle="image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="gap"></div>
+              <div class="controls controls--plain">
+                <span class="controls__title">split-3-1.png</span>
+                <span class="controls__values"><span>843×565</span></span>
+                <span class="controls__end"></span>
+              </div>
+          </div>
+          <div class="node node--prompt" data-node="prompt-61" data-i="7" style="--x: 1960px; --y: 360px; --w: 320px;">
+              <div class="node__header"><span class="node__title">Prompt</span></div>
+            <div class="card">
+              <div class="prompt"><div class="prompt__text">Upscale the image, keep all details of the original image exactly the same. </div><span class="prompt__grip"></span></div>
+                <span class="socket socket--in socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="gap"></div>
+              <div class="controls controls--plain">
+                <span class="controls__title controls__title--link">Add variable</span>
+                <span class="controls__values"><span>76 chars</span></span>
+                <span class="controls__end"></span>
+              </div>
+          </div>
+          <div class="node node--generate" data-node="nanoBanana-60" data-i="8" style="--x: 2380px; --y: 120px; --w: 480px;">
+              <div class="node__header"><span class="node__title"><svg class="badge" viewBox="0 0 1855 1855" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M1181.65 78C1212.05 78 1236.42 101.947 1239.32 131.261C1265.25 392.744 1480.07 600.836 1750.02 625.948C1780.28 628.764 1805 652.366 1805 681.816V1174.18C1805 1203.63 1780.28 1227.24 1750.02 1230.05C1480.07 1255.16 1265.25 1463.26 1239.32 1724.74C1236.42 1754.05 1212.05 1778 1181.65 1778H673.354C642.951 1778 618.585 1754.05 615.678 1724.74C589.754 1463.26 374.927 1255.16 104.984 1230.05C74.7212 1227.24 50 1203.63 50 1174.18V681.816C50 652.366 74.7213 628.764 104.984 625.948C374.927 600.836 589.754 392.744 615.678 131.261C618.585 101.946 642.951 78 673.353 78H1181.65ZM402.377 926.561C402.377 1209.41 638.826 1438.71 930.501 1438.71C1222.18 1438.71 1458.63 1209.41 1458.63 926.561C1458.63 643.709 1222.18 414.412 930.501 414.412C638.826 414.412 402.377 643.709 402.377 926.561Z"></path></svg>Generate Image</span></div>
+            <div class="card">
+              <img class="media" src="assets/cars-upscale.jpg" width="900" height="603" alt="" draggable="false">
+                <span class="socket socket--in socket--image" data-handle="image-0" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--in socket--text" data-handle="text-0" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--image" data-handle="image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="gap"></div>
+              <div class="controls">
+                <span class="controls__icon"><svg class="badge" viewBox="0 0 1855 1855" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M1181.65 78C1212.05 78 1236.42 101.947 1239.32 131.261C1265.25 392.744 1480.07 600.836 1750.02 625.948C1780.28 628.764 1805 652.366 1805 681.816V1174.18C1805 1203.63 1780.28 1227.24 1750.02 1230.05C1480.07 1255.16 1265.25 1463.26 1239.32 1724.74C1236.42 1754.05 1212.05 1778 1181.65 1778H673.354C642.951 1778 618.585 1754.05 615.678 1724.74C589.754 1463.26 374.927 1255.16 104.984 1230.05C74.7212 1227.24 50 1203.63 50 1174.18V681.816C50 652.366 74.7213 628.764 104.984 625.948C374.927 600.836 589.754 392.744 615.678 131.261C618.585 101.946 642.951 78 673.353 78H1181.65ZM402.377 926.561C402.377 1209.41 638.826 1438.71 930.501 1438.71C1222.18 1438.71 1458.63 1209.41 1458.63 926.561C1458.63 643.709 1222.18 414.412 930.501 414.412C638.826 414.412 402.377 643.709 402.377 926.561Z"></path></svg></span>
+                <span class="controls__title">Gemini 3 Pro Image Preview</span>
+                <span class="controls__values"></span>
+                <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </div>
+          </div>
+          <div class="node node--prompt" data-node="prompt-78" data-i="9" style="--x: 2380px; --y: 500px; --w: 320px;">
               <div class="node__header"><span class="node__title">Prompt</span></div>
             <div class="card">
               <div class="prompt"><div class="prompt__text">The camera very smoothly and slowly lifts on a boom to view the car from a bird's eye view. The car is completely still.</div><span class="prompt__grip"></span></div>
@@ -426,7 +474,7 @@ A) 3×3 Contact Sheet Image</div></div>
                 <span class="controls__end"></span>
               </div>
           </div>
-          <div class="node node--video" data-node="generateVideo-69" data-i="7" style="--x: 1980px; --y: 60px; --w: 480px;">
+          <div class="node node--video" data-node="generateVideo-69" data-i="10" style="--x: 2960px; --y: 60px; --w: 480px;">
               <div class="node__header"><span class="node__title"><svg class="badge" viewBox="0 0 1855 1855" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M1181.65 78C1212.05 78 1236.42 101.947 1239.32 131.261C1265.25 392.744 1480.07 600.836 1750.02 625.948C1780.28 628.764 1805 652.366 1805 681.816V1174.18C1805 1203.63 1780.28 1227.24 1750.02 1230.05C1480.07 1255.16 1265.25 1463.26 1239.32 1724.74C1236.42 1754.05 1212.05 1778 1181.65 1778H673.354C642.951 1778 618.585 1754.05 615.678 1724.74C589.754 1463.26 374.927 1255.16 104.984 1230.05C74.7212 1227.24 50 1203.63 50 1174.18V681.816C50 652.366 74.7213 628.764 104.984 625.948C374.927 600.836 589.754 392.744 615.678 131.261C618.585 101.946 642.951 78 673.353 78H1181.65ZM402.377 926.561C402.377 1209.41 638.826 1438.71 930.501 1438.71C1222.18 1438.71 1458.63 1209.41 1458.63 926.561C1458.63 643.709 1222.18 414.412 930.501 414.412C638.826 414.412 402.377 643.709 402.377 926.561Z"></path></svg>Generate Video</span></div>
             <div class="card">
               <video class="media" src="assets/cars-video.mp4" poster="assets/cars-video-poster.jpg" width="716" height="480" muted loop playsinline preload="metadata" data-video></video>
@@ -435,7 +483,7 @@ A) 3×3 Contact Sheet Image</div></div>
                 <span class="socket socket--in socket--video socket--placeholder" data-handle="video" style="--row: 2"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
                 <span class="socket socket--in socket--text" data-handle="text-0" style="--row: 3"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
                 <span class="socket socket--in socket--text" data-handle="text-1" style="--row: 4"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
-                <span class="socket socket--out socket--video" data-handle="video" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--video" data-handle="video" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
             </div>
             <div class="gap gap--row"><span class="scrub"><span class="scrub__play" data-play><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg></span><span class="scrub__range"><span class="scrub__fill" data-scrub-fill></span><span class="scrub__thumb" data-scrub-thumb></span></span><span class="scrub__time" data-scrub-time>0:00 / 0:05</span></span></div>
               <div class="controls">
@@ -443,6 +491,30 @@ A) 3×3 Contact Sheet Image</div></div>
                 <span class="controls__title">Kling Video v2.6 Image to Video</span>
                 <span class="controls__values"></span>
                 <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </div>
+          </div>
+          <div class="node node--ease" data-node="easeCurve-102" data-i="11" style="--x: 3540px; --y: 60px; --w: 427px;">
+              <div class="node__header"><span class="node__title">Ease Curve</span></div>
+            <div class="card">
+              <div class="empty" style="--h: 120px;"><span class="empty__frame"></span><span class="empty__text">Run workflow to apply ease curve</span></div>
+                <span class="socket socket--in socket--video" data-handle="video" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--in socket--easeCurve" data-handle="easeCurve" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--video" data-handle="video" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--easeCurve" data-handle="easeCurve" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="gap"></div>
+              <div class="ccard controls--open">
+                <div class="controls controls--bare controls--plain">
+                  <span class="controls__title">Ease curve</span>
+                  <span class="controls__values"><span>custom</span><span aria-hidden="true">·</span><span>1.5s</span></span>
+                  <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+                </div>
+                <div class="panel">
+                  <div class="frow frow--between"><span class="flabel">Easing function</span><span class="pbtn">Presets</span></div>
+                  <div class="bezier"><div class="bezier__box"><svg viewBox="0 0 100 100" preserveAspectRatio="none"><rect x="0" y="0" width="100" height="100" fill="#0f1720" stroke="rgba(255,255,255,0.12)" stroke-width="0.6"></rect><g stroke="rgba(255,255,255,0.12)" stroke-width="0.4" stroke-opacity="0.6"><line x1="0" y1="50" x2="100" y2="50"></line><line x1="50" y1="0" x2="50" y2="100"></line></g><line x1="0" y1="100" x2="100" y2="0" stroke="rgba(255,255,255,0.12)" stroke-width="0.4" stroke-dasharray="2 2"></line><g stroke="rgba(255,255,255,0.35)" stroke-width="0.8"><line x1="0" y1="100" x2="80.42" y2="74.62"></line><line x1="100" y1="0" x2="18.32" y2="13.77"></line></g><path d="M0 100 C 80.42 74.62, 18.32 13.77, 100 0" fill="none" stroke="#bef264" stroke-width="1.5" stroke-linecap="round"></path></svg><span class="bezier__handle" style="--hx: 80.42%; --hy: 74.62%;"></span><span class="bezier__handle" style="--hx: 18.32%; --hy: 13.77%;"></span></div></div>
+                  <div class="field"><span class="flabel">Duration</span><span class="well-input"><span>1.5</span><span class="well-input__unit">s</span></span></div>
+                  <div class="frow frow--end"><span class="pbtn">Apply</span></div>
+                </div>
               </div>
           </div>
         </div>
