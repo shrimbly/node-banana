@@ -49,7 +49,7 @@
       </div>
       <div class="app__tabs" data-tabs>
         <div class="tab tab--active" data-tab="mannequin"><svg class="tab__ear tab__ear--left" viewBox="0 0 9 9" fill="none"><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5 L0.5 9 L9 9 L9 0 Z" class="tab__ear-fill"></path><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5" class="tab__ear-line"></path></svg><svg class="tab__ear tab__ear--right" viewBox="0 0 9 9" fill="none"><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5 L0.5 9 L9 9 L9 0 Z" class="tab__ear-fill"></path><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5" class="tab__ear-line"></path></svg><span class="tab__label">Invisible Mannequin</span><span class="tab__close" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></span></div>
-        <div class="tab tab--rest" data-tab="fashion"><svg class="tab__ear tab__ear--left" viewBox="0 0 9 9" fill="none"><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5 L0.5 9 L9 9 L9 0 Z" class="tab__ear-fill"></path><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5" class="tab__ear-line"></path></svg><svg class="tab__ear tab__ear--right" viewBox="0 0 9 9" fill="none"><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5 L0.5 9 L9 9 L9 0 Z" class="tab__ear-fill"></path><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5" class="tab__ear-line"></path></svg><span class="tab__label">Fashion ad automation</span><span class="tab__close" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></span></div>
+        <div class="tab tab--rest" data-tab="cars"><svg class="tab__ear tab__ear--left" viewBox="0 0 9 9" fill="none"><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5 L0.5 9 L9 9 L9 0 Z" class="tab__ear-fill"></path><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5" class="tab__ear-line"></path></svg><svg class="tab__ear tab__ear--right" viewBox="0 0 9 9" fill="none"><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5 L0.5 9 L9 9 L9 0 Z" class="tab__ear-fill"></path><path d="M8.5 0 A8 8.5 0 0 1 0.5 8.5" class="tab__ear-line"></path></svg><span class="tab__label">Cars</span><span class="tab__close" data-close><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg></span></div>
         <span class="tab__new" data-new-tab><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></span>
       </div>
 
@@ -144,69 +144,303 @@ The denim jacket is completely steady during the rotation. </div><span class="pr
               </div>
           </div>
         </div>
-        <div class="stage" data-stage="fashion" style="--gx: 80px; --gy: 4px; --gw: 1220px; --cx: 690px; --cy: 290px; --zoom-tablet: 0.7; --zoom-phone: 0.55;">
+        <div class="stage" data-stage="cars" style="--gx: 0px; --gy: -26px; --gw: 2460px; --cx: 1230px; --cy: 220px; --zoom-tablet: 0.5; --zoom-phone: 0.42;">
           <svg class="edges" width="1" height="1" overflow="visible">
-            <path data-from="d-image" data-from-handle="image" data-to="d-generate" data-to-handle="image" pathLength="1" d="M 385.5 54 C 470.0 54, 470.0 144, 554.5 144" class="edge edge--image"></path>
-            <path data-from="d-prompt" data-from-handle="text" data-to="d-generate" data-to-handle="text" pathLength="1" d="M 405.5 324 C 480.0 324, 480.0 174, 554.5 174" class="edge edge--text"></path>
-            <path data-from="d-generate" data-from-handle="image" data-to="d-video" data-to-handle="image" pathLength="1" d="M 865.5 144 C 930.0 144, 930.0 64, 994.5 64" class="edge edge--image"></path>
+            <path data-from="imageInput-6" data-from-handle="image" data-to="llmGenerate-10" data-to-handle="image" pathLength="1" d="M 305.5 24 C 365.5 24, 354.5 144, 414.5 144" class="edge edge--image"></path>
+            <path data-from="prompt-9" data-from-handle="text" data-to="llmGenerate-10" data-to-handle="text" pathLength="1" d="M 325.5 314 C 385.5 314, 354.5 174, 414.5 174" class="edge edge--text"></path>
+            <path data-from="imageInput-6" data-from-handle="image" data-to="nanoBanana-11" data-to-handle="image-0" pathLength="1" d="M 305.5 24 C 570.0 24, 570.0 24, 834.5 24" class="edge edge--image"></path>
+            <path data-from="llmGenerate-10" data-from-handle="text" data-to="nanoBanana-11" data-to-handle="text-0" pathLength="1" d="M 745.5 174 C 805.5 174, 774.5 54, 834.5 54" class="edge edge--text"></path>
+            <path data-from="nanoBanana-11" data-from-handle="image" data-to="splitGrid-13" data-to-handle="image" pathLength="1" d="M 1465.5 24 C 1525.5 24, 1494.5 84, 1554.5 84" class="edge edge--image"></path>
+            <path data-from="nanoBanana-11" data-from-handle="image" data-to="generateVideo-69" data-to-handle="image-0" pathLength="1" d="M 1465.5 24 C 1720.0 24, 1720.0 84, 1974.5 84" class="edge edge--image"></path>
+            <path data-from="prompt-78" data-from-handle="text" data-to="generateVideo-69" data-to-handle="text-0" pathLength="1" d="M 1885.5 404 C 1945.5 404, 1914.5 174, 1974.5 174" class="edge edge--text"></path>
           </svg>
-          <div class="node node--image" data-node="d-image" data-i="1" style="--x: 80px; --y: 30px; --w: 300px;">
+          <div class="node node--image" data-node="imageInput-6" data-i="1" style="--x: 0px; --y: 0px; --w: 300px;">
               <div class="node__header"><span class="node__title">Image Input</span></div>
             <div class="card">
-              <img class="media" src="assets/node-desert.jpg" width="440" height="294" alt="" draggable="false">
+              <img class="media" src="assets/cars-input.jpg" width="800" height="533" alt="" draggable="false">
                 <span class="socket socket--in socket--reference" data-handle="reference" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
                 <span class="socket socket--out socket--image" data-handle="image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
             </div>
             <div class="gap"></div>
               <div class="controls controls--plain">
-                <span class="controls__title">desert.jpg</span>
-                <span class="controls__values"><span>1536×1024</span></span>
+                <span class="controls__title">DSCF4258.JPG</span>
+                <span class="controls__values"><span>2460×1640</span></span>
                 <span class="controls__end"></span>
               </div>
           </div>
-          <div class="node node--prompt" data-node="d-prompt" data-i="2" style="--x: 80px; --y: 300px; --w: 320px;">
+          <div class="node node--prompt" data-node="prompt-9" data-i="2" style="--x: 0px; --y: 290px; --w: 320px;">
               <div class="node__header"><span class="node__title">Prompt</span></div>
             <div class="card">
-              <div class="prompt" style="--h: 120px;"><div class="prompt__text">A donkey standing on a dune at golden hour, wearing a tailored linen coat. Editorial fashion photograph, 35mm, soft shadows.</div><span class="prompt__grip"></span></div>
+              <div class="prompt"><div class="prompt__text">Analyze the input image and use it to replace the bracketed example descriptors in the prompt below with accurate, image-grounded descriptions of the vehicle shown.
+
+Replace only the text inside square brackets [...].
+
+Do not change sentence structure, ordering, or wording outside those brackets.
+
+Do not add new descriptions or remove any constraints.
+
+Do not mention tools, models, or reasoning.
+
+Return the full prompt with the bracketed descriptors replaced.
+
+Prompt to Populate
+
+Analyze the input image and silently inventory all automotive-critical details: the specific vehicle make, model, and year ([VEHICLE_MAKE_MODEL_YEAR]), custom modifications ([VISIBLE_MODIFICATIONS]), tire tread design, interior visibility through glass, engineering details, light direction, and reflection quality.
+
+The setting is a pristine, high-budget automotive photography studio. A massive softbox downlight (large diffusion bank) hangs directly overhead, creating long, clean highlights on the vehicle. The background is a seamless, dark studio cyclorama. Outside the area with the car it is extremely dark, with the walls of the studio only faintly visible. Render the vehicle with hyper-realistic detail, capturing the precise texture of the materials, distinct mechanical components, and accurate light reflections.
+
+The vehicle’s body color, wheel color, and all material colors must exactly match the input image, with no reinterpretation, correction, enhancement, or stylization. Color fidelity must be exact and consistent across all frames.
+
+All vehicle details, styling, modifications, lighting, environment, and color grade must remain 100% unchanged across all frames. There must be NO human model present in any frame. Do not reinterpret materials or colors. Do not output any reasoning.
+
+All frames must contain NO written text, labels, captions, UI elements, watermarks, or annotations of any kind.
+
+Your visible output must be:
+
+One 3×3 contact sheet image (9 frames).
+
+Required 9-Frame Automotive Shot List
+1. Low-Angle Front "Hero" Stance (Aggressive, Wide Lens)
+
+Lens: Wide-angle (18–24 mm equivalent)
+Framing: Front three-quarter, full vehicle in frame
+Camera positioned very low to the studio floor at the front three-quarter view. This perspective exaggerates the front bumper, headlights, and wide stance of the car, making it appear dominant and aggressive. The massive overhead softbox creates long, sleek highlight lines across the hood and roof.
+
+2. High-Angle Rear Quarter Abstract (Geometric, Sculptural)
+
+Lens: Wide-angle (24–28 mm equivalent)
+Framing: Rear quarter, cropped mid-body to roofline
+Camera positioned high overhead, looking down sharply at the rear quarter and [REAR_BODY_FEATURES]. This frame emphasizes the vehicle’s rear geometry, rear glass curvature, and any visible aero elements against the dark studio floor.
+
+3. Ultra-Low "Worm's Eye" Profile (Speed, Texture)
+
+Lens: Wide-angle (20–24 mm equivalent)
+Framing: Side profile with extreme foreground emphasis
+Camera placed practically on the ground, looking along the side profile of the car from just behind the front wheel towards the rear. The front wheel and tire dominate the immediate foreground, showing [WHEEL_TIRE_AND_BRAKE_DETAILS], while the rest of the car body stretches away into the distance, emphasizing length and ride height.
+
+4. Wide Environmental Studio Frame (Scale, Production Value)
+
+Lens: Ultra-wide (14–18 mm equivalent)
+Framing: Full vehicle small in frame with environment dominant
+Camera positioned very wide and far back, capturing the entire vehicle small within the vastness of the studio. This shot must include the massive overhead diffusion bank hanging above the car, showing the scale of the lighting setup against the seamless dark cyclorama infinity background.
+
+5. The "Driver's Line" Abstract (Curvature, Reflection)
+
+Lens: Standard (35–50 mm equivalent)
+Framing: Tight longitudinal crop along hood and fender
+Camera positioned near the base of the windshield (cowl area), looking forward down the length of the hood and front fender curve. This angle focuses on body curvature and the precise reflection of the overhead light source on the vehicle’s paint surface.
+
+6. Macro Engineering Detail (Texture, Precision)
+
+Lens: True macro (90–105 mm equivalent)
+Framing: Extreme close-up, single component fills frame
+Extreme close-up macro shot focusing on a specific, intricate detail visible in the image — [MACRO_DETAIL]. The focus must be razor-sharp on the metallic, glass, or composite textures.
+
+7. Overhead Centerline Top-Down (Symmetry, Geometry)
+
+Lens: Moderate wide (28–35 mm equivalent)
+Framing: Full vehicle centered, top-down orthographic feel
+Camera positioned directly above the vehicle on the longitudinal centerline, looking straight down. This frame emphasizes symmetry, roofline geometry, hood alignment, and the graphic silhouette of the vehicle against the dark cyclorama floor.
+
+8. Rear Low-Centerline Compression (Width, Power)
+
+Lens: Short telephoto (70–85 mm equivalent)
+Framing: Rear view, tightly framed horizontally
+Camera positioned low and centered behind the vehicle. This compressed perspective emphasizes rear track width, bumper mass, and lower body volume, isolating the car from the surrounding darkness.
+
+9. Front Corner Surface Study (Surface Transition, Light Falloff)
+
+Lens: Short telephoto (85–100 mm equivalent)
+Framing: Tight three-quarter detail crop
+Camera positioned close to the front corner of the vehicle, angled obliquely across the headlight, fender edge, and hood seam. This frame emphasizes panel transitions, surface curvature, and controlled light falloff across the paint.
+
+Continuity &amp; Technical Requirements
+
+Maintain perfect vehicle fidelity in every frame: exact paint, exact wheel finish, exact materials, modifications, tires, and cleanliness.
+
+Environment, textures, and massive overhead lighting source must remain consistent.
+
+Depth of field shifts naturally with focal length (deep for wide/environmental shots, shallow for telephoto, very shallow for macro).
+
+Photoreal textures and physically plausible light behavior (especially metallic paint reflections and glass refractions) required.
+
+Frames must feel like different high-end camera placements within the same shoot.
+
+All keyframes must be the exact same aspect ratio, and exactly 9 keyframes should be output. Maintain the exact visual style in all keyframes: shot on Fuji Velvia film with a hard light source creating high contrast, overexposed highlights showing significant film grain, and oversaturated colors.
+
+Output Format
+
+A) 3×3 Contact Sheet Image</div><span class="prompt__grip"></span></div>
                 <span class="socket socket--in socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
                 <span class="socket socket--out socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
             </div>
             <div class="gap"></div>
               <div class="controls controls--plain">
                 <span class="controls__title controls__title--link">Add variable</span>
-                <span class="controls__values"><span>124 chars</span></span>
+                <span class="controls__values"><span>6615 chars</span></span>
                 <span class="controls__end"></span>
               </div>
           </div>
-          <div class="node node--generate" data-node="d-generate" data-i="3" style="--x: 560px; --y: 120px; --w: 300px;">
-              <div class="node__header"><span class="node__title"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg>Generate Image</span></div>
+          <div class="node node--llm" data-node="llmGenerate-10" data-i="3" style="--x: 420px; --y: 120px; --w: 320px;">
+              <div class="node__header"><span class="node__title">LLM Generate</span></div>
             <div class="card">
-              <img class="media" src="assets/node-donkey.jpg" width="440" height="294" alt="" draggable="false">
+              <div class="llm"><div class="llm__text">Analyze the input image and silently inventory all automotive-critical details: the specific vehicle make, model, and year (1973 MGB GT V8), custom modifications (factory-original chrome bumpers with overriders, period-correct multi-spoke alloy wheels with black centers and polished rims, and a custom '73MGV8' license plate), tire tread design, interior visibility through glass, engineering details, light direction, and reflection quality.
+
+The setting is a pristine, high-budget automotive photography studio. A massive softbox downlight (large diffusion bank) hangs directly overhead, creating long, clean highlights on the vehicle. The background is a seamless, dark studio cyclorama. Outside the area with the car it is extremely dark, with the walls of the studio only faintly visible. Render the vehicle with hyper-realistic detail, capturing the precise texture of the materials, distinct mechanical components, and accurate light reflections.
+
+The vehicle’s body color, wheel color, and all material colors must exactly match the input image, with no reinterpretation, correction, enhancement, or stylization. Color fidelity must be exact and consistent across all frames.
+
+All vehicle details, styling, modifications, lighting, environment, and color grade must remain 100% unchanged across all frames. There must be NO human model present in any frame. Do not reinterpret materials or colors. Do not output any reasoning.
+
+All frames must contain NO written text, labels, captions, UI elements, watermarks, or annotations of any kind.
+
+Your visible output must be:
+
+One 3×3 contact sheet image (9 frames).
+
+Required 9-Frame Automotive Shot List
+1. Low-Angle Front "Hero" Stance (Aggressive, Wide Lens)
+
+Lens: Wide-angle (18–24 mm equivalent)
+Framing: Front three-quarter, full vehicle in frame
+Camera positioned very low to the studio floor at the front three-quarter view. This perspective exaggerates the front bumper, headlights, and wide stance of the car, making it appear dominant and aggressive. The massive overhead softbox creates long, sleek highlight lines across the hood and roof.
+
+2. High-Angle Rear Quarter Abstract (Geometric, Sculptural)
+
+Lens: Wide-angle (24–28 mm equivalent)
+Framing: Rear quarter, cropped mid-body to roofline
+Camera positioned high overhead, looking down sharply at the rear quarter and the expansive curved rear glass hatch, vertical taillight clusters, and the chrome bumper featuring vertical overriders. This frame emphasizes the vehicle’s rear geometry, rear glass curvature, and any visible aero elements against the dark studio floor.
+
+3. Ultra-Low "Worm's Eye" Profile (Speed, Texture)
+
+Lens: Wide-angle (20–24 mm equivalent)
+Framing: Side profile with extreme foreground emphasis
+Camera placed practically on the ground, looking along the side profile of the car from just behind the front wheel towards the rear. The front wheel and tire dominate the immediate foreground, showing the multi-spoke composite wheels with black painted spokes and polished silver outer lips, paired with classic road-tread tires, while the rest of the car body stretches away into the distance, emphasizing length and ride height.
+
+4. Wide Environmental Studio Frame (Scale, Production Value)
+
+Lens: Ultra-wide (14–18 mm equivalent)
+Framing: Full vehicle small in frame with environment dominant
+Camera positioned very wide and far back, capturing the entire vehicle small within the vastness of the studio. This shot must include the massive overhead diffusion bank hanging above the car, showing the scale of the lighting setup against the seamless dark cyclorama infinity background.
+
+5. The "Driver's Line" Abstract (Curvature, Reflection)
+
+Lens: Standard (35–50 mm equivalent)
+Framing: Tight longitudinal crop along hood and fender
+Camera positioned near the base of the windshield (cowl area), looking forward down the length of the hood and front fender curve. This angle focuses on body curvature and the precise reflection of the overhead light source on the vehicle’s paint surface.
+
+6. Macro Engineering Detail (Texture, Precision)
+
+Lens: True macro (90–105 mm equivalent)
+Framing: Extreme close-up, single component fills frame
+Extreme close-up macro shot focusing on a specific, intricate detail visible in the image — the red MG octagon emblem and the chrome 'V8' badge positioned on the black honeycomb front grille. The focus must be razor-sharp on the metallic, glass, or composite textures.
+
+7. Overhead Centerline Top-Down (Symmetry, Geometry)
+
+Lens: Moderate wide (28–35 mm equivalent)
+Framing: Full vehicle centered, top-down orthographic feel
+Camera positioned directly above the vehicle on the longitudinal centerline, looking straight down. This frame emphasizes symmetry, roofline geometry, hood alignment, and the graphic silhouette of the vehicle against the dark cyclorama floor.
+
+8. Rear Low-Centerline Compression (Width, Power)
+
+Lens: Short telephoto (70–85 mm equivalent)
+Framing: Rear view, tightly framed horizontally
+Camera positioned low and centered behind the vehicle. This compressed perspective emphasizes rear track width, bumper mass, and lower body volume, isolating the car from the surrounding darkness.
+
+9. Front Corner Surface Study (Surface Transition, Light Falloff)
+
+Lens: Short telephoto (85–100 mm equivalent)
+Framing: Tight three-quarter detail crop
+Camera positioned close to the front corner of the vehicle, angled obliquely across the headlight, fender edge, and hood seam. This frame emphasizes panel transitions, surface curvature, and controlled light falloff across the paint.
+
+Continuity &amp; Technical Requirements
+
+Maintain perfect vehicle fidelity in every frame: exact paint, exact wheel finish, exact materials, modifications, tires, and cleanliness.
+
+Environment, textures, and massive overhead lighting source must remain consistent.
+
+Depth of field shifts naturally with focal length (deep for wide/environmental shots, shallow for telephoto, very shallow for macro).
+
+Photoreal textures and physically plausible light behavior (especially metallic paint reflections and glass refractions) required.
+
+Frames must feel like different high-end camera placements within the same shoot.
+
+All keyframes must be the exact same aspect ratio, and exactly 9 keyframes should be output. Maintain the exact visual style in all keyframes: shot on Fuji Velvia film with a hard light source creating high contrast, overexposed highlights showing significant film grain, and oversaturated colors.
+
+Output Format
+
+A) 3×3 Contact Sheet Image</div></div>
                 <span class="socket socket--in socket--image" data-handle="image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
                 <span class="socket socket--in socket--text" data-handle="text" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="gap"></div>
+              <div class="controls">
+                <span class="controls__icon"><span class="mark">G</span></span>
+                <span class="controls__title">Gemini 3 Flash</span>
+                <span class="controls__values"><span>temp 0.70</span></span>
+                <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </div>
+          </div>
+          <div class="node node--generate" data-node="nanoBanana-11" data-i="4" style="--x: 840px; --y: 0px; --w: 620px;">
+              <div class="node__header"><span class="node__title"><svg class="badge" viewBox="0 0 1855 1855" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M1181.65 78C1212.05 78 1236.42 101.947 1239.32 131.261C1265.25 392.744 1480.07 600.836 1750.02 625.948C1780.28 628.764 1805 652.366 1805 681.816V1174.18C1805 1203.63 1780.28 1227.24 1750.02 1230.05C1480.07 1255.16 1265.25 1463.26 1239.32 1724.74C1236.42 1754.05 1212.05 1778 1181.65 1778H673.354C642.951 1778 618.585 1754.05 615.678 1724.74C589.754 1463.26 374.927 1255.16 104.984 1230.05C74.7212 1227.24 50 1203.63 50 1174.18V681.816C50 652.366 74.7213 628.764 104.984 625.948C374.927 600.836 589.754 392.744 615.678 131.261C618.585 101.946 642.951 78 673.353 78H1181.65ZM402.377 926.561C402.377 1209.41 638.826 1438.71 930.501 1438.71C1222.18 1438.71 1458.63 1209.41 1458.63 926.561C1458.63 643.709 1222.18 414.412 930.501 414.412C638.826 414.412 402.377 643.709 402.377 926.561Z"></path></svg>Generate Image</span></div>
+            <div class="card">
+              <img class="media" src="assets/cars-grid.jpg" width="1200" height="805" alt="" draggable="false">
+                <span class="socket socket--in socket--image" data-handle="image-0" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--in socket--text" data-handle="text-0" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
                 <span class="socket socket--out socket--image" data-handle="image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
             </div>
             <div class="gap"></div>
               <div class="controls">
-                <span class="controls__icon"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg></span>
-                <span class="controls__title">Nano Banana Pro</span>
-                <span class="controls__values"><span>3:2</span><span aria-hidden="true">·</span><span>2K</span></span>
+                <span class="controls__icon"><svg class="badge" viewBox="0 0 1855 1855" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M1181.65 78C1212.05 78 1236.42 101.947 1239.32 131.261C1265.25 392.744 1480.07 600.836 1750.02 625.948C1780.28 628.764 1805 652.366 1805 681.816V1174.18C1805 1203.63 1780.28 1227.24 1750.02 1230.05C1480.07 1255.16 1265.25 1463.26 1239.32 1724.74C1236.42 1754.05 1212.05 1778 1181.65 1778H673.354C642.951 1778 618.585 1754.05 615.678 1724.74C589.754 1463.26 374.927 1255.16 104.984 1230.05C74.7212 1227.24 50 1203.63 50 1174.18V681.816C50 652.366 74.7213 628.764 104.984 625.948C374.927 600.836 589.754 392.744 615.678 131.261C618.585 101.946 642.951 78 673.353 78H1181.65ZM402.377 926.561C402.377 1209.41 638.826 1438.71 930.501 1438.71C1222.18 1438.71 1458.63 1209.41 1458.63 926.561C1458.63 643.709 1222.18 414.412 930.501 414.412C638.826 414.412 402.377 643.709 402.377 926.561Z"></path></svg></span>
+                <span class="controls__title">Gemini 3 Pro Image Preview</span>
+                <span class="controls__values"></span>
                 <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
               </div>
           </div>
-          <div class="node node--video" data-node="d-video" data-i="4" style="--x: 1000px; --y: 40px; --w: 300px;">
-              <div class="node__header"><span class="node__title"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg>Generate Video</span></div>
+          <div class="node node--split" data-node="splitGrid-13" data-i="5" style="--x: 1560px; --y: 60px; --w: 300px;">
+              <div class="node__header"><span class="node__title">Split Grid</span></div>
             <div class="card">
-              <img class="media media--wide" src="assets/node-donkey.jpg" width="440" height="294" alt="" draggable="false">
+              <div class="split" style="--rows: 3; --cols: 3;"><img class="media" src="assets/cars-grid.jpg" width="1200" height="805" alt="" draggable="false"><span class="split__cells"><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span></span></div>
                 <span class="socket socket--in socket--image" data-handle="image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
-                <span class="socket socket--in socket--video" data-handle="video" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
-                <span class="socket socket--in socket--text" data-handle="text" style="--row: 2"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--reference" data-handle="reference" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="gap"></div>
+              <div class="controls controls--plain">
+                <span class="controls__title">3×3 grid</span>
+                <span class="controls__values"></span>
+                <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </div>
+          </div>
+          <div class="node node--prompt" data-node="prompt-78" data-i="6" style="--x: 1560px; --y: 380px; --w: 320px;">
+              <div class="node__header"><span class="node__title">Prompt</span></div>
+            <div class="card">
+              <div class="prompt"><div class="prompt__text">The camera very smoothly and slowly lifts on a boom to view the car from a bird's eye view. The car is completely still.</div><span class="prompt__grip"></span></div>
+                <span class="socket socket--in socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="gap"></div>
+              <div class="controls controls--plain">
+                <span class="controls__title controls__title--link">Add variable</span>
+                <span class="controls__values"><span>120 chars</span></span>
+                <span class="controls__end"></span>
+              </div>
+          </div>
+          <div class="node node--video" data-node="generateVideo-69" data-i="7" style="--x: 1980px; --y: 60px; --w: 480px;">
+              <div class="node__header"><span class="node__title"><svg class="badge" viewBox="0 0 1855 1855" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M1181.65 78C1212.05 78 1236.42 101.947 1239.32 131.261C1265.25 392.744 1480.07 600.836 1750.02 625.948C1780.28 628.764 1805 652.366 1805 681.816V1174.18C1805 1203.63 1780.28 1227.24 1750.02 1230.05C1480.07 1255.16 1265.25 1463.26 1239.32 1724.74C1236.42 1754.05 1212.05 1778 1181.65 1778H673.354C642.951 1778 618.585 1754.05 615.678 1724.74C589.754 1463.26 374.927 1255.16 104.984 1230.05C74.7212 1227.24 50 1203.63 50 1174.18V681.816C50 652.366 74.7213 628.764 104.984 625.948C374.927 600.836 589.754 392.744 615.678 131.261C618.585 101.946 642.951 78 673.353 78H1181.65ZM402.377 926.561C402.377 1209.41 638.826 1438.71 930.501 1438.71C1222.18 1438.71 1458.63 1209.41 1458.63 926.561C1458.63 643.709 1222.18 414.412 930.501 414.412C638.826 414.412 402.377 643.709 402.377 926.561Z"></path></svg>Generate Video</span></div>
+            <div class="card">
+              <video class="media" src="assets/cars-video.mp4" poster="assets/cars-video-poster.jpg" width="716" height="480" muted loop playsinline preload="metadata" data-video></video>
+                <span class="socket socket--in socket--image" data-handle="image-0" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--in socket--image" data-handle="image-1" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--in socket--video socket--placeholder" data-handle="video" style="--row: 2"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--in socket--text" data-handle="text-0" style="--row: 3"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--in socket--text" data-handle="text-1" style="--row: 4"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
                 <span class="socket socket--out socket--video" data-handle="video" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
             </div>
-            <div class="gap gap--row"><span class="scrub"><span class="scrub__play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg></span><span class="scrub__range"><span class="scrub__fill" style="--pct: 40%"></span><span class="scrub__thumb" style="--pct: 40%"></span></span><span class="scrub__time">0:02 / 0:05</span></span></div>
+            <div class="gap gap--row"><span class="scrub"><span class="scrub__play" data-play><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"></path></svg></span><span class="scrub__range"><span class="scrub__fill" data-scrub-fill></span><span class="scrub__thumb" data-scrub-thumb></span></span><span class="scrub__time" data-scrub-time>0:00 / 0:05</span></span></div>
               <div class="controls">
-                <span class="controls__icon"><svg class="badge" viewBox="0 0 65 65" fill="currentColor" aria-hidden="true"><path d="M57.8647 29.0098C52.865 26.8576 48.4905 23.905 44.7393 20.1556C40.99 16.4063 38.0373 12.0299 35.8851 7.03022C35.0589 5.11406 34.395 3.14442 33.886 1.12498C33.72 0.464747 33.128 0 32.4475 0C31.7669 0 31.1749 0.464747 31.009 1.12498C30.4999 3.14442 29.836 5.11222 29.0098 7.03022C26.8576 12.0299 23.905 16.4063 20.1556 20.1556C16.4063 23.905 12.0299 26.8576 7.03022 29.0098C5.11406 29.836 3.14442 30.4999 1.12498 31.009C0.464747 31.1749 0 31.7669 0 32.4475C0 33.128 0.464747 33.72 1.12498 33.886C3.14442 34.395 5.11222 35.0589 7.03022 35.8851C12.0299 38.0373 16.4045 40.99 20.1556 44.7393C23.9068 48.4886 26.8576 52.865 29.0098 57.8647C29.836 59.7809 30.4999 61.7505 31.009 63.7699C31.1749 64.4302 31.7669 64.8949 32.4475 64.8949C33.128 64.8949 33.72 64.4302 33.886 63.7699C34.395 61.7505 35.0589 59.7827 35.8851 57.8647C38.0373 52.865 40.99 48.4905 44.7393 44.7393C48.4886 40.99 52.865 38.0373 57.8647 35.8851C59.7809 35.0589 61.7505 34.395 63.7699 33.886C64.4302 33.72 64.8949 33.128 64.8949 32.4475C64.8949 31.7669 64.4302 31.1749 63.7699 31.009C61.7505 30.4999 59.7827 29.836 57.8647 29.0098Z"></path></svg></span>
-                <span class="controls__title">Veo 3</span>
+                <span class="controls__icon"><svg class="badge" viewBox="0 0 1855 1855" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" clip-rule="evenodd" d="M1181.65 78C1212.05 78 1236.42 101.947 1239.32 131.261C1265.25 392.744 1480.07 600.836 1750.02 625.948C1780.28 628.764 1805 652.366 1805 681.816V1174.18C1805 1203.63 1780.28 1227.24 1750.02 1230.05C1480.07 1255.16 1265.25 1463.26 1239.32 1724.74C1236.42 1754.05 1212.05 1778 1181.65 1778H673.354C642.951 1778 618.585 1754.05 615.678 1724.74C589.754 1463.26 374.927 1255.16 104.984 1230.05C74.7212 1227.24 50 1203.63 50 1174.18V681.816C50 652.366 74.7213 628.764 104.984 625.948C374.927 600.836 589.754 392.744 615.678 131.261C618.585 101.946 642.951 78 673.353 78H1181.65ZM402.377 926.561C402.377 1209.41 638.826 1438.71 930.501 1438.71C1222.18 1438.71 1458.63 1209.41 1458.63 926.561C1458.63 643.709 1222.18 414.412 930.501 414.412C638.826 414.412 402.377 643.709 402.377 926.561Z"></path></svg></span>
+                <span class="controls__title">Kling Video v2.6 Image to Video</span>
                 <span class="controls__values"></span>
                 <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
               </div>

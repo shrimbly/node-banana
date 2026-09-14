@@ -348,6 +348,16 @@ ul { margin: 0; padding: 0; list-style: none; }
   background: rgb(115 115 115 / 0.7);
 }
 
+/* LLM node: the output text on the translucent surface; provider mark is a lettered circle. */
+.llm { position: relative; height: var(--h, 160px); border-radius: var(--radius-media); overflow: hidden; background: rgb(23 23 23 / 0.4); }
+.llm__text { position: absolute; inset: 0; padding: 8px; font-size: 10px; line-height: 14px; color: #d4d4d4; white-space: pre-wrap; overflow: hidden; }
+.mark { display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; background: #404040; color: #d4d4d4; font-size: 9px; line-height: 1; font-weight: 600; }
+
+/* Split grid: the source image with its cell outlines. */
+.split { position: relative; border-radius: var(--radius-media); overflow: hidden; }
+.split__cells { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); grid-template-rows: repeat(var(--rows, 3), minmax(0, 1fr)); pointer-events: none; }
+.split__cells span { border: 1px solid rgb(96 165 250 / 0.5); }
+
 /* Sockets sit in the card border: first centred 24px from the top, then every 30px. */
 .socket {
   position: absolute;
