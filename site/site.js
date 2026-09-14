@@ -205,12 +205,12 @@
     }
   }, { passive: false });
 
-  /* --- video: play with the scrub row following, unless motion is unwelcome. */
-  function wireVideo(stage) {
-    var video = stage.querySelector("[data-video]");
-    if (!video || video._wired) return;
+  /* --- video: every video in a stage plays with its own scrub row following, unless motion is unwelcome. */
+  function wireVideo(video) {
+    if (video._wired) return;
     video._wired = true;
-    var fill = stage.querySelector("[data-scrub-fill]"), thumb = stage.querySelector("[data-scrub-thumb]"), time = stage.querySelector("[data-scrub-time]");
+    var node = video.closest("[data-node]") || video.parentNode;
+    var fill = node.querySelector("[data-scrub-fill]"), thumb = node.querySelector("[data-scrub-thumb]"), time = node.querySelector("[data-scrub-time]");
     var fmt = function (t) { t = Math.floor(t || 0); return Math.floor(t / 60) + ":" + ("0" + (t % 60)).slice(-2); };
     video.addEventListener("timeupdate", function () {
       var d = video.duration || 5, pct = Math.min(100, (video.currentTime / d) * 100);
@@ -220,16 +220,15 @@
     });
   }
   function playVideo(stage) {
-    var video = stage.querySelector("[data-video]");
-    if (!video) return;
-    wireVideo(stage);
-    if (reducedMotion) return;
-    var p = video.play();
-    if (p && p.catch) p.catch(function () { /* autoplay refused: the poster stays */ });
+    Array.prototype.forEach.call(stage.querySelectorAll("[data-video]"), function (video) {
+      wireVideo(video);
+      if (reducedMotion) return;
+      var p = video.play();
+      if (p && p.catch) p.catch(function () { /* autoplay refused: the poster stays */ });
+    });
   }
   function pauseVideo(stage) {
-    var video = stage.querySelector("[data-video]");
-    if (video) video.pause();
+    Array.prototype.forEach.call(stage.querySelectorAll("[data-video]"), function (video) { video.pause(); });
   }
 
   /* --- tabs: click switches, the × closes, + opens an empty Untitled tab. */

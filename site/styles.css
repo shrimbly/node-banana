@@ -635,18 +635,20 @@ ul { margin: 0; padding: 0; list-style: none; }
   .js .word { transform: translateY(110%); }
 
   .js.ready .app { animation: rise 700ms var(--ease-out) 0ms both; }
-  .js.ready .node { animation: node-in 480ms var(--ease-out) both; }
-  .js.ready .node[data-i="1"] { animation-delay: 260ms; }
-  .js.ready .node[data-i="2"] { animation-delay: 350ms; }
-  .js.ready .node[data-i="3"] { animation-delay: 440ms; }
-  .js.ready .node[data-i="4"] { animation-delay: 530ms; }
-  .js.ready .node[data-i="5"] { animation-delay: 620ms; }
+  .js.ready .node { animation: node-in 480ms var(--ease-out) both; animation-delay: calc(170ms + var(--i, 1) * 90ms); }
   .js.ready .edge { animation: draw 560ms var(--ease-draw) both; }
   .js.ready .edge:nth-child(1) { animation-delay: 520ms; }
   .js.ready .edge:nth-child(2) { animation-delay: 600ms; }
-  .js.ready .edge:nth-child(3) { animation-delay: 700ms; }
+  .js.ready .edge:nth-child(3) { animation-delay: 680ms; }
   .js.ready .edge:nth-child(4) { animation-delay: 760ms; }
-  .js.ready .edge:nth-child(5) { animation-delay: 820ms; }
+  .js.ready .edge:nth-child(5) { animation-delay: 840ms; }
+  .js.ready .edge:nth-child(6) { animation-delay: 920ms; }
+  .js.ready .edge:nth-child(7) { animation-delay: 1000ms; }
+  .js.ready .edge:nth-child(8) { animation-delay: 1080ms; }
+  .js.ready .edge:nth-child(9) { animation-delay: 1160ms; }
+  .js.ready .edge:nth-child(10) { animation-delay: 1240ms; }
+  .js.ready .edge:nth-child(11) { animation-delay: 1320ms; }
+  .js.ready .edge:nth-child(12) { animation-delay: 1400ms; }
   .js.ready .points { animation: fade-up 600ms var(--ease-out) 700ms both; }
   .js.ready .nav__link { animation: fade-up 600ms var(--ease-out) 760ms both; }
   .js.ready .actions { animation: fade-up 600ms var(--ease-out) 820ms both; }
