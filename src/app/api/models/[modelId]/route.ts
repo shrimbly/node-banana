@@ -29,6 +29,9 @@ import { isGeminiOmni, GEMINI_OMNI_PARAMETERS, GEMINI_OMNI_INPUTS } from "@/lib/
 import { ModelParameter, ModelInput } from "@/lib/providers/types";
 import {
   getCachedWaveSpeedSchema,
+  getCachedModelRunnerSchema,
+  setCachedModelRunnerSchemas,
+  ModelRunnerApiSchema,
   setCachedWaveSpeedSchemas,
   WaveSpeedApiSchema,
 } from "@/lib/providers/cache";
@@ -546,6 +549,65 @@ async function fetchReplicateSchema(
  * Fetch and parse schema from fal.ai using Model Search API
  * Uses: GET https://api.fal.ai/v1/models?endpoint_id={modelId}&expand=openapi-3.0
  */
+/**
+ * Resolve a ModelRunner model's parameter schema.
+ *
+ * Schemas are normally already cached by the catalog fetch, which returns them
+ * inline. This falls back to a filtered catalog request for the case where the
+ * schema endpoint is hit before any model list has been loaded.
+ */
+async function fetchModelRunnerSchema(
+  modelId: string,
+  apiKey: string | null
+): Promise<ExtractedSchema> {
+  let schema: ModelRunnerApiSchema | null | undefined = getCachedModelRunnerSchema(modelId);
+
+  if (!schema) {
+    const alias = modelId.split("/").slice(1).join("/");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (apiKey) {
+      headers["Authorization"] = `Key ${apiKey}`;
+    }
+
+    const response = await fetch(
+      `https://modelrunner.run/models?limit=100&search=${encodeURIComponent(alias)}`,
+      { headers }
+    );
+
+    if (!response.ok) {
+      // Return empty params if the catalog is unavailable so generation still works
+      return { parameters: [], inputs: [] };
+    }
+
+    const data = await response.json();
+    const models: Array<Record<string, unknown>> = data?.data || [];
+    const refreshed = new Map<string, ModelRunnerApiSchema>();
+
+    for (const model of models) {
+      const endpoint = `${model.ownerName}/${model.alias}`;
+      if (model.schema) {
+        refreshed.set(endpoint, model.schema as ModelRunnerApiSchema);
+      }
+      if (endpoint === modelId) {
+        schema = model.schema as ModelRunnerApiSchema | undefined;
+      }
+    }
+
+    if (refreshed.size > 0) {
+      setCachedModelRunnerSchemas(refreshed);
+    }
+  }
+
+  const components = schema?.components?.schemas;
+  const inputSchema = components?.["Input"] as Record<string, unknown> | undefined;
+  if (!inputSchema) {
+    return { parameters: [], inputs: [] };
+  }
+
+  // Pass components.schemas so enum $refs resolve
+  return extractParametersFromSchema(inputSchema, components);
+}
+
 async function fetchFalSchema(
   modelId: string,
   apiKey: string | null
@@ -1575,11 +1637,11 @@ export async function GET(
   const decodedModelId = decodeURIComponent(modelId);
   const provider = request.nextUrl.searchParams.get("provider") as ProviderType | null;
 
-  if (!provider || (provider !== "replicate" && provider !== "fal" && provider !== "kie" && provider !== "wavespeed" && provider !== "gemini" && provider !== "openai")) {
+  if (!provider || (provider !== "replicate" && provider !== "fal" && provider !== "kie" && provider !== "wavespeed" && provider !== "gemini" && provider !== "openai" && provider !== "modelrunner")) {
     return NextResponse.json<SchemaErrorResponse>(
       {
         success: false,
-        error: "Invalid or missing provider. Use ?provider=replicate, ?provider=fal, ?provider=kie, ?provider=wavespeed, ?provider=openai, or ?provider=gemini",
+        error: "Invalid or missing provider. Use ?provider=replicate, ?provider=fal, ?provider=kie, ?provider=wavespeed, ?provider=openai, ?provider=modelrunner, or ?provider=gemini",
       },
       { status: 400 }
     );
@@ -1634,6 +1696,10 @@ export async function GET(
     } else if (provider === "openai") {
       // OpenAI uses hardcoded schemas (no schema discovery API for image models)
       result = getOpenAiSchema(decodedModelId);
+    } else if (provider === "modelrunner") {
+      // ModelRunner ships OpenAPI schemas inline with the catalog
+      const apiKey = request.headers.get("X-ModelRunner-Key") || process.env.MODELRUNNER_KEY || null;
+      result = await fetchModelRunnerSchema(decodedModelId, apiKey);
     } else {
       // User-provided key takes precedence over env variable
       const apiKey = request.headers.get("X-Fal-Key") || process.env.FAL_API_KEY || null;

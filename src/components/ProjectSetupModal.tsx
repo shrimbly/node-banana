@@ -170,7 +170,7 @@ export function ProjectSetupModal({
     replicate: false,
     fal: false,
     kie: false,
-    wavespeed: false,
+    wavespeed: false, modelrunner: false,
   });
   const [overrideActive, setOverrideActive] = useState<Record<ProviderType, boolean>>({
     gemini: false,
@@ -179,7 +179,7 @@ export function ProjectSetupModal({
     replicate: false,
     fal: false,
     kie: false,
-    wavespeed: false,
+    wavespeed: false, modelrunner: false,
   });
   const [envStatus, setEnvStatus] = useState<EnvStatusResponse | null>(null);
 
@@ -220,7 +220,7 @@ export function ProjectSetupModal({
       // Sync local providers state
       editedProviderKeys.current.clear();
       setLocalProviders(providerSettings);
-      setShowApiKey({ gemini: false, openai: false, anthropic: false, replicate: false, fal: false, kie: false, wavespeed: false });
+      setShowApiKey({ gemini: false, openai: false, anthropic: false, replicate: false, fal: false, kie: false, wavespeed: false, modelrunner: false });
       // Initialize override as active if user already has a key set
       setOverrideActive({
         gemini: !!providerSettings.providers.gemini?.apiKey,
@@ -230,6 +230,7 @@ export function ProjectSetupModal({
         fal: !!providerSettings.providers.fal?.apiKey,
         kie: !!providerSettings.providers.kie?.apiKey,
         wavespeed: !!providerSettings.providers.wavespeed?.apiKey,
+        modelrunner: !!providerSettings.providers.modelrunner?.apiKey,
       });
       setError(null);
 
@@ -878,7 +879,7 @@ export function ProjectSetupModal({
                       <button
                         type="button"
                         onClick={() => {
-                          setOverrideActive((prev) => ({ ...prev, wavespeed: false }));
+                          setOverrideActive((prev) => ({ ...prev, wavespeed: false, modelrunner: false }));
                           updateLocalProvider("wavespeed", { apiKey: null });
                         }}
                         className="text-xs text-neutral-500 hover:text-neutral-300"
