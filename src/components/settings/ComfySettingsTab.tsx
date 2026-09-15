@@ -375,10 +375,24 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /** Read the stored settings once on mount, for a modal that opens with them. */
-export function useComfySettingsDraft(isOpen: boolean): [ComfySettings, (s: ComfySettings) => void] {
+export function useComfySettingsDraft(isOpen: boolean) {
   const [draft, setDraft] = useState<ComfySettings>(() => getComfySettings());
+  const [editedFields] = useState(() => new Set<keyof ComfySettings>());
   useEffect(() => {
-    if (isOpen) setDraft(getComfySettings());
+    if (isOpen) { editedFields.clear(); setDraft(getComfySettings()); }
   }, [isOpen]);
-  return [draft, setDraft];
+  const updateDraft = (settings: ComfySettings) => {
+    for (const key of Object.keys(settings) as (keyof ComfySettings)[]) {
+      if (settings[key] !== draft[key]) editedFields.add(key);
+    }
+    setDraft(settings);
+  };
+  const applyImported = (settings: ComfySettings, fields: (keyof ComfySettings)[]) => {
+    setDraft(previous => {
+      const next = { ...previous };
+      for (const key of fields) if (!editedFields.has(key)) Object.assign(next, { [key]: settings[key] });
+      return next;
+    });
+  };
+  return [draft, updateDraft, applyImported] as const;
 }

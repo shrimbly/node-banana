@@ -30,12 +30,14 @@ import {
   GLBViewerNodeData,
   ComfyAppNodeData,
   WorkflowNodeData,
+  WorkflowNode,
   GroupColor,
   SelectedModel,
   MODEL_DISPLAY_NAMES,
 } from "@/types";
 import { loadGenerateImageDefaults, loadNodeDefaults } from "./localStorage";
 import { getEasingBezier } from "@/lib/easing-presets";
+import { DEFAULT_LLM_MODEL, DEFAULT_LLM_PROVIDER } from "@/lib/llm/catalog";
 
 /**
  * Default dimensions for each node type.
@@ -71,6 +73,33 @@ export const defaultNodeDimensions: Record<NodeType, { width: number; height: nu
   glbViewer: { width: 360, height: 380 },
   comfyApp: { width: 320, height: 340 },
 };
+
+/**
+ * Normalise a node's stored geometry for the width-driven layout.
+ *
+ * Height is derived from content at render time and only mirrored back into
+ * the node, so a saved or copied height is stale by definition; measurements
+ * belong to the DOM that produced them; and the settings-panel bookkeeping
+ * from the previous node chrome is gone. Width survives, in both the places
+ * React Flow reads it.
+ */
+export function migrateNodeGeometry<T extends WorkflowNode>(node: T): T {
+  const defaults = defaultNodeDimensions[node.type as NodeType] ?? { width: 300, height: 280 };
+  const styleWidth = typeof node.style?.width === "number" ? node.style.width : undefined;
+  const width = node.width ?? styleWidth ?? defaults.width;
+
+  const { height: _height, measured: _measured, ...rest } = node;
+  const { height: _styleHeight, ...styleRest } = (node.style ?? {}) as Record<string, unknown>;
+  const { _settingsPanelHeight, ...dataRest } = (node.data ?? {}) as Record<string, unknown>;
+  void _height; void _measured; void _styleHeight; void _settingsPanelHeight;
+
+  return {
+    ...rest,
+    width,
+    style: { ...styleRest, width },
+    data: dataRest,
+  } as T;
+}
 
 /**
  * Group color palette (dark mode tints).
@@ -253,8 +282,8 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         inputPrompt: null,
         inputImages: [],
         outputText: null,
-        provider: llmDefaults?.provider ?? "google",
-        model: llmDefaults?.model ?? "gemini-3-flash-preview",
+        provider: llmDefaults?.provider ?? DEFAULT_LLM_PROVIDER,
+        model: llmDefaults?.model ?? DEFAULT_LLM_MODEL,
         temperature: llmDefaults?.temperature ?? 0.7,
         maxTokens: llmDefaults?.maxTokens ?? 8192,
         status: "idle",

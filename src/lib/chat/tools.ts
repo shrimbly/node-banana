@@ -4,6 +4,7 @@ import { EditOperation } from "./editOperations";
 import { WorkflowContext, formatContextForPrompt } from "./contextBuilder";
 import { SubgraphResult } from "./subgraphExtractor";
 import { NodeType } from "@/types";
+import { describeLLMModels } from "@/lib/llm/catalog";
 
 /**
  * Valid node types for workflow editing.
@@ -58,8 +59,8 @@ AI video generation. Takes image + text inputs, outputs video. Only available wi
 
 ### LLM Text Generation
 AI text generation for expanding prompts or analyzing images.
-- **Provider dropdown**: Google or OpenAI
-- **Model dropdown**: Gemini 3 Flash, Gemini 2.5 Flash, Gemini 3.0 Pro (Google) / GPT-4.1 Mini, GPT-4.1 Nano (OpenAI)
+- **Provider dropdown**: Google, OpenAI or Anthropic
+- **Model dropdown**: ${describeLLMModels()}
 - **Parameters** (collapsible): Temperature slider (0-2), Max Tokens slider (256-16384)
 - Takes **text** input (required), optional **image** input
 

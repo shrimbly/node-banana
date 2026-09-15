@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useDeferredValue } from "react";
 import { useStore, type ReactFlowState } from "@xyflow/react";
 import { generateThumbnail } from "@/utils/imageThumbnail";
 import {
@@ -40,6 +40,10 @@ export function useAdaptiveImageSrc(
     // Only re-render when the boolean result changes
     (a, b) => a === b
   );
+  // Every image node crosses the threshold on the same zoom step, so the
+  // swap is deferred and React spreads it across frames instead of
+  // re-rendering them all in one
+  const thumbnailWanted = useDeferredValue(shouldUseThumbnail);
 
   const [thumbnailSrc, setThumbnailSrc] = useState<string | null>(null);
   const prevSrcRef = useRef<string | null>(null);
@@ -96,5 +100,5 @@ export function useAdaptiveImageSrc(
 
   if (!fullSrc) return null;
 
-  return shouldUseThumbnail && thumbnailSrc ? thumbnailSrc : fullSrc;
+  return thumbnailWanted && thumbnailSrc ? thumbnailSrc : fullSrc;
 }

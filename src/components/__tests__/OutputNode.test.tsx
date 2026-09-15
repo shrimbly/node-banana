@@ -241,15 +241,15 @@ describe("OutputNode", () => {
   });
 
   describe("Video Controls Rendering", () => {
-    it("should render video with controls attribute", () => {
+    it("drives the video from the scrub row instead of native controls", () => {
       render(
         <TestWrapper>
-          <OutputNode {...createNodeProps({ video: "data:video/mp4;base64,xyz" })} />
+          <OutputNode {...createNodeProps({ video: "data:video/mp4;base64,xyz789" })} />
         </TestWrapper>
       );
-
       const video = document.querySelector("video");
-      expect(video).toHaveAttribute("controls");
+      expect(video).not.toHaveAttribute("controls");
+      expect(screen.getByTitle("Play")).toBeInTheDocument();
     });
 
     it("should render video with loop attribute", () => {

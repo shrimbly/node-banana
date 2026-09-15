@@ -1,5 +1,6 @@
 "use client";
 
+import { Dialog } from "@/components/ui/Dialog";
 import { useState, useCallback } from "react";
 import { WorkflowFile } from "@/store/workflowStore";
 import { QuickstartView } from "@/types/quickstart";
@@ -53,12 +54,7 @@ export function WelcomeModal({
   const dialogHeight = currentView === "templates" || currentView === "browse" ? "max-h-[85vh]" : "max-h-[80vh]";
 
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60"
-      onWheelCapture={(e) => e.stopPropagation()}
-      onClick={onClose}
-    >
-      <div className={`w-full ${dialogWidth} mx-4 bg-neutral-800 rounded-xl border border-neutral-700 shadow-2xl overflow-clip ${dialogHeight} flex flex-col`} onClick={(e) => e.stopPropagation()}>
+    <Dialog open onClose={onClose} label="Welcome" className={`w-full ${dialogWidth} ${dialogHeight}`}>
         {currentView === "initial" && (
           <QuickstartInitialView
             onNewProject={handleNewProject}
@@ -88,7 +84,6 @@ export function WelcomeModal({
             onClose={onClose}
           />
         )}
-      </div>
-    </div>
+    </Dialog>
   );
 }

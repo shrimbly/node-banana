@@ -33,6 +33,10 @@ vi.mock("@xyflow/react", () => {
   return {
     Handle: MockHandle,
     NodeResizer: () => null,
+    NodeResizeControl: () => null,
+    useNodeConnections: () => [],
+    useStore: () => undefined,
+    useUpdateNodeInternals: () => () => {},
     Position: { Left: "left", Right: "right", Top: "top", Bottom: "bottom" },
     ReactFlowProvider: ({ children }: { children: React.ReactNode }) => children,
     useReactFlow: () => ({
@@ -41,6 +45,7 @@ vi.mock("@xyflow/react", () => {
       screenToFlowPosition: (pos: unknown) => pos,
     }),
     useConnection: (selector: (state: { inProgress: boolean }) => boolean) => selector({ inProgress: false }),
+    useNodeId: () => "node-1",
   };
 });
 
@@ -227,7 +232,9 @@ describe("EaseCurveNode", () => {
       );
       const video = document.querySelector("video");
       expect(video).toHaveAttribute("loop");
-      expect(video).toHaveAttribute("controls");
+      // Playback is driven from the scrub row, not native controls.
+      expect(video).not.toHaveAttribute("controls");
+      expect(screen.getByTitle("Play")).toBeInTheDocument();
     });
 
     it("should show clear button when outputVideo exists", () => {
@@ -310,7 +317,35 @@ describe("EaseCurveNode", () => {
       });
       // Rendering should not throw even when inherited
       const { container } = render(<EaseCurveNode {...createNodeProps()} />);
-      expect(container.querySelector('[data-testid="base-node"]')).toBeInTheDocument();
+      expect(container.querySelector("[data-node-shell]")).toBeInTheDocument();
+    });
+
+    it("collapses the controls to one row while settings are inherited", () => {
+      setMockStoreState({
+        edges: [
+          {
+            id: "ec-edge",
+            source: "parent-ease",
+            target: "test-ease-1",
+            targetHandle: "easeCurve",
+          },
+        ],
+      });
+      render(<EaseCurveNode {...createNodeProps()} />);
+
+      expect(screen.getByText("Settings inherited")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Control manually" })).toBeInTheDocument();
+      expect(screen.getByText("inherited")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Presets" })).not.toBeInTheDocument();
+      expect(screen.queryByText("Easing function")).not.toBeInTheDocument();
+    });
+
+    it("shows the full editor when nothing is inherited", () => {
+      render(<EaseCurveNode {...createNodeProps()} />);
+
+      expect(screen.getByRole("button", { name: "Presets" })).toBeInTheDocument();
+      expect(screen.queryByText("Settings inherited")).not.toBeInTheDocument();
+      expect(screen.queryByText("inherited")).not.toBeInTheDocument();
     });
 
     it("should not detect inheritance when edge targets different node", () => {
@@ -325,7 +360,7 @@ describe("EaseCurveNode", () => {
         ],
       });
       const { container } = render(<EaseCurveNode {...createNodeProps()} />);
-      expect(container.querySelector('[data-testid="base-node"]')).toBeInTheDocument();
+      expect(container.querySelector("[data-node-shell]")).toBeInTheDocument();
     });
   });
 });

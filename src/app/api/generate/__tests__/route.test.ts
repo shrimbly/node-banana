@@ -1911,6 +1911,33 @@ describe("/api/generate route", () => {
       global.fetch = originalFetch;
     });
 
+    it("returns GPT Image 2.5 output format and usage metadata", async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({
+        data: [{ b64_json: "aW1hZ2U=" }], output_format: "webp", size: "1536x864",
+        usage: { input_tokens_details: { text_tokens: 100, image_tokens: 250 }, output_tokens: 1000 },
+      }) });
+      const response = await POST(createMockPostRequest({
+        prompt: "A red house",
+        selectedModel: { provider: "openai", modelId: "gpt-image-2.5-flare", displayName: "GPT Image 2.5 Flare" },
+        parameters: { quality: "max", size: "1536x864", output_format: "webp" },
+      }, { "X-OpenAI-API-Key": "test-key" }));
+      const data = await response.json();
+      expect(response.status).toBe(200);
+      expect(data.image).toBe("data:image/webp;base64,aW1hZ2U=");
+      expect(data.generation).toMatchObject({ modelId: "gpt-image-2.5-flare", size: "1536x864", usage: { textInputTokens: 100, imageInputTokens: 250, imageOutputTokens: 1000 } });
+    });
+
+    it("rejects invalid custom dimensions before contacting OpenAI", async () => {
+      const response = await POST(createMockPostRequest({
+        prompt: "A red house",
+        selectedModel: { provider: "openai", modelId: "gpt-image-2.5-sunburst", displayName: "GPT Image 2.5 Sunburst" },
+        parameters: { size: "512x512" },
+      }, { "X-OpenAI-API-Key": "test-key" }));
+      expect(response.status).toBe(400);
+      expect((await response.json()).errorCode).toBe("invalid_parameters");
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it("should generate image successfully via OpenAI text-to-image", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -2038,7 +2065,7 @@ describe("/api/generate route", () => {
       const response = await POST(request);
       const data = await response.json();
 
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(429);
       expect(data.success).toBe(false);
       expect(data.error).toContain("Rate limit exceeded");
     });
@@ -2094,7 +2121,7 @@ describe("/api/generate route", () => {
       const response = await POST(request);
       const data = await response.json();
 
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(502);
       expect(data.success).toBe(false);
       // No raw HTML leaks through; message is concise and actionable.
       expect(data.error).not.toContain("<!DOCTYPE");

@@ -1,42 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { generateWorkflowId, useWorkflowStore } from "@/store/workflowStore";
-import { ProviderType, ProviderSettings, NodeDefaultsConfig, LLMProvider, LLMModelType } from "@/types";
+import { ProviderType, ProviderSettings, NodeDefaultsConfig, LLMProvider, LLMModelType, EdgeAppearance, EdgeStyle } from "@/types";
 import { CanvasNavigationSettings, PanMode, ZoomMode, SelectionMode } from "@/types/canvas";
 import { EnvStatusResponse } from "@/app/api/env-status/route";
-import { loadNodeDefaults, saveNodeDefaults, getLastProjectBaseDir, setLastProjectBaseDir } from "@/store/utils/localStorage";
+import { loadNodeDefaults, saveNodeDefaults, getLastProjectBaseDir, setLastProjectBaseDir, saveEdgeDefaults, getProviderSettings } from "@/store/utils/localStorage";
 import { clearFetchCache } from "@/utils/deduplicatedFetch";
 import { ProviderModel } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { ComfySettingsTab, useComfySettingsDraft } from "@/components/settings/ComfySettingsTab";
-import { saveComfySettings } from "@/lib/comfy/settings";
-import { useInlineParameters } from "@/hooks/useInlineParameters";
+import { saveComfySettings, getComfySettings } from "@/lib/comfy/settings";
+import { EnvironmentImport } from '@/components/settings/EnvironmentImport';
+import { isDesktop, comfySecretFields } from '@/lib/desktop/credentials';
+import { ConnectionSettings } from "@/components/settings/ConnectionSettings";
+import {
+  Dialog,
+  DialogBody,
+  DialogButton,
+  DialogDescription,
+  DialogFooter,
+  DialogTitle,
+} from "@/components/ui/Dialog";
+import { cn } from "@/components/nodes/ui/cn";
 
-// LLM provider and model options (mirrored from LLMGenerateNode)
-const LLM_PROVIDERS: { value: LLMProvider; label: string }[] = [
-  { value: "google", label: "Google" },
-  { value: "openai", label: "OpenAI" },
-  { value: "anthropic", label: "Anthropic" },
-];
-
-const LLM_MODELS: Record<LLMProvider, { value: LLMModelType; label: string }[]> = {
-  google: [
-    { value: "gemini-3-flash-preview", label: "Gemini 3 Flash" },
-    { value: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-    { value: "gemini-3-pro-preview", label: "Gemini 3.0 Pro" },
-    { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro" },
-  ],
-  openai: [
-    { value: "gpt-4.1-mini", label: "GPT-4.1 Mini" },
-    { value: "gpt-4.1-nano", label: "GPT-4.1 Nano" },
-  ],
-  anthropic: [
-    { value: "claude-sonnet-4.5", label: "Claude Sonnet 4.5" },
-    { value: "claude-haiku-4.5", label: "Claude Haiku 4.5" },
-    { value: "claude-opus-4.6", label: "Claude Opus 4.6" },
-  ],
-};
+import { DEFAULT_LLM_MODEL, LLM_PROVIDER_OPTIONS, defaultLLMModel, llmModelLabel, llmModelOptions } from "@/lib/llm/catalog";
 
 // Provider icons
 const GeminiIcon = () => (
@@ -82,6 +70,18 @@ const getProviderIcon = (provider: ProviderType) => {
       return null;
   }
 };
+
+type SettingsTab = "project" | "providers" | "comfy" | "nodeDefaults" | "canvas" | "noodles";
+
+/** The rail's entries, with each page's heading and one-line subtitle. */
+const SETTINGS_PAGES: { id: SettingsTab; label: string; title: string; description: string }[] = [
+  { id: "project", label: "Project", title: "Project", description: "Name, location and how the file is written." },
+  { id: "providers", label: "Providers", title: "Providers", description: "API keys for the model providers this project can call." },
+  { id: "comfy", label: "ComfyUI", title: "ComfyUI", description: "Where Comfy app nodes run." },
+  { id: "nodeDefaults", label: "Node Defaults", title: "Node defaults", description: "Applied when a node is added from the bar or a shortcut." },
+  { id: "canvas", label: "Canvas", title: "Canvas", description: "How you navigate and select on the canvas." },
+  { id: "noodles", label: "Noodles", title: "Noodles", description: "How the connections between nodes are drawn." },
+];
 
 interface ProjectSetupModalProps {
   isOpen: boolean;
@@ -142,13 +142,15 @@ export function ProjectSetupModal({
     setMaxConcurrentCalls,
     canvasNavigationSettings,
     updateCanvasNavigationSettings,
+    edgeStyle,
+    edgeAppearance,
+    setEdgeStyle,
+    setEdgeAppearance,
   } = useWorkflowStore();
 
-  // Inline parameters hook
-  const { inlineParametersEnabled, setInlineParameters } = useInlineParameters();
 
   // Tab state
-  const [activeTab, setActiveTab] = useState<"project" | "providers" | "comfy" | "nodeDefaults" | "canvas">("project");
+  const [activeTab, setActiveTab] = useState<SettingsTab>("project");
 
   // Project tab state
   const [name, setName] = useState("");
@@ -160,6 +162,7 @@ export function ProjectSetupModal({
 
   // Provider tab state
   const [localProviders, setLocalProviders] = useState<ProviderSettings>(providerSettings);
+  const editedProviderKeys = useRef(new Set<ProviderType>());
   const [showApiKey, setShowApiKey] = useState<Record<ProviderType, boolean>>({
     gemini: false,
     openai: false,
@@ -188,8 +191,13 @@ export function ProjectSetupModal({
   // Canvas tab state
   const [localCanvasSettings, setLocalCanvasSettings] = useState<CanvasNavigationSettings>(canvasNavigationSettings);
 
+  // Connection appearance draft (Canvas tab); applied on Save
+  const [localEdgeStyle, setLocalEdgeStyle] = useState<EdgeStyle>(edgeStyle);
+  const [localEdgeAppearance, setLocalEdgeAppearance] = useState<EdgeAppearance>(edgeAppearance);
+  const [edgeDefaultSaved, setEdgeDefaultSaved] = useState(false);
+
   // ComfyUI tab state
-  const [localComfySettings, setLocalComfySettings] = useComfySettingsDraft(isOpen);
+  const [localComfySettings, setLocalComfySettings, applyImportedComfySettings] = useComfySettingsDraft(isOpen);
 
   // Pre-fill when opening in settings mode
   useEffect(() => {
@@ -210,6 +218,7 @@ export function ProjectSetupModal({
       }
 
       // Sync local providers state
+      editedProviderKeys.current.clear();
       setLocalProviders(providerSettings);
       setShowApiKey({ gemini: false, openai: false, anthropic: false, replicate: false, fal: false, kie: false, wavespeed: false });
       // Initialize override as active if user already has a key set
@@ -231,6 +240,9 @@ export function ProjectSetupModal({
 
       // Sync canvas settings
       setLocalCanvasSettings(canvasNavigationSettings);
+      setLocalEdgeStyle(edgeStyle);
+      setLocalEdgeAppearance(edgeAppearance);
+      setEdgeDefaultSaved(false);
 
       // Fetch env status
       fetch("/api/env-status")
@@ -238,7 +250,9 @@ export function ProjectSetupModal({
         .then((data: EnvStatusResponse) => setEnvStatus(data))
         .catch(() => setEnvStatus(null));
     }
-  }, [isOpen, mode, workflowName, saveDirectoryPath, useExternalImageStorage, providerSettings, canvasNavigationSettings]);
+    // Provider edits/imports must not reset other unsaved settings drafts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, mode, workflowName, saveDirectoryPath, useExternalImageStorage, canvasNavigationSettings]);
 
   const handleBrowse = async () => {
     setIsBrowsing(true);
@@ -354,6 +368,17 @@ export function ProjectSetupModal({
     onClose();
   };
 
+  const handleSaveNoodles = () => {
+    if (localEdgeStyle !== edgeStyle) setEdgeStyle(localEdgeStyle);
+    if (localEdgeAppearance !== edgeAppearance) setEdgeAppearance(localEdgeAppearance);
+    onClose();
+  };
+
+  const handleSetEdgeDefault = () => {
+    saveEdgeDefaults({ edgeStyle: localEdgeStyle, appearance: localEdgeAppearance });
+    setEdgeDefaultSaved(true);
+  };
+
   const handleSaveComfy = () => {
     saveComfySettings(localComfySettings);
     onClose();
@@ -368,17 +393,20 @@ export function ProjectSetupModal({
       handleSaveComfy();
     } else if (activeTab === "canvas") {
       handleSaveCanvas();
+    } else if (activeTab === "noodles") {
+      handleSaveNoodles();
     } else {
       handleSaveNodeDefaults();
     }
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // The model browsers are React children of this panel, so their key events
+    // bubble here through the portal. Enter in one of them picks a model; it
+    // must not save the (still stale) draft and close the settings dialog.
+    if (showImageModelDialog || showVideoModelDialog) return;
     if (e.key === "Enter" && !isValidating && !isBrowsing) {
       handleSave();
-    }
-    if (e.key === "Escape") {
-      onClose();
     }
   };
 
@@ -386,6 +414,7 @@ export function ProjectSetupModal({
     providerId: ProviderType,
     updates: { enabled?: boolean; apiKey?: string | null }
   ) => {
+    if ('apiKey' in updates) editedProviderKeys.current.add(providerId);
     setLocalProviders((prev) => ({
       providers: {
         ...prev.providers,
@@ -399,63 +428,51 @@ export function ProjectSetupModal({
 
   if (!isOpen) return null;
 
+  const page = SETTINGS_PAGES.find((p) => p.id === activeTab) ?? SETTINGS_PAGES[0];
+
   return (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      onWheelCapture={(e) => e.stopPropagation()}
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      className="w-[820px] max-w-[92vw] h-[560px]"
+      panelProps={{ onKeyDown: handleKeyDown }}
     >
-      <div
-        className="bg-neutral-800 rounded-xl w-[580px] border border-neutral-700 shadow-2xl overflow-clip flex flex-col max-h-[80vh]"
-        onKeyDown={handleKeyDown}
-      >
-        <div className="px-8 pt-8 pb-0 shrink-0">
-          <div className="flex items-center gap-2 mb-5">
-            <img src="/banana_icon.png" alt="" className="w-6 h-6" />
-            <h2 className="text-xl font-medium text-neutral-100">
-              {mode === "new" ? "New Project" : "Project Settings"}
-            </h2>
+      <div className="flex-1 min-h-0 flex">
+        {/* Rail: one entry per page, the dialog's title at its head */}
+        <nav
+          aria-label="Settings pages"
+          className="w-44 shrink-0 flex flex-col gap-0.5 p-2 pt-3.5 bg-neutral-900/50 border-r border-chrome-border/50"
+        >
+          <div className="px-2.5 pb-3">
+            <DialogTitle>{mode === "new" ? "New Project" : "Project Settings"}</DialogTitle>
+          </div>
+          {SETTINGS_PAGES.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setActiveTab(p.id)}
+              aria-current={activeTab === p.id ? "page" : undefined}
+              className={cn(
+                "h-8 px-2.5 rounded-md text-left text-sm whitespace-nowrap transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
+                activeTab === p.id
+                  ? "bg-neutral-700 text-neutral-100 font-medium"
+                  : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50"
+              )}
+            >
+              {p.label}
+            </button>
+          ))}
+        </nav>
+
+        <div className="flex-1 min-w-0 flex flex-col">
+          <div className="px-5 pt-3.5 pb-2 shrink-0 flex flex-col gap-0.5">
+            <h3 className="text-base font-semibold leading-6 text-neutral-100">{page.title}</h3>
+            <DialogDescription>{page.description}</DialogDescription>
           </div>
 
-          {/* Tab Bar */}
-          <div className="flex gap-1.5 p-1 bg-neutral-900/50 rounded-lg">
-          <button
-            onClick={() => setActiveTab("project")}
-            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "project" ? "bg-neutral-700 text-neutral-100 font-medium" : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"}`}
-          >
-            Project
-          </button>
-          <button
-            onClick={() => setActiveTab("providers")}
-            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "providers" ? "bg-neutral-700 text-neutral-100 font-medium" : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"}`}
-          >
-            Providers
-          </button>
-          <button
-            onClick={() => setActiveTab("comfy")}
-            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "comfy" ? "bg-neutral-700 text-neutral-100 font-medium" : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"}`}
-          >
-            ComfyUI
-          </button>
-          <button
-            onClick={() => setActiveTab("nodeDefaults")}
-            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "nodeDefaults" ? "bg-neutral-700 text-neutral-100 font-medium" : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"}`}
-          >
-            Node Defaults
-          </button>
-          <button
-            onClick={() => setActiveTab("canvas")}
-            className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${activeTab === "canvas" ? "bg-neutral-700 text-neutral-100 font-medium" : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"}`}
-          >
-            Canvas
-          </button>
-          </div>
-        </div>
-
-        {/* Scrollable tab content area */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-8 py-5">
+        {/* Scrollable page content */}
+        <DialogBody className="pt-1">
 
         {/* Project Tab Content */}
         {activeTab === "project" && (
@@ -520,26 +537,6 @@ export function ProjectSetupModal({
               </label>
             </div>
 
-            <div className="pt-2 border-t border-neutral-700">
-              <label className="flex items-center justify-between gap-3 cursor-pointer">
-                <div>
-                  <span className="text-sm text-neutral-200">Show model settings on nodes</span>
-                  <p className="text-xs text-neutral-400">
-                    Show model parameters inside generation nodes instead of the side panel
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={inlineParametersEnabled}
-                  onClick={() => setInlineParameters(!inlineParametersEnabled)}
-                  className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${inlineParametersEnabled ? "bg-blue-500" : "bg-neutral-600"}`}
-                >
-                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${inlineParametersEnabled ? "translate-x-[18px]" : "translate-x-[3px]"}`} />
-                </button>
-              </label>
-            </div>
-
             {error && <p className="text-sm text-red-400">{error}</p>}
           </div>
         )}
@@ -547,6 +544,17 @@ export function ProjectSetupModal({
         {/* Providers Tab Content */}
         {activeTab === "providers" && (
           <div className="space-y-3">
+            <EnvironmentImport onImported={result => {
+              const imported = getProviderSettings();
+              setLocalProviders(previous => ({ providers: Object.fromEntries(Object.entries(previous.providers).map(([id, config]) => [id, {
+                ...config, apiKey: editedProviderKeys.current.has(id as ProviderType) ? config.apiKey : imported.providers[id as ProviderType]?.apiKey,
+              }])) as ProviderSettings['providers'] }));
+              const comfy = getComfySettings();
+              applyImportedComfySettings(comfy, [
+                ...comfySecretFields,
+                ...Object.keys(result.preferences) as (keyof typeof result.preferences)[],
+              ]);
+            }} />
             {/* Gemini Provider */}
             <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
               <div className="flex items-center justify-between">
@@ -884,7 +892,7 @@ export function ProjectSetupModal({
             </div>
 
             <p className="text-xs text-neutral-400 mt-2">
-              Add API keys via <code className="px-1 py-0.5 bg-neutral-800 rounded">.env.local</code> for better security. Keys added here override .env and are stored in your browser.
+              {isDesktop() ? 'Keys are encrypted in your desktop profile. Imported keys are saved immediately.' : <>Add API keys via <code className="px-1 py-0.5 bg-neutral-800 rounded">.env.local</code> for server-side storage. Keys added here override .env and are stored in your browser.</>}
             </p>
           </div>
         )}
@@ -1006,7 +1014,7 @@ export function ProjectSetupModal({
                 </div>
 
                 {!localNodeDefaults.llm ? (
-                  <p className="text-xs text-neutral-400">Using system defaults (Google Gemini 3 Flash)</p>
+                  <p className="text-xs text-neutral-400">{`Using system defaults (Google ${llmModelLabel(DEFAULT_LLM_MODEL)})`}</p>
                 ) : null}
 
                 {/* Provider dropdown */}
@@ -1016,7 +1024,7 @@ export function ProjectSetupModal({
                     value={localNodeDefaults.llm?.provider || "google"}
                     onChange={(e) => {
                       const newProvider = e.target.value as LLMProvider;
-                      const firstModelForProvider = LLM_MODELS[newProvider][0].value;
+                      const firstModelForProvider = defaultLLMModel(newProvider);
                       const currentTemp = localNodeDefaults.llm?.temperature ?? 0.7;
                       setLocalNodeDefaults(prev => ({
                         ...prev,
@@ -1031,7 +1039,7 @@ export function ProjectSetupModal({
                     }}
                     className="flex-1 px-2 py-1 text-xs bg-neutral-800 border border-neutral-600 rounded text-neutral-100 focus:outline-none focus:border-neutral-500"
                   >
-                    {LLM_PROVIDERS.map((p) => (
+                    {LLM_PROVIDER_OPTIONS.map((p) => (
                       <option key={p.value} value={p.value}>{p.label}</option>
                     ))}
                   </select>
@@ -1041,7 +1049,7 @@ export function ProjectSetupModal({
                 <div className="flex items-center gap-2">
                   <label className="text-xs text-neutral-400 w-20">Model</label>
                   <select
-                    value={localNodeDefaults.llm?.model || LLM_MODELS[localNodeDefaults.llm?.provider || "google"][0].value}
+                    value={localNodeDefaults.llm?.model || defaultLLMModel(localNodeDefaults.llm?.provider || "google")}
                     onChange={(e) => {
                       setLocalNodeDefaults(prev => ({
                         ...prev,
@@ -1050,7 +1058,7 @@ export function ProjectSetupModal({
                     }}
                     className="flex-1 px-2 py-1 text-xs bg-neutral-800 border border-neutral-600 rounded text-neutral-100 focus:outline-none focus:border-neutral-500"
                   >
-                    {LLM_MODELS[localNodeDefaults.llm?.provider || "google"].map((m) => (
+                    {llmModelOptions(localNodeDefaults.llm?.provider || "google", localNodeDefaults.llm?.model).map((m) => (
                       <option key={m.value} value={m.value}>{m.label}</option>
                     ))}
                   </select>
@@ -1141,7 +1149,6 @@ export function ProjectSetupModal({
         {/* Canvas Tab Content */}
         {activeTab === "canvas" && (
           <div className="space-y-3">
-            <p className="text-xs text-neutral-400">Configure how you navigate and interact with the canvas.</p>
             {/* Pan Mode */}
             <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
               <div className="flex flex-col gap-3">
@@ -1246,26 +1253,37 @@ export function ProjectSetupModal({
           </div>
         )}
 
-        </div>
+        {/* Noodles Tab Content */}
+        {activeTab === "noodles" && (
+          <div className="space-y-3">
+            <ConnectionSettings
+              edgeStyle={localEdgeStyle}
+              appearance={localEdgeAppearance}
+              onEdgeStyleChange={setLocalEdgeStyle}
+              onAppearanceChange={setLocalEdgeAppearance}
+              onSetDefault={handleSetEdgeDefault}
+              defaultSaved={edgeDefaultSaved}
+            />
+          </div>
+        )}
 
-        {/* Fixed footer */}
-        <div className="flex justify-end gap-2 px-8 py-5 border-t border-neutral-700/50 shrink-0">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-100 transition-colors"
-          >
+        </DialogBody>
+
+        <DialogFooter>
+          <DialogButton variant="ghost" onClick={onClose}>
             Cancel
-          </button>
-          <button
+          </DialogButton>
+          <DialogButton
+            variant="primary"
             onClick={handleSave}
             disabled={activeTab === "project" && (isValidating || isBrowsing)}
-            className="px-4 py-2 text-sm bg-white text-neutral-900 rounded-lg hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             {activeTab === "project"
               ? (isValidating ? "Validating..." : mode === "new" ? "Create" : "Save")
               : "Save"
             }
-          </button>
+          </DialogButton>
+        </DialogFooter>
         </div>
       </div>
 
@@ -1312,6 +1330,6 @@ export function ProjectSetupModal({
           initialCapabilityFilter="video"
         />
       )}
-    </div>
+    </Dialog>
   );
 }

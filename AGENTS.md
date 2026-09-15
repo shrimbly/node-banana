@@ -68,9 +68,7 @@ Image generation models (these exist and are recently released):
 - `gemini-2.5-flash-image` → internal name: `nano-banana`
 - `gemini-3-pro-image-preview` → internal name: `nano-banana-pro`
 
-LLM models:
-- Google: `gemini-2.5-flash`, `gemini-3-flash-preview`, `gemini-3-pro-preview`
-- OpenAI: `gpt-4.1-mini`, `gpt-4.1-nano`
+LLM models are defined once in `src/lib/llm/catalog.ts`: the current list per provider, legacy ids saved workflows may carry, their replacements, and the defaults. Add or retire a model there; every dropdown, `/api/llm` and the assistant read it.
 
 ## Node Types
 
@@ -131,7 +129,7 @@ Returns `{ images: string[], text: string | null }`.
 - `Shift + L` - Add LLM node
 - `Shift + A` - Add annotation node
 - `Shift + T` - Add audio (generateAudio) node
-- `H` - Stack selected nodes horizontally
+- Hold `H` and drag - Hook edges into one movable bundle
 - `V` - Stack selected nodes vertically
 - `G` - Arrange selected nodes in grid
 - `?` - Show keyboard shortcuts
@@ -230,4 +228,3 @@ All routes in `src/app/api/`:
 - Commit after each logical task or unit of work is complete. When implementing a multi-task plan, commit after finishing each task — do NOT batch all tasks into a single commit at the end.
 - Each commit should be atomic and self-contained: one task = one commit.
 - The .planning directory is untracked, do not attempt to commit any changes to the files in this directory.
-

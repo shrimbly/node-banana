@@ -165,7 +165,7 @@ describe("executeSplitGrid", () => {
 
       await expect(executeSplitGrid(ctx)).rejects.toThrow("No input image connected");
       expect(ctx.updateNodeData).toHaveBeenCalledWith("sg-1", {
-        status: "error",
+        status: "skipped",
         error: "No input image connected",
       });
       expect(ctx.materializeSplitGridCells).not.toHaveBeenCalled();

@@ -5,6 +5,7 @@ import React, { useMemo, useState } from "react";
 import { ComfyWordmark } from "@/components/icons/ComfyWordmark";
 import { ComfyAppParameters } from "@/components/nodes/ComfyAppParameters";
 import type { ComfyAppInput, ComfyAppOutput, ComfyAppParam } from "@/lib/comfy/types";
+import { HANDLE_TYPE_COLORS } from "@/lib/edges/colors";
 
 /**
  * The node this dialog is about to build, drawn as it will appear.
@@ -21,13 +22,7 @@ import type { ComfyAppInput, ComfyAppOutput, ComfyAppParam } from "@/lib/comfy/t
  */
 
 /** Matches `.react-flow__handle[data-handletype]` in globals.css. */
-const HANDLE_FILL: Record<string, string> = {
-  image: "#10b981",
-  text: "#3b82f6",
-  audio: "#a855f7",
-  video: "#ec4899",
-  "3d": "#f97316",
-};
+const HANDLE_FILL: Record<string, string> = HANDLE_TYPE_COLORS;
 
 /** Evenly space n handles down an edge — the node's own rule. */
 const handleTop = (index: number, total: number): string =>
@@ -64,7 +59,7 @@ export function ComfyNodePreview({
   }, [params, edits]);
 
   return (
-    <div className="h-full rounded-lg bg-neutral-900/70 ring-1 ring-inset ring-black/40 overflow-auto flex justify-center p-6">
+    <div className="h-full rounded-well bg-well ring-1 ring-inset ring-black/40 overflow-auto flex justify-center p-6">
       {/* The node sits at its real width, so the preview is a measurement and
           not an impression.
 
@@ -80,10 +75,10 @@ export function ComfyNodePreview({
           </span>
         </div>
 
-        <div className="relative bg-neutral-800 rounded-lg shadow-lg">
+        <div className="relative bg-card rounded-controls shadow-lg">
           <Handles inputs={inputs} outputs={outputs} />
 
-          <div className="rounded-t-lg border border-b-0 border-neutral-700/60 px-3 pb-4">
+          <div className="rounded-t-controls border border-b-0 border-card-border px-3 pb-4">
             <div className="flex items-center gap-2 pt-2 pb-1.5">
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-medium text-neutral-200 truncate">
@@ -101,7 +96,7 @@ export function ComfyNodePreview({
 
           {/* Always open here. Collapsed, the one thing this view exists to
               show would be a chevron. */}
-          <div className="bg-[#2a2a2a] rounded-b-lg">
+          <div className="bg-panel rounded-b-controls">
             <div className="w-full flex items-center justify-center gap-1 py-1 text-neutral-500">
               <span className="text-[10px]">Settings</span>
               <svg
@@ -116,7 +111,7 @@ export function ComfyNodePreview({
                 <polyline points="6 9 12 15 18 9" />
               </svg>
             </div>
-            <div className="px-3 pb-3 rounded-b-lg">
+            <div className="px-3 pb-3 rounded-b-controls">
               {params.length > 0 ? (
                 <ComfyAppParameters params={params} values={values} onChange={setEdits} />
               ) : (

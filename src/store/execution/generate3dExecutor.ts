@@ -10,6 +10,7 @@ import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
 import type { NodeExecutionContext } from "./types";
+import { MissingInputError } from "./missingInput";
 
 export interface Generate3DOptions {
   /** When true, falls back to stored inputImages/inputPrompt if no connections provide them. */
@@ -58,10 +59,10 @@ export async function executeGenerate3D(
   // 3D models may work with just images (image-to-3d) or just text (text-to-3d)
   if (!promptText && images.length === 0) {
     updateNodeData(node.id, {
-      status: "error",
+      status: "skipped",
       error: "Missing text or image input",
     });
-    throw new Error("Missing text or image input");
+    throw new MissingInputError("Missing text or image input");
   }
 
   updateNodeData(node.id, {

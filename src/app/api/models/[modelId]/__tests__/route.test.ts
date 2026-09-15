@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { NextRequest } from "next/server";
+import reveSchema from "@/lib/providers/__fixtures__/reve-2.1-schema.json";
 
 // Mock the route module to test internal functions
 // We'll test via the GET endpoint behavior
@@ -101,6 +102,16 @@ describe("/api/models/[modelId] schema endpoint", () => {
   });
 
   describe("isImageInput classification", () => {
+    it("exposes Reve 2.1 reference_images as an image handle instead of a null setting", async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ latest_version: { openapi_schema: reveSchema } }) });
+      const modelId = `reve/reve-2.1-${testCounter}`;
+      const response = await GET(createMockSchemaRequest(modelId, "replicate"), { params: Promise.resolve({ modelId }) });
+      const data = await response.json();
+      expect(response.status).toBe(200);
+      expect(data.inputs).toContainEqual(expect.objectContaining({ name: "reference_images", type: "image", isArray: true, required: false }));
+      expect(data.parameters.map((param: { name: string }) => param.name)).not.toContain("reference_images");
+    });
+
     it("should NOT classify boolean params with 'image' in name as image inputs", async () => {
       // This was the original bug: sequential_image_generation (boolean) was misclassified
       mockFetch.mockResolvedValueOnce(
@@ -885,5 +896,45 @@ describe("/api/models/[modelId] schema endpoint", () => {
       expect(byName.last_frame).toBe("image");
       expect(byName.video).toBe("video");
     });
+  });
+});
+
+describe("OpenAI GPT Image 2.5 schemas", () => {
+  it.each(["gpt-image-2.5-sunburst", "gpt-image-2.5-flare", "gpt-image-2.5-flare-2026-09-08"])("exposes supported settings for %s", async modelId => {
+    const response = await GET(createMockSchemaRequest(modelId, "openai"), { params: Promise.resolve({ modelId }) });
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data.parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "quality", enum: ["auto", "low", "medium", "high", "xhigh", "max"] }),
+      expect.objectContaining({ name: "size", type: "string", default: "auto" }),
+      expect.objectContaining({ name: "output_format", enum: ["png", "jpeg", "webp"] }),
+    ]));
+    expect(data.inputs).toEqual(expect.arrayContaining([expect.objectContaining({ name: "image", isArray: true })]));
+  });
+
+  it("does not expose 2.5 quality settings on older models", async () => {
+    const modelId = "gpt-image-1";
+    const response = await GET(createMockSchemaRequest(modelId, "openai"), { params: Promise.resolve({ modelId }) });
+    const data = await response.json();
+    expect(data.parameters.find((p: { name: string }) => p.name === "quality").enum).not.toContain("max");
+  });
+});
+
+describe("Gemini Omni schemas", () => {
+  it.each(["gemini-omni-1.1-flash", "gemini-omni-flash-preview"])("exposes multimodal inputs and supported video settings for %s", async (modelId) => {
+    const response = await GET(createMockSchemaRequest(modelId, "gemini"), { params: Promise.resolve({ modelId }) });
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data.parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "resolution", enum: ["360p", "720p", "1080p", "4k"] }),
+      expect.objectContaining({ name: "task", enum: expect.arrayContaining(["auto", "edit", "extend"]) }),
+    ]));
+    expect(data.inputs).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "image", type: "image", isArray: true }),
+      expect.objectContaining({ name: "video", type: "video" }),
+      expect.objectContaining({ name: "audio", type: "audio" }),
+      expect.objectContaining({ name: "prompt", type: "text" }),
+    ]));
+    expect(data.parameters.some((p: { name: string }) => p.name === "durationSeconds")).toBe(false);
   });
 });

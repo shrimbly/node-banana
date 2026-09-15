@@ -143,6 +143,14 @@ describe("GenerateVideoNode", () => {
     type: "generateVideo" as const,
     data: createNodeData(data),
     selected: false,
+    dragging: false,
+    zIndex: 0,
+    selectable: true,
+    deletable: true,
+    draggable: true,
+    isConnectable: true,
+    positionAbsoluteX: 0,
+    positionAbsoluteY: 0,
   });
 
   describe("Basic Rendering", () => {
@@ -316,7 +324,7 @@ describe("GenerateVideoNode", () => {
       expect(video).toHaveAttribute("src", "data:video/mp4;base64,abc123");
     });
 
-    it("should render video with controls attribute", () => {
+    it("drives the video from the scrub row instead of native controls", () => {
       const { container } = render(
         <TestWrapper>
           <GenerateVideoNode {...createNodeProps({
@@ -326,7 +334,8 @@ describe("GenerateVideoNode", () => {
       );
 
       const video = container.querySelector("video");
-      expect(video).toHaveAttribute("controls");
+      expect(video).not.toHaveAttribute("controls");
+      expect(screen.getByTitle("Play")).toBeInTheDocument();
     });
 
     it("should render video with loop attribute", () => {
@@ -605,7 +614,7 @@ describe("GenerateVideoNode", () => {
         expect(imageTop).toBeLessThan(textTop);
       });
 
-      it("should maintain gap between image and text handle groups", () => {
+      it("stacks image sockets above the text socket at one pitch", () => {
         const { container } = render(
           <TestWrapper>
             <GenerateVideoNode {...createNodeProps({
@@ -632,13 +641,62 @@ describe("GenerateVideoNode", () => {
         const top1 = parseFloat(image1.style.top);
         const topText = parseFloat(textHandle.style.top);
 
-        // Gap between image-1 and text should be larger than gap between image-0 and image-1
+        // Sockets sit at a fixed pitch down the card: images, then the video
+        // placeholder this model does not use, then text.
         const imageDiff = top1 - top0;
-        const gapDiff = topText - top1;
-
-        // The gap should account for the spacing slot
-        expect(gapDiff).toBeGreaterThan(imageDiff * 0.9);
+        expect(imageDiff).toBe(30);
+        expect(topText).toBe(top1 + 60);
       });
+    });
+  });
+
+
+  describe("Schema reported on mount", () => {
+    // ModelParameters reports its inputs on every mount, and a culled node
+    // remounts on every pan. The cache is the path a remount takes.
+    const inputs = [
+      { name: "image", type: "image" as const, required: true, label: "Input Image" },
+      { name: "prompt", type: "text" as const, required: true, label: "Prompt" },
+    ];
+    const model = { provider: "fal" as const, modelId: "cached/video-model", displayName: "Cached Model" };
+
+    beforeEach(() => {
+      localStorage.setItem(
+        "node-banana-schema-cache",
+        JSON.stringify({ [`fal:${model.modelId}`]: { parameters: [], inputs, timestamp: Date.now() } })
+      );
+    });
+    afterEach(() => {
+      localStorage.removeItem("node-banana-schema-cache");
+    });
+
+    it("does not rewrite an inputSchema the node already has", () => {
+      render(
+        <TestWrapper>
+          <GenerateVideoNode {...createNodeProps({
+            selectedModel: model,
+            inputSchema: inputs.map((input) => ({ ...input })),
+          })} />
+        </TestWrapper>
+      );
+
+      expect(mockUpdateNodeData).not.toHaveBeenCalledWith(
+        "test-node-1",
+        expect.objectContaining({ inputSchema: expect.anything() })
+      );
+    });
+
+    it("writes the inputSchema when the model's inputs differ", () => {
+      render(
+        <TestWrapper>
+          <GenerateVideoNode {...createNodeProps({
+            selectedModel: model,
+            inputSchema: [inputs[1]],
+          })} />
+        </TestWrapper>
+      );
+
+      expect(mockUpdateNodeData).toHaveBeenCalledWith("test-node-1", { inputSchema: inputs });
     });
   });
 

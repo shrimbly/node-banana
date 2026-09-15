@@ -14,6 +14,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { GenerateRequest, GenerateResponse, ModelType, SelectedModel, ProviderType } from "@/types";
 import { GenerationInput, ModelCapability } from "@/lib/providers/types";
 import { generateWithGemini, generateWithGeminiVideo } from "./providers/gemini";
+import { generateWithGeminiOmni } from "./providers/gemini-omni";
+import { isGeminiOmni } from "@/lib/providers/geminiOmni";
 import { generateWithReplicate } from "./providers/replicate";
 import { generateWithFalQueue } from "./providers/fal";
 import { submitKieTask } from "./providers/kie";
@@ -467,6 +469,7 @@ export async function POST(request: NextRequest) {
         images: processedImages,
         parameters,
         dynamicInputs: processedDynamicInputs,
+        signal: request.signal,
       };
 
       const result = await generateWithOpenAI(requestId, openaiApiKey, genInput);
@@ -476,8 +479,13 @@ export async function POST(request: NextRequest) {
           {
             success: false,
             error: result.error || "Generation failed",
+            errorCode: result.errorCode,
+            retryAfter: result.retryAfter,
           },
-          { status: 500 }
+          {
+            status: result.statusCode || 500,
+            ...(result.retryAfter ? { headers: { "Retry-After": result.retryAfter } } : {}),
+          }
         );
       }
 
@@ -490,7 +498,7 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      return buildMediaResponse(output);
+      return buildMediaResponse(output, result.generation);
     }
 
     // Default: Use Gemini
@@ -525,6 +533,20 @@ export async function POST(request: NextRequest) {
         { success: false, error: "prompt must be a string" },
         { status: 400 }
       );
+    }
+
+    if (isGeminiOmni(selectedModel?.modelId)) {
+      const result = await generateWithGeminiOmni(
+        geminiApiKey, selectedModel!.modelId, resolvedPrompt || "", images || [], parameters || {}, dynamicInputs || {}, request.signal,
+      );
+      const output = result.outputs?.[0];
+      if (!result.success || !output) {
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: result.error || "Gemini Omni returned no video" },
+          { status: result.statusCode ?? 500 },
+        );
+      }
+      return buildMediaResponse(output);
     }
 
     // Check if this is a Veo video model request

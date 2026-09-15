@@ -10,6 +10,7 @@ import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
 import type { NodeExecutionContext } from "./types";
+import { MissingInputError } from "./missingInput";
 
 export interface GenerateAudioOptions {
   /** When true, falls back to stored inputPrompt if no connections provide it. */
@@ -49,20 +50,20 @@ export async function executeGenerateAudio(
     const hasPrompt = text || dynamicInputs.prompt;
     if (!hasPrompt) {
       updateNodeData(node.id, {
-        status: "error",
+        status: "skipped",
         error: "Missing text input for audio generation",
       });
-      throw new Error("Missing text input for audio generation");
+      throw new MissingInputError("Missing text input for audio generation");
     }
   } else {
     text = connectedText;
     const hasPrompt = text || dynamicInputs.prompt;
     if (!hasPrompt) {
       updateNodeData(node.id, {
-        status: "error",
+        status: "skipped",
         error: "Missing text input for audio generation",
       });
-      throw new Error("Missing text input for audio generation");
+      throw new MissingInputError("Missing text input for audio generation");
     }
   }
 
@@ -151,7 +152,8 @@ export async function executeGenerateAudio(
         const timestamp = Date.now();
         const audioId = `${timestamp}`;
 
-        // Add to node's audio history
+        // The carousel reloads entries from the generations folder, so only a
+        // generation that is being saved there gets an entry.
         const newHistoryItem = {
           id: audioId,
           timestamp,
@@ -164,8 +166,7 @@ export async function executeGenerateAudio(
           outputAudio: audioData,
           status: "complete",
           error: null,
-          audioHistory: updatedHistory,
-          selectedAudioHistoryIndex: 0,
+          ...(generationsPath ? { audioHistory: updatedHistory, selectedAudioHistoryIndex: 0 } : {}),
         });
 
         // Track cost

@@ -421,3 +421,44 @@ export function copyLoopOutput(
     console.warn(`[copyLoopOutput] Unrecognized target: type="${type}" → node.type="${targetNode.type}"`);
   }
 }
+
+/**
+ * Object URLs die with the document that made them, so a `blob:` string in a
+ * workflow file, or in state that came from one, can never be read again: a
+ * video element shows nothing and the desktop recovery checkpoint fails on
+ * every write. Drop them: fields become null, array entries disappear. Nodes
+ * without any are returned as the same object.
+ */
+export function stripDeadBlobUrls(nodes: WorkflowNode[]): WorkflowNode[] {
+  const isBlob = (value: unknown): value is string => typeof value === "string" && value.startsWith("blob:");
+  const strip = (value: unknown, depth: number): { value: unknown; changed: boolean } => {
+    if (depth > 8) return { value, changed: false };
+    if (Array.isArray(value)) {
+      let changed = false;
+      const next: unknown[] = [];
+      for (const item of value) {
+        if (isBlob(item)) { changed = true; continue; }
+        const inner = strip(item, depth + 1);
+        changed ||= inner.changed;
+        next.push(inner.value);
+      }
+      return changed ? { value: next, changed } : { value, changed: false };
+    }
+    if (value && typeof value === "object" && Object.getPrototypeOf(value) === Object.prototype) {
+      let changed = false;
+      const next: Record<string, unknown> = {};
+      for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+        if (isBlob(child)) { next[key] = null; changed = true; continue; }
+        const inner = strip(child, depth + 1);
+        changed ||= inner.changed;
+        next[key] = inner.value;
+      }
+      return changed ? { value: next, changed } : { value, changed: false };
+    }
+    return { value, changed: false };
+  };
+  return nodes.map((node) => {
+    const result = strip(node.data, 0);
+    return result.changed ? { ...node, data: result.value as WorkflowNodeData } : node;
+  });
+}

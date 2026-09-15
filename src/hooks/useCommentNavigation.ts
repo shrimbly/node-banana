@@ -1,5 +1,6 @@
 import { useMemo, useCallback } from "react";
 import { useWorkflowStore } from "@/store/workflowStore";
+import { nodeGraphIndex } from "@/lib/edges/graphIndex";
 
 export interface CommentNavigation {
   currentIndex: number;
@@ -13,17 +14,16 @@ export interface CommentNavigation {
  * Returns null if the node has no comment.
  */
 export function useCommentNavigation(nodeId: string): CommentNavigation | null {
-  const nodes = useWorkflowStore((state) => state.nodes);
   const getNodesWithComments = useWorkflowStore((state) => state.getNodesWithComments);
   const markCommentViewed = useWorkflowStore((state) => state.markCommentViewed);
   const setNavigationTarget = useWorkflowStore((state) => state.setNavigationTarget);
 
-  // Get the current node's comment
-  const nodeComment = useMemo(() => {
-    const node = nodes.find((n) => n.id === nodeId);
-    const data = node?.data as { comment?: string } | undefined;
+  // Get the current node's comment. Only the comment: every node calls this
+  // hook, and the nodes array changes on every frame of a drag
+  const nodeComment = useWorkflowStore((state) => {
+    const data = nodeGraphIndex(state.nodes).byId.get(nodeId)?.data as { comment?: string } | undefined;
     return data?.comment?.trim() || null;
-  }, [nodes, nodeId]);
+  });
 
   // Get sorted nodes with comments
   const nodesWithComments = useMemo(() => {

@@ -1,11 +1,11 @@
-import type { WorkflowNode, WorkflowEdge, NodeGroup } from "@/types";
-import type { EdgeStyle } from "./workflowStore";
+import type { WorkflowNode, WorkflowEdge, NodeGroup, EdgeStyle, EdgeAppearance } from "@/types";
 
 export interface UndoSnapshot {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   groups: Record<string, NodeGroup>;
   edgeStyle: EdgeStyle;
+  edgeAppearance: EdgeAppearance;
 }
 
 const MAX_HISTORY = 50;

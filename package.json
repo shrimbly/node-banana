@@ -2,8 +2,12 @@
   "name": "node-banana",
   "version": "1.9.0",
   "private": true,
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "node server.js",
+    "electron:dev": "electron . --dev",
+    "electron:start": "electron .",
+    "electron:smoke": "node scripts/electron-smoke.cjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -11,7 +15,10 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "comfy:record": "node scripts/comfy-smoke.mjs record",
-    "comfy:smoke": "node scripts/comfy-smoke.mjs run"
+    "comfy:smoke": "node scripts/comfy-smoke.mjs run",
+    "electron:package": "node scripts/package-electron.cjs",
+    "electron:test": "node --test electron/tests/*.test.cjs",
+    "electron:acceptance": "node scripts/electron-acceptance.cjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.13",
@@ -25,6 +32,7 @@
     "@xyflow/react": "^12.9.3",
     "ai": "^6.0.49",
     "autoprefixer": "^10.4.22",
+    "clsx": "^2.1.1",
     "gifenc": "^1.0.3",
     "jszip": "^3.10.1",
     "konva": "^10.0.12",
@@ -37,6 +45,8 @@
     "react-dom": "^19.2.4",
     "react-konva": "^19.2.1",
     "react-markdown": "^10.1.0",
+    "sonner": "^2.0.8",
+    "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.1.17",
     "three": "^0.182.0",
     "zod": "^4.4.3",
@@ -52,7 +62,10 @@
     "@types/three": "^0.182.0",
     "@vitejs/plugin-react": "^4.7.0",
     "@vitest/coverage-v8": "^4.0.16",
+    "electron": "^44.2.0",
+    "electron-builder": "26.15.3",
     "jsdom": "^27.4.0",
+    "playwright-core": "^1.63.0",
     "typescript": "5.9.3",
     "vite-tsconfig-paths": "^6.0.4",
     "vitest": "^4.0.16"

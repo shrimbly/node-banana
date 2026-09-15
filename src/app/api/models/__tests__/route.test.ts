@@ -124,12 +124,12 @@ describe("/api/models route", () => {
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
-      // 2 fal models + 8 gemini models (4 image + 4 video, always included)
-      expect(data.models).toHaveLength(10);
+      // 2 fal models + 10 gemini models (4 image + 6 video, always included)
+      expect(data.models).toHaveLength(12);
       expect(data.providers.fal.success).toBe(true);
       expect(data.providers.fal.count).toBe(2);
       expect(data.providers.gemini.success).toBe(true);
-      expect(data.providers.gemini.count).toBe(8);
+      expect(data.providers.gemini.count).toBe(10);
     });
 
     it("GET: should return models from both providers when both keys present", async () => {
@@ -156,8 +156,8 @@ describe("/api/models route", () => {
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
-      // 1 replicate + 1 fal + 8 gemini models (always included)
-      expect(data.models).toHaveLength(10);
+      // 1 replicate + 1 fal + 10 gemini models (always included)
+      expect(data.models).toHaveLength(12);
       expect(data.providers.replicate.success).toBe(true);
       expect(data.providers.fal.success).toBe(true);
       expect(data.providers.gemini.success).toBe(true);
@@ -222,8 +222,7 @@ describe("/api/models route", () => {
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
       // Only video models should be returned
-      const capabilities = data.models.flatMap((m: { capabilities: string[] }) => m.capabilities);
-      expect(capabilities.every((c: string) => c === "text-to-video")).toBe(true);
+      expect(data.models.every((m: { capabilities: string[] }) => m.capabilities.includes("text-to-video"))).toBe(true);
     });
 
     it("GET: should search by query param", async () => {
@@ -445,8 +444,8 @@ describe("/api/models route", () => {
 
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
-      // 1 fal + 8 gemini models (always included)
-      expect(data.models).toHaveLength(9);
+      // 1 fal + 10 gemini models (always included)
+      expect(data.models).toHaveLength(11);
       expect(data.providers.replicate.success).toBe(false);
       expect(data.providers.fal.success).toBe(true);
       expect(data.providers.gemini.success).toBe(true);
@@ -684,8 +683,8 @@ describe("/api/models route", () => {
       const data = await response.json();
 
       expect(response.status).toBe(200);
-      // 4 fal models + 8 gemini models (always included)
-      expect(data.models).toHaveLength(12);
+      // 4 fal models + 10 gemini models (always included)
+      expect(data.models).toHaveLength(14);
       expect(data.models.find((m: { id: string }) => m.id === "fal-ai/flux")?.capabilities).toEqual(["text-to-image"]);
       expect(data.models.find((m: { id: string }) => m.id === "fal-ai/img2img")?.capabilities).toEqual(["image-to-image"]);
       expect(data.models.find((m: { id: string }) => m.id === "fal-ai/t2v")?.capabilities).toEqual(["text-to-video"]);
@@ -712,8 +711,8 @@ describe("/api/models route", () => {
       const data = await response.json();
 
       expect(response.status).toBe(200);
-      // 1 fal text-to-image + 1 fal text-to-speech (mapped to text-to-audio) + 8 gemini models (always included)
-      expect(data.models).toHaveLength(10);
+      // 1 fal text-to-image + 1 fal text-to-speech (mapped to text-to-audio) + 10 gemini models (always included)
+      expect(data.models).toHaveLength(12);
       expect(data.models.find((m: { id: string }) => m.id === "fal-ai/flux")).toBeDefined();
       expect(data.models.find((m: { id: string }) => m.id === "fal-ai/tts")?.capabilities).toEqual(["text-to-audio"]);
     });
@@ -754,27 +753,13 @@ describe("/api/models route", () => {
       expect(data.models[0].name).toBe("Alpha");
       expect(data.models[1].provider).toBe("fal");
       expect(data.models[1].name).toBe("Zebra");
-      // Gemini models: 4 image + 4 video, sorted by name
-      expect(data.models[2].provider).toBe("gemini");
-      expect(data.models[2].name).toBe("Nano Banana");
-      expect(data.models[3].provider).toBe("gemini");
-      expect(data.models[3].name).toBe("Nano Banana 2");
-      expect(data.models[4].provider).toBe("gemini");
-      expect(data.models[4].name).toBe("Nano Banana 2 Lite");
-      expect(data.models[5].provider).toBe("gemini");
-      expect(data.models[5].name).toBe("Nano Banana Pro");
-      expect(data.models[6].provider).toBe("gemini");
-      expect(data.models[6].name).toBe("Veo 3.1");
-      expect(data.models[7].provider).toBe("gemini");
-      expect(data.models[7].name).toBe("Veo 3.1 Fast");
-      expect(data.models[8].provider).toBe("gemini");
-      expect(data.models[8].name).toBe("Veo 3.1 Fast I2V");
-      expect(data.models[9].provider).toBe("gemini");
-      expect(data.models[9].name).toBe("Veo 3.1 I2V");
-      expect(data.models[10].provider).toBe("replicate");
-      expect(data.models[10].name).toBe("alpha");
-      expect(data.models[11].provider).toBe("replicate");
-      expect(data.models[11].name).toBe("zebra");
+      const geminiModels = data.models.filter((m: { provider: string }) => m.provider === "gemini");
+      expect(geminiModels.map((m: { name: string }) => m.name)).toEqual([
+        "Gemini Omni 1.1 Flash", "Gemini Omni Flash Preview", "Nano Banana", "Nano Banana 2",
+        "Nano Banana 2 Lite", "Nano Banana Pro", "Veo 3.1", "Veo 3.1 Fast", "Veo 3.1 Fast I2V", "Veo 3.1 I2V",
+      ]);
+      expect(data.models.slice(-2).map((m: { provider: string; name: string }) => [m.provider, m.name]))
+        .toEqual([["replicate", "alpha"], ["replicate", "zebra"]]);
     });
   });
 
@@ -965,5 +950,30 @@ describe("/api/models route", () => {
       // ...and surface the model that only the search API knew about.
       expect(data.models.find((m: { id: string }) => m.id === "obscure/flux-rare")).toBeDefined();
     });
+  });
+});
+
+describe("OpenAI GPT Image 2.5 catalogue", () => {
+  it("lists both variants under OpenAI without a fabricated per-image price", async () => {
+    const response = await GET(createMockGetRequest({ provider: "openai", search: "2.5" }, { "X-OpenAI-API-Key": "test-key" }));
+    const data = await response.json();
+    expect(data.models.map((model: { id: string }) => model.id)).toEqual(["gpt-image-2.5-flare", "gpt-image-2.5-sunburst"]);
+    for (const model of data.models) {
+      expect(model.provider).toBe("openai");
+      expect(model.capabilities).toContain("image-to-image");
+      expect(model.pricing).toBeUndefined();
+    }
+  });
+});
+
+describe("Gemini Omni catalogue", () => {
+  it("lists the stable and preview Omni models under Gemini", async () => {
+    const response = await GET(createMockGetRequest({ provider: "gemini", search: "omni", capabilities: "text-to-video" }));
+    const data = await response.json();
+    expect(data.models.map((model: { id: string }) => model.id)).toEqual(["gemini-omni-1.1-flash", "gemini-omni-flash-preview"]);
+    for (const model of data.models) {
+      expect(model.provider).toBe("gemini");
+      expect(model.capabilities).toEqual(expect.arrayContaining(["text-to-video", "image-to-video", "audio-to-video"]));
+    }
   });
 });

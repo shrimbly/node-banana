@@ -1,3 +1,5 @@
+import { isDesktop, desktopCredential, desktopCredentialsMigrated, saveDesktopCredentials } from "@/lib/desktop/credentials";
+import type { CredentialName, DesktopCredentials } from "@/types/desktop";
 import {
   WorkflowSaveConfig,
   WorkflowCostData,
@@ -11,6 +13,9 @@ import {
   CanvasNavigationSettings,
   defaultCanvasNavigationSettings,
 } from "@/types";
+import type { EdgeAppearance, EdgeStyle } from "@/types";
+import { defaultEdgeAppearance } from "@/types";
+import { isEdgeStyle, normalizeEdgeAppearance } from "@/lib/edges/appearance";
 
 // Storage keys
 export const STORAGE_KEY = "node-banana-workflow-configs";
@@ -23,6 +28,7 @@ export const CANVAS_NAVIGATION_KEY = "node-banana-canvas-navigation";
 export const LAST_PROJECT_BASE_DIR_KEY = "node-banana-last-project-dir";
 export const WORKFLOWS_DIRECTORY_KEY = "node-banana-workflows-directory";
 export const FTUX_COMPLETED_KEY = "node-banana-ftux-completed";
+export const EDGE_DEFAULTS_KEY = "node-banana-edge-appearance";
 
 // Maximum recent models to store (show 4 in UI, keep 8 for persistence)
 export const MAX_RECENT_MODELS = 8;
@@ -123,7 +129,7 @@ export const saveGenerateImageDefaults = (settings: Partial<GenerateImageDefault
 };
 
 // Provider settings helpers
-export const getProviderSettings = (): ProviderSettings => {
+const readProviderPreferences = (): ProviderSettings => {
   if (typeof window === "undefined") return defaultProviderSettings;
   const stored = localStorage.getItem(PROVIDER_SETTINGS_KEY);
   if (stored) {
@@ -148,8 +154,35 @@ export const getProviderSettings = (): ProviderSettings => {
   return defaultProviderSettings;
 };
 
+export const getProviderSettings = (): ProviderSettings => {
+  const settings = readProviderPreferences();
+  if (!isDesktop()) return settings;
+  return { providers: Object.fromEntries(Object.entries(settings.providers).map(([id, config]) => [id, {
+    ...config, apiKey: desktopCredential(`provider.${id}` as CredentialName) ?? null,
+  }])) as ProviderSettings["providers"] };
+};
+
 export const saveProviderSettings = (settings: ProviderSettings): void => {
   if (typeof window === "undefined") return;
+  if (isDesktop()) {
+    const secrets: DesktopCredentials = {};
+    const providers = Object.fromEntries(Object.entries(settings.providers).map(([id, config]) => {
+      secrets[`provider.${id}` as CredentialName] = config.apiKey ?? null;
+      const { apiKey: _secret, ...preferences } = config;
+      return [id, preferences];
+    }));
+    saveDesktopCredentials(secrets);
+    // Preserve legacy keys if encrypted migration failed; never add plaintext keys.
+    if (!desktopCredentialsMigrated()) {
+      const legacy = localStorage.getItem(PROVIDER_SETTINGS_KEY);
+      const saved = legacy ? JSON.parse(legacy).providers || {} : {};
+      for (const [id, preferences] of Object.entries(providers)) {
+        if (saved[id]?.apiKey !== undefined) Object.assign(preferences, { apiKey: saved[id].apiKey });
+      }
+    }
+    localStorage.setItem(PROVIDER_SETTINGS_KEY, JSON.stringify({ providers }));
+    return;
+  }
   localStorage.setItem(PROVIDER_SETTINGS_KEY, JSON.stringify(settings));
 };
 
@@ -223,6 +256,38 @@ export const getCanvasNavigationSettings = (): CanvasNavigationSettings => {
 export const saveCanvasNavigationSettings = (settings: CanvasNavigationSettings): void => {
   if (typeof window === "undefined") return;
   localStorage.setItem(CANVAS_NAVIGATION_KEY, JSON.stringify(settings));
+};
+
+// Connection appearance defaults: the user's preferred line style and
+// appearance, applied to new workflows and to files that carry none.
+export interface EdgeDefaults {
+  edgeStyle: EdgeStyle;
+  appearance: EdgeAppearance;
+}
+
+export const builtInEdgeDefaults: EdgeDefaults = {
+  edgeStyle: "curved",
+  appearance: defaultEdgeAppearance,
+};
+
+export const getEdgeDefaults = (): EdgeDefaults => {
+  if (typeof window === "undefined") return builtInEdgeDefaults;
+  const stored = localStorage.getItem(EDGE_DEFAULTS_KEY);
+  if (!stored) return builtInEdgeDefaults;
+  try {
+    const parsed = JSON.parse(stored) as Partial<EdgeDefaults>;
+    return {
+      edgeStyle: isEdgeStyle(parsed.edgeStyle) ? parsed.edgeStyle : builtInEdgeDefaults.edgeStyle,
+      appearance: normalizeEdgeAppearance(parsed.appearance),
+    };
+  } catch {
+    return builtInEdgeDefaults;
+  }
+};
+
+export const saveEdgeDefaults = (defaults: EdgeDefaults): void => {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(EDGE_DEFAULTS_KEY, JSON.stringify(defaults));
 };
 
 // Last project base directory helpers

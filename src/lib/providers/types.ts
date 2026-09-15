@@ -7,6 +7,7 @@
  */
 
 import { ProviderType } from "@/types";
+import type { ImageGenerationMetadata } from "@/types/api";
 
 /**
  * Model capabilities - what operations a model can perform
@@ -84,6 +85,8 @@ export interface ProviderModel {
  * Unified input format for generation across all providers
  */
 export interface GenerationInput {
+  /** Abort upstream work when the caller cancels. */
+  signal?: AbortSignal;
   /** The model to use for generation */
   model: ProviderModel;
   /** Text prompt for the generation */
@@ -100,6 +103,10 @@ export interface GenerationInput {
  * Unified output format for generation results
  */
 export interface GenerationOutput {
+  generation?: ImageGenerationMetadata;
+  statusCode?: number;
+  errorCode?: string;
+  retryAfter?: string;
   /** Whether the generation succeeded */
   success: boolean;
   /** Generated outputs (images, videos, or audio) */

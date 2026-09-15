@@ -1,5 +1,6 @@
 import { WorkflowFile } from "@/store/workflowStore";
 import { TemplateCategory, TemplateMetadata } from "@/types/quickstart";
+import { DEFAULT_LLM_MODEL, DEFAULT_LLM_PROVIDER } from "@/lib/llm/catalog";
 
 export type ContentLevel = "empty" | "minimal" | "full";
 
@@ -93,8 +94,8 @@ const createLLMGenerateData = () => ({
   inputPrompt: null,
   inputImages: [],
   outputText: null,
-  provider: "google" as const,
-  model: "gemini-3-flash-preview" as const,
+  provider: DEFAULT_LLM_PROVIDER,
+  model: DEFAULT_LLM_MODEL,
   temperature: 0.7,
   maxTokens: 8192,
   status: "idle" as const,

@@ -1,25 +1,27 @@
 "use client";
 
-import { useCallback, useRef } from "react";
-import { Handle, Position, NodeProps, Node } from "@xyflow/react";
-import { BaseNode } from "./BaseNode";
+import { useCallback, useRef, useState } from "react";
+import { NodeProps, Node } from "@xyflow/react";
+import { NodeShell } from "./NodeShell";
 import { useCommentNavigation } from "@/hooks/useCommentNavigation";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { ImageInputNodeData } from "@/types";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
 import { downloadMedia } from "@/utils/downloadMedia";
-import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
-import { HandleLabel } from "./HandleLabel";
+import { ControlsCard, SummaryValues, type SocketSpec } from "./ui";
 
 type ImageInputNodeType = Node<ImageInputNodeData, "imageInput">;
+
+const INPUT_SOCKETS: SocketSpec[] = [{ id: "reference", type: "reference", label: "Ref", dataTutorial: "node-input-handle" }];
+const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "image", type: "image", label: "Image", dataTutorial: "node-output-handle" }];
 
 export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeType>) {
   const nodeData = data;
   const adaptiveImage = useAdaptiveImageSrc(nodeData.image, id);
-  const commentNavigation = useCommentNavigation(id);
+  useCommentNavigation(id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const showLabels = useShowHandleLabels(selected);
+  const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,13 +89,34 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
     });
   }, [id, updateNodeData]);
 
+  // The clip follows the image: stored dimensions first, then whatever loads.
+  const dims = nodeData.dimensions;
+  const storedAspect = dims && dims.width > 0 && dims.height > 0 ? dims.width / dims.height : null;
+  const aspect = nodeData.image
+    ? loadedAspect?.src === nodeData.image
+      ? loadedAspect.aspect
+      : storedAspect ?? 1
+    : 1;
+
   return (
-    <BaseNode
+    <NodeShell
       id={id}
       selected={selected}
-      contentClassName="flex-1 min-h-0"
-      aspectFitMedia={nodeData.image}
-      fullBleed
+      media={{ kind: "aspect", aspect }}
+      inputs={INPUT_SOCKETS}
+      outputs={OUTPUT_SOCKETS}
+      mediaClassName="group"
+      controls={
+        nodeData.image ? (
+          <ControlsCard
+            id={id}
+            summary={{
+              title: nodeData.filename || "Image",
+              values: <SummaryValues items={[dims ? `${dims.width}×${dims.height}` : null, nodeData.isOptional ? "optional" : null]} />,
+            }}
+          />
+        ) : undefined
+      }
     >
       <input
         ref={fileInputRef}
@@ -104,11 +127,17 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
       />
 
       {nodeData.image ? (
-        <div className="relative group w-full h-full overflow-clip rounded-lg">
+        <>
           <img
             src={adaptiveImage ?? undefined}
             alt={nodeData.filename || "Uploaded image"}
-            className="w-full h-full object-cover rounded-lg"
+            className="absolute inset-0 w-full h-full object-cover"
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              if (img.naturalWidth > 0 && img.naturalHeight > 0 && nodeData.image) {
+                setLoadedAspect({ src: nodeData.image, aspect: img.naturalWidth / img.naturalHeight });
+              }
+            }}
           />
           {nodeData.isOptional && (
             <span className="absolute bottom-2 left-2 text-[9px] font-medium text-neutral-300 bg-black/50 px-1.5 py-0.5 rounded">
@@ -133,7 +162,7 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
-        </div>
+        </>
       ) : (
         <div
           role="button"
@@ -148,33 +177,15 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
           }}
           onDrop={handleDrop}
           onDragOver={handleDragOver}
-          className={`w-full h-full bg-neutral-900/40 flex flex-col items-center justify-center cursor-pointer hover:bg-neutral-900/60 transition-colors ${nodeData.isOptional ? "border-2 border-dashed border-neutral-600" : ""}`}
+          className="absolute inset-0 bg-neutral-900/40 flex flex-col items-center justify-center cursor-pointer hover:bg-neutral-900/60 transition-colors"
         >
+          <div className={`absolute inset-2 rounded-[6px] squircle border border-dashed pointer-events-none ${nodeData.isOptional ? "border-neutral-600" : "border-neutral-700/70"}`} />
           <svg className="w-8 h-8 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
           </svg>
           <span className="text-xs text-neutral-500 mt-2">{nodeData.isOptional ? "Optional" : "Drop image"}</span>
         </div>
       )}
-
-      {/* Handles rendered after visual content so they paint on top */}
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="reference"
-        data-handletype="reference"
-        data-tutorial="node-input-handle"
-        className="!bg-gray-500"
-      />
-      <HandleLabel label="Ref" side="target" color="#6b7280" visible={showLabels} />
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="image"
-        data-handletype="image"
-        data-tutorial="node-output-handle"
-      />
-      <HandleLabel label="Image" side="source" color="var(--handle-color-image)" visible={showLabels} />
-    </BaseNode>
+    </NodeShell>
   );
 }
