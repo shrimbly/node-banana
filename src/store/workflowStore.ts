@@ -87,6 +87,7 @@ import {
   findLoopSubgraph,
   copyLoopOutput,
   revokeBlobUrl,
+  stripDeadBlobUrls,
   wouldCreateCycle,
 } from "./utils/executionUtils";
 import { getConnectedInputsPure, validateWorkflowPure, nodeReadinessPure, type ConnectedInputs, type NodeReadiness } from "./utils/connectedInputs";
@@ -3138,7 +3139,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     set({
       // Clear selected state - selection should not be persisted across sessions
       // Also validate position to ensure coordinates are finite numbers
-      nodes: hydratedWorkflow.nodes.map(node => migrateNodeGeometry({
+      // A blob: URL in a file died with the session that wrote it; it cannot be shown or checkpointed
+      nodes: stripDeadBlobUrls(hydratedWorkflow.nodes).map(node => migrateNodeGeometry({
         ...node,
         selected: false,
         position: {
@@ -3506,7 +3508,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         id: workflowId,
         name: workflowName,
         directoryPath: saveDirectoryPath,
-        nodes: currentNodes,
+        // Object URLs are only good in this session, so the file never carries them
+        nodes: stripDeadBlobUrls(currentNodes),
         edges,
         edgeStyle,
         edgeAppearance,
