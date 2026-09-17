@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import * as fs from "fs/promises";
 import * as path from "path";
 import { logger } from "@/utils/logger";
+import { validateWorkflowPath } from "@/utils/pathValidation";
 
 // Supported file extensions
 const SUPPORTED_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'mp4', 'webm', 'mov', 'mp3', 'wav', 'ogg', 'flac', 'aac'];
@@ -50,6 +51,31 @@ export async function POST(request: NextRequest) {
       });
       return NextResponse.json(
         { success: false, error: "Missing required fields" },
+        { status: 400 }
+      );
+    }
+
+    // Both inputs are caller-supplied and are joined into a filesystem path
+    // below, so both have to be checked first.
+    const pathCheck = validateWorkflowPath(directoryPath);
+    if (!pathCheck.valid) {
+      logger.warn('file.load', 'Generation load rejected: invalid directory path', {
+        directoryPath,
+        reason: pathCheck.error,
+      });
+      return NextResponse.json(
+        { success: false, error: pathCheck.error },
+        { status: 400 }
+      );
+    }
+
+    // The app mints ids as `img-<base36 timestamp>-<6 random>`, so anything
+    // outside that alphabet is not an id we wrote — and a separator would let
+    // the path.join below escape the directory entirely.
+    if (!/^[A-Za-z0-9_-]+$/.test(imageId)) {
+      logger.warn('file.load', 'Generation load rejected: invalid image id', { imageId });
+      return NextResponse.json(
+        { success: false, error: "Invalid image id" },
         { status: 400 }
       );
     }
