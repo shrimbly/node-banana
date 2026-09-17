@@ -97,9 +97,11 @@ export function connectionFromRequest(request: Request): ComfyConnection {
   return {
     mode,
     baseUrl: validateEngineUrl(rawBaseUrl),
-    // The browser holds the user's key; the env var is the fallback for a
-    // headless deployment where no browser supplies one.
-    apiKey: headers.get(COMFY_HEADERS.apiKey) || process.env.COMFY_API_KEY?.trim() || null,
+    // The caller chose this engine URL, so the server's own key must not be
+    // attached to it: that would send our credential to a host the caller
+    // named. A headless deployment supplies no URL and is served by
+    // envConnection() above, where the env key is the right answer.
+    apiKey: headers.get(COMFY_HEADERS.apiKey) || null,
     useSdk: headers.get(COMFY_HEADERS.apiV2) === "1",
     jobTimeoutMs: clampJobTimeoutMs(timeout),
   };
@@ -112,12 +114,14 @@ export function connectionFromRequest(request: Request): ComfyConnection {
  * even when the job itself is authorized.
  */
 export function orgKeyFromRequest(request: Request, connection: ComfyConnection): string | null {
-  return (
-    request.headers.get(COMFY_HEADERS.orgKey) ||
-    process.env.COMFY_ORG_API_KEY?.trim() ||
-    connection.apiKey ||
-    null
-  );
+  const supplied = request.headers.get(COMFY_HEADERS.orgKey);
+  if (supplied) return supplied;
+
+  // Same rule as the engine key above: when the caller named the engine, the
+  // server's org key is not ours to forward.
+  if (request.headers.get(COMFY_HEADERS.baseUrl)) return connection.apiKey || null;
+
+  return process.env.COMFY_ORG_API_KEY?.trim() || connection.apiKey || null;
 }
 
 /** Auth headers for a direct call to the engine's HTTP API. */
