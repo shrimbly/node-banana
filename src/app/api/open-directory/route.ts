@@ -4,10 +4,20 @@ import { promisify } from "util";
 import { stat } from "fs/promises";
 import path from "path";
 import os from "os";
+import { isLocalhostRequest } from "@/utils/localhostRequest";
 
 const execFileAsync = promisify(execFile);
 
 export async function POST(req: NextRequest) {
+    // This opens a directory in the *server's* file manager, so it carries the
+    // same guard its sibling open-file route already has.
+    if (!isLocalhostRequest(req)) {
+        return NextResponse.json(
+            { success: false, error: "Forbidden: localhost only" },
+            { status: 403 }
+        );
+    }
+
     try {
         const body = await req.json();
         const { path: inputPath } = body;
@@ -21,6 +31,15 @@ export async function POST(req: NextRequest) {
 
         // Normalize and resolve the path to prevent traversal attacks
         const normalizedPath = path.resolve(inputPath);
+
+        // Restrict to user's home directory, as open-file does
+        const homeDir = os.homedir();
+        if (!normalizedPath.startsWith(homeDir + path.sep) && normalizedPath !== homeDir) {
+            return NextResponse.json(
+                { success: false, error: "Path is outside allowed directory" },
+                { status: 403 }
+            );
+        }
 
         // Validate that the path exists and is a directory
         try {
