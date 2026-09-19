@@ -68,6 +68,8 @@
   --desktop-window-control-dot-size: 14px;
   --desktop-window-control-rest-opacity: 0.45;
   --desktop-window-controls-layer: 10001;
+  /* Windows: three 40px buttons with 2px gaps and a 6px edge gutter, plus room to breathe. */
+  --desktop-windows-controls-inset: 140px;
 }
 
 /* Match the inset graph frame to the surrounding macOS window curve. */
@@ -148,6 +150,69 @@ html[data-desktop-platform="darwin"] .desktop-window-controls {
 .desktop-window-control:focus-visible {
   outline: 2px solid var(--color-selection);
   outline-offset: -2px;
+}
+
+/* On Windows the frameless window has no caption: the workflow strip drags the
+   window (double-click maximises) and the app draws the caption buttons at the
+   top right, dim at rest and lit on hover like the macOS dots. */
+html[data-desktop-platform="win32"] .workflow-tabs {
+  padding-right: var(--desktop-windows-controls-inset);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+html[data-desktop-platform="win32"] .workflow-tabs [role="tab"],
+html[data-desktop-platform="win32"] .workflow-tabs button {
+  -webkit-app-region: no-drag;
+}
+
+html[data-desktop-platform="win32"] .desktop-startup-drag-region {
+  display: block;
+  position: fixed;
+  z-index: var(--desktop-window-controls-layer);
+  top: 0;
+  left: 0;
+  right: var(--desktop-windows-controls-inset);
+  height: 38px;
+  -webkit-app-region: drag;
+}
+
+html[data-desktop-platform="win32"] .desktop-window-controls-windows {
+  position: fixed;
+  z-index: var(--desktop-window-controls-layer);
+  top: 5px;
+  right: 6px;
+  display: flex;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.desktop-window-controls-windows .desktop-window-control {
+  width: 40px;
+  height: 28px;
+  border-radius: 6px;
+  color: #737373;
+  transition: background-color 120ms, color 120ms;
+}
+
+.desktop-window-controls-windows .desktop-window-control:hover,
+.desktop-window-controls-windows .desktop-window-control:focus-visible {
+  background: rgb(255 255 255 / 0.08);
+  color: #f5f5f5;
+}
+
+.desktop-window-controls-windows .desktop-window-close:hover,
+.desktop-window-controls-windows .desktop-window-close:focus-visible {
+  background: rgb(196 43 28 / 0.9);
+  color: #ffffff;
+}
+
+.desktop-window-controls-windows .desktop-window-control svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
 }
 
 .desktop-window-control-dot svg {

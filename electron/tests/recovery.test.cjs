@@ -5,7 +5,9 @@ const path = require('node:path');
 const os = require('node:os');
 const { createRecoveryStore } = require('../lib/recovery.cjs');
 const snapshot = (text, media) => ({ version: 1, activeTabId: 'two', tabs: ['one', 'two'].map(id => ({ id, snapshot: { nodes: [{ id, data: { text, media } }], edges: [] } })) });
-test('reports a committed discard after directory fsync failure so the renderer completes closure', () => {
+// atomicWrite never fsyncs the directory on Windows, so the failure this test
+// simulates cannot occur there.
+test('reports a committed discard after directory fsync failure so the renderer completes closure', { skip: process.platform === 'win32' && 'directory fsync is skipped on Windows' }, () => {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'banana-discard-sync-'));
   const original = fs.fsyncSync;
   try {

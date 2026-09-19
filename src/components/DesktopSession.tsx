@@ -50,16 +50,25 @@ export function DesktopSession({ children }: { children: ReactNode }) {
     return watchDesktopConnection(window.nodeBananaDesktop!.backend, setDesktopConnected);
   }, [setDesktopConnected]);
   const [ready, setReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; code?: string } | null>(null);
   const hydrate = () => {
     useWorkflowStore.setState({ providerSettings: getProviderSettings() });
     setReady(true);
   };
-  const initialize = () => initializeDesktopCredentials().then(() => { hydrate(); setError(null); }).catch(error => setError(error.message));
+  const fail = (error: Error & { code?: string }) => setError({ message: error.message, code: error.code });
+  const initialize = () => initializeDesktopCredentials().then(() => { hydrate(); setError(null); }).catch(fail);
+  // Data the OS key no longer decrypts stays unreadable however often it is
+  // retried; the reset moves it aside and initialises against an empty store.
+  // Offered only for that failure: a locked keychain or a full disk leaves a
+  // perfectly good file that a reset would move out of reach.
+  const resettable = error?.code === 'undecryptable';
+  const reset = () => window.nodeBananaDesktop!.credentials.reset()
+    .then(result => { if (!result.ok) throw new Error(result.error); return initialize(); })
+    .catch(fail);
   useEffect(() => {
     if (!isDesktop()) { setReady(true); return; }
     void initialize();
-    const failed = (event: Event) => setError((event as CustomEvent<string>).detail);
+    const failed = (event: Event) => setError({ message: (event as CustomEvent<string>).detail });
     window.addEventListener('desktop-credential-error', failed);
     return () => { window.removeEventListener('desktop-credential-error', failed); };
     // Initialization is a shared, repeatable promise across StrictMode mounts.
@@ -73,12 +82,16 @@ export function DesktopSession({ children }: { children: ReactNode }) {
     <Dialog open={!!error} size="sm" label="Credential storage" overlayClassName="z-[10000]">
       <DialogHeader>
         <DialogTitle>Keys could not be saved securely</DialogTitle>
-        <DialogDescription>{error}</DialogDescription>
+        <DialogDescription>{error?.message}</DialogDescription>
       </DialogHeader>
       <DialogBody scroll={false} className="pb-4">
-        <p className="text-xs leading-4 text-neutral-500">Your existing stored keys are preserved. Session-only keys stay in memory and are lost when the app closes.</p>
+        <p className="text-xs leading-4 text-neutral-500">
+          {resettable ? 'Retrying reads the stored keys again. Resetting moves the unreadable file aside and starts an empty store. ' : 'Your existing stored keys are preserved. '}
+          Session-only keys stay in memory and are lost when the app closes.
+        </p>
       </DialogBody>
       <DialogFooter>
+        {resettable && <DialogButton variant="ghost" onClick={() => void reset()}>Reset stored keys</DialogButton>}
         <DialogButton variant="ghost" onClick={() => { useSessionCredentials(); hydrate(); setError(null); }}>Use for this session only</DialogButton>
         <DialogButton variant="primary" autoFocus onClick={() => void initialize()}>Retry secure storage</DialogButton>
       </DialogFooter>
