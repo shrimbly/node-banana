@@ -90,9 +90,11 @@ async function createWindow() {
   window = new BrowserWindow({ title: 'Node Banana', ...bounds,
     minWidth: Math.min(900, bounds.width), minHeight: Math.min(600, bounds.height), backgroundColor: '#0f0f0f', show: false,
     // Both desktop platforms draw their own window controls over the tab strip.
-    // Windows also drops the native menu bar; the application menu stays
-    // installed so its accelerators keep working.
-    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' } : process.platform === 'win32' ? { titleBarStyle: 'hidden', autoHideMenuBar: true } : {}),
+    // Windows also hides the native menu bar (setMenuBarVisibility below, not
+    // autoHideMenuBar, which would let a lone Alt press draw it over the
+    // frameless window); the application menu stays installed so its
+    // accelerators keep working.
+    ...(process.platform === 'darwin' || process.platform === 'win32' ? { titleBarStyle: 'hidden' } : {}),
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.cjs') },
   });
   const current = window;
@@ -157,7 +159,9 @@ function registerBridge() {
     try { return { ok: true, value: getStore()[operation](value) }; }
     catch (error) {
       log(error);
-      return { ok: false, error: category === 'credentials' ? error.message : 'Recovery could not be read or saved. Check disk space and permissions, and save your workflows to disk.' };
+      return category === 'credentials'
+        ? { ok: false, error: error.message, ...(error.code ? { code: error.code } : {}) }
+        : { ok: false, error: 'Recovery could not be read or saved. Check disk space and permissions, and save your workflows to disk.' };
     }
   });
   ipcMain.on('desktop:recovery:discardTab', (event, id) => {

@@ -33,7 +33,8 @@ test('encrypted updates, deletion tombstones and failures preserve credentials',
     assert.equal(fs.readFileSync(filename, 'utf8'), previous);
     assert.throws(() => store.write({ arbitrary: 'nope' }), /Invalid/);
     fs.writeFileSync(filename, 'corrupt');
-    assert.throws(() => store.read(), /preserved/);
+    // Only a decrypt failure is resettable; macOS reports a locked keychain instead.
+    assert.throws(() => store.read(), error => /preserved/.test(error.message) && error.code === (process.platform === 'darwin' ? undefined : 'undecryptable'));
     // A reset keeps the unreadable file beside a fresh, writable store.
     secure.encryptString = encrypt;
     assert.deepEqual(store.reset(), {});

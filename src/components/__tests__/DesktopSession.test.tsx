@@ -2,9 +2,10 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest';
 import { DesktopSession } from '../DesktopSession';
 
+const credentialFailure = vi.hoisted(() => ({ current: () => new Error('Disk full') as Error & { code?: string } }));
 vi.mock('@/lib/desktop/credentials', () => ({
   isDesktop: () => true,
-  initializeDesktopCredentials: () => Promise.reject(new Error('Disk full')),
+  initializeDesktopCredentials: () => Promise.reject(credentialFailure.current()),
   useSessionCredentials: vi.fn(),
 }));
 vi.mock('@/store/utils/localStorage', () => ({ getProviderSettings: () => ({ providers: {} }) }));
@@ -30,6 +31,8 @@ it('keeps window actions and dragging available through credential failure and r
   expect(container.querySelector('.desktop-startup-drag-region')).toBeInTheDocument();
   await screen.findByRole('dialog', { name: 'Credential storage' });
   expect(screen.queryByText('Editor workspace')).not.toBeInTheDocument();
+  // A write failure leaves a good file behind; no reset is offered for it.
+  expect(screen.queryByRole('button', { name: 'Reset stored keys' })).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole('button', { name: 'Close window' }));
   expect(close).toHaveBeenCalledOnce();
   fireEvent.click(screen.getByRole('button', { name: 'Use for this session only' }));
@@ -62,8 +65,8 @@ it('resynchronizes when the store connection action changes during a dev refresh
   connectionState.setDesktopConnected = first;
 });
 
-it('draws the Windows caption buttons and resets an unreadable key store on request', async () => {
-  document.documentElement.dataset.desktopPlatform = 'win32';
+it('draws the Windows caption buttons and resets an undecryptable key store on request', async () => {
+  // The bridge reports the platform before the <html> attribute is stamped.
   const toggleMaximize = vi.fn();
   let announce: ((maximized: boolean) => void) | undefined;
   Object.defineProperty(window, 'nodeBananaWindow', { configurable: true, value: {
@@ -72,9 +75,11 @@ it('draws the Windows caption buttons and resets an unreadable key store on requ
   } });
   const reset = vi.fn(async () => ({ ok: true as const, value: {} }));
   Object.defineProperty(window, 'nodeBananaDesktop', { configurable: true, value: {
+    platform: 'win32',
     backend: { onStatus: () => vi.fn(), state: async () => true },
     credentials: { reset },
   } });
+  credentialFailure.current = () => Object.assign(new Error('Stored keys could not be decrypted'), { code: 'undecryptable' });
   try {
     render(<DesktopSession><div>Editor workspace</div></DesktopSession>);
     await screen.findByRole('dialog', { name: 'Credential storage' });
@@ -88,6 +93,6 @@ it('draws the Windows caption buttons and resets an unreadable key store on requ
     fireEvent.click(screen.getByRole('button', { name: 'Reset stored keys' }));
     await waitFor(() => expect(reset).toHaveBeenCalledOnce());
   } finally {
-    delete document.documentElement.dataset.desktopPlatform;
+    credentialFailure.current = () => new Error('Disk full');
   }
 });

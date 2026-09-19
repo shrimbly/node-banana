@@ -2,6 +2,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 // Narrow capabilities on every desktop platform; never expose the IPC transport.
 contextBridge.exposeInMainWorld('nodeBananaDesktop', {
+  // Available synchronously from the first script; the <html> attribute below
+  // arrives only at DOMContentLoaded, which React may beat under streaming.
+  platform: process.platform,
   backend: {
     state: () => ipcRenderer.invoke('desktop:backend-state'),
     restart: () => ipcRenderer.invoke('desktop:restart-backend'),
@@ -45,14 +48,21 @@ contextBridge.exposeInMainWorld('nodeBananaDesktop', {
 });
 // Platforms whose window controls are drawn by the renderer.
 if (process.platform === 'darwin' || process.platform === 'win32') {
+  // The main process announces the maximised state on did-finish-load, which
+  // fires before React has mounted and subscribed. Keep the latest value here,
+  // where the listener exists from preload time, and replay it on subscription
+  // so a window that starts maximised shows the restore glyph.
+  let maximized = false;
+  ipcRenderer.on('desktop:window-maximized', (_event, value) => { maximized = value === true; });
   contextBridge.exposeInMainWorld('nodeBananaWindow', {
     close: () => ipcRenderer.send('desktop:window-action', 'close'),
     minimize: () => ipcRenderer.send('desktop:window-action', 'minimize'),
     toggleFullscreen: () => ipcRenderer.send('desktop:window-action', 'toggle-fullscreen'),
     toggleMaximize: () => ipcRenderer.send('desktop:window-action', 'toggle-maximize'),
     onMaximized: (callback) => {
-      const listener = (_event, maximized) => callback(maximized);
+      const listener = (_event, value) => callback(value === true);
       ipcRenderer.on('desktop:window-maximized', listener);
+      callback(maximized);
       return () => ipcRenderer.removeListener('desktop:window-maximized', listener);
     },
   });

@@ -7,11 +7,14 @@ export type EnvironmentImport = { cancelled: true } | {
   credentials: DesktopCredentials;
   preferences: { mode?: 'cloud' | 'local' | 'remote'; localUsesApiV2?: boolean; remoteUsesApiV2?: boolean };
 };
-export type DesktopResult<T> = { ok: true; value: T } | { ok: false; error: string };
+/** `code` names a failure the renderer can act on beyond retrying; today only `undecryptable`. */
+export type DesktopResult<T> = { ok: true; value: T } | { ok: false; error: string; code?: string };
 
 declare global {
   interface Window {
     readonly nodeBananaDesktop?: {
+      /** Node's `process.platform`; the same value the preload stamps on `<html data-desktop-platform>` at DOMContentLoaded. */
+      platform: string;
       backend: {
         state: () => Promise<boolean>;
         restart: () => Promise<boolean>;
