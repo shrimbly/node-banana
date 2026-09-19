@@ -126,6 +126,30 @@
     });
   }
 
+  /* --- scroll handoff: the fold owns the wheel until the graph's bottom edge has
+     been panned above 40% of the canvas, or until the page has scrolled. A quiet
+     "Scroll" mark appears after two seconds without a gesture, until the first scroll. */
+  var THRESHOLD = 0.4;
+  function pastThreshold(stage) {
+    var r = canvas.getBoundingClientRect(), bottom = -Infinity;
+    Array.prototype.forEach.call(stage.querySelectorAll("[data-node]"), function (n) {
+      bottom = Math.max(bottom, n.getBoundingClientRect().bottom);
+    });
+    return bottom <= r.top + r.height * THRESHOLD;
+  }
+  var fold = canvas.closest(".fold");
+  var hintTimer = null, hintDone = false;
+  function touched() {
+    if (!fold || hintDone) return;
+    fold.classList.remove("is-idle");
+    clearTimeout(hintTimer);
+    hintTimer = setTimeout(function () { if (!hintDone) fold.classList.add("is-idle"); }, 2000);
+  }
+  window.addEventListener("scroll", function () {
+    if (window.scrollY > 0 && fold) { hintDone = true; fold.classList.remove("is-idle"); clearTimeout(hintTimer); }
+  }, { passive: true });
+  touched();
+
   /* --- pointer handling on the canvas: drag a node, or pan the stage. Two
      pointers pinch-zoom. Wheel pans, as the app does; ctrl/cmd + wheel zooms. */
   var pointers = {};
@@ -167,10 +191,19 @@
       gesture.node.style.setProperty("--y", Math.round(gesture.y + (event.clientY - gesture.oy) / gesture.z) + "px");
       redraw(stage);
     } else if (gesture.kind === "pan") {
-      var v = viewOf(stage);
-      v.x = gesture.x + (event.clientX - gesture.ox);
-      v.y = gesture.y + (event.clientY - gesture.oy);
-      applyView(stage);
+      var dx = event.clientX - gesture.ox, dy = event.clientY - gesture.oy;
+      gesture.ox = event.clientX; gesture.oy = event.clientY;
+      /* Past the threshold, dragging the graph further up scrolls the page instead;
+         dragging back down scrolls it back before the graph moves again. */
+      if (window.scrollY > 0 || (dy < 0 && pastThreshold(stage))) {
+        window.scrollBy(0, -dy);
+      } else {
+        var v = viewOf(stage);
+        v.x += dx;
+        v.y += dy;
+        applyView(stage);
+      }
+      touched();
     } else if (gesture.kind === "pinch") {
       var ids = Object.keys(pointers);
       if (ids.length < 2) return;
@@ -194,6 +227,11 @@
   canvas.addEventListener("wheel", function (event) {
     var stage = activeStage();
     if (!stage) return;
+    touched();
+    /* The wheel belongs to the page once it has scrolled, and hands over to it as
+       soon as the graph has been panned up past the threshold. */
+    if (window.scrollY > 0) return;
+    if (!(event.ctrlKey || event.metaKey) && event.deltaY > 0 && pastThreshold(stage)) return;
     event.preventDefault();
     if (event.ctrlKey || event.metaKey) {
       zoomAt(stage, Math.exp(-event.deltaY * 0.0025), event.clientX, event.clientY);
