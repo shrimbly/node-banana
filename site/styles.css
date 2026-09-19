@@ -687,7 +687,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 .section__head { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 96px; align-items: end; }
 .section__copy { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 /* Split blocks share one grid: two equal halves, the same gap, so the right half starts at the same edge in every section. */
-.section__split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 96px; align-items: center; container-type: inline-size; }
+.section__split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 144px; align-items: center; container-type: inline-size; }
 .section__split > * { min-width: 0; }
 .section__split--comfy { align-items: start; }
 .section__split--templates { align-items: end; }
@@ -733,7 +733,7 @@ ul { margin: 0; padding: 0; list-style: none; }
 
 /* A static graph: the same node anatomy as the fold, laid out once. */
 /* The graph keeps its 672px layout and zooms down when the column is narrower. */
-.graph { position: relative; width: 672px; height: 520px; --gw: min(672px, (100cqw - 96px) / 2); zoom: tan(atan2(var(--gw), 672px)); }
+.graph { position: relative; width: 672px; height: 520px; --gw: min(672px, (100cqw - 144px) / 2); zoom: tan(atan2(var(--gw), 672px)); }
 .graph--one { width: 320px; height: 560px; margin-top: 16px; zoom: 1; }
 .graph .edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 .graph mark { background: rgb(96 165 250 / 0.3); color: inherit; border-radius: 2px; padding: 2px 0; }
