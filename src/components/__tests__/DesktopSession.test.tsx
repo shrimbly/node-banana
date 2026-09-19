@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { DesktopSession } from '../DesktopSession';
 
@@ -60,4 +60,34 @@ it('resynchronizes when the store connection action changes during a dev refresh
   expect(unsubscribe).toHaveBeenCalled();
   unmount();
   connectionState.setDesktopConnected = first;
+});
+
+it('draws the Windows caption buttons and resets an unreadable key store on request', async () => {
+  document.documentElement.dataset.desktopPlatform = 'win32';
+  const toggleMaximize = vi.fn();
+  let announce: ((maximized: boolean) => void) | undefined;
+  Object.defineProperty(window, 'nodeBananaWindow', { configurable: true, value: {
+    close: vi.fn(), minimize: vi.fn(), toggleFullscreen: vi.fn(), toggleMaximize,
+    onMaximized: (callback: (maximized: boolean) => void) => { announce = callback; return vi.fn(); },
+  } });
+  const reset = vi.fn(async () => ({ ok: true as const, value: {} }));
+  Object.defineProperty(window, 'nodeBananaDesktop', { configurable: true, value: {
+    backend: { onStatus: () => vi.fn(), state: async () => true },
+    credentials: { reset },
+  } });
+  try {
+    render(<DesktopSession><div>Editor workspace</div></DesktopSession>);
+    await screen.findByRole('dialog', { name: 'Credential storage' });
+    const controls = await screen.findByRole('group', { name: 'Window controls' });
+    expect(controls).toHaveClass('desktop-window-controls-windows');
+    expect(screen.queryByRole('button', { name: 'Toggle fullscreen' })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Maximise window' }));
+    expect(toggleMaximize).toHaveBeenCalledOnce();
+    act(() => announce?.(true));
+    expect(screen.getByRole('button', { name: 'Restore window' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Reset stored keys' }));
+    await waitFor(() => expect(reset).toHaveBeenCalledOnce());
+  } finally {
+    delete document.documentElement.dataset.desktopPlatform;
+  }
 });

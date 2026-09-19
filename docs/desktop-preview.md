@@ -66,7 +66,11 @@ Diagnostics rotate at 2 MiB across four desktop log files; workflow session logs
 
 ## Windows (x64)
 
-`npm run electron:package` on a Windows 11 x64 machine (Node 23, ImageMagick 7) produces, in `dist-electron/`, a per-user **NSIS installer** `Node Banana-1.9.0-x64.exe` and a **zip** `Node Banana-1.9.0-x64.zip`, plus an unpacked `win-unpacked/` tree. The installer is not signed; Windows SmartScreen may warn on first run. The app icon is a multi-resolution `.ico` generated from the shared artwork with ImageMagick (macOS uses `iconutil`); the macOS packaging path is unchanged. Data lives under `%APPDATA%\Node Banana\` (preferences, encrypted keys, recovery, window state, and versioned `runtimes\`); logs are reachable via **Help → Open Logs**. The server origin is the same `http://127.0.0.1:47831`.
+`npm run electron:package` on a Windows 11 x64 machine (Node 23, ImageMagick 7) produces, in `dist-electron/`, a per-user **NSIS installer** `Node Banana-1.9.0-x64.exe` and a **zip** `Node Banana-1.9.0-x64.zip`, plus an unpacked `win-unpacked/` tree. The installer is not signed; Windows SmartScreen may warn on first run. The app icon is a multi-resolution `.ico` generated from the shared artwork with ImageMagick (macOS uses `iconutil`); the macOS packaging path is unchanged. Data lives under `%APPDATA%\Node Banana\` (preferences, encrypted keys, recovery, window state, and versioned `runtimes\`); logs are in `%APPDATA%\Node Banana\logs\`, also opened by the disconnected banner's **Open logs** button. The server origin is the same `http://127.0.0.1:47831`.
+
+The window is frameless on Windows: no native title bar and no menu bar. The workflow tab strip is the drag region (double-click maximises) and the app draws minimise, maximise/restore and close at the top right, dim at rest and lit on hover like the macOS controls. The application menu stays installed but hidden, so its accelerators (reload, DevTools, F11 fullscreen) still work; the Help items have no Windows home yet.
+
+Keys are encrypted with Electron's `safeStorage`, whose AES key on Windows is DPAPI-wrapped in `%APPDATA%\Node Banana\Local State`. If Chromium regenerates that key the saved file can no longer be decrypted, and retrying never helps. The credential dialog then offers **Reset stored keys**, which moves the file aside as `credentials-v1.unreadable-<timestamp>.json` and starts an empty store; keys are re-entered in Settings.
 
 Verified on Windows 11 x64 for this build:
 

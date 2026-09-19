@@ -43,12 +43,18 @@ contextBridge.exposeInMainWorld('nodeBananaDesktop', {
     reset: () => ipcRenderer.invoke('desktop:credentials:reset'),
   },
 });
-if (process.platform === 'darwin') {
+// Platforms whose window controls are drawn by the renderer.
+if (process.platform === 'darwin' || process.platform === 'win32') {
   contextBridge.exposeInMainWorld('nodeBananaWindow', {
     close: () => ipcRenderer.send('desktop:window-action', 'close'),
     minimize: () => ipcRenderer.send('desktop:window-action', 'minimize'),
     toggleFullscreen: () => ipcRenderer.send('desktop:window-action', 'toggle-fullscreen'),
     toggleMaximize: () => ipcRenderer.send('desktop:window-action', 'toggle-maximize'),
+    onMaximized: (callback) => {
+      const listener = (_event, maximized) => callback(maximized);
+      ipcRenderer.on('desktop:window-maximized', listener);
+      return () => ipcRenderer.removeListener('desktop:window-maximized', listener);
+    },
   });
 }
 

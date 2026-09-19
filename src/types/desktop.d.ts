@@ -41,6 +41,7 @@ declare global {
       minimize: () => void;
       toggleFullscreen: () => void;
       toggleMaximize: () => void;
+      onMaximized: (callback: (maximized: boolean) => void) => () => void;
     };
   }
 }

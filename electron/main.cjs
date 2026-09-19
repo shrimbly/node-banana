@@ -89,7 +89,10 @@ async function createWindow() {
   const bounds = visibleBounds(saved?.bounds, screen.getAllDisplays(), screen.getPrimaryDisplay());
   window = new BrowserWindow({ title: 'Node Banana', ...bounds,
     minWidth: Math.min(900, bounds.width), minHeight: Math.min(600, bounds.height), backgroundColor: '#0f0f0f', show: false,
-    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' } : {}),
+    // Both desktop platforms draw their own window controls over the tab strip.
+    // Windows also drops the native menu bar; the application menu stays
+    // installed so its accelerators keep working.
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' } : process.platform === 'win32' ? { titleBarStyle: 'hidden', autoHideMenuBar: true } : {}),
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.cjs') },
   });
   const current = window;
@@ -102,6 +105,11 @@ async function createWindow() {
   for (const event of ['resize', 'move', 'maximize', 'unmaximize']) current.on(event, () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveBounds, 300); });
   current.on('close', saveBounds);
   if (saved?.maximized) current.maximize();
+  // The renderer's maximise button swaps to a restore glyph from this state.
+  const sendMaximized = () => { if (!current.isDestroyed()) current.webContents.send('desktop:window-maximized', current.isMaximized()); };
+  for (const event of ['maximize', 'unmaximize']) current.on(event, sendMaximized);
+  current.webContents.on('did-finish-load', sendMaximized);
+  if (process.platform === 'win32') current.setMenuBarVisibility(false);
   if (process.platform === 'darwin') {
     current.setWindowButtonVisibility(false);
     current.on('enter-full-screen', () => current.setWindowButtonVisibility(false));
