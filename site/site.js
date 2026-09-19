@@ -43,8 +43,9 @@
     });
   }
 
-  /* 4. Stars. The number in the HTML is the fallback. */
-  var stars = document.querySelector("[data-stars]");
+  /* 4. Stars. The number in the HTML is the fallback; the count appears in the fold and again in the open-source section. */
+  var starEls = document.querySelectorAll("[data-stars]");
+  var stars = starEls.length ? { set textContent(v) { Array.prototype.forEach.call(starEls, function (el) { el.textContent = v; }); } } : null;
   if (stars && window.fetch) {
     var cached = null;
     try { cached = sessionStorage.getItem("nb-stars"); } catch (e) { /* storage may be blocked */ }
