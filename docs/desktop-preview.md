@@ -63,3 +63,15 @@ Native input checks use `cliclick` and require macOS Accessibility permission. T
 For isolated manual testing, set `NODE_BANANA_ELECTRON_USER_DATA` to a temporary directory before launching the executable. `NODE_BANANA_ELECTRON_PORT` is an explicit developer/test override; each port has separate Chromium origin storage. Avoid overriding either value for ordinary testers.
 
 Diagnostics rotate at 2 MiB across four desktop log files; workflow session logs retain ten bounded files. Known credential values and credential-shaped fields are redacted. When reporting a problem, include app version, macOS version, the failed step and relevant diagnostics. Do not attach credential files or recovery content without inspecting what they contain.
+
+## Windows (x64)
+
+`npm run electron:package` on a Windows 11 x64 machine (Node 23, ImageMagick 7) produces, in `dist-electron/`, a per-user **NSIS installer** `Node Banana-1.9.0-x64.exe` and a **zip** `Node Banana-1.9.0-x64.zip`, plus an unpacked `win-unpacked/` tree. The installer is not signed; Windows SmartScreen may warn on first run. The app icon is a multi-resolution `.ico` generated from the shared artwork with ImageMagick (macOS uses `iconutil`); the macOS packaging path is unchanged. Data lives under `%APPDATA%\Node Banana\` (preferences, encrypted keys, recovery, window state, and versioned `runtimes\`); logs are reachable via **Help → Open Logs**. The server origin is the same `http://127.0.0.1:47831`.
+
+Verified on Windows 11 x64 for this build:
+
+- `npm run electron:package` produces the x64 installer and zip; `win-unpacked\Node Banana.exe` starts and the desktop server listens on `127.0.0.1:47831`. Bundled runtime files are present (`resources\runtime\.next\BUILD_ID`, `resources\runtime\node_modules\sharp\package.json`, `resources\runtime\server.cjs`, `resources\runtime\runtime.json` with `arch: "x64"`).
+- The installer installs silently (`/S`) per-user to `%LOCALAPPDATA%\Programs\Node Banana\` without elevation; the installed app starts and listens on 47831; `Uninstall Node Banana.exe /S` removes it.
+- `npm run electron:test` and `node scripts/electron-smoke.cjs --production` pass (the `npm run electron:smoke -- --production` form runs in dev because npm consumes `--production`).
+
+Not covered on Windows in this milestone: signing, SmartScreen handling, auto-update, and installer branding. The production `next build` (Turbopack) can crash intermittently with an access violation on Windows and succeeds on retry.
