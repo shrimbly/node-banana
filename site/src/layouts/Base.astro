@@ -1,0 +1,48 @@
+---
+import "../styles/global.css";
+---
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Node Banana</title>
+  <meta name="description" content="Node Banana is a free, open source generative media canvas for Mac and Windows. Bring your own API keys and generate images, video, audio and 3D on one node graph.">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#0a0a0a">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Node Banana">
+  <meta property="og:description" content="Free, open source, bring your own key. A generative media canvas for Mac and Windows.">
+  <!-- og:image and og:url must be absolute once the site has a domain. -->
+  <meta property="og:image" content="/assets/og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Node Banana">
+  <meta name="twitter:description" content="Free, open source, bring your own key. A generative media canvas for Mac and Windows.">
+  <meta name="twitter:image" content="/assets/og.png">
+
+  <link rel="icon" type="image/png" href="/assets/banana.png">
+  <link rel="apple-touch-icon" href="/assets/banana.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+  <script is:inline>
+    /* Entry animation gate. Lives here, not in site.js, so a failed script can never leave the page hidden. */
+    (function (root) {
+      root.classList.replace("no-js", "js");
+      var go = function () { root.classList.add("ready"); };
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(go, go);
+      setTimeout(go, 900);
+    })(document.documentElement);
+  </script>
+</head>
+<body>
+  <slot />
+  <script>
+    import "../scripts/site.js";
+  </script>
+</body>
+</html>

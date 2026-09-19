@@ -1,0 +1,48 @@
+---
+import appWindow from "../partials/app-window.html?raw";
+---
+<main class="fold">
+  <Fragment set:html={appWindow} />
+
+    <div class="line">
+      <ul class="points">
+        <li>Free</li>
+        <li>Open source</li>
+        <li>Bring your own key</li>
+        <li>Generative media canvas</li>
+      </ul>
+
+      <nav class="nav" aria-label="Site">
+        <div class="nav__links">
+          <a class="nav__link" href="https://node-banana-docs.vercel.app/">Documentation</a>
+          <a class="nav__link" href="https://discord.com/invite/89Nr6EKkTf">Discord</a>
+        </div>
+
+        <div class="actions">
+          <a class="btn btn--secondary" href="https://github.com/shrimbly/node-banana">
+            <svg class="btn__icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.7 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3z"></path></svg>
+            <span data-stars>1.6k</span><span class="sr-only"> stars on GitHub</span>
+          </a>
+
+          <!-- Both downloads point at the latest release for now. Once 2.0 artifacts exist,
+               put the per-platform asset URLs in the two href attributes below (the main
+               button copies whichever platform the visitor is on). -->
+          <div class="download" data-download>
+            <a class="btn btn--primary download__main" href="https://github.com/shrimbly/node-banana/releases/latest" data-download-main><span>Download for <span data-platform-label>Mac</span></span></a>
+            <details class="download__more" data-download-more>
+              <summary class="download__toggle" aria-label="Choose another platform">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6l4 4 4-4"></path></svg>
+              </summary>
+              <ul class="menu">
+                <li><a class="menu__item" href="https://github.com/shrimbly/node-banana/releases/latest" data-platform="mac" data-label="Mac"><span class="menu__name">Mac</span><span class="menu__meta">Apple Silicon · <span class="version"></span></span></a></li>
+                <li><a class="menu__item" href="https://github.com/shrimbly/node-banana/releases/latest" data-platform="windows" data-label="Windows"><span class="menu__name">Windows</span><span class="menu__meta">x64 · <span class="version"></span></span></a></li>
+              </ul>
+            </details>
+          </div>
+        </div>
+      </nav>
+      <span class="scroll-hint" data-scroll-hint aria-hidden="true"><span class="mono">Scroll</span><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></span>
+    </div>
+
+    <h1 class="wordmark"><span class="wordmark__text"><span class="word">Node</span> <span class="word">Banana</span></span></h1>
+</main>
