@@ -217,7 +217,13 @@ else {
     backend = createBackend({ fork: (...args) => utilityProcess.fork(...args),
       entry: app.isPackaged ? path.join(root, 'server.cjs') : path.join(__dirname, 'server.cjs'), diagnostics, onDisconnected: disconnected,
       options: () => ({ cwd: root, serviceName: 'Node Banana Server', stdio: 'pipe', env: {
-        ...(app.isPackaged ? Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'LANG'].filter(key => process.env[key]).map(key => [key, process.env[key]])) : process.env),
+        ...(app.isPackaged ? Object.fromEntries([
+          'PATH', 'HOME', 'TMPDIR', 'LANG',
+          // Windows utility processes need these OS variables to initialise
+          // Winsock / Chromium networking; without SystemRoot/windir the bundled
+          // server fails to bind with `listen UNKNOWN` and never starts.
+          ...(process.platform === 'win32' ? ['SystemRoot', 'windir', 'SystemDrive', 'TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA', 'USERPROFILE', 'COMSPEC', 'PATHEXT', 'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE'] : []),
+        ].filter(key => process.env[key]).map(key => [key, process.env[key]])) : process.env),
         NODE_ENV: dev ? 'development' : 'production', NODE_BANANA_ELECTRON: '1', NODE_BANANA_LOGS_DIR: app.getPath('logs'),
         NODE_BANANA_ELECTRON_PORT: String(port), NODE_BANANA_ELECTRON_TOKEN: token,
       } }),
