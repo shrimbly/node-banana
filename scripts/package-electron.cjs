@@ -5,6 +5,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const { build } = require('electron-builder');
+const { pickHostEnvironment } = require('../electron/lib/env.cjs');
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'dist-electron');
 const run = (command, args, cwd, env) => new Promise((resolve, reject) => {
@@ -15,20 +16,18 @@ const run = (command, args, cwd, env) => new Promise((resolve, reject) => {
   child.on('error', reject);
   child.on('exit', code => code === 0 ? resolve() : reject(new Error(`${command} exited ${code}`)));
 });
-const filter = source => !/(^|\/)(\.env[^/]*|\.DS_Store|__tests__|__fixtures__|__mocks__|fixtures|tests?|coverage)(\/|$)|\.(test|spec)\.[^/]+$/.test(source);
+// fs.cp hands over native paths, so normalise the separator before matching or
+// none of these exclusions apply on Windows.
+const filter = source => !/(^|\/)(\.env[^/]*|\.DS_Store|__tests__|__fixtures__|__mocks__|fixtures|tests?|coverage)(\/|$)|\.(test|spec)\.[^/]+$/.test(source.split(path.sep).join('/'));
 async function main() {
   const isMac = process.platform === 'darwin' && process.arch === 'arm64';
   const isWin = process.platform === 'win32' && process.arch === 'x64';
   if (!isMac && !isWin) throw new Error('Build this preview on an Apple Silicon Mac (darwin/arm64) or a Windows x64 machine (win32/x64).');
   const work = await fs.mkdtemp(path.join(os.tmpdir(), 'node-banana-release-'));
-  // macOS keeps the original tightly-scoped env. Windows child processes (npm,
-  // node, electron-builder and its tools) need the standard OS variables, so
-  // pass the full environment minus anything that looks like a provider secret.
-  // Copied .env files are excluded separately by `filter`, so no developer keys
-  // reach the Next build regardless.
-  const env = isMac
-    ? Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL'].filter(key => process.env[key]).map(key => [key, process.env[key]]))
-    : Object.fromEntries(Object.entries(process.env).filter(([key, value]) => value !== undefined && !/API_KEY|SECRET|PASSWORD|TOKEN/i.test(key)));
+  // The same OS allowlist the packaged backend gets, so a developer key can
+  // never reach npm, the Next build or electron-builder by any name. Windows
+  // tools additionally resolve program and profile directories.
+  const env = pickHostEnvironment(isWin ? ['ProgramFiles', 'ProgramFiles(x86)', 'ProgramW6432', 'ProgramData', 'CommonProgramFiles', 'ALLUSERSPROFILE', 'PUBLIC'] : []);
   Object.assign(env, { NEXT_TELEMETRY_DISABLED: '1', CSC_IDENTITY_AUTO_DISCOVERY: 'false' });
   try {
     const source = path.join(work, 'source');
