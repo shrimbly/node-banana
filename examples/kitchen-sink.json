@@ -1,0 +1,1918 @@
+{
+  "version": 1,
+  "id": "wf_kitchen_sink",
+  "name": "Kitchen sink",
+  "directoryPath": "",
+  "nodes": [
+    {
+      "id": "imageInput-1",
+      "type": "imageInput",
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "data": {
+        "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgNjAwIDQ1MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMTIwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMTgwLDQ1JSwyMiUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjYwMCIgaGVpZ2h0PSI0NTAiIGZpbGw9InVybCgjZykiLz48Y2lyY2xlIGN4PSI0MjAiIGN5PSIxNTcuNSIgcj0iODEiIGZpbGw9ImhzbCgzMDAsNTAlLDcwJSkiIG9wYWNpdHk9Ii44Ii8+PHRleHQgeD0iMzAwIiB5PSIyMjUiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iNTAiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9Ii44NSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSI+NDozPC90ZXh0Pjwvc3ZnPg==",
+        "filename": "house-lake.jpg",
+        "dimensions": {
+          "width": 600,
+          "height": 450
+        }
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "imageInput-2",
+      "type": "imageInput",
+      "position": {
+        "x": 0,
+        "y": 520
+      },
+      "data": {
+        "image": null,
+        "filename": null,
+        "dimensions": null,
+        "isOptional": true
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "videoInput-3",
+      "type": "videoInput",
+      "position": {
+        "x": 0,
+        "y": 1040
+      },
+      "data": {
+        "video": null,
+        "filename": null,
+        "duration": null,
+        "dimensions": null,
+        "format": null
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "audioInput-4",
+      "type": "audioInput",
+      "position": {
+        "x": 0,
+        "y": 1560
+      },
+      "data": {
+        "audioFile": null,
+        "filename": null,
+        "duration": null,
+        "format": null
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "prompt-5",
+      "type": "prompt",
+      "position": {
+        "x": 0,
+        "y": 2080
+      },
+      "data": {
+        "prompt": "A lakeside house at golden hour, {{style}}, shot on medium format film",
+        "variableName": "scene"
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "prompt-6",
+      "type": "prompt",
+      "position": {
+        "x": 0,
+        "y": 2600
+      },
+      "data": {
+        "prompt": "",
+        "isOptional": true
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "promptConstructor-7",
+      "type": "promptConstructor",
+      "position": {
+        "x": 0,
+        "y": 3120
+      },
+      "data": {
+        "template": "Portrait of @scene in @style",
+        "outputText": "Portrait of @scene in @style",
+        "unresolvedVars": []
+      },
+      "width": 340,
+      "style": {
+        "width": 340
+      }
+    },
+    {
+      "id": "annotation-8",
+      "type": "annotation",
+      "position": {
+        "x": 440,
+        "y": 0
+      },
+      "data": {
+        "sourceImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgNjAwIDQ1MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMTIwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMTgwLDQ1JSwyMiUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjYwMCIgaGVpZ2h0PSI0NTAiIGZpbGw9InVybCgjZykiLz48Y2lyY2xlIGN4PSI0MjAiIGN5PSIxNTcuNSIgcj0iODEiIGZpbGw9ImhzbCgzMDAsNTAlLDcwJSkiIG9wYWNpdHk9Ii44Ii8+PHRleHQgeD0iMzAwIiB5PSIyMjUiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iNTAiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9Ii44NSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSI+NDozPC90ZXh0Pjwvc3ZnPg==",
+        "annotations": [
+          {
+            "id": "a1"
+          },
+          {
+            "id": "a2"
+          }
+        ],
+        "outputImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgNjAwIDQ1MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMTIwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMTgwLDQ1JSwyMiUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjYwMCIgaGVpZ2h0PSI0NTAiIGZpbGw9InVybCgjZykiLz48Y2lyY2xlIGN4PSI0MjAiIGN5PSIxNTcuNSIgcj0iODEiIGZpbGw9ImhzbCgzMDAsNTAlLDcwJSkiIG9wYWNpdHk9Ii44Ii8+PHRleHQgeD0iMzAwIiB5PSIyMjUiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iNTAiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9Ii44NSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSI+NDozPC90ZXh0Pjwvc3ZnPg=="
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "annotation-9",
+      "type": "annotation",
+      "position": {
+        "x": 440,
+        "y": 520
+      },
+      "data": {
+        "sourceImage": null,
+        "annotations": [],
+        "outputImage": null
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "llmGenerate-10",
+      "type": "llmGenerate",
+      "position": {
+        "x": 440,
+        "y": 1040
+      },
+      "data": {
+        "inputPrompt": null,
+        "inputImages": [],
+        "outputText": "A weathered lakeside cabin, warm windows, mist over still water.",
+        "provider": "google",
+        "model": "gemini-3-flash-preview",
+        "temperature": 0.7,
+        "maxTokens": 8192,
+        "status": "idle",
+        "error": null,
+        "parametersExpanded": true
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "llmGenerate-11",
+      "type": "llmGenerate",
+      "position": {
+        "x": 440,
+        "y": 1560
+      },
+      "data": {
+        "inputPrompt": null,
+        "inputImages": [],
+        "outputText": null,
+        "provider": "google",
+        "model": "gemini-3-flash-preview",
+        "temperature": 0.7,
+        "maxTokens": 8192,
+        "status": "idle",
+        "error": null,
+        "parametersExpanded": false
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "llmGenerate-12",
+      "type": "llmGenerate",
+      "position": {
+        "x": 440,
+        "y": 2080
+      },
+      "data": {
+        "inputPrompt": null,
+        "inputImages": [],
+        "outputText": null,
+        "provider": "google",
+        "model": "gemini-3-flash-preview",
+        "temperature": 0.7,
+        "maxTokens": 8192,
+        "status": "error",
+        "error": "Rate limit exceeded",
+        "parametersExpanded": false
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "array-13",
+      "type": "array",
+      "position": {
+        "x": 440,
+        "y": 2600
+      },
+      "data": {
+        "inputText": "red, green, blue",
+        "splitMode": "delimiter",
+        "delimiter": "*",
+        "regexPattern": "",
+        "trimItems": true,
+        "removeEmpty": true,
+        "batchMode": false,
+        "selectedOutputIndex": null,
+        "outputItems": [
+          "red",
+          "green",
+          "blue"
+        ],
+        "outputText": "[\"red\",\"green\",\"blue\"]",
+        "error": null
+      },
+      "width": 340,
+      "style": {
+        "width": 340
+      }
+    },
+    {
+      "id": "array-14",
+      "type": "array",
+      "position": {
+        "x": 440,
+        "y": 3120
+      },
+      "data": {
+        "inputText": null,
+        "splitMode": "delimiter",
+        "delimiter": "*",
+        "regexPattern": "",
+        "trimItems": true,
+        "removeEmpty": true,
+        "batchMode": false,
+        "selectedOutputIndex": null,
+        "outputItems": [],
+        "outputText": "[]",
+        "error": null
+      },
+      "width": 340,
+      "style": {
+        "width": 340
+      }
+    },
+    {
+      "id": "nanoBanana-15",
+      "type": "nanoBanana",
+      "position": {
+        "x": 880,
+        "y": 0
+      },
+      "data": {
+        "inputImages": [],
+        "inputPrompt": null,
+        "outputImage": null,
+        "aspectRatio": "16:9",
+        "resolution": "2K",
+        "model": "nano-banana-pro",
+        "selectedModel": {
+          "provider": "gemini",
+          "modelId": "nano-banana-pro",
+          "displayName": "Nano Banana Pro"
+        },
+        "useGoogleSearch": false,
+        "useImageSearch": false,
+        "status": "idle",
+        "error": null,
+        "imageHistory": [],
+        "selectedHistoryIndex": 0,
+        "parametersExpanded": false
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "nanoBanana-16",
+      "type": "nanoBanana",
+      "position": {
+        "x": 880,
+        "y": 520
+      },
+      "data": {
+        "inputImages": [],
+        "inputPrompt": null,
+        "outputImage": null,
+        "aspectRatio": "1:1",
+        "resolution": "1K",
+        "model": "nano-banana-pro",
+        "selectedModel": {
+          "provider": "gemini",
+          "modelId": "nano-banana-pro",
+          "displayName": "Nano Banana Pro"
+        },
+        "useGoogleSearch": false,
+        "useImageSearch": false,
+        "status": "loading",
+        "error": null,
+        "imageHistory": [],
+        "selectedHistoryIndex": 0,
+        "parametersExpanded": false
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "nanoBanana-17",
+      "type": "nanoBanana",
+      "position": {
+        "x": 880,
+        "y": 1040
+      },
+      "data": {
+        "inputImages": [],
+        "inputPrompt": null,
+        "outputImage": null,
+        "aspectRatio": "3:2",
+        "resolution": "1K",
+        "model": "nano-banana-pro",
+        "selectedModel": {
+          "provider": "gemini",
+          "modelId": "nano-banana-pro",
+          "displayName": "Nano Banana Pro"
+        },
+        "useGoogleSearch": false,
+        "useImageSearch": false,
+        "status": "error",
+        "error": "Rate limit exceeded. Try again in a minute.",
+        "imageHistory": [],
+        "selectedHistoryIndex": 0,
+        "parametersExpanded": false
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "nanoBanana-18",
+      "type": "nanoBanana",
+      "position": {
+        "x": 880,
+        "y": 1560
+      },
+      "data": {
+        "inputImages": [],
+        "inputPrompt": null,
+        "outputImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgNjAwIDQ1MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMTIwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMTgwLDQ1JSwyMiUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjYwMCIgaGVpZ2h0PSI0NTAiIGZpbGw9InVybCgjZykiLz48Y2lyY2xlIGN4PSI0MjAiIGN5PSIxNTcuNSIgcj0iODEiIGZpbGw9ImhzbCgzMDAsNTAlLDcwJSkiIG9wYWNpdHk9Ii44Ii8+PHRleHQgeD0iMzAwIiB5PSIyMjUiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iNTAiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9Ii44NSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSI+NDozPC90ZXh0Pjwvc3ZnPg==",
+        "aspectRatio": "4:3",
+        "resolution": "1K",
+        "model": "nano-banana-pro",
+        "selectedModel": {
+          "provider": "gemini",
+          "modelId": "nano-banana-pro",
+          "displayName": "Nano Banana Pro"
+        },
+        "useGoogleSearch": false,
+        "useImageSearch": false,
+        "status": "idle",
+        "error": null,
+        "imageHistory": [
+          {
+            "id": "hist-4x3-1",
+            "timestamp": 1756000000000,
+            "prompt": "Variation 1",
+            "aspectRatio": "4:3",
+            "model": "nano-banana-pro"
+          }
+        ],
+        "selectedHistoryIndex": 0,
+        "parametersExpanded": false
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "nanoBanana-19",
+      "type": "nanoBanana",
+      "position": {
+        "x": 880,
+        "y": 2080
+      },
+      "data": {
+        "inputImages": [],
+        "inputPrompt": null,
+        "outputImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iMzYwIiB2aWV3Qm94PSIwIDAgNjQwIDM2MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMjAwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMjYwLDQ1JSwyMiUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSIzNjAiIGZpbGw9InVybCgjZykiLz48Y2lyY2xlIGN4PSI0NDgiIGN5PSIxMjUuOTk5OTk5OTk5OTk5OTkiIHI9IjY0LjgiIGZpbGw9ImhzbCgyMCw1MCUsNzAlKSIgb3BhY2l0eT0iLjgiLz48dGV4dCB4PSIzMjAiIHk9IjE4MCIgZm9udC1mYW1pbHk9InN5c3RlbS11aSIgZm9udC1zaXplPSI0MCIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iLjg1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIj4xNjo5PC90ZXh0Pjwvc3ZnPg==",
+        "aspectRatio": "16:9",
+        "resolution": "2K",
+        "model": "nano-banana-pro",
+        "selectedModel": {
+          "provider": "gemini",
+          "modelId": "nano-banana-pro",
+          "displayName": "Nano Banana Pro"
+        },
+        "useGoogleSearch": true,
+        "useImageSearch": false,
+        "status": "idle",
+        "error": null,
+        "imageHistory": [
+          {
+            "id": "hist-16x9-1",
+            "timestamp": 1756000000000,
+            "prompt": "Variation 1",
+            "aspectRatio": "16:9",
+            "model": "nano-banana-pro"
+          },
+          {
+            "id": "hist-16x9-2",
+            "timestamp": 1756000060000,
+            "prompt": "Variation 2",
+            "aspectRatio": "16:9",
+            "model": "nano-banana-pro"
+          },
+          {
+            "id": "hist-16x9-3",
+            "timestamp": 1756000120000,
+            "prompt": "Variation 3",
+            "aspectRatio": "16:9",
+            "model": "nano-banana-pro"
+          },
+          {
+            "id": "hist-16x9-4",
+            "timestamp": 1756000180000,
+            "prompt": "Variation 4",
+            "aspectRatio": "16:9",
+            "model": "nano-banana-pro"
+          },
+          {
+            "id": "hist-16x9-5",
+            "timestamp": 1756000240000,
+            "prompt": "Variation 5",
+            "aspectRatio": "16:9",
+            "model": "nano-banana-pro"
+          }
+        ],
+        "selectedHistoryIndex": 2,
+        "parametersExpanded": true
+      },
+      "width": 360,
+      "style": {
+        "width": 360
+      }
+    },
+    {
+      "id": "nanoBanana-20",
+      "type": "nanoBanana",
+      "position": {
+        "x": 880,
+        "y": 2600
+      },
+      "data": {
+        "inputImages": [],
+        "inputPrompt": null,
+        "outputImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzNjAiIGhlaWdodD0iNjQwIiB2aWV3Qm94PSIwIDAgMzYwIDY0MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMzAwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMCw0NSUsMjIlKSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSIzNjAiIGhlaWdodD0iNjQwIiBmaWxsPSJ1cmwoI2cpIi8+PGNpcmNsZSBjeD0iMjUxLjk5OTk5OTk5OTk5OTk3IiBjeT0iMjI0IiByPSI2NC44IiBmaWxsPSJoc2woMTIwLDUwJSw3MCUpIiBvcGFjaXR5PSIuOCIvPjx0ZXh0IHg9IjE4MCIgeT0iMzIwIiBmb250LWZhbWlseT0ic3lzdGVtLXVpIiBmb250LXNpemU9IjQwIiBmaWxsPSJ3aGl0ZSIgZmlsbC1vcGFjaXR5PSIuODUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiPjk6MTY8L3RleHQ+PC9zdmc+",
+        "aspectRatio": "1:1",
+        "resolution": "1K",
+        "model": "nano-banana-pro",
+        "selectedModel": {
+          "provider": "fal",
+          "modelId": "fal-ai/flux-pro/v1.1-ultra",
+          "displayName": "FLUX 1.1 Pro Ultra"
+        },
+        "useGoogleSearch": false,
+        "useImageSearch": false,
+        "status": "idle",
+        "error": null,
+        "imageHistory": [
+          {
+            "id": "hist-9x16-1",
+            "timestamp": 1756000000000,
+            "prompt": "Variation 1",
+            "aspectRatio": "9:16",
+            "model": "nano-banana-pro"
+          },
+          {
+            "id": "hist-9x16-2",
+            "timestamp": 1756000060000,
+            "prompt": "Variation 2",
+            "aspectRatio": "9:16",
+            "model": "nano-banana-pro"
+          }
+        ],
+        "selectedHistoryIndex": 1,
+        "parameters": {
+          "aspect_ratio": "9:16",
+          "num_images": 1,
+          "safety_tolerance": "2",
+          "output_format": "jpeg",
+          "seed": 1234,
+          "raw": false
+        },
+        "parametersExpanded": true
+      },
+      "width": 240,
+      "style": {
+        "width": 240
+      }
+    },
+    {
+      "id": "nanoBanana-21",
+      "type": "nanoBanana",
+      "position": {
+        "x": 880,
+        "y": 3640
+      },
+      "data": {
+        "inputImages": [],
+        "inputPrompt": null,
+        "outputImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMzAsNDUlLDM4JSkiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9ImhzbCg5MCw0NSUsMjIlKSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiBmaWxsPSJ1cmwoI2cpIi8+PGNpcmNsZSBjeD0iMzU4LjQiIGN5PSIxNzkuMiIgcj0iOTIuMTYiIGZpbGw9ImhzbCgyMTAsNTAlLDcwJSkiIG9wYWNpdHk9Ii44Ii8+PHRleHQgeD0iMjU2IiB5PSIyNTYiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iNTYuODg4ODg4ODg4ODg4ODg2IiBmaWxsPSJ3aGl0ZSIgZmlsbC1vcGFjaXR5PSIuODUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiPjE6MTwvdGV4dD48L3N2Zz4=",
+        "aspectRatio": "1:1",
+        "resolution": "1K",
+        "model": "nano-banana-pro",
+        "selectedModel": {
+          "provider": "gemini",
+          "modelId": "nano-banana-pro",
+          "displayName": "Nano Banana Pro"
+        },
+        "useGoogleSearch": false,
+        "useImageSearch": false,
+        "status": "idle",
+        "error": null,
+        "imageHistory": [
+          {
+            "id": "hist-1x1-1",
+            "timestamp": 1756000000000,
+            "prompt": "Variation 1",
+            "aspectRatio": "1:1",
+            "model": "nano-banana-pro"
+          }
+        ],
+        "selectedHistoryIndex": 0,
+        "parametersExpanded": false,
+        "__usedFallback": true,
+        "__fallbackModelUsed": "Nano Banana",
+        "__primaryError": "quota"
+      },
+      "width": 520,
+      "style": {
+        "width": 520
+      }
+    },
+    {
+      "id": "generateVideo-22",
+      "type": "generateVideo",
+      "position": {
+        "x": 1320,
+        "y": 0
+      },
+      "data": {
+        "inputImages": [],
+        "inputPrompt": null,
+        "outputVideo": null,
+        "selectedModel": {
+          "provider": "kie",
+          "modelId": "wan/2-2-i2v-14b",
+          "displayName": "Wan 2.2 Image-to-Video 14B"
+        },
+        "status": "idle",
+        "error": null,
+        "videoHistory": [],
+        "selectedVideoHistoryIndex": 0,
+        "parameters": {
+          "duration": 5,
+          "resolution": "720p"
+        },
+        "parametersExpanded": true
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "generateVideo-23",
+      "type": "generateVideo",
+      "position": {
+        "x": 1320,
+        "y": 520
+      },
+      "data": {
+        "inputImages": [],
+        "inputPrompt": null,
+        "outputVideo": null,
+        "selectedModel": {
+          "provider": "fal",
+          "modelId": "fal-ai/kling-video/v2.1",
+          "displayName": "Kling 2.1 Pro"
+        },
+        "status": "loading",
+        "error": null,
+        "videoHistory": [],
+        "selectedVideoHistoryIndex": 0,
+        "parametersExpanded": false
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "generateVideo-24",
+      "type": "generateVideo",
+      "position": {
+        "x": 1320,
+        "y": 1040
+      },
+      "data": {
+        "inputImages": [],
+        "inputPrompt": null,
+        "outputVideo": null,
+        "status": "error",
+        "error": "Model unavailable",
+        "videoHistory": [],
+        "selectedVideoHistoryIndex": 0,
+        "parametersExpanded": false
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "generateAudio-25",
+      "type": "generateAudio",
+      "position": {
+        "x": 1320,
+        "y": 1560
+      },
+      "data": {
+        "inputPrompt": null,
+        "outputAudio": null,
+        "status": "error",
+        "error": "Voice not found",
+        "audioHistory": [],
+        "selectedAudioHistoryIndex": 0,
+        "duration": null,
+        "format": null,
+        "parametersExpanded": false
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "generateAudio-26",
+      "type": "generateAudio",
+      "position": {
+        "x": 1320,
+        "y": 2080
+      },
+      "data": {
+        "inputPrompt": null,
+        "outputAudio": null,
+        "selectedModel": {
+          "provider": "fal",
+          "modelId": "fal-ai/elevenlabs/tts",
+          "displayName": "ElevenLabs TTS Multilingual v2"
+        },
+        "status": "idle",
+        "error": null,
+        "audioHistory": [],
+        "selectedAudioHistoryIndex": 0,
+        "duration": null,
+        "format": null,
+        "parametersExpanded": false
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "generate3d-27",
+      "type": "generate3d",
+      "position": {
+        "x": 1320,
+        "y": 2600
+      },
+      "data": {
+        "inputImages": [],
+        "inputPrompt": null,
+        "output3dUrl": null,
+        "savedFilename": null,
+        "savedFilePath": null,
+        "status": "idle",
+        "error": null,
+        "parametersExpanded": false
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "generate3d-28",
+      "type": "generate3d",
+      "position": {
+        "x": 1320,
+        "y": 3120
+      },
+      "data": {
+        "inputImages": [],
+        "inputPrompt": null,
+        "output3dUrl": "blob:kitchen-sink/model.glb",
+        "savedFilename": "bench.glb",
+        "savedFilePath": "/tmp/bench.glb",
+        "selectedModel": {
+          "provider": "fal",
+          "modelId": "fal-ai/hunyuan3d/v2",
+          "displayName": "Hunyuan3D 2.0"
+        },
+        "status": "idle",
+        "error": null,
+        "parametersExpanded": false
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "comfyApp-29",
+      "type": "comfyApp",
+      "position": {
+        "x": 1320,
+        "y": 3640
+      },
+      "data": {
+        "app": {
+          "id": "app-kitchen",
+          "name": "Upscale Pass",
+          "description": "A two-node upscale",
+          "source": "upload",
+          "graph": {
+            "1": {
+              "class_type": "LoadImage",
+              "inputs": {
+                "image": "example.png"
+              }
+            }
+          },
+          "inputs": [
+            {
+              "id": "1:image",
+              "name": "image",
+              "label": "Image",
+              "type": "image",
+              "nodeId": "1",
+              "inputKey": "image",
+              "required": true
+            }
+          ],
+          "params": [
+            {
+              "id": "2:steps",
+              "label": "KSampler · steps",
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 100,
+              "nodeId": "2",
+              "inputKey": "steps"
+            },
+            {
+              "id": "2:sampler",
+              "label": "KSampler · sampler_name",
+              "type": "string",
+              "enum": [
+                "euler",
+                "dpmpp_2m"
+              ],
+              "default": "euler",
+              "nodeId": "2",
+              "inputKey": "sampler_name"
+            },
+            {
+              "id": "2:seed",
+              "label": "KSampler · seed",
+              "type": "integer",
+              "default": 42,
+              "isSeed": true,
+              "nodeId": "2",
+              "inputKey": "seed"
+            }
+          ],
+          "outputs": [
+            {
+              "id": "9",
+              "label": "Result",
+              "type": "image",
+              "nodeId": "9",
+              "classType": "SaveImage"
+            }
+          ],
+          "classTypes": [
+            "LoadImage",
+            "KSampler",
+            "SaveImage"
+          ],
+          "nodeCount": 3,
+          "createdAt": 1756000000000
+        },
+        "paramValues": {
+          "2:steps": 28
+        },
+        "outputs": {},
+        "outputImage": null,
+        "outputVideo": null,
+        "outputAudio": null,
+        "outputText": null,
+        "output3dUrl": null,
+        "jobId": null,
+        "runStatus": null,
+        "parametersExpanded": true,
+        "status": "idle",
+        "error": null
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "comfyApp-30",
+      "type": "comfyApp",
+      "position": {
+        "x": 1320,
+        "y": 4160
+      },
+      "data": {
+        "app": {
+          "id": "app-kitchen",
+          "name": "Upscale Pass",
+          "description": "A two-node upscale",
+          "source": "upload",
+          "graph": {
+            "1": {
+              "class_type": "LoadImage",
+              "inputs": {
+                "image": "example.png"
+              }
+            }
+          },
+          "inputs": [
+            {
+              "id": "1:image",
+              "name": "image",
+              "label": "Image",
+              "type": "image",
+              "nodeId": "1",
+              "inputKey": "image",
+              "required": true
+            }
+          ],
+          "params": [
+            {
+              "id": "2:steps",
+              "label": "KSampler · steps",
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 100,
+              "nodeId": "2",
+              "inputKey": "steps"
+            },
+            {
+              "id": "2:sampler",
+              "label": "KSampler · sampler_name",
+              "type": "string",
+              "enum": [
+                "euler",
+                "dpmpp_2m"
+              ],
+              "default": "euler",
+              "nodeId": "2",
+              "inputKey": "sampler_name"
+            },
+            {
+              "id": "2:seed",
+              "label": "KSampler · seed",
+              "type": "integer",
+              "default": 42,
+              "isSeed": true,
+              "nodeId": "2",
+              "inputKey": "seed"
+            }
+          ],
+          "outputs": [
+            {
+              "id": "9",
+              "label": "Result",
+              "type": "image",
+              "nodeId": "9",
+              "classType": "SaveImage"
+            }
+          ],
+          "classTypes": [
+            "LoadImage",
+            "KSampler",
+            "SaveImage"
+          ],
+          "nodeCount": 3,
+          "createdAt": 1756000000000
+        },
+        "paramValues": {},
+        "outputs": {
+          "9": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMzAsNDUlLDM4JSkiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9ImhzbCg5MCw0NSUsMjIlKSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiBmaWxsPSJ1cmwoI2cpIi8+PGNpcmNsZSBjeD0iMzU4LjQiIGN5PSIxNzkuMiIgcj0iOTIuMTYiIGZpbGw9ImhzbCgyMTAsNTAlLDcwJSkiIG9wYWNpdHk9Ii44Ii8+PHRleHQgeD0iMjU2IiB5PSIyNTYiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iNTYuODg4ODg4ODg4ODg4ODg2IiBmaWxsPSJ3aGl0ZSIgZmlsbC1vcGFjaXR5PSIuODUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiPjE6MTwvdGV4dD48L3N2Zz4="
+        },
+        "outputImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMzAsNDUlLDM4JSkiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9ImhzbCg5MCw0NSUsMjIlKSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiBmaWxsPSJ1cmwoI2cpIi8+PGNpcmNsZSBjeD0iMzU4LjQiIGN5PSIxNzkuMiIgcj0iOTIuMTYiIGZpbGw9ImhzbCgyMTAsNTAlLDcwJSkiIG9wYWNpdHk9Ii44Ii8+PHRleHQgeD0iMjU2IiB5PSIyNTYiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iNTYuODg4ODg4ODg4ODg4ODg2IiBmaWxsPSJ3aGl0ZSIgZmlsbC1vcGFjaXR5PSIuODUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiPjE6MTwvdGV4dD48L3N2Zz4=",
+        "outputVideo": null,
+        "outputAudio": null,
+        "outputText": null,
+        "output3dUrl": null,
+        "jobId": null,
+        "runStatus": null,
+        "parametersExpanded": false,
+        "status": "idle",
+        "error": null
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "comfyApp-31",
+      "type": "comfyApp",
+      "position": {
+        "x": 1320,
+        "y": 4680
+      },
+      "data": {
+        "app": null,
+        "paramValues": {},
+        "outputs": {},
+        "outputImage": null,
+        "outputVideo": null,
+        "outputAudio": null,
+        "outputText": null,
+        "output3dUrl": null,
+        "jobId": null,
+        "runStatus": null,
+        "parametersExpanded": false,
+        "status": "idle",
+        "error": null
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "imageResize-32",
+      "type": "imageResize",
+      "position": {
+        "x": 1760,
+        "y": 0
+      },
+      "data": {
+        "sourceImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgNjAwIDQ1MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMTIwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMTgwLDQ1JSwyMiUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjYwMCIgaGVpZ2h0PSI0NTAiIGZpbGw9InVybCgjZykiLz48Y2lyY2xlIGN4PSI0MjAiIGN5PSIxNTcuNSIgcj0iODEiIGZpbGw9ImhzbCgzMDAsNTAlLDcwJSkiIG9wYWNpdHk9Ii44Ii8+PHRleHQgeD0iMzAwIiB5PSIyMjUiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iNTAiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9Ii44NSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSI+NDozPC90ZXh0Pjwvc3ZnPg==",
+        "outputImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgNjAwIDQ1MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMTIwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMTgwLDQ1JSwyMiUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjYwMCIgaGVpZ2h0PSI0NTAiIGZpbGw9InVybCgjZykiLz48Y2lyY2xlIGN4PSI0MjAiIGN5PSIxNTcuNSIgcj0iODEiIGZpbGw9ImhzbCgzMDAsNTAlLDcwJSkiIG9wYWNpdHk9Ii44Ii8+PHRleHQgeD0iMzAwIiB5PSIyMjUiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iNTAiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9Ii44NSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSI+NDozPC90ZXh0Pjwvc3ZnPg==",
+        "mode": "exact",
+        "width": 128,
+        "height": 128,
+        "maxEdge": 128,
+        "scalePct": 100,
+        "fit": "contain",
+        "padColor": "#00000000",
+        "format": "png",
+        "quality": 0.9,
+        "outputDimensions": {
+          "width": 1024,
+          "height": 768
+        },
+        "outputBytes": 184320,
+        "status": "idle",
+        "error": null
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "imageResize-33",
+      "type": "imageResize",
+      "position": {
+        "x": 1760,
+        "y": 520
+      },
+      "data": {
+        "sourceImage": null,
+        "outputImage": null,
+        "mode": "exact",
+        "width": 128,
+        "height": 128,
+        "maxEdge": 128,
+        "scalePct": 100,
+        "fit": "contain",
+        "padColor": "#00000000",
+        "format": "png",
+        "quality": 0.9,
+        "outputDimensions": null,
+        "outputBytes": null,
+        "status": "idle",
+        "error": null
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "removeBackground-34",
+      "type": "removeBackground",
+      "position": {
+        "x": 1760,
+        "y": 1040
+      },
+      "data": {
+        "model": "isnet_fp16",
+        "outputImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIiB2aWV3Qm94PSIwIDAgNDAwIDQwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woODAsNDUlLDM4JSkiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9ImhzbCgxNDAsNDUlLDIyJSkiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0idXJsKCNnKSIvPjxjaXJjbGUgY3g9IjI4MCIgY3k9IjE0MCIgcj0iNzIiIGZpbGw9ImhzbCgyNjAsNTAlLDcwJSkiIG9wYWNpdHk9Ii44Ii8+PHRleHQgeD0iMjAwIiB5PSIyMDAiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iNDQuNDQ0NDQ0NDQ0NDQ0NDQiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9Ii44NSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSI+Y3V0LW91dDwvdGV4dD48L3N2Zz4=",
+        "status": "idle",
+        "error": null,
+        "progress": 0
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "removeBackground-35",
+      "type": "removeBackground",
+      "position": {
+        "x": 1760,
+        "y": 1560
+      },
+      "data": {
+        "model": "isnet_fp16",
+        "outputImage": null,
+        "status": "idle",
+        "error": null,
+        "progress": 0
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "videoFrameGrab-36",
+      "type": "videoFrameGrab",
+      "position": {
+        "x": 1760,
+        "y": 2080
+      },
+      "data": {
+        "framePosition": "first",
+        "outputImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iMzYwIiB2aWV3Qm94PSIwIDAgNjQwIDM2MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMjAwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMjYwLDQ1JSwyMiUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSIzNjAiIGZpbGw9InVybCgjZykiLz48Y2lyY2xlIGN4PSI0NDgiIGN5PSIxMjUuOTk5OTk5OTk5OTk5OTkiIHI9IjY0LjgiIGZpbGw9ImhzbCgyMCw1MCUsNzAlKSIgb3BhY2l0eT0iLjgiLz48dGV4dCB4PSIzMjAiIHk9IjE4MCIgZm9udC1mYW1pbHk9InN5c3RlbS11aSIgZm9udC1zaXplPSI0MCIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iLjg1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIj4xNjo5PC90ZXh0Pjwvc3ZnPg==",
+        "status": "idle",
+        "error": null
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "videoFrameGrab-37",
+      "type": "videoFrameGrab",
+      "position": {
+        "x": 1760,
+        "y": 2600
+      },
+      "data": {
+        "framePosition": "first",
+        "outputImage": null,
+        "status": "idle",
+        "error": null
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "videoTrim-38",
+      "type": "videoTrim",
+      "position": {
+        "x": 1760,
+        "y": 3120
+      },
+      "data": {
+        "startTime": 0,
+        "endTime": 0,
+        "duration": null,
+        "outputVideo": null,
+        "status": "idle",
+        "error": null,
+        "progress": 0,
+        "encoderSupported": null
+      },
+      "width": 360,
+      "style": {
+        "width": 360
+      }
+    },
+    {
+      "id": "videoStitch-39",
+      "type": "videoStitch",
+      "position": {
+        "x": 1760,
+        "y": 3640
+      },
+      "data": {
+        "clips": [],
+        "clipOrder": [],
+        "outputVideo": null,
+        "loopCount": 1,
+        "status": "idle",
+        "error": null,
+        "progress": 0,
+        "encoderSupported": null
+      },
+      "width": 400,
+      "style": {
+        "width": 400
+      }
+    },
+    {
+      "id": "gifEncoder-40",
+      "type": "gifEncoder",
+      "position": {
+        "x": 1760,
+        "y": 4160
+      },
+      "data": {
+        "clipOrder": [],
+        "outputGif": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMzAsNDUlLDM4JSkiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9ImhzbCg5MCw0NSUsMjIlKSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiBmaWxsPSJ1cmwoI2cpIi8+PGNpcmNsZSBjeD0iMzU4LjQiIGN5PSIxNzkuMiIgcj0iOTIuMTYiIGZpbGw9ImhzbCgyMTAsNTAlLDcwJSkiIG9wYWNpdHk9Ii44Ii8+PHRleHQgeD0iMjU2IiB5PSIyNTYiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iNTYuODg4ODg4ODg4ODg4ODg2IiBmaWxsPSJ3aGl0ZSIgZmlsbC1vcGFjaXR5PSIuODUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiPjE6MTwvdGV4dD48L3N2Zz4=",
+        "fps": 8,
+        "loopCount": 0,
+        "colorCount": 128,
+        "dither": false,
+        "targetMaxBytes": 131072,
+        "outputBytes": 96000,
+        "outputDimensions": {
+          "width": 512,
+          "height": 512
+        },
+        "status": "idle",
+        "error": null,
+        "progress": 0
+      },
+      "width": 480,
+      "style": {
+        "width": 480
+      }
+    },
+    {
+      "id": "gifEncoder-41",
+      "type": "gifEncoder",
+      "position": {
+        "x": 1760,
+        "y": 4680
+      },
+      "data": {
+        "clipOrder": [],
+        "outputGif": null,
+        "fps": 8,
+        "loopCount": 0,
+        "colorCount": 128,
+        "dither": false,
+        "targetMaxBytes": 131072,
+        "outputBytes": null,
+        "outputDimensions": null,
+        "status": "idle",
+        "error": null,
+        "progress": 0
+      },
+      "width": 480,
+      "style": {
+        "width": 480
+      }
+    },
+    {
+      "id": "easeCurve-42",
+      "type": "easeCurve",
+      "position": {
+        "x": 1760,
+        "y": 5200
+      },
+      "data": {
+        "bezierHandles": [
+          0.37,
+          0,
+          0.63,
+          1
+        ],
+        "easingPreset": "easeInOutQuad",
+        "inheritedFrom": null,
+        "outputDuration": 1.5,
+        "outputVideo": null,
+        "status": "idle",
+        "error": null,
+        "progress": 0,
+        "encoderSupported": null
+      },
+      "width": 340,
+      "style": {
+        "width": 340
+      }
+    },
+    {
+      "id": "imageCompare-43",
+      "type": "imageCompare",
+      "position": {
+        "x": 2200,
+        "y": 0
+      },
+      "data": {
+        "imageA": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iMzYwIiB2aWV3Qm94PSIwIDAgNjQwIDM2MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMjAwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMjYwLDQ1JSwyMiUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSIzNjAiIGZpbGw9InVybCgjZykiLz48Y2lyY2xlIGN4PSI0NDgiIGN5PSIxMjUuOTk5OTk5OTk5OTk5OTkiIHI9IjY0LjgiIGZpbGw9ImhzbCgyMCw1MCUsNzAlKSIgb3BhY2l0eT0iLjgiLz48dGV4dCB4PSIzMjAiIHk9IjE4MCIgZm9udC1mYW1pbHk9InN5c3RlbS11aSIgZm9udC1zaXplPSI0MCIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iLjg1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIj4xNjo5PC90ZXh0Pjwvc3ZnPg==",
+        "imageB": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iMzYwIiB2aWV3Qm94PSIwIDAgNjQwIDM2MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMjAwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMjYwLDQ1JSwyMiUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSIzNjAiIGZpbGw9InVybCgjZykiLz48Y2lyY2xlIGN4PSI0NDgiIGN5PSIxMjUuOTk5OTk5OTk5OTk5OTkiIHI9IjY0LjgiIGZpbGw9ImhzbCgyMCw1MCUsNzAlKSIgb3BhY2l0eT0iLjgiLz48dGV4dCB4PSIzMjAiIHk9IjE4MCIgZm9udC1mYW1pbHk9InN5c3RlbS11aSIgZm9udC1zaXplPSI0MCIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iLjg1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIj4xNjo5PC90ZXh0Pjwvc3ZnPg=="
+      },
+      "width": 400,
+      "style": {
+        "width": 400
+      }
+    },
+    {
+      "id": "imageCompare-44",
+      "type": "imageCompare",
+      "position": {
+        "x": 2200,
+        "y": 520
+      },
+      "data": {
+        "imageA": null,
+        "imageB": null
+      },
+      "width": 400,
+      "style": {
+        "width": 400
+      }
+    },
+    {
+      "id": "splitGrid-45",
+      "type": "splitGrid",
+      "position": {
+        "x": 2200,
+        "y": 1040
+      },
+      "data": {
+        "sourceImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMzAsNDUlLDM4JSkiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9ImhzbCg5MCw0NSUsMjIlKSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiBmaWxsPSJ1cmwoI2cpIi8+PGNpcmNsZSBjeD0iMzU4LjQiIGN5PSIxNzkuMiIgcj0iOTIuMTYiIGZpbGw9ImhzbCgyMTAsNTAlLDcwJSkiIG9wYWNpdHk9Ii44Ii8+PHRleHQgeD0iMjU2IiB5PSIyNTYiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iNTYuODg4ODg4ODg4ODg4ODg2IiBmaWxsPSJ3aGl0ZSIgZmlsbC1vcGFjaXR5PSIuODUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiPjE6MTwvdGV4dD48L3N2Zz4=",
+        "gridRows": 2,
+        "gridCols": 2,
+        "template": {
+          "baseNodeId": "cell-image",
+          "nodes": [
+            {
+              "id": "cell-image",
+              "type": "imageInput",
+              "position": {
+                "x": 0,
+                "y": 0
+              }
+            }
+          ],
+          "edges": []
+        },
+        "cells": [],
+        "materializedKey": null,
+        "routerNodeId": null,
+        "targetCount": 6,
+        "defaultPrompt": "",
+        "generateSettings": {
+          "aspectRatio": "1:1",
+          "resolution": "1K",
+          "model": "nano-banana-pro",
+          "useGoogleSearch": false,
+          "useImageSearch": false
+        },
+        "childNodeIds": [],
+        "isConfigured": false,
+        "status": "idle",
+        "error": null
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "splitGrid-46",
+      "type": "splitGrid",
+      "position": {
+        "x": 2200,
+        "y": 1560
+      },
+      "data": {
+        "sourceImage": null,
+        "gridRows": 2,
+        "gridCols": 3,
+        "template": {
+          "baseNodeId": "cell-image",
+          "nodes": [
+            {
+              "id": "cell-image",
+              "type": "imageInput",
+              "position": {
+                "x": 0,
+                "y": 0
+              }
+            }
+          ],
+          "edges": []
+        },
+        "cells": [],
+        "materializedKey": null,
+        "routerNodeId": null,
+        "targetCount": 6,
+        "defaultPrompt": "",
+        "generateSettings": {
+          "aspectRatio": "1:1",
+          "resolution": "1K",
+          "model": "nano-banana-pro",
+          "useGoogleSearch": false,
+          "useImageSearch": false
+        },
+        "childNodeIds": [],
+        "isConfigured": false,
+        "status": "idle",
+        "error": null
+      },
+      "width": 300,
+      "style": {
+        "width": 300
+      }
+    },
+    {
+      "id": "glbViewer-47",
+      "type": "glbViewer",
+      "position": {
+        "x": 2200,
+        "y": 2080
+      },
+      "data": {
+        "glbUrl": null,
+        "filename": null,
+        "capturedImage": null
+      },
+      "width": 360,
+      "style": {
+        "width": 360
+      }
+    },
+    {
+      "id": "glbViewer-48",
+      "type": "glbViewer",
+      "position": {
+        "x": 2200,
+        "y": 2600
+      },
+      "data": {
+        "glbUrl": "blob:kitchen-sink/model.glb",
+        "filename": "bench.glb",
+        "capturedImage": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIiB2aWV3Qm94PSIwIDAgNDAwIDQwMCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woODAsNDUlLDM4JSkiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9ImhzbCgxNDAsNDUlLDIyJSkiLz48L2xpbmVhckdyYWRpZW50PjwvZGVmcz48cmVjdCB3aWR0aD0iNDAwIiBoZWlnaHQ9IjQwMCIgZmlsbD0idXJsKCNnKSIvPjxjaXJjbGUgY3g9IjI4MCIgY3k9IjE0MCIgcj0iNzIiIGZpbGw9ImhzbCgyNjAsNTAlLDcwJSkiIG9wYWNpdHk9Ii44Ii8+PHRleHQgeD0iMjAwIiB5PSIyMDAiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iNDQuNDQ0NDQ0NDQ0NDQ0NDQiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9Ii44NSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSI+Y3V0LW91dDwvdGV4dD48L3N2Zz4="
+      },
+      "width": 360,
+      "style": {
+        "width": 360
+      }
+    },
+    {
+      "id": "output-49",
+      "type": "output",
+      "position": {
+        "x": 2200,
+        "y": 3120
+      },
+      "data": {
+        "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iMzYwIiB2aWV3Qm94PSIwIDAgNjQwIDM2MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMjAwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMjYwLDQ1JSwyMiUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSIzNjAiIGZpbGw9InVybCgjZykiLz48Y2lyY2xlIGN4PSI0NDgiIGN5PSIxMjUuOTk5OTk5OTk5OTk5OTkiIHI9IjY0LjgiIGZpbGw9ImhzbCgyMCw1MCUsNzAlKSIgb3BhY2l0eT0iLjgiLz48dGV4dCB4PSIzMjAiIHk9IjE4MCIgZm9udC1mYW1pbHk9InN5c3RlbS11aSIgZm9udC1zaXplPSI0MCIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iLjg1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIj4xNjo5PC90ZXh0Pjwvc3ZnPg==",
+        "outputFilename": ""
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "output-50",
+      "type": "output",
+      "position": {
+        "x": 2200,
+        "y": 3640
+      },
+      "data": {
+        "image": null,
+        "outputFilename": ""
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "output-51",
+      "type": "output",
+      "position": {
+        "x": 2200,
+        "y": 4160
+      },
+      "data": {
+        "image": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzNjAiIGhlaWdodD0iNjQwIiB2aWV3Qm94PSIwIDAgMzYwIDY0MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMzAwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMCw0NSUsMjIlKSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSIzNjAiIGhlaWdodD0iNjQwIiBmaWxsPSJ1cmwoI2cpIi8+PGNpcmNsZSBjeD0iMjUxLjk5OTk5OTk5OTk5OTk3IiBjeT0iMjI0IiByPSI2NC44IiBmaWxsPSJoc2woMTIwLDUwJSw3MCUpIiBvcGFjaXR5PSIuOCIvPjx0ZXh0IHg9IjE4MCIgeT0iMzIwIiBmb250LWZhbWlseT0ic3lzdGVtLXVpIiBmb250LXNpemU9IjQwIiBmaWxsPSJ3aGl0ZSIgZmlsbC1vcGFjaXR5PSIuODUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiPjk6MTY8L3RleHQ+PC9zdmc+",
+        "outputFilename": ""
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "outputGallery-52",
+      "type": "outputGallery",
+      "position": {
+        "x": 2200,
+        "y": 4680
+      },
+      "data": {
+        "images": [
+          "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2NDAiIGhlaWdodD0iMzYwIiB2aWV3Qm94PSIwIDAgNjQwIDM2MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMjAwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMjYwLDQ1JSwyMiUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjY0MCIgaGVpZ2h0PSIzNjAiIGZpbGw9InVybCgjZykiLz48Y2lyY2xlIGN4PSI0NDgiIGN5PSIxMjUuOTk5OTk5OTk5OTk5OTkiIHI9IjY0LjgiIGZpbGw9ImhzbCgyMCw1MCUsNzAlKSIgb3BhY2l0eT0iLjgiLz48dGV4dCB4PSIzMjAiIHk9IjE4MCIgZm9udC1mYW1pbHk9InN5c3RlbS11aSIgZm9udC1zaXplPSI0MCIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iLjg1IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkb21pbmFudC1iYXNlbGluZT0ibWlkZGxlIj4xNjo5PC90ZXh0Pjwvc3ZnPg==",
+          "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiB2aWV3Qm94PSIwIDAgNTEyIDUxMiI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMzAsNDUlLDM4JSkiLz48c3RvcCBvZmZzZXQ9IjEiIHN0b3AtY29sb3I9ImhzbCg5MCw0NSUsMjIlKSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSI1MTIiIGhlaWdodD0iNTEyIiBmaWxsPSJ1cmwoI2cpIi8+PGNpcmNsZSBjeD0iMzU4LjQiIGN5PSIxNzkuMiIgcj0iOTIuMTYiIGZpbGw9ImhzbCgyMTAsNTAlLDcwJSkiIG9wYWNpdHk9Ii44Ii8+PHRleHQgeD0iMjU2IiB5PSIyNTYiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iNTYuODg4ODg4ODg4ODg4ODg2IiBmaWxsPSJ3aGl0ZSIgZmlsbC1vcGFjaXR5PSIuODUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiPjE6MTwvdGV4dD48L3N2Zz4=",
+          "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIzNjAiIGhlaWdodD0iNjQwIiB2aWV3Qm94PSIwIDAgMzYwIDY0MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMzAwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMCw0NSUsMjIlKSIvPjwvbGluZWFyR3JhZGllbnQ+PC9kZWZzPjxyZWN0IHdpZHRoPSIzNjAiIGhlaWdodD0iNjQwIiBmaWxsPSJ1cmwoI2cpIi8+PGNpcmNsZSBjeD0iMjUxLjk5OTk5OTk5OTk5OTk3IiBjeT0iMjI0IiByPSI2NC44IiBmaWxsPSJoc2woMTIwLDUwJSw3MCUpIiBvcGFjaXR5PSIuOCIvPjx0ZXh0IHg9IjE4MCIgeT0iMzIwIiBmb250LWZhbWlseT0ic3lzdGVtLXVpIiBmb250LXNpemU9IjQwIiBmaWxsPSJ3aGl0ZSIgZmlsbC1vcGFjaXR5PSIuODUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGRvbWluYW50LWJhc2VsaW5lPSJtaWRkbGUiPjk6MTY8L3RleHQ+PC9zdmc+",
+          "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI2MDAiIGhlaWdodD0iNDUwIiB2aWV3Qm94PSIwIDAgNjAwIDQ1MCI+PGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIxIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSJoc2woMTIwLDQ1JSwzOCUpIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSJoc2woMTgwLDQ1JSwyMiUpIi8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+PHJlY3Qgd2lkdGg9IjYwMCIgaGVpZ2h0PSI0NTAiIGZpbGw9InVybCgjZykiLz48Y2lyY2xlIGN4PSI0MjAiIGN5PSIxNTcuNSIgcj0iODEiIGZpbGw9ImhzbCgzMDAsNTAlLDcwJSkiIG9wYWNpdHk9Ii44Ii8+PHRleHQgeD0iMzAwIiB5PSIyMjUiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iNTAiIGZpbGw9IndoaXRlIiBmaWxsLW9wYWNpdHk9Ii44NSIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZG9taW5hbnQtYmFzZWxpbmU9Im1pZGRsZSI+NDozPC90ZXh0Pjwvc3ZnPg=="
+        ],
+        "videos": []
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "outputGallery-53",
+      "type": "outputGallery",
+      "position": {
+        "x": 2200,
+        "y": 5200
+      },
+      "data": {
+        "images": [],
+        "videos": []
+      },
+      "width": 320,
+      "style": {
+        "width": 320
+      }
+    },
+    {
+      "id": "router-54",
+      "type": "router",
+      "position": {
+        "x": 2640,
+        "y": 0
+      },
+      "data": {},
+      "width": 200,
+      "style": {
+        "width": 200
+      }
+    },
+    {
+      "id": "router-55",
+      "type": "router",
+      "position": {
+        "x": 2640,
+        "y": 520
+      },
+      "data": {},
+      "width": 200,
+      "style": {
+        "width": 200
+      }
+    },
+    {
+      "id": "switch-56",
+      "type": "switch",
+      "position": {
+        "x": 2640,
+        "y": 1040
+      },
+      "data": {
+        "inputType": "text",
+        "switches": [
+          {
+            "id": "sw-a",
+            "name": "Warm",
+            "enabled": true
+          },
+          {
+            "id": "sw-b",
+            "name": "Cool",
+            "enabled": false
+          },
+          {
+            "id": "sw-c",
+            "name": "Mono",
+            "enabled": true
+          }
+        ]
+      },
+      "width": 220,
+      "style": {
+        "width": 220
+      }
+    },
+    {
+      "id": "switch-57",
+      "type": "switch",
+      "position": {
+        "x": 2640,
+        "y": 1560
+      },
+      "data": {
+        "inputType": null,
+        "switches": [
+          {
+            "id": "53btkan",
+            "name": "Output 1",
+            "enabled": true
+          }
+        ]
+      },
+      "width": 220,
+      "style": {
+        "width": 220
+      }
+    },
+    {
+      "id": "conditionalSwitch-58",
+      "type": "conditionalSwitch",
+      "position": {
+        "x": 2640,
+        "y": 2080
+      },
+      "data": {
+        "incomingText": "night scene, neon",
+        "rules": [
+          {
+            "id": "rule-night",
+            "value": "night",
+            "mode": "contains",
+            "label": "Night",
+            "isMatched": true
+          },
+          {
+            "id": "rule-day",
+            "value": "day",
+            "mode": "contains",
+            "label": "Day",
+            "isMatched": false
+          }
+        ]
+      },
+      "width": 260,
+      "style": {
+        "width": 260
+      }
+    },
+    {
+      "id": "conditionalSwitch-59",
+      "type": "conditionalSwitch",
+      "position": {
+        "x": 2640,
+        "y": 2600
+      },
+      "data": {
+        "incomingText": null,
+        "rules": [
+          {
+            "id": "rule-y9gdcxr",
+            "value": "",
+            "mode": "contains",
+            "label": "Rule 1",
+            "isMatched": false
+          }
+        ],
+        "evaluationPaused": true
+      },
+      "width": 260,
+      "style": {
+        "width": 260
+      }
+    }
+  ],
+  "edges": [
+    {
+      "id": "edge-imageInput-1-annotation-8-image-image",
+      "source": "imageInput-1",
+      "sourceHandle": "image",
+      "target": "annotation-8",
+      "targetHandle": "image"
+    },
+    {
+      "id": "edge-annotation-8-nanoBanana-19-image-image",
+      "source": "annotation-8",
+      "sourceHandle": "image",
+      "target": "nanoBanana-19",
+      "targetHandle": "image"
+    },
+    {
+      "id": "edge-prompt-5-nanoBanana-19-text-text",
+      "source": "prompt-5",
+      "sourceHandle": "text",
+      "target": "nanoBanana-19",
+      "targetHandle": "text"
+    },
+    {
+      "id": "edge-nanoBanana-19-output-49-image-image",
+      "source": "nanoBanana-19",
+      "sourceHandle": "image",
+      "target": "output-49",
+      "targetHandle": "image"
+    },
+    {
+      "id": "edge-prompt-5-llmGenerate-10-text-text",
+      "source": "prompt-5",
+      "sourceHandle": "text",
+      "target": "llmGenerate-10",
+      "targetHandle": "text"
+    },
+    {
+      "id": "edge-imageInput-1-llmGenerate-10-image-image",
+      "source": "imageInput-1",
+      "sourceHandle": "image",
+      "target": "llmGenerate-10",
+      "targetHandle": "image"
+    },
+    {
+      "id": "edge-llmGenerate-10-nanoBanana-16-text-text",
+      "source": "llmGenerate-10",
+      "sourceHandle": "text",
+      "target": "nanoBanana-16",
+      "targetHandle": "text"
+    },
+    {
+      "id": "edge-prompt-5-promptConstructor-7-text-text",
+      "source": "prompt-5",
+      "sourceHandle": "text",
+      "target": "promptConstructor-7",
+      "targetHandle": "text"
+    },
+    {
+      "id": "edge-promptConstructor-7-nanoBanana-17-text-text",
+      "source": "promptConstructor-7",
+      "sourceHandle": "text",
+      "target": "nanoBanana-17",
+      "targetHandle": "text"
+    },
+    {
+      "id": "edge-imageInput-1-generateVideo-22-image-image",
+      "source": "imageInput-1",
+      "sourceHandle": "image",
+      "target": "generateVideo-22",
+      "targetHandle": "image"
+    },
+    {
+      "id": "edge-prompt-5-generateVideo-22-text-text",
+      "source": "prompt-5",
+      "sourceHandle": "text",
+      "target": "generateVideo-22",
+      "targetHandle": "text"
+    },
+    {
+      "id": "edge-generateVideo-22-videoTrim-38-video-video",
+      "source": "generateVideo-22",
+      "sourceHandle": "video",
+      "target": "videoTrim-38",
+      "targetHandle": "video"
+    },
+    {
+      "id": "edge-videoTrim-38-videoFrameGrab-36-video-video",
+      "source": "videoTrim-38",
+      "sourceHandle": "video",
+      "target": "videoFrameGrab-36",
+      "targetHandle": "video"
+    },
+    {
+      "id": "edge-videoFrameGrab-36-removeBackground-34-image-image",
+      "source": "videoFrameGrab-36",
+      "sourceHandle": "image",
+      "target": "removeBackground-34",
+      "targetHandle": "image"
+    },
+    {
+      "id": "edge-removeBackground-34-imageResize-32-image-image",
+      "source": "removeBackground-34",
+      "sourceHandle": "image",
+      "target": "imageResize-32",
+      "targetHandle": "image"
+    },
+    {
+      "id": "edge-imageResize-32-gifEncoder-40-image-image-0",
+      "source": "imageResize-32",
+      "sourceHandle": "image",
+      "target": "gifEncoder-40",
+      "targetHandle": "image-0"
+    },
+    {
+      "id": "edge-imageInput-1-gifEncoder-40-image-image-1",
+      "source": "imageInput-1",
+      "sourceHandle": "image",
+      "target": "gifEncoder-40",
+      "targetHandle": "image-1"
+    },
+    {
+      "id": "edge-videoInput-3-videoStitch-39-video-video-0",
+      "source": "videoInput-3",
+      "sourceHandle": "video",
+      "target": "videoStitch-39",
+      "targetHandle": "video-0"
+    },
+    {
+      "id": "edge-audioInput-4-videoStitch-39-audio-audio",
+      "source": "audioInput-4",
+      "sourceHandle": "audio",
+      "target": "videoStitch-39",
+      "targetHandle": "audio"
+    },
+    {
+      "id": "edge-videoInput-3-easeCurve-42-video-video",
+      "source": "videoInput-3",
+      "sourceHandle": "video",
+      "target": "easeCurve-42",
+      "targetHandle": "video"
+    },
+    {
+      "id": "edge-easeCurve-42-outputGallery-52-video-video",
+      "source": "easeCurve-42",
+      "sourceHandle": "video",
+      "target": "outputGallery-52",
+      "targetHandle": "video"
+    },
+    {
+      "id": "edge-prompt-5-generateAudio-25-text-text",
+      "source": "prompt-5",
+      "sourceHandle": "text",
+      "target": "generateAudio-25",
+      "targetHandle": "text"
+    },
+    {
+      "id": "edge-generateAudio-25-output-50-audio-audio",
+      "source": "generateAudio-25",
+      "sourceHandle": "audio",
+      "target": "output-50",
+      "targetHandle": "audio"
+    },
+    {
+      "id": "edge-imageInput-1-generate3d-27-image-image",
+      "source": "imageInput-1",
+      "sourceHandle": "image",
+      "target": "generate3d-27",
+      "targetHandle": "image"
+    },
+    {
+      "id": "edge-generate3d-27-glbViewer-47-3d-3d",
+      "source": "generate3d-27",
+      "sourceHandle": "3d",
+      "target": "glbViewer-47",
+      "targetHandle": "3d"
+    },
+    {
+      "id": "edge-glbViewer-47-imageCompare-43-image-image",
+      "source": "glbViewer-47",
+      "sourceHandle": "image",
+      "target": "imageCompare-43",
+      "targetHandle": "image"
+    },
+    {
+      "id": "edge-nanoBanana-21-imageCompare-43-image-image-1",
+      "source": "nanoBanana-21",
+      "sourceHandle": "image",
+      "target": "imageCompare-43",
+      "targetHandle": "image-1"
+    },
+    {
+      "id": "edge-imageInput-1-splitGrid-45-image-image",
+      "source": "imageInput-1",
+      "sourceHandle": "image",
+      "target": "splitGrid-45",
+      "targetHandle": "image"
+    },
+    {
+      "id": "edge-splitGrid-45-imageInput-2-reference-reference",
+      "source": "splitGrid-45",
+      "sourceHandle": "reference",
+      "target": "imageInput-2",
+      "targetHandle": "reference"
+    },
+    {
+      "id": "edge-imageInput-1-router-54-image-generic-input",
+      "source": "imageInput-1",
+      "sourceHandle": "image",
+      "target": "router-54",
+      "targetHandle": "generic-input"
+    },
+    {
+      "id": "edge-router-54-outputGallery-52-image-image",
+      "source": "router-54",
+      "sourceHandle": "image",
+      "target": "outputGallery-52",
+      "targetHandle": "image"
+    },
+    {
+      "id": "edge-prompt-5-switch-56-text-generic-input",
+      "source": "prompt-5",
+      "sourceHandle": "text",
+      "target": "switch-56",
+      "targetHandle": "generic-input"
+    },
+    {
+      "id": "edge-switch-56-array-13-sw-a-text",
+      "source": "switch-56",
+      "sourceHandle": "sw-a",
+      "target": "array-13",
+      "targetHandle": "text"
+    },
+    {
+      "id": "edge-llmGenerate-10-conditionalSwitch-58-text-text",
+      "source": "llmGenerate-10",
+      "sourceHandle": "text",
+      "target": "conditionalSwitch-58",
+      "targetHandle": "text"
+    },
+    {
+      "id": "edge-conditionalSwitch-58-nanoBanana-20-rule-night-text",
+      "source": "conditionalSwitch-58",
+      "sourceHandle": "rule-night",
+      "target": "nanoBanana-20",
+      "targetHandle": "text"
+    },
+    {
+      "id": "edge-imageInput-1-comfyApp-29-image-image-0",
+      "source": "imageInput-1",
+      "sourceHandle": "image",
+      "target": "comfyApp-29",
+      "targetHandle": "image-0"
+    },
+    {
+      "id": "edge-comfyApp-29-generateVideo-23-9-image",
+      "source": "comfyApp-29",
+      "sourceHandle": "9",
+      "target": "generateVideo-23",
+      "targetHandle": "image"
+    }
+  ],
+  "edgeStyle": "angular",
+  "groups": {}
+}

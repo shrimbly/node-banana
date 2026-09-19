@@ -283,9 +283,12 @@ describe("executeGenerateVideo", () => {
       ok: true,
       json: () => Promise.resolve({ success: true, video: "data:video/mp4;base64,out" }),
     });
+    // The save to the generations folder that a configured path triggers
+    mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({ success: true }) });
 
     const ctx = makeCtx(node, {
       getFreshNode: vi.fn().mockReturnValue(node),
+      generationsPath: "/proj/generations",
     });
     await executeGenerateVideo(ctx);
 

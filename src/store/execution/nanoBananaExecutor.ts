@@ -7,13 +7,16 @@
 
 import type {
   NanoBananaNodeData,
+  ImageGenerationMetadata,
   SelectedModel,
 } from "@/types";
+import { isOpenAIImage25 } from "@/lib/providers/openaiImages";
 import { calculateGenerationCost } from "@/utils/costCalculator";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
 import type { NodeExecutionContext } from "./types";
+import { MissingInputError } from "./missingInput";
 
 export interface NanoBananaOptions {
   /** When true, falls back to stored inputImages/inputPrompt if no connections provide them. */
@@ -74,10 +77,10 @@ export async function executeNanoBanana(
 
   if (!promptText) {
     updateNodeData(node.id, {
-      status: "error",
+      status: "skipped",
       error: "Missing text input",
     });
-    throw new Error("Missing text input");
+    throw new MissingInputError("Missing text input");
   }
 
   // Capture promptText as a definitely-non-null string for use inside the closure.
@@ -175,22 +178,28 @@ export async function executeNanoBanana(
         const timestamp = Date.now();
         const imageId = `${timestamp}`;
 
+        const generation: ImageGenerationMetadata | undefined = provider === "openai" ? result.generation : undefined;
+        const historyModel = provider === "openai" ? modelToUse.displayName : nodeData.model;
+
         // Save to global history
         addToGlobalHistory({
           image: result.image,
           timestamp,
           prompt: finalPrompt,
           aspectRatio: nodeData.aspectRatio,
-          model: nodeData.model,
+          model: historyModel,
+          ...(generation ? { generation } : {}),
         });
 
-        // Add to node's carousel history
+        // The carousel reloads entries from the generations folder, so only a
+        // generation that is being saved there gets an entry.
         const newHistoryItem = {
           id: imageId,
           timestamp,
           prompt: finalPrompt,
           aspectRatio: nodeData.aspectRatio,
-          model: nodeData.model,
+          model: historyModel,
+          ...(generation ? { generation } : {}),
         };
         const updatedHistory = [newHistoryItem, ...(nodeData.imageHistory || [])].slice(0, 50);
 
@@ -198,8 +207,7 @@ export async function executeNanoBanana(
           outputImage: result.image,
           status: "complete",
           error: null,
-          imageHistory: updatedHistory,
-          selectedHistoryIndex: 0,
+          ...(generationsPath ? { imageHistory: updatedHistory, selectedHistoryIndex: 0 } : {}),
         });
 
         // Push new image to connected downstream outputGallery nodes (atomic append)
@@ -215,7 +223,9 @@ export async function executeNanoBanana(
           });
 
         // Track cost
-        if ((modelToUse.provider === "fal" || modelToUse.provider === "openai") && modelToUse.pricing) {
+        if (provider === "openai" && generation?.cost && Number.isFinite(generation.cost.amount) && generation.cost.amount >= 0) {
+          addIncurredCost(generation.cost.amount);
+        } else if ((provider === "fal" || (provider === "openai" && !isOpenAIImage25(modelToUse.modelId))) && modelToUse.pricing) {
           addIncurredCost(modelToUse.pricing.amount);
         } else if (modelToUse.provider === "gemini") {
           const generationCost = calculateGenerationCost(nodeData.model, nodeData.resolution);

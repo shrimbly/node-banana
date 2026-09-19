@@ -65,6 +65,21 @@ describe("ModelParameters", () => {
     vi.stubGlobal("fetch", vi.fn());
   });
 
+  it("shows OpenAI compression only for JPEG/WebP and flags transparent JPEG", async () => {
+    const { OPENAI_IMAGE_25_PARAMETERS } = await import("@/lib/providers/openaiImages");
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      json: async () => ({ parameters: OPENAI_IMAGE_25_PARAMETERS }),
+    } as Response);
+    const props = { ...defaultProps, provider: "openai" as const, modelId: "gpt-image-2.5-flare" };
+    const { rerender } = render(<ModelParameters {...props} parameters={{ size: "auto", output_format: "png" }} />);
+    await screen.findByLabelText("Output Format");
+    expect(screen.queryByLabelText("Compression")).toBeNull();
+    rerender(<ModelParameters {...props} parameters={{ size: "auto", output_format: "jpeg", background: "transparent" }} />);
+    expect(screen.getByLabelText("Compression")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("PNG or WebP");
+  });
+
   describe("Initial Rendering", () => {
     it("should fetch schema for Gemini provider", () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockImplementation(
@@ -336,7 +351,7 @@ describe("ModelParameters", () => {
       });
     });
 
-    it("should show min/max range in label", async () => {
+    it("should show min/max range in the label tooltip", async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
         ok: true,
         json: () =>
@@ -355,7 +370,7 @@ describe("ModelParameters", () => {
       render(<ModelParameters {...defaultProps} />);
 
       await waitFor(() => {
-        expect(screen.getByText("(1-20)")).toBeInTheDocument();
+        expect(screen.getByText("Guidance Scale")).toHaveAttribute("title", expect.stringContaining("(1-20)"));
       });
     });
 

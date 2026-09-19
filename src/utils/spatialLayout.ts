@@ -1,5 +1,6 @@
 import { Node } from "@xyflow/react";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
+import { getNodeSize } from "./nodeDimensions";
 import { NodeType } from "@/types";
 
 const COLLISION_GAP = 20; // Same as STACK_GAP in MultiSelectToolbar
@@ -83,14 +84,7 @@ function hasCollision(
   };
 
   for (const node of existingNodes) {
-    const nodeWidth =
-      (node.measured?.width as number) ||
-      (node.style?.width as number) ||
-      300;
-    const nodeHeight =
-      (node.measured?.height as number) ||
-      (node.style?.height as number) ||
-      300;
+    const { width: nodeWidth, height: nodeHeight } = getNodeSize(node);
 
     const existingRect: Rectangle = {
       x: node.position.x,

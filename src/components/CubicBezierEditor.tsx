@@ -9,6 +9,8 @@ interface CubicBezierEditorProps {
   disabled?: boolean;
   /** SVG polyline points string (in 0–100 coordinate space) for the actual easing curve overlay */
   easingCurve?: string;
+  /** Extra classes on the framed box, e.g. to cap its size. */
+  className?: string;
 }
 
 const clamp = (value: number) => Math.max(0, Math.min(1, value));
@@ -32,6 +34,7 @@ export function CubicBezierEditor({
   onCommit,
   disabled = false,
   easingCurve,
+  className,
 }: CubicBezierEditorProps) {
   const editorRef = useRef<HTMLDivElement | null>(null);
   const valueRef = useRef(value);
@@ -166,7 +169,7 @@ export function CubicBezierEditor({
   );
 
   return (
-    <div className="bg-neutral-900/50 rounded-lg border border-neutral-700 p-2">
+    <div className={`bg-neutral-900/50 rounded-lg border border-neutral-700 p-2${className ? ` ${className}` : ""}`}>
       <div ref={editorRef} className="relative w-full aspect-square">
         <svg
           viewBox="0 0 100 100"
@@ -230,7 +233,7 @@ export function CubicBezierEditor({
         <button
           type="button"
           aria-label="Adjust control point 1"
-          className={`nodrag nopan absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 border-neutral-900/80 bg-lime-300/80 shadow transition active:cursor-grabbing active:scale-95 disabled:cursor-not-allowed disabled:pointer-events-none touch-none ${
+          className={`nodrag nopan absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border border-neutral-900/80 bg-lime-300/80 shadow transition active:cursor-grabbing active:scale-95 disabled:cursor-not-allowed disabled:pointer-events-none touch-none ${
             draggingHandle === "p1" ? "ring-2 ring-lime-300/80" : ""
           }`}
           style={controlStyles.p1}
@@ -241,7 +244,7 @@ export function CubicBezierEditor({
         <button
           type="button"
           aria-label="Adjust control point 2"
-          className={`nodrag nopan absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border-2 border-neutral-900/80 bg-lime-300/80 shadow transition active:cursor-grabbing active:scale-95 disabled:cursor-not-allowed disabled:pointer-events-none touch-none ${
+          className={`nodrag nopan absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-full border border-neutral-900/80 bg-lime-300/80 shadow transition active:cursor-grabbing active:scale-95 disabled:cursor-not-allowed disabled:pointer-events-none touch-none ${
             draggingHandle === "p2" ? "ring-2 ring-lime-300/80" : ""
           }`}
           style={controlStyles.p2}

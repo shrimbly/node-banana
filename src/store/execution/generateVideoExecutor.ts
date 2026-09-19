@@ -10,6 +10,7 @@ import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
 import { pollGenerateTask } from "./pollTaskCompletion";
 import { runWithFallback } from "./runWithFallback";
 import type { NodeExecutionContext } from "./types";
+import { MissingInputError } from "./missingInput";
 
 export interface GenerateVideoOptions {
   /** When true, falls back to stored inputImages/inputPrompt if no connections provide them. */
@@ -56,10 +57,10 @@ export async function executeGenerateVideo(
     const hasVideo = connectedVideos.length > 0;
     if (!hasPrompt && images.length === 0 && !hasAudio && !hasVideo) {
       updateNodeData(node.id, {
-        status: "error",
+        status: "skipped",
         error: "Missing required inputs",
       });
-      throw new Error("Missing required inputs");
+      throw new MissingInputError("Missing required inputs");
     }
   } else {
     images = connectedImages;
@@ -69,10 +70,10 @@ export async function executeGenerateVideo(
     const hasVideo = connectedVideos.length > 0;
     if (!hasPrompt && images.length === 0 && !hasAudio && !hasVideo) {
       updateNodeData(node.id, {
-        status: "error",
+        status: "skipped",
         error: "Missing required inputs",
       });
-      throw new Error("Missing required inputs");
+      throw new MissingInputError("Missing required inputs");
     }
   }
 
@@ -159,7 +160,8 @@ export async function executeGenerateVideo(
         const timestamp = Date.now();
         const videoId = `${timestamp}`;
 
-        // Add to node's video history
+        // The carousel reloads entries from the generations folder, so only a
+        // generation that is being saved there gets an entry.
         const newHistoryItem = {
           id: videoId,
           timestamp,
@@ -172,8 +174,7 @@ export async function executeGenerateVideo(
           outputVideo: outputContent,
           status: "complete",
           error: null,
-          videoHistory: updatedHistory,
-          selectedVideoHistoryIndex: 0,
+          ...(generationsPath ? { videoHistory: updatedHistory, selectedVideoHistoryIndex: 0 } : {}),
         });
 
         // Push this result to downstream outputGallery nodes so a batch run

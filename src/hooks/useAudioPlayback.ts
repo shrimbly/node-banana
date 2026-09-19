@@ -84,8 +84,10 @@ export function useAudioPlayback({ audioSrc, waveformData, isLoadingWaveform }: 
         const x = i * barWidth;
         const y = (height - barHeight) / 2;
 
-        ctx.fillStyle = x < progressX ? "rgb(139, 92, 246)" : "rgba(139, 92, 246, 0.4)";
-        ctx.fillRect(x, y, barWidth - barGap, barHeight);
+        // Played bars in the full violet; the rest bright enough to read on
+        // the dark clip rather than fading into it.
+        ctx.fillStyle = x < progressX ? "rgb(139, 92, 246)" : "rgba(167, 139, 250, 0.75)";
+        ctx.fillRect(x, y, Math.max(1, barWidth - barGap), Math.max(1, barHeight));
       }
 
       // Draw playback position line
@@ -115,8 +117,11 @@ export function useAudioPlayback({ audioSrc, waveformData, isLoadingWaveform }: 
         const width = entry.contentRect.width;
         const height = entry.contentRect.height;
 
-        canvas.width = width;
-        canvas.height = height;
+        // Back the canvas at device resolution so 1px bars stay crisp.
+        const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+        canvas.width = Math.round(width * dpr);
+        canvas.height = Math.round(height * dpr);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
         drawWaveform(ctx, width, height, waveformData.peaks);
       }
@@ -137,9 +142,13 @@ export function useAudioPlayback({ audioSrc, waveformData, isLoadingWaveform }: 
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const width = canvas.width;
-    const height = canvas.height;
+    // The backing store is device pixels; draw in CSS pixels under the same
+    // transform the resize pass set.
+    const dpr = typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1;
+    const width = canvas.width / dpr;
+    const height = canvas.height / dpr;
     if (width === 0 || height === 0) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const duration = audioRef.current?.duration;
     const progress = duration && isFinite(duration) && currentTime > 0 ? currentTime / duration : undefined;

@@ -441,3 +441,42 @@ describe("localStorage utilities", () => {
     });
   });
 });
+
+describe("edge defaults", () => {
+  beforeEach(() => {
+    localStorageMock.clear();
+  });
+
+  it("returns the built-in defaults when nothing is stored", async () => {
+    const { getEdgeDefaults, builtInEdgeDefaults } = await import("../localStorage");
+    expect(getEdgeDefaults()).toEqual(builtInEdgeDefaults);
+  });
+
+  it("round-trips saved defaults", async () => {
+    const { getEdgeDefaults, saveEdgeDefaults } = await import("../localStorage");
+    const defaults = {
+      edgeStyle: "straight" as const,
+      appearance: { thickness: "thick" as const, fadedOpacity: 0.4, gradient: false, loadingPulse: true },
+    };
+    saveEdgeDefaults(defaults);
+    expect(getEdgeDefaults()).toEqual(defaults);
+  });
+
+  it("repairs invalid stored values", async () => {
+    const { getEdgeDefaults, EDGE_DEFAULTS_KEY, builtInEdgeDefaults } = await import("../localStorage");
+    localStorageMock.setItem(
+      EDGE_DEFAULTS_KEY,
+      JSON.stringify({ edgeStyle: "zigzag", appearance: { thickness: "thin", fadedOpacity: -1 } })
+    );
+    expect(getEdgeDefaults()).toEqual({
+      edgeStyle: builtInEdgeDefaults.edgeStyle,
+      appearance: { ...builtInEdgeDefaults.appearance, thickness: "thin", fadedOpacity: 0 },
+    });
+  });
+
+  it("returns the built-in defaults for unparsable JSON", async () => {
+    const { getEdgeDefaults, EDGE_DEFAULTS_KEY, builtInEdgeDefaults } = await import("../localStorage");
+    localStorageMock.setItem(EDGE_DEFAULTS_KEY, "{not json");
+    expect(getEdgeDefaults()).toEqual(builtInEdgeDefaults);
+  });
+});

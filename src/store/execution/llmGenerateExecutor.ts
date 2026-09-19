@@ -15,6 +15,7 @@ import type {
 import { buildLlmHeaders } from "@/store/utils/buildApiHeaders";
 import { runWithFallback } from "./runWithFallback";
 import type { NodeExecutionContext } from "./types";
+import { MissingInputError } from "./missingInput";
 
 export interface LlmGenerateOptions {
   /** When true, falls back to stored inputImages/inputPrompt if no connections provide them. */
@@ -61,10 +62,10 @@ export async function executeLlmGenerate(
 
   if (!text) {
     updateNodeData(node.id, {
-      status: "error",
+      status: "skipped",
       error: "Missing text input - connect a prompt node or set internal prompt",
     });
-    throw new Error("Missing text input");
+    throw new MissingInputError("Missing text input");
   }
 
   // Capture text as a definitely-non-null string for use inside the closure.
@@ -75,6 +76,7 @@ export async function executeLlmGenerate(
     inputImages: images,
     status: "loading",
     error: null,
+    __modelNote: undefined,
   });
 
   const runOnce = async (modelToUse: SelectedModel, parametersOverride?: Record<string, unknown>): Promise<void> => {
@@ -119,10 +121,15 @@ export async function executeLlmGenerate(
       const result = await response.json();
 
       if (result.success && result.text) {
+        // The route may have replaced a retired id; adopt the replacement on the
+        // primary so the workflow heals itself, and keep the note for the badge.
+        const isPrimary = modelToUse.modelId === nodeData.model;
+        const replaced = isPrimary && typeof result.model === "string" && result.model !== nodeData.model;
         updateNodeData(node.id, {
           outputText: result.text,
           status: "complete",
           error: null,
+          ...(replaced && { model: result.model, __modelNote: result.note }),
         });
       } else {
         updateNodeData(node.id, {

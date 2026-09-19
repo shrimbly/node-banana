@@ -1,4 +1,5 @@
 import { ContentLevel } from "./templates";
+import { DEFAULT_LLM_MODEL, DEFAULT_LLM_PROVIDER } from "@/lib/llm/catalog";
 
 /**
  * Build a comprehensive prompt for Gemini to generate a workflow
@@ -78,8 +79,8 @@ Purpose: Text generation using LLM (for prompt expansion, analysis, etc.)
     "inputPrompt": null,
     "inputImages": [],
     "outputText": null,
-    "provider": "google",
-    "model": "gemini-3-flash-preview",
+    "provider": "${DEFAULT_LLM_PROVIDER}",
+    "model": "${DEFAULT_LLM_MODEL}",
     "temperature": 0.7,
     "maxTokens": 8192,
     "status": "idle",

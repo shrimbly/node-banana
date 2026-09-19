@@ -1,6 +1,7 @@
 import { WorkflowFile } from "@/store/workflowStore";
 import { NodeType, WorkflowNodeData } from "@/types";
 import { getEasingBezier } from "@/lib/easing-presets";
+import { DEFAULT_LLM_MODEL, DEFAULT_LLM_PROVIDER } from "@/lib/llm/catalog";
 
 interface ValidationError {
   path: string;
@@ -333,8 +334,8 @@ function createDefaultNodeData(type: NodeType): WorkflowNodeData {
         inputPrompt: null,
         inputImages: [],
         outputText: null,
-        provider: "google",
-        model: "gemini-3-flash-preview",
+        provider: DEFAULT_LLM_PROVIDER,
+        model: DEFAULT_LLM_MODEL,
         temperature: 0.7,
         maxTokens: 8192,
         status: "idle",

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Toast } from "@/components/Toast";
+import { GenerationToaster } from "@/components/GenerationToast";
 
 export const metadata: Metadata = {
   title: "Node Banana - AI Image Workflow",
@@ -13,10 +14,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // Electron's preload adds a platform styling attribute before hydration.
+    <html lang="en" suppressHydrationWarning>
       <body className="antialiased">
         {children}
         <Toast />
+        <GenerationToaster />
       </body>
     </html>
   );

@@ -1,7 +1,7 @@
 "use client";
 
+import { Dialog, DialogHeader, DialogTitle } from "@/components/ui/Dialog";
 import React, { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { createPortal } from "react-dom";
 import { useWorkflowStore, useProviderApiKeys } from "@/store/workflowStore";
 import { deduplicatedFetch, clearFetchCache } from "@/utils/deduplicatedFetch";
 import { useReactFlow } from "@xyflow/react";
@@ -10,12 +10,17 @@ import { ProviderModel, ModelCapability } from "@/lib/providers/types";
 
 // localStorage cache for models (persists across dev server restarts)
 const MODELS_CACHE_KEY = "node-banana-models-cache";
+// Bump when the built-in OpenAI catalogue changes so existing users see new models.
+const OPENAI_CATALOGUE_VERSION = 1;
+const GEMINI_CATALOGUE_VERSION = 1;
 const MODELS_CACHE_TTL = 48 * 60 * 60 * 1000; // 48 hours
 // Cap the number of cached entries to avoid unbounded localStorage growth.
 // Entries are pruned LRU-style (oldest timestamp first) on write.
 const MODELS_CACHE_MAX_ENTRIES = 20;
 
 interface ModelsCacheEntry {
+  geminiCatalogueVersion?: number;
+  openaiCatalogueVersion?: number;
   models: ProviderModel[];
   availableProviders?: string[];
   timestamp: number;
@@ -25,6 +30,11 @@ function getCachedModels(cacheKey: string): ModelsCacheEntry | null {
   try {
     const cache = JSON.parse(localStorage.getItem(MODELS_CACHE_KEY) || "{}");
     const entry = cache[cacheKey];
+    const provider = cacheKey.split(":")[1];
+    const includesOpenAI = provider === "all" || provider === "openai";
+    if (includesOpenAI && entry?.openaiCatalogueVersion !== OPENAI_CATALOGUE_VERSION) return null;
+    // Gemini models are included in the combined catalogue and the Gemini filter.
+    if ((provider === "all" || provider === "gemini") && entry?.geminiCatalogueVersion !== GEMINI_CATALOGUE_VERSION) return null;
     if (entry && Date.now() - entry.timestamp < MODELS_CACHE_TTL) {
       return entry;
     }
@@ -49,7 +59,7 @@ function setCachedModels(cacheKey: string, models: ProviderModel[], availablePro
       }
     }
 
-    cache[cacheKey] = { models, availableProviders, timestamp: now };
+    cache[cacheKey] = { models, availableProviders, timestamp: now, openaiCatalogueVersion: OPENAI_CATALOGUE_VERSION, geminiCatalogueVersion: GEMINI_CATALOGUE_VERSION };
 
     // Cap total entries (LRU): drop oldest by timestamp until under the limit.
     const keys = Object.keys(cache);
@@ -180,8 +190,6 @@ export function ModelSearchDialog({
 }: ModelSearchDialogProps) {
   const {
     addNode,
-    incrementModalCount,
-    decrementModalCount,
     recentModels,
     trackModelUsage,
   } = useWorkflowStore();
@@ -207,14 +215,6 @@ export function ModelSearchDialog({
   const searchInputRef = useRef<HTMLInputElement>(null);
   // Track request version to ignore stale responses
   const requestVersionRef = useRef(0);
-
-  // Register modal with store
-  useEffect(() => {
-    if (isOpen) {
-      incrementModalCount();
-      return () => decrementModalCount();
-    }
-  }, [isOpen, incrementModalCount, decrementModalCount]);
 
   // Debounce search query
   useEffect(() => {
@@ -428,33 +428,6 @@ export function ModelSearchDialog({
     [screenToFlowPosition, addNode, onClose, onModelSelected, trackModelUsage]
   );
 
-  // Handle escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        onClose();
-      }
-    };
-
-    if (isOpen) {
-      window.addEventListener("keydown", handleKeyDown);
-    }
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [isOpen, onClose]);
-
-  // Handle backdrop click
-  const handleBackdropClick = useCallback(
-    (e: React.MouseEvent<HTMLDivElement>) => {
-      if (e.target === e.currentTarget) {
-        onClose();
-      }
-    },
-    [onClose]
-  );
-
   // Get provider badge color
   const getProviderBadgeColor = (provider: ProviderType) => {
     switch (provider) {
@@ -643,38 +616,13 @@ export function ModelSearchDialog({
   if (!isOpen) return null;
 
   const dialogContent = (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60"
-      onClick={handleBackdropClick}
-    >
-      <div className="relative bg-neutral-800 border border-neutral-700 rounded-lg shadow-2xl w-full max-w-5xl max-h-[85vh] flex flex-col mx-4">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-neutral-700">
-          <h2 className="text-lg font-semibold text-neutral-100">
-            {title}
-          </h2>
-          <button
-            onClick={onClose}
-            className="p-1.5 text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700 rounded transition-colors"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
+    <Dialog open onClose={onClose} portal size="xl">
+        <DialogHeader divider>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
 
         {/* Filter Bar */}
-        <div className="px-6 py-4 border-b border-neutral-700">
+        <div className="px-5 py-3 border-b border-chrome-border/50">
           <div className="flex flex-col sm:flex-row gap-3">
             {/* Search Input */}
             <div className="flex-1 relative">
@@ -1013,10 +961,10 @@ export function ModelSearchDialog({
                 <button
                   key={`${model.provider}-${model.id}`}
                   onClick={() => handleSelectModel(model)}
-                  className="flex items-start gap-3 p-4 bg-neutral-700/50 hover:bg-neutral-700 border border-neutral-600/50 hover:border-neutral-500 rounded-lg transition-colors text-left cursor-pointer group"
+                  className="flex items-stretch min-h-[108px] bg-well hover:bg-neutral-700/40 border border-card-border hover:border-neutral-500 rounded-well overflow-hidden transition-colors text-left cursor-pointer group"
                 >
-                  {/* Cover Image - larger */}
-                  <div className="w-20 h-20 rounded bg-neutral-600 overflow-hidden flex-shrink-0">
+                  {/* Cover Image - full height of the card */}
+                  <div className="w-24 self-stretch bg-neutral-700/60 overflow-hidden flex-shrink-0">
                     {model.coverImage ? (
                       <img
                         src={model.coverImage}
@@ -1047,9 +995,9 @@ export function ModelSearchDialog({
                   </div>
 
                   {/* Model Info */}
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 p-3">
                     {/* Model name with variant suffix for fal.ai */}
-                    <div className="font-medium text-neutral-100 text-sm truncate">
+                    <div className="font-medium text-neutral-100 text-[13px] truncate">
                       {getDisplayName(model)}
                     </div>
 
@@ -1096,14 +1044,14 @@ export function ModelSearchDialog({
 
                     {/* Description - more lines */}
                     {model.description && (
-                      <p className="mt-1.5 text-xs text-neutral-400 line-clamp-3">
+                      <p className="mt-1.5 text-[11px] leading-[15px] text-neutral-400 line-clamp-2">
                         {model.description}
                       </p>
                     )}
                   </div>
 
                   {/* Hover indicator */}
-                  <div className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 self-center">
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 self-center pr-3">
                     <svg
                       className="w-5 h-5 text-neutral-400"
                       fill="none"
@@ -1127,14 +1075,13 @@ export function ModelSearchDialog({
 
         {/* Footer with model count */}
         {!isLoading && !error && models.length > 0 && (
-          <div className="px-6 py-3 border-t border-neutral-700 text-xs text-neutral-400">
+          <div className="px-5 py-2.5 border-t border-chrome-border/50 text-xs text-neutral-500">
             {models.length} model{models.length !== 1 ? "s" : ""} found
           </div>
         )}
-      </div>
-    </div>
+    </Dialog>
   );
 
-  // Use portal to render outside React Flow stacking context
-  return createPortal(dialogContent, document.body);
+  // In a body portal (Dialog's `portal`), outside React Flow's stacking context
+  return dialogContent;
 }

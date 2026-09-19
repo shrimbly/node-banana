@@ -1,0 +1,11 @@
+---
+import graphPrompting from "../partials/graph-prompting.html?raw";
+---
+<section class="section" id="prompting">
+  <div class="section__inner">
+  <div class="section__split">
+    <div class="section__copy"><h2 class="h2 reveal">Prompts that write themselves.</h2><p class="lead reveal" style="--d: 1;">Build prompts from @variables, let an LLM look at the input and fill in the details, and reuse the chain on every run. The prompt adapts; the graph stays the same.</p></div>
+    <Fragment set:html={graphPrompting} />
+  </div>
+  </div>
+</section>

@@ -1,7 +1,7 @@
 "use client";
 
+import { Dialog } from "@/components/ui/Dialog";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 
 import { ComfyMark } from "@/components/icons/ComfyMark";
 import { ComfyNodePreview } from "./ComfyNodePreview";
@@ -127,12 +127,12 @@ const APP_MODE_DOCS = "https://docs.comfy.org/interface/app-mode";
 
 /** The dialog's one committing action, wherever the current step puts it. */
 const PRIMARY_BUTTON =
-  "px-4 py-2 text-sm rounded-lg bg-neutral-100 text-neutral-900 font-medium hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,scale] duration-150 active:scale-[0.96] disabled:active:scale-100";
+  "h-8 px-3.5 text-[13px] rounded-lg bg-white text-neutral-900 font-medium hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition-[background-color,scale] duration-150 active:scale-[0.96] disabled:active:scale-100";
 
 /** Beside it: keeping this node is a different act from attaching it, and a
  *  second filled button would make the dialog ask twice which one you meant. */
 const SECONDARY_BUTTON =
-  "px-3 py-2 text-sm rounded-lg bg-neutral-700/60 text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed transition-[background-color,color,scale] duration-150 active:scale-[0.96] disabled:active:scale-100";
+  "h-8 px-3.5 text-[13px] rounded-lg bg-neutral-700 text-neutral-200 font-medium hover:bg-neutral-600 disabled:opacity-50 disabled:cursor-not-allowed transition-[background-color,color,scale] duration-150 active:scale-[0.96] disabled:active:scale-100";
 
 /**
  * Import a ComfyUI workflow and confirm what it exposes.
@@ -192,55 +192,12 @@ export function ComfyWorkflowImportModal({
   const [settingsSaved, setSettingsSaved] = useState(0);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
   const settings = useMemo(
     () => (isOpen ? getComfySettings() : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [isOpen, settingsSaved]
   );
   const configError = settings ? comfyConfigError(settings) : null;
-
-  // Escape belongs to the dialog, not to whatever happens to be focused. Bound
-  // on the document because opening the dialog does not move focus into it —
-  // a keydown on the page would otherwise never reach the panel.
-  useEffect(() => {
-    if (!isOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        onClose();
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [isOpen, onClose]);
-
-  // Focus starts inside, so the first Tab continues through the dialog rather
-  // than through the canvas behind it.
-  useEffect(() => {
-    if (!isOpen) return;
-    const frame = requestAnimationFrame(() => panelRef.current?.focus());
-    return () => cancelAnimationFrame(frame);
-  }, [isOpen]);
-
-  /** Keep Tab inside the dialog: a modal the keyboard can walk out of is not one. */
-  const trapFocus = useCallback((event: React.KeyboardEvent) => {
-    if (event.key !== "Tab" || !panelRef.current) return;
-    const focusable = panelRef.current.querySelectorAll<HTMLElement>(
-      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-    );
-    if (focusable.length === 0) return;
-    const first = focusable[0]!;
-    const last = focusable[focusable.length - 1]!;
-    const active = document.activeElement;
-    if (event.shiftKey && (active === first || active === panelRef.current)) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && active === last) {
-      event.preventDefault();
-      first.focus();
-    }
-  }, []);
 
   /**
    * Keep the new connection and go back to what the dialog was doing.
@@ -655,30 +612,21 @@ export function ComfyWorkflowImportModal({
   const showPreview = Boolean(isMain && inspection);
 
   const dialog = (
-    <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 animate-dialog-backdrop"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-      onWheelCapture={(e) => e.stopPropagation()}
+    <Dialog
+      open
+      onClose={onClose}
+      portal
+      labelledBy="comfy-import-title"
+      // Wider only where there is a second column to hold: every other step
+      // is a single list, and stretching it would leave a hall of empty grey.
+      className={`max-h-[82vh] transition-[width] duration-200 ${
+        showPreview ? "w-[880px]" : "w-[600px]"
+      }`}
     >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="comfy-import-title"
-        tabIndex={-1}
-        // Wider only where there is a second column to hold: every other step
-        // is a single list, and stretching it would leave a hall of empty grey.
-        className={`bg-neutral-800 rounded-xl border border-neutral-700 shadow-2xl overflow-clip flex flex-col max-h-[82vh] focus:outline-none animate-dialog-panel transition-[width] duration-200 ${
-          showPreview ? "w-[880px]" : "w-[600px]"
-        }`}
-        onKeyDown={trapFocus}
-      >
-        <div className="px-4 pt-4 pb-0 shrink-0 animate-dialog-section">
+        <div className="px-5 pt-3.5 pb-0 shrink-0 animate-dialog-section">
           <div className="flex items-center gap-2">
             <ComfyMark className="w-4 h-[19px] text-neutral-300 shrink-0" />
-            <h2 id="comfy-import-title" className="text-xl font-medium text-neutral-100 truncate">
+            <h2 id="comfy-import-title" className="text-base font-semibold leading-6 text-neutral-100 truncate">
               {showHelp
                 ? "Preparing a workflow"
                 : showSettings
@@ -704,7 +652,7 @@ export function ComfyWorkflowImportModal({
                 title="How to prepare a workflow for this"
                 aria-label="How to prepare a workflow"
                 aria-pressed={showHelp}
-                className={`w-10 h-10 flex items-center justify-center rounded-lg transition-[background-color,color,scale] duration-150 active:scale-[0.96] ${
+                className={`w-7 h-7 flex items-center justify-center rounded-md transition-[background-color,color,scale] duration-150 active:scale-[0.96] ${
                   showHelp
                     ? "bg-neutral-700 text-neutral-100"
                     : "text-neutral-500 hover:text-neutral-200 hover:bg-neutral-700/50"
@@ -730,7 +678,7 @@ export function ComfyWorkflowImportModal({
                 title="ComfyUI connection — engine, API key"
                 aria-label="ComfyUI connection settings"
                 aria-pressed={showSettings}
-                className={`w-10 h-10 flex items-center justify-center rounded-lg transition-[background-color,color,scale] duration-150 active:scale-[0.96] ${
+                className={`w-7 h-7 flex items-center justify-center rounded-md transition-[background-color,color,scale] duration-150 active:scale-[0.96] ${
                   showSettings
                     ? "bg-neutral-700 text-neutral-100"
                     : "text-neutral-500 hover:text-neutral-200 hover:bg-neutral-700/50"
@@ -779,7 +727,7 @@ export function ComfyWorkflowImportModal({
             heading inside a padded scroller stops at the *content* edge, and
             rows then scroll through the padding band above it in full view. */}
         <div
-          className="flex-1 min-w-0 overflow-y-auto px-4 animate-dialog-section"
+          className="flex-1 min-w-0 overflow-y-auto px-5 animate-dialog-section"
           style={{ animationDelay: "80ms" }}
         >
           <div className="py-4">
@@ -885,7 +833,7 @@ export function ComfyWorkflowImportModal({
         </div>
 
         <div
-          className="flex items-center justify-between gap-3 p-4 border-t border-neutral-700/60 shrink-0 animate-dialog-section"
+          className="flex items-center justify-between gap-3 px-5 py-3 border-t border-chrome-border/50 shrink-0 animate-dialog-section"
           style={{ animationDelay: "160ms" }}
         >
           <button
@@ -899,7 +847,7 @@ export function ComfyWorkflowImportModal({
                   : onClose
                 : () => setView("main")
             }
-            className="px-4 py-2 text-sm text-neutral-400 hover:text-neutral-200 transition-[color,scale] duration-150 active:scale-[0.96]"
+            className="h-8 px-3.5 -ml-3.5 text-[13px] font-medium rounded-lg text-neutral-400 hover:text-neutral-100 hover:bg-neutral-700/40 transition-[color,background-color,scale] duration-150 active:scale-[0.96]"
           >
             {!isMain || (inspection && !reconfigure) ? "Back" : "Cancel"}
           </button>
@@ -977,7 +925,6 @@ export function ComfyWorkflowImportModal({
             )
           )}
         </div>
-      </div>
 
       <input
         ref={fileInputRef}
@@ -990,15 +937,14 @@ export function ComfyWorkflowImportModal({
           e.target.value = "";
         }}
       />
-    </div>
+    </Dialog>
   );
 
-  // Portalled to the body: this dialog is rendered from inside a node, and
-  // React Flow's viewport carries a `transform`, which makes it the containing
-  // block for `position: fixed` — so without this the dialog is scaled and
-  // shifted by the canvas zoom.
-  if (typeof document === "undefined") return null;
-  return createPortal(dialog, document.body);
+  // In a body portal (Dialog's `portal`): this dialog is rendered from inside
+  // a node, and React Flow's viewport carries a `transform`, which makes it
+  // the containing block for `position: fixed` — without the portal the
+  // dialog is scaled and shifted by the canvas zoom.
+  return dialog;
 }
 
 function TabButton({
@@ -1667,7 +1613,7 @@ function Section({
       {/* Sticky, and bled to the dialog's edges so rows pass behind it rather
           than beside it — three sections deep, the heading is the only thing
           saying which list you are in. */}
-      <div className="sticky top-0 z-10 -mx-4 px-4 py-2 bg-neutral-800 flex items-baseline gap-2">
+      <div className="sticky top-0 z-10 -mx-5 px-5 py-2 bg-card flex items-baseline gap-2">
         <h3 className="text-sm text-neutral-200 font-medium shrink-0">{title}</h3>
         <span className="text-[10px] text-neutral-600 truncate">{hint}</span>
         {count && !isEmpty && (
@@ -1931,11 +1877,11 @@ function describeValue(value: ComfyWidgetCandidate["currentValue"]): string {
 }
 
 function handleColor(type: string): string {
-  if (type === "text") return "var(--handle-color-text)";
-  if (type === "audio") return "var(--handle-color-audio)";
-  if (type === "video") return "var(--handle-color-video)";
-  if (type === "3d") return "var(--handle-color-3d)";
-  return "var(--handle-color-image)";
+  if (type === "text") return "var(--color-handle-text)";
+  if (type === "audio") return "var(--color-handle-audio)";
+  if (type === "video") return "var(--color-handle-video)";
+  if (type === "3d") return "var(--color-handle-3d)";
+  return "var(--color-handle-image)";
 }
 
 /** The handle type inspection assigned to a sink node. */

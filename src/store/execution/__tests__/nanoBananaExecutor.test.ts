@@ -105,7 +105,7 @@ describe("executeNanoBanana", () => {
     await expect(executeNanoBanana(ctx)).rejects.toThrow("Missing text input");
 
     expect(ctx.updateNodeData).toHaveBeenCalledWith("gen-1", {
-      status: "error",
+      status: "skipped",
       error: "Missing text input",
     });
   });
@@ -383,5 +383,52 @@ describe("executeNanoBanana", () => {
     expect(stampCall).toBeDefined();
     expect((stampCall![1] as Record<string, unknown>).__fallbackModelUsed).toBe("Flux Dev");
     expect((stampCall![1] as Record<string, unknown>).__primaryError).toBe("Primary boom");
+  });
+});
+
+describe("carousel history", () => {
+  it("records no entry when there is no generations folder to reload it from", async () => {
+    const node = makeNode({ imageHistory: [{ id: "old", timestamp: 1, prompt: "p", aspectRatio: "1:1", model: "m" }] });
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, image: "data:image/png;base64,new" }) });
+    const ctx = makeCtx(node, { generationsPath: null });
+    await executeNanoBanana(ctx);
+
+    const complete = (ctx.updateNodeData as ReturnType<typeof vi.fn>).mock.calls.find(
+      (c: unknown[]) => (c[1] as Record<string, unknown>).status === "complete"
+    );
+    expect(complete?.[1]).toMatchObject({ outputImage: "data:image/png;base64,new" });
+    expect(complete?.[1]).not.toHaveProperty("imageHistory");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("OpenAI generation usage and history", () => {
+  it("records usage cost once and preserves the selected variant and output settings", async () => {
+    const node = makeNode({ selectedModel: { provider: "openai", modelId: "gpt-image-2.5-flare", displayName: "GPT Image 2.5 Flare", pricing: { amount: 0.05 } } });
+    const generation = { modelId: "gpt-image-2.5-flare", size: "1536x864", outputFormat: "webp", parameters: { quality: "max" }, cost: { amount: 0.0325, currency: "USD", estimated: true } };
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, image: "data:image/webp;base64,result", generation }) });
+    // The save to the generations folder that a configured path triggers
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ success: true }) });
+    const ctx = makeCtx(node, { generationsPath: "/proj/generations" });
+    await executeNanoBanana(ctx);
+    expect(ctx.addIncurredCost).toHaveBeenCalledExactlyOnceWith(0.0325);
+    expect(ctx.addToGlobalHistory).toHaveBeenCalledWith(expect.objectContaining({ model: "GPT Image 2.5 Flare", generation }));
+    expect(ctx.updateNodeData).toHaveBeenCalledWith(node.id, expect.objectContaining({ imageHistory: [expect.objectContaining({ model: "GPT Image 2.5 Flare", generation })] }));
+  });
+
+  it("does not substitute a flat or Gemini cost when 2.5 usage is missing", async () => {
+    const node = makeNode({ selectedModel: { provider: "openai", modelId: "gpt-image-2.5-sunburst", displayName: "GPT Image 2.5 Sunburst", pricing: { amount: 0.05 } } });
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, image: "data:image/png;base64,result" }) });
+    const ctx = makeCtx(node);
+    await executeNanoBanana(ctx);
+    expect(ctx.addIncurredCost).not.toHaveBeenCalled();
+  });
+
+  it("keeps the existing estimate for older OpenAI models", async () => {
+    const node = makeNode({ selectedModel: { provider: "openai", modelId: "gpt-image-1", displayName: "GPT Image 1", pricing: { amount: 0.05 } } });
+    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ success: true, image: "data:image/png;base64,result" }) });
+    const ctx = makeCtx(node);
+    await executeNanoBanana(ctx);
+    expect(ctx.addIncurredCost).toHaveBeenCalledExactlyOnceWith(0.05);
   });
 });

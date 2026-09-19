@@ -2,17 +2,233 @@
 
 @theme {
   --color-canvas-bg: #171717;
+  --color-window-close: #ff5f57;
+  --color-window-minimize: #febc2e;
+  --color-window-fullscreen: #28c840;
+  --color-window-control-symbol: #1b1b1b;
+
+  /* Node anatomy (see docs/node-redesign.md) */
+  --color-card: #262626;
+  --color-card-border: rgb(64 64 64 / 0.6);
+  --color-panel: #2a2a2a;
+  --color-well: #1a1a1a;
+  --color-selection: #3b82f6;
+  --color-running: #3b82f6;
+  --color-error: #ef4444;
+
+  /* Handle / socket colours, keyed by handle type */
+  --color-handle-image: #10b981;
+  --color-handle-text: #3b82f6;
+  --color-handle-3d: #f97316;
+  --color-handle-audio: #a855f7;
+  --color-handle-video: #ec4899;
+  --color-handle-easeCurve: #bef264;
+  --color-handle-reference: #6b7280;
+
+  --radius-card: 12px;
+  --radius-media: 8px;
+  --radius-controls: 10px;
+  --radius-well: 8px;
+  /* Concentric with the 16px macOS window curve at the canvas's 4px inset. */
+  --radius-desktop-canvas: 12px;
+
+  /* Faint recess for input wells on the settings panel */
+  --shadow-well: inset 0 1px 1.5px rgb(0 0 0 / 0.3), inset 0 0 0 1px rgb(0 0 0 / 0.12), 0 1px 0 rgb(255 255 255 / 0.025);
+
+  /* Floating chrome — dialogs and menus (src/components/ui). Same surface as
+     a node card, one tier up: a solid border where the card's is 60%, and a
+     shadow that reads as height. Menus are controls cards, dialogs are cards. */
+  --color-chrome-border: #404040;
+  --color-scrim: rgb(0 0 0 / 0.6);
+  --color-scrim-heavy: rgb(0 0 0 / 0.9);
+  --shadow-menu: 0 8px 24px -4px rgb(0 0 0 / 0.5), 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-dialog: 0 24px 64px -12px rgb(0 0 0 / 0.65);
+
+  --text-node: 10px;
+  --text-node--line-height: 14px;
+}
+
+/* Squircle corners where the engine supports them (Chrome 139+); plain
+   border-radius elsewhere. */
+@utility squircle {
+  @supports (corner-shape: squircle) {
+    corner-shape: squircle;
+  }
 }
 
 :root {
   --background: #0a0a0a;
   --foreground: #fafafa;
-  /* Handle colors (used by labels) */
-  --handle-color-image: #10b981;
-  --handle-color-text: #3b82f6;
-  --handle-color-3d: #f97316;
-  --handle-color-audio: #a855f7;
-  --handle-color-video: #ec4899;
+  /* Window-control geometry aligns their centres with the workflow tab labels. */
+  --desktop-window-controls-inset: 84px;
+  --desktop-window-controls-left: 10px;
+  --desktop-window-controls-top: 11px;
+  --desktop-window-control-width: 22px;
+  --desktop-window-control-height: 24px;
+  --desktop-window-control-dot-size: 14px;
+  --desktop-window-control-rest-opacity: 0.45;
+  --desktop-window-controls-layer: 10001;
+  /* Windows: three 40px buttons with 2px gaps and a 6px edge gutter, plus room to breathe. */
+  --desktop-windows-controls-inset: 140px;
+}
+
+/* Match the inset graph frame to the surrounding macOS window curve. */
+html[data-desktop-platform="darwin"] .workflow-canvas-frame {
+  border-bottom-left-radius: var(--radius-desktop-canvas);
+  border-bottom-right-radius: var(--radius-desktop-canvas);
+}
+
+/* The workflow strip doubles as the macOS title bar inside Electron. */
+html[data-desktop-platform="darwin"] .workflow-tabs {
+  /* Keep the native drag rectangle entirely outside the controls' gutter.
+     Padding would still make that area draggable beneath the fixed controls. */
+  margin-left: var(--desktop-window-controls-inset);
+  padding-left: 0;
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+html[data-desktop-platform="darwin"] .workflow-tabs [role="tab"],
+html[data-desktop-platform="darwin"] .workflow-tabs button {
+  -webkit-app-region: no-drag;
+}
+
+.desktop-window-controls {
+  display: none;
+}
+
+.desktop-startup-drag-region { display: none; }
+html[data-desktop-platform="darwin"] .desktop-startup-drag-region {
+  display: block;
+  position: fixed;
+  z-index: var(--desktop-window-controls-layer);
+  top: 0;
+  left: var(--desktop-window-controls-inset);
+  right: 0;
+  height: 38px;
+  -webkit-app-region: drag;
+}
+
+html[data-desktop-platform="darwin"] .desktop-window-controls {
+  /* Stay usable above app dialogs, like native window chrome. */
+  position: fixed;
+  z-index: var(--desktop-window-controls-layer);
+  left: var(--desktop-window-controls-left);
+  top: var(--desktop-window-controls-top);
+  display: flex;
+  -webkit-app-region: no-drag;
+}
+
+.desktop-window-control {
+  -webkit-app-region: no-drag;
+  display: flex;
+  width: var(--desktop-window-control-width);
+  height: var(--desktop-window-control-height);
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-controls);
+}
+
+.desktop-window-close { --window-control-color: var(--color-window-close); }
+.desktop-window-minimize { --window-control-color: var(--color-window-minimize); }
+.desktop-window-fullscreen { --window-control-color: var(--color-window-fullscreen); }
+
+.desktop-window-control-dot {
+  width: var(--desktop-window-control-dot-size);
+  height: var(--desktop-window-control-dot-size);
+  border-radius: 50%;
+  background: var(--window-control-color);
+  opacity: var(--desktop-window-control-rest-opacity);
+  pointer-events: none;
+}
+
+.desktop-window-control:hover .desktop-window-control-dot,
+.desktop-window-control:focus-visible .desktop-window-control-dot {
+  opacity: 1;
+}
+
+.desktop-window-control:focus-visible {
+  outline: 2px solid var(--color-selection);
+  outline-offset: -2px;
+}
+
+/* On Windows the frameless window has no caption: the workflow strip drags the
+   window (double-click maximises) and the app draws the caption buttons at the
+   top right, dim at rest and lit on hover like the macOS dots. */
+html[data-desktop-platform="win32"] .workflow-tabs {
+  padding-right: var(--desktop-windows-controls-inset);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+html[data-desktop-platform="win32"] .workflow-tabs [role="tab"],
+html[data-desktop-platform="win32"] .workflow-tabs button {
+  -webkit-app-region: no-drag;
+}
+
+html[data-desktop-platform="win32"] .desktop-startup-drag-region {
+  display: block;
+  position: fixed;
+  z-index: var(--desktop-window-controls-layer);
+  top: 0;
+  left: 0;
+  right: var(--desktop-windows-controls-inset);
+  height: 38px;
+  -webkit-app-region: drag;
+}
+
+html[data-desktop-platform="win32"] .desktop-window-controls-windows {
+  position: fixed;
+  z-index: var(--desktop-window-controls-layer);
+  top: 5px;
+  right: 6px;
+  display: flex;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.desktop-window-controls-windows .desktop-window-control {
+  width: 40px;
+  height: 28px;
+  border-radius: 6px;
+  color: #737373;
+  transition: background-color 120ms, color 120ms;
+}
+
+.desktop-window-controls-windows .desktop-window-control:hover,
+.desktop-window-controls-windows .desktop-window-control:focus-visible {
+  background: rgb(255 255 255 / 0.08);
+  color: #f5f5f5;
+}
+
+.desktop-window-controls-windows .desktop-window-close:hover,
+.desktop-window-controls-windows .desktop-window-close:focus-visible {
+  background: rgb(196 43 28 / 0.9);
+  color: #ffffff;
+}
+
+.desktop-window-controls-windows .desktop-window-control svg {
+  width: 10px;
+  height: 10px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.desktop-window-control-dot svg {
+  width: 100%;
+  height: 100%;
+  fill: none;
+  stroke: var(--color-window-control-symbol);
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+
+.desktop-window-control:hover svg,
+.desktop-window-control:focus-visible svg {
+  opacity: 1;
 }
 
 html {
@@ -107,8 +323,51 @@ body {
   transition: opacity 250ms ease-in-out;
 }
 
-/* Base handle styles */
-.react-flow__handle {
+/* Sockets: the handle is an 18×28 box whose SVG swell sits in the media
+   card's border. Position and mirroring are inline; this strips React Flow's
+   circle and gives the swell a generous hit area. */
+.react-flow__handle.socket {
+  width: 18px;
+  height: 18px;
+  min-width: 0;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  z-index: 5;
+}
+
+.react-flow__handle.socket::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 30px;
+  height: 34px;
+  border-radius: 50%;
+}
+
+.react-flow__handle.socket > svg {
+  display: block;
+  overflow: visible;
+}
+
+.react-flow__handle.socket.socket-placeholder {
+  opacity: 0.3;
+}
+
+/* While a connection is being dragged onto a socket that would accept it,
+   fill the hole so the target reads before the drop. */
+.react-flow__handle.socket.connectingto.valid [data-socket-hole] {
+  fill: currentColor;
+  stroke-opacity: 1;
+}
+
+/* Circle handles for the one mini-canvas that still draws plain React Flow
+   handles (the Comfy node preview in the import dialog). */
+.react-flow__handle:not(.socket) {
   width: 14px;
   height: 14px;
   border-radius: 50%;
@@ -118,7 +377,7 @@ body {
 }
 
 /* Larger invisible hit area for easier clicking, especially when zoomed out */
-.react-flow__handle::before {
+.react-flow__handle:not(.socket)::before {
   content: "";
   position: absolute;
   top: 50%;
@@ -129,37 +388,32 @@ body {
   border-radius: 50%;
 }
 
-.react-flow__handle-left {
+.react-flow__handle-left:not(.socket) {
   left: -7px;
 }
 
-.react-flow__handle-right {
+.react-flow__handle-right:not(.socket) {
   right: -7px;
 }
 
-/* Image handles - soft green */
-.react-flow__handle[data-handletype="image"] {
-  background: #10b981;
+.react-flow__handle[data-handletype="image"]:not(.socket) {
+  background: var(--color-handle-image);
 }
 
-/* Text handles - soft blue */
-.react-flow__handle[data-handletype="text"] {
-  background: #3b82f6;
+.react-flow__handle[data-handletype="text"]:not(.socket) {
+  background: var(--color-handle-text);
 }
 
-/* Audio handles - purple */
-.react-flow__handle[data-handletype="audio"] {
-  background: #a855f7;
+.react-flow__handle[data-handletype="audio"]:not(.socket) {
+  background: var(--color-handle-audio);
 }
 
-/* Video handles - pink */
-.react-flow__handle[data-handletype="video"] {
-  background: #ec4899;
+.react-flow__handle[data-handletype="video"]:not(.socket) {
+  background: var(--color-handle-video);
 }
 
-/* 3D handles - orange */
-.react-flow__handle[data-handletype="3d"] {
-  background: #f97316;
+.react-flow__handle[data-handletype="3d"]:not(.socket) {
+  background: var(--color-handle-3d);
 }
 
 .react-flow__edge-path {
@@ -169,9 +423,13 @@ body {
   stroke-linejoin: round;
 }
 
+/* Hovered or selected noodles switch to their own "active" stroke (set by the
+   edge component as --edge-stroke-active), so the highlight keeps the type
+   colour and gradient instead of turning a flat blue. */
 .react-flow__edge.selected .react-flow__edge-path,
 .react-flow__edge:hover .react-flow__edge-path {
-  stroke: #3b82f6;
+  stroke: var(--edge-stroke-active, #3b82f6) !important;
+  stroke-opacity: 1 !important;
 }
 
 /* Hide resize handles but show resize cursor on edges */
@@ -200,40 +458,6 @@ body {
 .react-flow__resize-control.top.right,
 .react-flow__resize-control.bottom.left {
   cursor: nesw-resize !important;
-}
-
-/* React Flow Controls dark theme */
-.react-flow__controls {
-  background: #262626 !important;
-  border: 1px solid #404040 !important;
-  border-radius: 8px !important;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3) !important;
-}
-
-.react-flow__controls-button {
-  background: #262626 !important;
-  border-bottom: 1px solid #404040 !important;
-}
-
-.react-flow__controls-button svg {
-  fill: #d4d4d4 !important;
-}
-
-.react-flow__controls-button svg path {
-  fill: #d4d4d4 !important;
-}
-
-.react-flow__controls-button:hover {
-  background: #404040 !important;
-}
-
-.react-flow__controls-button:hover svg,
-.react-flow__controls-button:hover svg path {
-  fill: #fafafa !important;
-}
-
-.react-flow__controls-button:last-child {
-  border-bottom: none !important;
 }
 
 /* Scrollbars.
@@ -291,34 +515,36 @@ html {
 }
 
 /* Fan animation for image history */
-@keyframes fanEnter {
-  0% {
+/* Top-right chrome: the history drop-down and generation cards fall in
+   from the button they hang under. */
+@keyframes dropIn {
+  from {
     opacity: 0;
-    transform: scale(0.3) translate(0, 0);
+    transform: translateY(-4px) scale(0.98);
   }
-  100% {
+  to {
     opacity: 1;
-    transform: scale(1) translate(var(--fan-x), var(--fan-y));
+    transform: none;
   }
 }
 
-@keyframes fanExit {
-  0% {
-    opacity: 1;
-    transform: scale(1) translate(var(--fan-x), var(--fan-y));
-  }
-  100% {
-    opacity: 0;
-    transform: scale(0.3) translate(0, 0);
-  }
+.animate-drop-in {
+  animation: dropIn 0.15s ease-out both;
 }
 
-.animate-fan-enter {
-  animation: fanEnter 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+/* Auto-dismiss countdown along the bottom edge of a generation card. */
+@keyframes toastTimer {
+  from { width: 100%; }
+  to { width: 0%; }
 }
 
-.animate-fan-exit {
-  animation: fanExit 0.15s ease-in forwards;
+.animate-toast-timer {
+  animation: toastTimer linear both;
+}
+
+/* Sonner pauses every card's timer while the stack is hovered; hold the bars with it. */
+[data-sonner-toaster]:hover .animate-toast-timer {
+  animation-play-state: paused;
 }
 
 /* Dialog entrance: the backdrop fades, the panel rises under it, and the

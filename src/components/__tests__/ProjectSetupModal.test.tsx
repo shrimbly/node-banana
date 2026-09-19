@@ -3,6 +3,10 @@ import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ProjectSetupModal } from "@/components/ProjectSetupModal";
 import { ProviderSettings } from "@/types";
 
+vi.mock('@/components/settings/EnvironmentImport', () => ({
+  EnvironmentImport: ({ onImported }: { onImported: (value: unknown) => void }) => <button onClick={() => onImported({ preferences: {} })}>Complete environment import</button>,
+}));
+
 // Mock the workflow store
 const mockSetUseExternalImageStorage = vi.fn();
 const mockUpdateProviderApiKey = vi.fn();
@@ -19,6 +23,22 @@ vi.mock("@/store/workflowStore", () => ({
   generateWorkflowId: () => "mock-workflow-id",
 }));
 
+// Stand-in for the model browser: a search box rendered, like the real one,
+// as a React child of the settings dialog's panel.
+vi.mock("@/components/modals/ModelSearchDialog", () => ({
+  ModelSearchDialog: ({ onModelSelected }: { onModelSelected?: (m: unknown) => void }) => (
+    <div data-testid="model-search-dialog">
+      <input placeholder="Search models..." />
+      <button
+        type="button"
+        onClick={() => onModelSelected?.({ provider: "fal", id: "fal/test-model", name: "Test Model" })}
+      >
+        Test Model
+      </button>
+    </div>
+  ),
+}));
+
 // Mock fetch
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -29,7 +49,7 @@ global.confirm = mockConfirm;
 
 // Ensure localStorage is always available in this test environment
 const localStorageMock = {
-  getItem: vi.fn(() => null),
+  getItem: vi.fn((_key?: string): string | null => null),
   setItem: vi.fn(),
   removeItem: vi.fn(),
   clear: vi.fn(),
@@ -63,12 +83,17 @@ const createDefaultState = (overrides = {}) => ({
   setUseExternalImageStorage: mockSetUseExternalImageStorage,
   updateProviderApiKey: mockUpdateProviderApiKey,
   toggleProvider: mockToggleProvider,
+  edgeStyle: "curved",
+  edgeAppearance: { thickness: "regular", fadedOpacity: 0.25, gradient: true, loadingPulse: true },
+  setEdgeStyle: vi.fn(),
+  setEdgeAppearance: vi.fn(),
   ...overrides,
 });
 
 describe("ProjectSetupModal", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorageMock.getItem.mockImplementation(() => null);
     // Default mock for env-status API (called on modal open)
     mockFetch.mockImplementation((url: string) => {
       if (url === "/api/env-status") {
@@ -90,6 +115,26 @@ describe("ProjectSetupModal", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it('keeps a provider key explicitly cleared before an unrelated environment import', async () => {
+    const settings = { providers: { ...defaultProviderSettings.providers, gemini: { ...defaultProviderSettings.providers.gemini, apiKey: 'saved-gemini-key' } } };
+    mockUseWorkflowStore.mockImplementation(selector => selector(createDefaultState({ providerSettings: settings })));
+    localStorageMock.getItem.mockImplementation((key?: string) => key === 'node-banana-provider-settings' ? JSON.stringify({ providers: {
+      ...settings.providers, openai: { ...settings.providers.openai, apiKey: 'imported-openai-key' },
+    } }) : null);
+    render(<ProjectSetupModal isOpen onClose={vi.fn()} onSave={vi.fn()} mode="settings" />);
+    fireEvent.click(screen.getByRole('button', { name: 'Providers' }));
+    const key = await screen.findByPlaceholderText('AIza...');
+    expect(key).toHaveValue('saved-gemini-key');
+    fireEvent.change(key, { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Complete environment import' }));
+    expect(key).toHaveValue('');
+    expect(screen.getByPlaceholderText('sk-...')).toHaveValue('imported-openai-key');
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(mockUpdateProviderApiKey).toHaveBeenCalledWith('gemini', null);
+    expect(mockUpdateProviderApiKey).toHaveBeenCalledWith('openai', 'imported-openai-key');
+    localStorageMock.getItem.mockImplementation(() => null);
   });
 
   describe("Visibility", () => {
@@ -145,8 +190,8 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      expect(screen.getByText("Project")).toBeInTheDocument();
-      expect(screen.getByText("Providers")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Project" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Providers" })).toBeInTheDocument();
     });
 
     it("should start on Project tab in new mode", () => {
@@ -173,7 +218,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("Providers"));
+      fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
       // Should show provider names
       expect(screen.getByText("Google Gemini")).toBeInTheDocument();
@@ -893,8 +938,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      const modalDiv = container.querySelector(".bg-neutral-800");
-      fireEvent.keyDown(modalDiv!, { key: "Escape" });
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
 
       expect(onClose).toHaveBeenCalled();
     });
@@ -935,12 +979,39 @@ describe("ProjectSetupModal", () => {
         target: { value: "/path/to/project" },
       });
 
-      const modalDiv = container.querySelector(".bg-neutral-800");
-      fireEvent.keyDown(modalDiv!, { key: "Enter" });
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Enter" });
 
       await waitFor(() => {
         expect(onSave).toHaveBeenCalled();
       });
+    });
+
+    it("should not save and close when Enter is pressed inside the model browser", async () => {
+      const onClose = vi.fn();
+
+      render(
+        <ProjectSetupModal
+          isOpen={true}
+          onClose={onClose}
+          onSave={vi.fn()}
+          mode="settings"
+        />
+      );
+
+      fireEvent.click(screen.getByText("Node Defaults"));
+      fireEvent.click(screen.getAllByText("Select Model")[0]);
+
+      const search = screen.getByPlaceholderText("Search models...");
+      fireEvent.keyDown(search, { key: "Enter" });
+
+      expect(onClose).not.toHaveBeenCalled();
+      expect(screen.getByTestId("model-search-dialog")).toBeInTheDocument();
+
+      // The pick still lands in the draft, and the settings dialog stays open.
+      fireEvent.click(screen.getByText("Test Model"));
+      expect(screen.queryByTestId("model-search-dialog")).not.toBeInTheDocument();
+      expect(screen.getByText("Test Model")).toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
     });
   });
 
@@ -957,7 +1028,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("Providers"));
+      fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
       await waitFor(() => {
         expect(screen.getByText("Google Gemini")).toBeInTheDocument();
@@ -977,7 +1048,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("Providers"));
+      fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
       await waitFor(() => {
         // Check for placeholder texts
@@ -1007,7 +1078,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("Providers"));
+      fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
       await waitFor(() => {
         expect(screen.getByText("Configured via .env")).toBeInTheDocument();
@@ -1034,7 +1105,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("Providers"));
+      fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
       await waitFor(() => {
         expect(screen.getByText("Override")).toBeInTheDocument();
@@ -1051,7 +1122,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("Providers"));
+      fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
       await waitFor(() => {
         const showButtons = screen.getAllByText("Show");
@@ -1078,7 +1149,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("Providers"));
+      fireEvent.click(screen.getByRole("button", { name: "Providers" }));
 
       await waitFor(() => {
         expect(screen.getByText("Google Gemini")).toBeInTheDocument();
@@ -1088,5 +1159,25 @@ describe("ProjectSetupModal", () => {
 
       expect(onClose).toHaveBeenCalled();
     });
+  });
+});
+
+describe("Noodles tab", () => {
+  // One stable object: the modal syncs it into local state in an effect,
+  // and a fresh object per render would loop.
+  const navSettings = { panMode: "space", zoomMode: "altScroll", selectionMode: "click" };
+
+  it("shows the connection settings under their own tab", () => {
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ canvasNavigationSettings: navSettings }))
+    );
+    mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    render(<ProjectSetupModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} mode="settings" />);
+    fireEvent.click(screen.getByRole("button", { name: "Noodles" }));
+    expect(screen.getByText("Connections")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "Curved" })).toHaveAttribute("aria-checked", "true");
+    // The Canvas tab no longer carries them
+    fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
+    expect(screen.queryByText("Connections")).toBeNull();
   });
 });

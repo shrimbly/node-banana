@@ -15,6 +15,10 @@ vi.mock("@/store/workflowStore", () => ({
   },
 }));
 
+vi.mock("@/components/edges/EditableEdge", () => ({
+  EditableEdge: (props: { id: string }) => <g data-testid="editable-edge" data-id={props.id} />,
+}));
+
 // Wrapper component for React Flow context
 function TestWrapper({ children }: { children: React.ReactNode }) {
   return (
@@ -42,6 +46,8 @@ const createDefaultProps = (overrides = {}) => ({
 // Default store state factory
 const createDefaultState = (overrides = {}) => ({
   edgeStyle: "angular" as const,
+  edges: [],
+  edgeAppearance: { thickness: "regular" as const, fadedOpacity: 0.25, gradient: true, loadingPulse: true },
   nodes: [],
   ...overrides,
 });
@@ -52,6 +58,18 @@ describe("ReferenceEdge", () => {
     // Default mock implementation
     mockUseWorkflowStore.mockImplementation((selector) => {
       return selector(createDefaultState());
+    });
+  });
+
+  describe("Hidden", () => {
+    it("defers to EditableEdge so the connection leaves labelled stubs", () => {
+      const { container, getByTestId } = render(
+        <TestWrapper>
+          <ReferenceEdge {...createDefaultProps({ data: { hidden: true } })} />
+        </TestWrapper>
+      );
+      expect(getByTestId("editable-edge").getAttribute("data-id")).toBe("ref-edge-1");
+      expect(container.querySelector(".react-flow__edge-interaction")).toBeNull();
     });
   });
 

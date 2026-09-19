@@ -1,0 +1,13 @@
+{
+  "name": "node-banana-site",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview"
+  },
+  "devDependencies": {
+    "astro": "^7.3.3"
+  }
+}

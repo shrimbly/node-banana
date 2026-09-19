@@ -4,6 +4,15 @@ import { SplitGridTemplateModal } from "@/components/splitgrid/SplitGridTemplate
 import { TEMPLATE_NODE_CATALOG } from "@/components/splitgrid/templateCatalog";
 import type { SplitGridNodeData } from "@/types";
 import type { FinalConnectionState } from "@xyflow/react";
+import type { ProviderModel } from "@/lib/providers/types";
+
+vi.mock("@/components/modals/ModelSearchDialog", () => ({
+  ModelSearchDialog: ({ initialCapabilityFilter, onModelSelected }: {
+    initialCapabilityFilter: string; onModelSelected: (model: ProviderModel) => void;
+  }) => <button onClick={() => onModelSelected({
+    id: "test-video", provider: "fal", name: "Test Video", capabilities: ["image-to-video"],
+  } as ProviderModel)}>Choose {initialCapabilityFilter} model</button>,
+}));
 
 const reactFlowCapture = vi.hoisted(() => ({
   props: null as Record<string, unknown> | null,
@@ -29,6 +38,7 @@ const mockDecrementModalCount = vi.fn();
 let mockIsRunning = false;
 
 vi.mock("@/store/workflowStore", () => ({
+  useProviderApiKeys: () => ({}),
   useWorkflowStore: (selector: (state: unknown) => unknown) =>
     selector({
       updateNodeData: mockUpdateNodeData,
@@ -134,6 +144,51 @@ describe("SplitGridTemplateModal", () => {
     });
   });
 
+  describe("Preview geometry", () => {
+    it("previews a cell slice at its real aspect and includes the image controls", () => {
+      renderModal({ nodeData: {
+        sourceImage: "data:image/png;base64,grid", gridRows: 5, gridCols: 9,
+      } });
+      const img = screen.getByAltText("Source");
+      Object.defineProperties(img, {
+        naturalWidth: { value: 3200 }, naturalHeight: { value: 1000 },
+      });
+      fireEvent.load(img);
+      const clip = img.closest("[data-media-clip]") as HTMLElement;
+      expect(Number(clip.style.aspectRatio)).toBeCloseTo(16 / 9);
+      expect((img as HTMLElement).style.width).toBe("900%");
+      expect((img as HTMLElement).style.height).toBe("500%");
+      expect(img.closest("[data-node-shell]")?.querySelector("[data-controls-card]")).toHaveTextContent("split-1-1.png");
+    });
+
+    it("uses custom slice boundaries in the cell preview", () => {
+      renderModal({ nodeData: {
+        sourceImage: "data:image/png;base64,grid", gridRows: 2, gridCols: 2,
+        colOffsets: [0.25], rowOffsets: [0.5],
+      } });
+      const img = screen.getByAltText("Source");
+      Object.defineProperties(img, {
+        naturalWidth: { value: 2000 }, naturalHeight: { value: 1000 },
+      });
+      fireEvent.load(img);
+      expect((img.closest("[data-media-clip]") as HTMLElement).style.aspectRatio).toBe("1");
+      expect((img as HTMLElement).style.width).toBe("400%");
+    });
+
+    it("matches the real prompt height and configured generator aspect", () => {
+      renderModal({ nodeData: { generateSettings: {
+        aspectRatio: "16:9", resolution: "2K", model: "nano-banana-2",
+        useGoogleSearch: false, useImageSearch: false,
+      } } });
+      fireEvent.click(screen.getByRole("button", { name: "Prompt + Generate" }));
+      const prompt = screen.getByPlaceholderText(PROMPT_TEXTAREA_PLACEHOLDER);
+      expect(prompt.closest("[data-media-clip]")).toHaveStyle({ height: "160px" });
+      expect(prompt.closest("[data-node-shell]")?.querySelector("[data-controls-card]")).toHaveTextContent("Add variable");
+      const generate = screen.getByText("Run to generate");
+      expect(Number((generate.closest("[data-media-clip]") as HTMLElement).style.aspectRatio)).toBeCloseTo(16 / 9);
+    });
+  });
+
   describe("Modal Count", () => {
     it("should increment the modal count on mount", () => {
       renderModal();
@@ -152,6 +207,77 @@ describe("SplitGridTemplateModal", () => {
   });
 
   describe("Adding Nodes", () => {
+    it("adds video generation with model settings and indexed image/prompt connections", async () => {
+      localStorage.setItem("node-banana-schema-cache", JSON.stringify({ "fal:test-video": {
+        timestamp: Date.now(),
+        parameters: [{ name: "duration", type: "string", enum: ["5", "10"], default: "5" }],
+        inputs: [
+          { name: "image_url", type: "image", label: "Start frame", required: true },
+          { name: "tail_image_url", type: "image", label: "End frame", required: false },
+          { name: "prompt", type: "text", label: "Prompt", required: true },
+        ],
+      } }));
+      renderModal();
+      fireEvent.contextMenu(document.querySelector(".react-flow__pane")!);
+      fireEvent.click(screen.getByRole("button", { name: "Generate Video" }));
+      expect(screen.getByText("Run to generate video")).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Browse"));
+      fireEvent.click(screen.getByText("Choose video model"));
+      fireEvent.change(await screen.findByLabelText("Duration"), { target: { value: "10" } });
+      fireEvent.contextMenu(document.querySelector(".react-flow__pane")!);
+      fireEvent.click(screen.getByRole("button", { name: "Prompt" }));
+      const nodes = reactFlowCapture.props!.nodes as Array<{ id: string; data: { nodeType: string } }>;
+      const videoId = nodes.find((node) => node.data.nodeType === "generateVideo")!.id;
+      const promptId = nodes.find((node) => node.data.nodeType === "prompt")!.id;
+      const connect = reactFlowCapture.props!.onConnect as (connection: unknown) => void;
+      act(() => connect({ source: "cell-image", sourceHandle: "image", target: videoId, targetHandle: "image-1" }));
+      act(() => connect({ source: promptId, sourceHandle: "text", target: videoId, targetHandle: "text-0" }));
+      expect(screen.queryByText("Generate Video nodes need a Prompt connected to their text input")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Apply to 6 cells" }));
+      const template = mockMaterializeSplitGridCells.mock.calls[0][1].template;
+      expect(template.nodes.find((node: { id: string }) => node.id === videoId).data).toMatchObject({
+        selectedModel: { provider: "fal", modelId: "test-video" }, parameters: { duration: "10" },
+        inputSchema: expect.arrayContaining([expect.objectContaining({ name: "tail_image_url" })]),
+      });
+      expect(template.edges).toEqual(expect.arrayContaining([
+        expect.objectContaining({ target: videoId, targetHandle: "image-1" }),
+        expect.objectContaining({ target: videoId, targetHandle: "text-0" }),
+      ]));
+      localStorage.removeItem("node-banana-schema-cache");
+    });
+
+    it.each(["double-click", "right-click"])("adds an unconnected node at the %s location", (gesture) => {
+      renderModal();
+      const pane = document.querySelector(".react-flow__pane")!;
+      if (gesture === "double-click") fireEvent.doubleClick(pane, { clientX: 400, clientY: 250 });
+      else fireEvent.contextMenu(pane, { clientX: 400, clientY: 250 });
+
+      const search = screen.getByRole("textbox", { name: "Search nodes" });
+      expect(screen.queryByRole("button", { name: "Split Grid" })).not.toBeInTheDocument();
+      fireEvent.change(search, { target: { value: "prompt" } });
+      fireEvent.keyDown(search, { key: "Enter" });
+      expect(screen.queryByRole("textbox", { name: "Search nodes" })).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Apply to 6 cells" }));
+      const template = mockMaterializeSplitGridCells.mock.calls[0][1].template;
+      expect(template.nodes).toHaveLength(2);
+      expect(template.nodes[1]).toMatchObject({ type: "prompt", position: { x: 400, y: 250 } });
+      expect(template.edges).toHaveLength(0);
+    });
+
+    it("dismisses the node menu with Escape without closing the editor", () => {
+      const { onClose } = renderModal();
+      fireEvent.contextMenu(document.querySelector(".react-flow__pane")!);
+      fireEvent.keyDown(screen.getByRole("textbox", { name: "Search nodes" }), { key: "Escape" });
+      expect(screen.queryByRole("textbox", { name: "Search nodes" })).not.toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it("does not open the node menu when double-clicking a node", () => {
+      renderModal();
+      fireEvent.doubleClick(screen.getByText("Split image lands here"));
+      expect(screen.queryByRole("textbox", { name: "Search nodes" })).not.toBeInTheDocument();
+    });
+
     it("adds prompt and generate cards when the classic preset is applied", () => {
       renderModal();
 
@@ -181,6 +307,34 @@ describe("SplitGridTemplateModal", () => {
   });
 
   describe("Apply", () => {
+    it.each(["grid", "vertical", "horizontal"] as const)("applies the %s cell layout", (layout) => {
+      renderModal();
+      expect(screen.getByRole("combobox", { name: "Cell layout" })).toHaveValue("grid");
+      fireEvent.change(screen.getByRole("combobox", { name: "Cell layout" }), { target: { value: layout } });
+      fireEvent.click(screen.getByRole("button", { name: "Apply to 6 cells" }));
+      const template = mockMaterializeSplitGridCells.mock.calls[0][1].template;
+      expect(template.layout ?? "grid").toBe(layout);
+    });
+
+    it("restores a saved layout and preserves it when changing presets", () => {
+      renderModal({ nodeData: { template: {
+        baseNodeId: "cell-image", layout: "vertical",
+        nodes: [{ id: "cell-image", type: "imageInput", position: { x: 0, y: 0 } }], edges: [],
+      } } });
+      expect(screen.getByRole("combobox", { name: "Cell layout" })).toHaveValue("vertical");
+      fireEvent.click(screen.getByRole("button", { name: "Prompt + Generate" }));
+      fireEvent.click(screen.getByRole("button", { name: "Apply to 6 cells" }));
+      expect(mockMaterializeSplitGridCells.mock.calls[0][1].template.layout).toBe("vertical");
+    });
+
+    it("treats a layout change as an unsaved edit", () => {
+      const { onClose } = renderModal();
+      fireEvent.change(screen.getByRole("combobox", { name: "Cell layout" }), { target: { value: "horizontal" } });
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(screen.getByText("Discard changes?")).toBeInTheDocument();
+      expect(onClose).not.toHaveBeenCalled();
+    });
+
     it("should materialize with force and the built template in one call, then close", () => {
       const { onClose } = renderModal();
 

@@ -15,6 +15,7 @@ import {
   computeMaterializedKey,
   getSplitGridTemplate,
 } from "../utils/splitGridTemplate";
+import { getNodeSize } from "@/utils/nodeDimensions";
 import type {
   WorkflowNode,
   WorkflowNodeData,
@@ -125,6 +126,72 @@ describe("materializeSplitGridCells", () => {
         nodes: [makeSplitGridNode()],
         edges: [],
       });
+    });
+
+    it("creates a configured video generator in every cell with its typed connections", () => {
+      const template = createClassicSplitGridTemplate();
+      const generator = template.nodes.find((node) => node.type === "nanoBanana")!;
+      generator.type = "generateVideo";
+      generator.data = {
+        selectedModel: { provider: "fal", modelId: "test-video", displayName: "Test Video" },
+        parameters: { duration: "10" },
+        inputSchema: [{ name: "image_url", type: "image", label: "Start frame", required: true }],
+      };
+      template.edges[0].targetHandle = "image-0";
+      template.edges[1].targetHandle = "text-0";
+      template.router = [{ source: generator.id, sourceHandle: "video", targetHandle: "video" }];
+      act(() => useWorkflowStore.getState().materializeSplitGridCells(SPLIT_ID, { force: true, template }));
+      const state = useWorkflowStore.getState();
+      const videos = state.nodes.filter((node) => node.type === "generateVideo");
+      expect(videos).toHaveLength(4);
+      for (const video of videos) {
+        expect(video.data).toMatchObject(generator.data);
+        expect(state.edges).toEqual(expect.arrayContaining([
+          expect.objectContaining({ target: video.id, targetHandle: "image-0", sourceHandle: "image" }),
+          expect.objectContaining({ target: video.id, targetHandle: "text-0", sourceHandle: "text" }),
+          expect.objectContaining({ source: video.id, sourceHandle: "video", target: getSplitData().routerNodeId, targetHandle: "video" }),
+        ]));
+      }
+    });
+
+    it.each(["grid", "vertical", "horizontal"] as const)("persists and places cells in %s layout without changing their source order", (layout) => {
+      const template = { ...createClassicSplitGridTemplate(), layout };
+      act(() => {
+        useWorkflowStore.getState().materializeSplitGridCells(SPLIT_ID, { force: true, template });
+      });
+      const state = useWorkflowStore.getState();
+      const data = getSplitData();
+      expect(data.template?.layout).toBe(layout);
+      const groups = data.cells!.map((cell) => state.groups[cell.groupId!]);
+      expect(groups.map((group) => group.name)).toEqual(["Cell 1-1", "Cell 1-2", "Cell 2-1", "Cell 2-2"]);
+      expect(new Set(groups.map((group) => group.position.x)).size).toBe(layout === "vertical" ? 1 : layout === "horizontal" ? 4 : 2);
+      expect(new Set(groups.map((group) => group.position.y)).size).toBe(layout === "horizontal" ? 1 : layout === "vertical" ? 4 : 2);
+      for (let i = 0; i < groups.length; i++) {
+        for (let j = i + 1; j < groups.length; j++) {
+          const a = groups[i], b = groups[j];
+          expect(b.position.x >= a.position.x + a.size.width || b.position.y >= a.position.y + a.size.height).toBe(true);
+        }
+      }
+      // Running again preserves the saved arrangement and existing cell IDs.
+      expect(useWorkflowStore.getState().materializeSplitGridCells(SPLIT_ID)).toBe(false);
+      expect(getSplitData().cells).toEqual(data.cells);
+    });
+
+    it("rebuilds when the saved layout changes, and undo restores the previous layout", () => {
+      act(() => {
+        useWorkflowStore.getState().materializeSplitGridCells(SPLIT_ID);
+      });
+      const originalCells = getSplitData().cells;
+      act(() => {
+        useWorkflowStore.getState().materializeSplitGridCells(SPLIT_ID, {
+          template: { ...createDefaultSplitGridTemplate(), layout: "horizontal" },
+        });
+      });
+      expect(getSplitData().template?.layout).toBe("horizontal");
+      expect(getSplitData().cells).not.toEqual(originalCells);
+      act(() => useWorkflowStore.getState().undo());
+      expect(getSplitData().template?.layout ?? "grid").toBe("grid");
+      expect(getSplitData().cells).toEqual(originalCells);
     });
 
     it("creates 4 imageInput nodes, 4 groups, and 4 reference edges", () => {
@@ -919,5 +986,104 @@ describe("materializeSplitGridCells", () => {
       const router = useWorkflowStore.getState().nodes.find((n) => n.id === routerId)!;
       expect(router.position).toEqual({ x: 5000, y: 1234 }); // preserved
     });
+  });
+});
+
+
+describe("split cell content measurements", () => {
+  beforeEach(resetStore);
+
+  function materialize() {
+    const template = createClassicSplitGridTemplate();
+    template.nodes[0].size = { width: 300, height: 100 };
+    template.nodes[1].position = { x: 0, y: 150 };
+    template.nodes[1].size = { width: 300, height: 150 };
+    template.nodes[2].position = { x: 450, y: 0 };
+    template.nodes[2].size = { width: 300, height: 280 };
+    useWorkflowStore.setState({
+      nodes: [makeSplitGridNode({ template }), makeNode("unrelated", "prompt")],
+      edges: [],
+    });
+    useWorkflowStore.getState().materializeSplitGridCells(SPLIT_ID);
+    return getSplitData().cells!;
+  }
+
+  it("lets real node shells measure their full height instead of fixing editor heights", () => {
+    const cells = materialize();
+    for (const id of cells.flatMap((cell) => cell.nodeIds)) {
+      const node = useWorkflowStore.getState().nodes.find((n) => n.id === id)!;
+      expect(node.style?.height).toBeUndefined();
+      expect(node.height).toBeUndefined();
+      expect(node.measured?.height).toBeGreaterThan(0);
+    }
+  });
+
+  it("preserves gaps when a slice grows, encloses controls, and moves the next row", () => {
+    const cells = materialize();
+    const before = useWorkflowStore.getState();
+    const [imageId, promptId, generateId] = cells[0].nodeIds;
+    const image = before.nodes.find((n) => n.id === imageId)!;
+    const prompt = before.nodes.find((n) => n.id === promptId)!;
+    const oldGap = prompt.position.y - image.position.y - getNodeSize(image).height;
+    const oldGroup = before.groups[cells[0].groupId!];
+    const oldNextGroup = before.groups[cells[2].groupId!];
+    const oldRowGap = oldNextGroup.position.y - oldGroup.position.y - oldGroup.size.height;
+    useWorkflowStore.getState().onNodesChange([
+      { id: imageId, type: "dimensions", dimensions: { width: 300, height: 240 } },
+      { id: promptId, type: "dimensions", dimensions: { width: 300, height: 208 } },
+      { id: generateId, type: "dimensions", dimensions: { width: 300, height: 440 } },
+    ]);
+    const after = useWorkflowStore.getState();
+    const nextPrompt = after.nodes.find((n) => n.id === promptId)!;
+    expect(nextPrompt.position.y - image.position.y - 240).toBe(oldGap);
+    expect(nextPrompt.position.x).toBe(prompt.position.x);
+    const group = after.groups[cells[0].groupId!];
+    for (const id of cells[0].nodeIds) {
+      const node = after.nodes.find((n) => n.id === id)!;
+      expect(node.position.y + getNodeSize(node).height).toBeLessThanOrEqual(group.position.y + group.size.height - 20);
+    }
+    const nextGroup = after.groups[cells[2].groupId!];
+    expect(nextGroup.position.y - group.position.y - group.size.height).toBe(oldRowGap);
+    for (const id of cells[2].nodeIds) {
+      const previous = before.nodes.find((n) => n.id === id)!;
+      const next = after.nodes.find((n) => n.id === id)!;
+      expect(next.position.y - previous.position.y).toBe(nextGroup.position.y - oldNextGroup.position.y);
+    }
+    expect(after.nodes.find((n) => n.id === "unrelated")).toBe(before.nodes.find((n) => n.id === "unrelated"));
+    expect(after.edges).toBe(before.edges);
+    expect(after.groups[cells[1].groupId!]).toBe(before.groups[cells[1].groupId!]);
+
+    // Repeated observer notifications must not keep pushing the layout down.
+    useWorkflowStore.getState().onNodesChange([
+      { id: imageId, type: "dimensions", dimensions: { width: 300, height: 240 } },
+    ]);
+    expect(useWorkflowStore.getState().nodes.map((n) => n.position)).toEqual(after.nodes.map((n) => n.position));
+    expect(useWorkflowStore.getState().groups).toEqual(after.groups);
+  });
+
+  it("restores spacing when a loading image settles to a shorter slice", () => {
+    const cells = materialize();
+    const [imageId, promptId] = cells[0].nodeIds;
+    const before = useWorkflowStore.getState();
+    const promptY = before.nodes.find((node) => node.id === promptId)!.position.y;
+    const measure = (height: number) => useWorkflowStore.getState().onNodesChange([
+      { id: imageId, type: "dimensions", dimensions: { width: 300, height } },
+    ]);
+    measure(300);
+    expect(useWorkflowStore.getState().nodes.find((node) => node.id === promptId)!.position.y).toBe(promptY + 200);
+    measure(100);
+    expect(useWorkflowStore.getState().nodes.map((node) => node.position)).toEqual(before.nodes.map((node) => node.position));
+    expect(useWorkflowStore.getState().groups).toEqual(before.groups);
+  });
+
+  it("leaves deliberate node dragging alone", () => {
+    const cells = materialize();
+    const promptId = cells[0].nodeIds[1];
+    const groups = useWorkflowStore.getState().groups;
+    useWorkflowStore.getState().onNodesChange([
+      { id: promptId, type: "position", position: { x: 500, y: 10 } },
+    ]);
+    expect(useWorkflowStore.getState().nodes.find((n) => n.id === promptId)!.position).toEqual({ x: 500, y: 10 });
+    expect(useWorkflowStore.getState().groups).toBe(groups);
   });
 });

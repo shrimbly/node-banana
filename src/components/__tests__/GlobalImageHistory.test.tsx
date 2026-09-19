@@ -56,6 +56,18 @@ describe("GlobalImageHistory", () => {
     vi.useRealTimers();
   });
 
+  it("labels usage costs as estimates and missing costs as unavailable", () => {
+    const history = [
+      createHistoryItem({ model: "GPT Image 2.5 Flare", generation: { modelId: "gpt-image-2.5-flare", parameters: {}, size: "1536x864", outputFormat: "webp", cost: { amount: 0.0325, currency: "USD", estimated: true } } }),
+      createHistoryItem({ model: "GPT Image 2.5 Sunburst", generation: { modelId: "gpt-image-2.5-sunburst", parameters: {} } }),
+    ];
+    mockUseWorkflowStore.mockImplementation(selector => selector(createDefaultState({ globalImageHistory: history })));
+    render(<GlobalImageHistory />);
+    fireEvent.click(screen.getByRole("button"));
+    expect(screen.getByTitle(/Est. \$0.0325 USD/)).toHaveAttribute("title", expect.stringContaining("1536x864 · WEBP"));
+    expect(screen.getByTitle(/Cost unavailable/)).toBeInTheDocument();
+  });
+
   describe("Empty State", () => {
     it("should not render when history is empty", () => {
       const { container } = render(<GlobalImageHistory />);
@@ -133,7 +145,7 @@ describe("GlobalImageHistory", () => {
     });
   });
 
-  describe("Fan Open/Close", () => {
+  describe("Drop-down Open/Close", () => {
     it("should open fan on trigger button click", () => {
       const history = [createHistoryItem()];
       mockUseWorkflowStore.mockImplementation((selector) => {
@@ -170,7 +182,7 @@ describe("GlobalImageHistory", () => {
       fireEvent.click(allButtons[0]);
     });
 
-    it("should show max 10 items in fan view", () => {
+    it("should show max 12 items in the drop-down", () => {
       const history = Array.from({ length: 15 }, (_, i) =>
         createHistoryItem({ id: `item-${i}` })
       );
@@ -183,13 +195,12 @@ describe("GlobalImageHistory", () => {
       const triggerButton = screen.getByRole("button");
       fireEvent.click(triggerButton);
 
-      // Fan items: 10 images + trigger button + "show more" button
-      const allButtons = screen.getAllByRole("button");
-      // 1 trigger + 10 fan items + 1 show more = 12
-      expect(allButtons.length).toBe(12);
+      // 1 trigger + Clear + 12 thumbnails + Show all
+      expect(screen.getAllByRole("button").length).toBe(15);
+      expect(screen.getAllByRole("img").length).toBe(12);
     });
 
-    it("should show '+X more' button when history exceeds 10 items", () => {
+    it("should show 'Show all' when history exceeds 12 items", () => {
       const history = Array.from({ length: 15 }, (_, i) =>
         createHistoryItem({ id: `item-${i}` })
       );
@@ -202,12 +213,12 @@ describe("GlobalImageHistory", () => {
       const triggerButton = screen.getByRole("button");
       fireEvent.click(triggerButton);
 
-      expect(screen.getByText("+5 more")).toBeInTheDocument();
+      expect(screen.getByText("Show all · 15")).toBeInTheDocument();
     });
   });
 
   describe("History Sidebar", () => {
-    it("should open sidebar when 'show more' button is clicked", () => {
+    it("should open sidebar when 'Show all' is clicked", () => {
       const history = Array.from({ length: 15 }, (_, i) =>
         createHistoryItem({ id: `item-${i}`, prompt: `Prompt ${i}` })
       );
@@ -222,7 +233,7 @@ describe("GlobalImageHistory", () => {
       fireEvent.click(triggerButton);
 
       // Click show more
-      const showMoreButton = screen.getByText("+5 more");
+      const showMoreButton = screen.getByText("Show all · 15");
       fireEvent.click(showMoreButton);
 
       // Sidebar should show "All History (15)"
@@ -260,7 +271,7 @@ describe("GlobalImageHistory", () => {
       // Open fan
       fireEvent.click(screen.getByRole("button"));
       // Open sidebar
-      fireEvent.click(screen.getByText("+5 more"));
+      fireEvent.click(screen.getByText("Show all · 15"));
 
       expect(screen.getByText("Clear All")).toBeInTheDocument();
     });
@@ -278,7 +289,7 @@ describe("GlobalImageHistory", () => {
       // Open fan
       fireEvent.click(screen.getByRole("button"));
       // Open sidebar
-      fireEvent.click(screen.getByText("+5 more"));
+      fireEvent.click(screen.getByText("Show all · 15"));
       // Clear all
       fireEvent.click(screen.getByText("Clear All"));
 
@@ -297,7 +308,7 @@ describe("GlobalImageHistory", () => {
 
       // Open fan then sidebar
       fireEvent.click(screen.getByRole("button"));
-      fireEvent.click(screen.getByText("+5 more"));
+      fireEvent.click(screen.getByText("Show all · 15"));
 
       // Close button has title "Close"
       const closeButton = screen.getByTitle("Close");
@@ -316,7 +327,7 @@ describe("GlobalImageHistory", () => {
 
       // Open fan then sidebar
       fireEvent.click(screen.getByRole("button"));
-      fireEvent.click(screen.getByText("+5 more"));
+      fireEvent.click(screen.getByText("Show all · 15"));
 
       expect(screen.getByText("Drag images to canvas to create nodes")).toBeInTheDocument();
     });
@@ -335,7 +346,7 @@ describe("GlobalImageHistory", () => {
 
       // Open fan then sidebar
       fireEvent.click(screen.getByRole("button"));
-      fireEvent.click(screen.getByText("+5 more"));
+      fireEvent.click(screen.getByText("Show all · 15"));
 
       // Check for "Pro" text (it appears in the format "Xm ago . Pro")
       const proLabels = screen.getAllByText(/Pro/);
@@ -354,7 +365,7 @@ describe("GlobalImageHistory", () => {
 
       // Open fan then sidebar
       fireEvent.click(screen.getByRole("button"));
-      fireEvent.click(screen.getByText("+5 more"));
+      fireEvent.click(screen.getByText("Show all · 15"));
 
       // Check for "Standard" text
       const standardLabels = screen.getAllByText(/Standard/);
@@ -376,7 +387,7 @@ describe("GlobalImageHistory", () => {
 
       // Open fan then sidebar
       fireEvent.click(screen.getByRole("button"));
-      fireEvent.click(screen.getByText("+5 more"));
+      fireEvent.click(screen.getByText("Show all · 15"));
 
       // Should show truncated version (first 60 chars)
       expect(screen.getAllByText(/A very long prompt/).length).toBeGreaterThan(0);
@@ -394,14 +405,41 @@ describe("GlobalImageHistory", () => {
 
       // Open fan then sidebar
       fireEvent.click(screen.getByRole("button"));
-      fireEvent.click(screen.getByText("+5 more"));
+      fireEvent.click(screen.getByText("Show all · 15"));
 
       expect(screen.getAllByText("No prompt").length).toBeGreaterThan(0);
     });
   });
 
+  describe("Drop-down Clear", () => {
+    it("should call clearGlobalHistory from the drop-down header", () => {
+      const history = [createHistoryItem()];
+      mockUseWorkflowStore.mockImplementation((selector) => {
+        return selector(createDefaultState({ globalImageHistory: history }));
+      });
+
+      render(<GlobalImageHistory />);
+      fireEvent.click(screen.getByRole("button"));
+      fireEvent.click(screen.getByText("Clear"));
+
+      expect(mockClearGlobalHistory).toHaveBeenCalled();
+    });
+
+    it("should not offer 'Show all' when everything fits the grid", () => {
+      const history = Array.from({ length: 12 }, (_, i) => createHistoryItem({ id: `item-${i}` }));
+      mockUseWorkflowStore.mockImplementation((selector) => {
+        return selector(createDefaultState({ globalImageHistory: history }));
+      });
+
+      render(<GlobalImageHistory />);
+      fireEvent.click(screen.getByRole("button"));
+
+      expect(screen.queryByText(/Show all/)).not.toBeInTheDocument();
+    });
+  });
+
   describe("Drag and Drop", () => {
-    it("should set data transfer on fan item drag", () => {
+    it("should set data transfer on thumbnail drag", () => {
       const history = [createHistoryItem({ prompt: "Test drag prompt" })];
       mockUseWorkflowStore.mockImplementation((selector) => {
         return selector(createDefaultState({ globalImageHistory: history }));
@@ -412,9 +450,9 @@ describe("GlobalImageHistory", () => {
       // Open fan
       fireEvent.click(screen.getByRole("button"));
 
-      // Find fan item (second button after trigger)
+      // Thumbnails follow the trigger and the Clear button
       const buttons = screen.getAllByRole("button");
-      const fanItem = buttons[1];
+      const fanItem = buttons[2];
 
       const mockDataTransfer = {
         setData: vi.fn(),
@@ -442,7 +480,7 @@ describe("GlobalImageHistory", () => {
 
       // Open fan then sidebar
       fireEvent.click(screen.getByRole("button"));
-      fireEvent.click(screen.getByText("+5 more"));
+      fireEvent.click(screen.getByText("Show all · 15"));
 
       // Find a draggable item in sidebar (it's a div, not a button)
       const sidebarItems = document.querySelectorAll("[draggable='true']");
@@ -484,7 +522,7 @@ describe("GlobalImageHistory", () => {
 
       // Open fan then sidebar
       fireEvent.click(screen.getByRole("button"));
-      fireEvent.click(screen.getByText("+5 more"));
+      fireEvent.click(screen.getByText("Show all · 15"));
 
       expect(screen.getAllByText(/Just now/).length).toBeGreaterThan(0);
     });
@@ -506,7 +544,7 @@ describe("GlobalImageHistory", () => {
 
       // Open fan then sidebar
       fireEvent.click(screen.getByRole("button"));
-      fireEvent.click(screen.getByText("+5 more"));
+      fireEvent.click(screen.getByText("Show all · 15"));
 
       expect(screen.getAllByText(/10m ago/).length).toBeGreaterThan(0);
     });
@@ -528,14 +566,14 @@ describe("GlobalImageHistory", () => {
 
       // Open fan then sidebar
       fireEvent.click(screen.getByRole("button"));
-      fireEvent.click(screen.getByText("+5 more"));
+      fireEvent.click(screen.getByText("Show all · 15"));
 
       expect(screen.getAllByText(/2h ago/).length).toBeGreaterThan(0);
     });
   });
 
   describe("Image Thumbnails", () => {
-    it("should render image thumbnails in fan view", () => {
+    it("should render image thumbnails in the drop-down", () => {
       const history = [createHistoryItem()];
       mockUseWorkflowStore.mockImplementation((selector) => {
         return selector(createDefaultState({ globalImageHistory: history }));
@@ -563,7 +601,7 @@ describe("GlobalImageHistory", () => {
 
       // Open fan then sidebar
       fireEvent.click(screen.getByRole("button"));
-      fireEvent.click(screen.getByText("+5 more"));
+      fireEvent.click(screen.getByText("Show all · 15"));
 
       const images = screen.getAllByRole("img");
       // 15 items in sidebar
@@ -584,7 +622,7 @@ describe("GlobalImageHistory", () => {
 
       // Open fan then sidebar
       fireEvent.click(screen.getByRole("button"));
-      fireEvent.click(screen.getByText("+5 more"));
+      fireEvent.click(screen.getByText("Show all · 15"));
 
       expect(screen.getByText("All History (15)")).toBeInTheDocument();
 
@@ -613,7 +651,7 @@ describe("GlobalImageHistory", () => {
       // Press Escape
       fireEvent.keyDown(document, { key: "Escape" });
 
-      // Fan should close - only trigger button remains
+      // Drop-down should close - only trigger button remains
       buttons = screen.getAllByRole("button");
       expect(buttons.length).toBe(1);
     });

@@ -9,6 +9,7 @@
 
 # next.js
 /.next/
+/.next-electron/
 /out/
 
 # production
@@ -50,3 +51,7 @@ logs/*.json
 .agents/
 
 .superset/
+.scratch/
+
+# Electron release artifacts
+/dist-electron/

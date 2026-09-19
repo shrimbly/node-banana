@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 
 import { ComfyAppNode } from "@/components/nodes/ComfyAppNode";
@@ -174,5 +174,68 @@ describe("a running Comfy node", () => {
 
     expect(screen.queryByAltText("Rendering")).not.toBeInTheDocument();
     expect(screen.getByText("Out of credits")).toBeInTheDocument();
+  });
+});
+
+describe("the clip of a running Comfy node", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseWorkflowStore.mockImplementation((selector: (state: unknown) => unknown) =>
+      selector({
+        updateNodeData: mockUpdateNodeData,
+        edges: [],
+        removeEdge: vi.fn(),
+        currentNodeIds: [],
+        setHoveredNodeId: vi.fn(),
+      })
+    );
+  });
+
+  const clipAspect = (container: HTMLElement) =>
+    (container.querySelector("[data-media-clip]") as HTMLElement).style.aspectRatio;
+
+  /** jsdom never decodes an image, so its measured size is set by hand. */
+  const loads = (img: HTMLElement, width: number, height: number) => {
+    Object.defineProperty(img, "naturalWidth", { value: width, configurable: true });
+    Object.defineProperty(img, "naturalHeight", { value: height, configurable: true });
+    fireEvent.load(img);
+  };
+
+  it("keeps the measured proportions from one preview frame to the next", () => {
+    // Every frame is a new data URL. Snapping back to square until each one
+    // loads made a portrait node pulse twice per sampling step.
+    mockPreview.mockReturnValue(LATENT);
+    const { container, rerender } = render(tree(nodeData()));
+    loads(screen.getByAltText("Rendering"), 1024, 1536);
+    expect(clipAspect(container)).toBe(String(1024 / 1536));
+
+    mockPreview.mockReturnValue("data:image/jpeg;base64,BBBB");
+    rerender(tree(nodeData()));
+
+    expect(screen.getByAltText("Rendering")).toHaveAttribute("src", "data:image/jpeg;base64,BBBB");
+    expect(clipAspect(container)).toBe(String(1024 / 1536));
+  });
+
+  it("lets the finished result correct the proportions on its own load", () => {
+    mockPreview.mockReturnValue(LATENT);
+    const { container, rerender } = render(tree(nodeData()));
+    loads(screen.getByAltText("Rendering"), 1024, 1536);
+
+    const done = nodeData({ status: "complete", runStatus: null, jobId: null, outputs: { "9": "data:image/png;base64,FINAL" } });
+    rerender(tree(done));
+    expect(clipAspect(container)).toBe(String(1024 / 1536));
+
+    loads(screen.getByAltText("Result"), 1920, 1080);
+    expect(clipAspect(container)).toBe(String(1920 / 1080));
+  });
+
+  it("starts square again for a different workflow", () => {
+    mockPreview.mockReturnValue(LATENT);
+    const { container, rerender } = render(tree(nodeData()));
+    loads(screen.getByAltText("Rendering"), 1024, 1536);
+
+    rerender(tree(nodeData({ app: { ...app(), id: "app-2" } })));
+
+    expect(clipAspect(container)).toBe("1");
   });
 });

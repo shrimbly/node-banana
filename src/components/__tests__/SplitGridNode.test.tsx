@@ -12,6 +12,7 @@ import {
 const mockUpdateNodeData = vi.fn();
 const mockRegenerateNode = vi.fn();
 const mockUseWorkflowStore = vi.fn();
+const mockAdaptiveImageSrc = vi.fn();
 
 vi.mock("@/store/workflowStore", () => ({
   useWorkflowStore: (selector: (state: unknown) => unknown) => mockUseWorkflowStore(selector),
@@ -28,7 +29,7 @@ vi.mock("@/components/splitgrid/SplitGridTemplateModal", () => ({
 
 // Pass the full-resolution source straight through (skips thumbnail generation)
 vi.mock("@/hooks/useAdaptiveImageSrc", () => ({
-  useAdaptiveImageSrc: (fullSrc: string | null | undefined) => fullSrc ?? null,
+  useAdaptiveImageSrc: (fullSrc: string | null | undefined) => mockAdaptiveImageSrc(fullSrc),
 }));
 
 const NODE_ID = "split-grid-node-1";
@@ -111,8 +112,8 @@ function materialized(rows: number, cols: number) {
   };
 }
 
-function renderNode(dataOverrides: Partial<SplitGridNodeData> = {}) {
-  return render(
+function nodeElement(dataOverrides: Partial<SplitGridNodeData> = {}) {
+  return (
     <ReactFlowProvider>
       <SplitGridNode
         id={NODE_ID}
@@ -134,9 +135,14 @@ function renderNode(dataOverrides: Partial<SplitGridNodeData> = {}) {
   );
 }
 
+function renderNode(dataOverrides: Partial<SplitGridNodeData> = {}) {
+  return render(nodeElement(dataOverrides));
+}
+
 describe("SplitGridNode", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockAdaptiveImageSrc.mockImplementation((src) => src ?? null);
     setStoreState();
   });
 
@@ -285,7 +291,7 @@ describe("SplitGridNode", () => {
 
       expect(screen.queryByTestId("split-grid-template-modal")).not.toBeInTheDocument();
 
-      fireEvent.click(screen.getByRole("button", { name: /cell nodes/i }));
+      fireEvent.click(screen.getByRole("button", { name: /open cell editor/i }));
 
       expect(screen.getByTestId("split-grid-template-modal")).toBeInTheDocument();
     });
@@ -293,7 +299,7 @@ describe("SplitGridNode", () => {
     it("closes the template modal via onClose", () => {
       renderNode();
 
-      fireEvent.click(screen.getByRole("button", { name: /cell nodes/i }));
+      fireEvent.click(screen.getByRole("button", { name: /open cell editor/i }));
       expect(screen.getByTestId("split-grid-template-modal")).toBeInTheDocument();
 
       fireEvent.click(screen.getByText("Close Modal"));
@@ -307,39 +313,33 @@ describe("SplitGridNode", () => {
       expect(screen.queryByTestId("split-grid-template-modal")).not.toBeInTheDocument();
     });
 
-    it("shows the template node count per cell", () => {
-      // Default template is image-only: 1 node per cell
-      renderNode();
-
-      expect(screen.getByText("1 / cell")).toBeInTheDocument();
-    });
   });
 
   describe("Split button", () => {
     it("is labeled with the current grid dimensions", () => {
       renderNode({ gridRows: 2, gridCols: 3 });
 
-      expect(screen.getByRole("button", { name: "Split 2×3" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Split 2×3 now" })).toBeInTheDocument();
     });
 
     it("is disabled when there is no source image", () => {
       renderNode({ sourceImage: null });
 
-      expect(screen.getByRole("button", { name: "Split 2×3" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Split 2×3 now" })).toBeDisabled();
     });
 
     it("is disabled while the workflow is running", () => {
       setStoreState({ isRunning: true, ...connectedImageState(SOURCE_IMAGE) });
       renderNode({ sourceImage: SOURCE_IMAGE });
 
-      expect(screen.getByRole("button", { name: "Split 2×3" })).toBeDisabled();
+      expect(screen.getByRole("button", { name: "Split 2×3 now" })).toBeDisabled();
     });
 
     it("calls regenerateNode when clicked with a source image", () => {
       setStoreState(connectedImageState(SOURCE_IMAGE));
       renderNode({ sourceImage: SOURCE_IMAGE });
 
-      const splitButton = screen.getByRole("button", { name: "Split 2×3" });
+      const splitButton = screen.getByRole("button", { name: "Split 2×3 now" });
       expect(splitButton).toBeEnabled();
 
       fireEvent.click(splitButton);
@@ -349,6 +349,51 @@ describe("SplitGridNode", () => {
   });
 
   describe("Preview", () => {
+    it("keeps the source aspect through thumbnail swaps and split completion", () => {
+      setStoreState(connectedImageState(SOURCE_IMAGE));
+      const { container, rerender } = renderNode({ sourceImage: SOURCE_IMAGE });
+      const img = screen.getByAltText("Source grid");
+      Object.defineProperties(img, {
+        naturalWidth: { value: 3200 },
+        naturalHeight: { value: 1000 },
+      });
+      fireEvent.load(img);
+      const clip = container.querySelector("[data-media-clip]") as HTMLElement;
+      expect(clip.style.aspectRatio).toBe("3.2");
+
+      mockAdaptiveImageSrc.mockReturnValue("data:image/jpeg;base64,thumbnail");
+      rerender(nodeElement({ sourceImage: SOURCE_IMAGE, status: "complete", ...materialized(5, 9).data }));
+      expect(clip.style.aspectRatio).toBe("3.2");
+      fireEvent.load(img);
+      expect(clip.style.aspectRatio).toBe("3.2");
+
+      mockAdaptiveImageSrc.mockImplementation((src) => src ?? null);
+      rerender(nodeElement({ sourceImage: SOURCE_IMAGE, status: "complete" }));
+      expect(clip.style.aspectRatio).toBe("3.2");
+    });
+
+    it("does not reuse a previous source's aspect for a different image", () => {
+      setStoreState(connectedImageState(SOURCE_IMAGE));
+      const { container, rerender } = renderNode({ sourceImage: SOURCE_IMAGE });
+      const img = screen.getByAltText("Source grid");
+      Object.defineProperties(img, {
+        naturalWidth: { value: 3200, configurable: true },
+        naturalHeight: { value: 1000, configurable: true },
+      });
+      fireEvent.load(img);
+      const nextImage = "data:image/png;base64,portrait";
+      setStoreState(connectedImageState(nextImage));
+      rerender(nodeElement({ sourceImage: nextImage }));
+      const clip = container.querySelector("[data-media-clip]") as HTMLElement;
+      expect(clip.style.aspectRatio).toBe("1");
+      Object.defineProperties(img, {
+        naturalWidth: { value: 1000 },
+        naturalHeight: { value: 2000 },
+      });
+      fireEvent.load(img);
+      expect(clip.style.aspectRatio).toBe("0.5");
+    });
+
     it("shows the source image when set", () => {
       setStoreState(connectedImageState(SOURCE_IMAGE));
       renderNode({ sourceImage: SOURCE_IMAGE });
@@ -436,90 +481,4 @@ describe("SplitGridNode", () => {
     });
   });
 
-  describe("Status text", () => {
-    it("prompts to split when no cells exist", () => {
-      renderNode();
-
-      expect(screen.getByText("Split creates a group per cell")).toBeInTheDocument();
-    });
-
-    it("shows the cell group count when cells match the current config", () => {
-      const { data, storeNodes } = materialized(2, 3);
-      setStoreState({ nodes: storeNodes });
-      renderNode(data);
-
-      expect(screen.getByText("6 cell groups")).toBeInTheDocument();
-    });
-
-    it("uses the singular form for a single cell", () => {
-      const { data, storeNodes } = materialized(1, 1);
-      setStoreState({ nodes: storeNodes });
-      renderNode(data);
-
-      expect(screen.getByText("1 cell group")).toBeInTheDocument();
-    });
-
-    it("shows the stale hint when the materialized key no longer matches", () => {
-      const { data, storeNodes } = materialized(2, 3);
-      setStoreState({ nodes: storeNodes });
-      renderNode({ ...data, materializedKey: "stale-key" });
-
-      expect(screen.getByText("Cells out of date — Split rebuilds")).toBeInTheDocument();
-    });
-
-    it("shows the stale hint when grid dimensions changed after materialization", () => {
-      const { data, storeNodes } = materialized(2, 3);
-      setStoreState({ nodes: storeNodes });
-      // Key was computed for 2x3; rows changed to 3 afterwards
-      renderNode({ ...data, gridRows: 3 });
-
-      expect(screen.getByText("Cells out of date — Split rebuilds")).toBeInTheDocument();
-    });
-
-    it("does not mark cells stale when a single base node was deleted (intentional pruning)", () => {
-      const { data, storeNodes } = materialized(2, 3);
-      setStoreState({ nodes: storeNodes.slice(1) });
-      renderNode(data);
-
-      expect(screen.queryByText("Cells out of date — Split rebuilds")).not.toBeInTheDocument();
-      expect(screen.getByText("6 cell groups")).toBeInTheDocument();
-    });
-
-    it("shows the stale hint when every cell's base node is gone", () => {
-      const { data } = materialized(2, 3);
-      setStoreState({ nodes: [] });
-      renderNode(data);
-
-      expect(screen.getByText("Cells out of date — Split rebuilds")).toBeInTheDocument();
-    });
-
-    it("counts legacy childNodeIds cells matching the grid without marking them stale", () => {
-      renderNode({
-        gridRows: 1,
-        gridCols: 3,
-        childNodeIds: [
-          { imageInput: "img-1", prompt: "p-1", nanoBanana: "gen-1" },
-          { imageInput: "img-2", prompt: "p-2", nanoBanana: "gen-2" },
-          { imageInput: "img-3", prompt: "p-3", nanoBanana: "gen-3" },
-        ],
-      });
-
-      expect(screen.getByText("3 cell groups")).toBeInTheDocument();
-      expect(screen.queryByText("Cells out of date — Split rebuilds")).not.toBeInTheDocument();
-    });
-
-    it("marks legacy cells stale when rows/cols no longer match the child count", () => {
-      renderNode({
-        gridRows: 2,
-        gridCols: 3,
-        childNodeIds: [
-          { imageInput: "img-1", prompt: "p-1", nanoBanana: "gen-1" },
-          { imageInput: "img-2", prompt: "p-2", nanoBanana: "gen-2" },
-          { imageInput: "img-3", prompt: "p-3", nanoBanana: "gen-3" },
-        ],
-      });
-
-      expect(screen.getByText("Cells out of date — Split rebuilds")).toBeInTheDocument();
-    });
-  });
 });
