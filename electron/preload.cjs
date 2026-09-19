@@ -40,6 +40,7 @@ contextBridge.exposeInMainWorld('nodeBananaDesktop', {
     read: () => ipcRenderer.invoke('desktop:credentials:read'),
     write: (value) => ipcRenderer.invoke('desktop:credentials:write', value),
     delete: (name) => ipcRenderer.invoke('desktop:credentials:delete', name),
+    reset: () => ipcRenderer.invoke('desktop:credentials:reset'),
   },
 });
 if (process.platform === 'darwin') {

@@ -56,6 +56,11 @@ export function DesktopSession({ children }: { children: ReactNode }) {
     setReady(true);
   };
   const initialize = () => initializeDesktopCredentials().then(() => { hydrate(); setError(null); }).catch(error => setError(error.message));
+  // Data the OS key no longer decrypts stays unreadable however often it is
+  // retried; the reset moves it aside and initialises against an empty store.
+  const reset = () => window.nodeBananaDesktop!.credentials.reset()
+    .then(result => { if (!result.ok) throw new Error(result.error); return initialize(); })
+    .catch(error => setError(error.message));
   useEffect(() => {
     if (!isDesktop()) { setReady(true); return; }
     void initialize();
@@ -76,9 +81,10 @@ export function DesktopSession({ children }: { children: ReactNode }) {
         <DialogDescription>{error}</DialogDescription>
       </DialogHeader>
       <DialogBody scroll={false} className="pb-4">
-        <p className="text-xs leading-4 text-neutral-500">Your existing stored keys are preserved. Session-only keys stay in memory and are lost when the app closes.</p>
+        <p className="text-xs leading-4 text-neutral-500">Retrying reads the stored keys again. Resetting moves the unreadable file aside and starts an empty store. Session-only keys stay in memory and are lost when the app closes.</p>
       </DialogBody>
       <DialogFooter>
+        <DialogButton variant="ghost" onClick={() => void reset()}>Reset stored keys</DialogButton>
         <DialogButton variant="ghost" onClick={() => { useSessionCredentials(); hydrate(); setError(null); }}>Use for this session only</DialogButton>
         <DialogButton variant="primary" autoFocus onClick={() => void initialize()}>Retry secure storage</DialogButton>
       </DialogFooter>

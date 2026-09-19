@@ -32,6 +32,8 @@ declare global {
         read: () => Promise<DesktopResult<DesktopCredentials>>;
         write: (patch: DesktopCredentials) => Promise<DesktopResult<DesktopCredentials>>;
         delete: (name: CredentialName) => Promise<DesktopResult<DesktopCredentials>>;
+        /** Moves an undecryptable store aside and starts an empty one. */
+        reset: () => Promise<DesktopResult<DesktopCredentials>>;
       };
     };
     readonly nodeBananaWindow?: {
