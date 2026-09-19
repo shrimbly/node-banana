@@ -216,7 +216,14 @@
   });
   function release(event) {
     delete pointers[event.pointerId];
-    if (Object.keys(pointers).length === 0) {
+    var left = Object.keys(pointers);
+    if (left.length === 1 && gesture && gesture.kind === "pinch") {
+      /* One finger lifted mid-pinch: the other carries on as a pan. */
+      gesture = { kind: "pan", ox: pointers[left[0]].x, oy: pointers[left[0]].y };
+      canvas.classList.add("is-panning");
+      return;
+    }
+    if (left.length === 0) {
       if (gesture && gesture.node) gesture.node.classList.remove("is-dragging");
       canvas.classList.remove("is-panning");
       gesture = null;
