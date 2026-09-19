@@ -165,7 +165,9 @@ function createRecoveryStore(userData) {
         upload.hash.update(bytes); upload.size += bytes.length; upload.updated = Date.now();
         if (!done) return { uploadId };
         const id = upload.hash.digest('hex');
-        const fd = fs.openSync(upload.filename, 'r');
+        // Open read-write: on Windows fsync (FlushFileBuffers) needs write access
+        // on the handle, and a read-only fd fails with EPERM.
+        const fd = fs.openSync(upload.filename, 'r+');
         try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
         fs.renameSync(upload.filename, assetPath(id));
         if (process.platform !== 'win32') {
