@@ -1,0 +1,16 @@
+---
+import tangle from "../partials/tangle.html?raw";
+import comfyNode from "../partials/comfy-node.html?raw";
+---
+<section class="section" id="comfyui">
+  <div class="section__inner">
+  <div class="section__split section__split--comfy">
+    <div class="section__copy"><Fragment set:html={tangle} /></div>
+    <div class="section__copy">
+      <h2 class="h2">Your ComfyUI workflows, as nodes.</h2>
+      <p class="lead">Drop a ComfyUI workflow on the canvas. Its App Mode inputs become sockets, its widgets become settings, its outputs become handles. The whole graph runs as one node, on Comfy Cloud, on this computer, or on a ComfyUI elsewhere on your network.</p>
+      <Fragment set:html={comfyNode} />
+    </div>
+  </div>
+  </div>
+</section>
