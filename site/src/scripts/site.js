@@ -65,7 +65,23 @@
     }
   }
 
-  /* 5. The app window. */
+  /* 5. Reveal: a section gets .is-in once, as it enters the viewport. The CSS
+     decides what each block does with it; without this, everything is visible. */
+  var sections = document.querySelectorAll(".section");
+  if (sections.length && "IntersectionObserver" in window) {
+    var seen = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.add("is-in");
+        seen.unobserve(entry.target);
+      });
+    }, { rootMargin: "0px 0px -12% 0px", threshold: 0.12 });
+    Array.prototype.forEach.call(sections, function (s) { seen.observe(s); });
+  } else {
+    Array.prototype.forEach.call(sections, function (s) { s.classList.add("is-in"); });
+  }
+
+  /* 6. The app window. */
   var canvas = document.querySelector("[data-canvas]");
   var tabs = document.querySelector("[data-tabs]");
   if (!canvas || !tabs || !window.PointerEvent) return;
