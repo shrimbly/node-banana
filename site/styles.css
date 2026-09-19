@@ -699,7 +699,6 @@ ul { margin: 0; padding: 0; list-style: none; }
 .eyebrow { font-family: var(--font-mono); font-size: 12px; line-height: 16px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
 .h2 { margin: 0; font-family: var(--font-display); font-size: 56px; line-height: 60px; font-weight: 700; letter-spacing: -0.03em; color: var(--ink); text-wrap: balance; }
 .h2--statement { font-size: 80px; line-height: 84px; max-width: 1100px; }
-.h2--huge { font-size: 96px; line-height: 92px; letter-spacing: -0.05em; }
 .lead { margin: 0; font-family: var(--font-display); font-weight: 500; font-size: 18px; line-height: 28px; color: var(--ink-2); max-width: 560px; }
 .lead--centre { max-width: 640px; }
 
@@ -780,7 +779,6 @@ ul { margin: 0; padding: 0; list-style: none; }
   .section__head { grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
   .h2 { font-size: 40px; line-height: 44px; }
   .h2--statement { font-size: 48px; line-height: 52px; }
-  .h2--huge { font-size: 72px; line-height: 72px; }
   .mrow { grid-template-columns: minmax(0, 1fr); height: auto; gap: 8px; padding: 12px 0; }
   .marquee__set { gap: 48px; padding-right: 48px; }
   .lockup__name { font-size: 20px; }
