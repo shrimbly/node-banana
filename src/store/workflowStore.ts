@@ -1,4 +1,5 @@
 import { desktopCredentialsReady } from "@/lib/desktop/credentials";
+import type { QuickstartView } from "@/types/quickstart";
 import { pushGenerationToast } from "@/components/GenerationToast";
 import { create, StateCreator } from "zustand";
 import { useShallow } from "zustand/shallow";
@@ -384,10 +385,12 @@ export interface WorkflowStore {
   openModalCount: number;
   isModalOpen: boolean;
   showQuickstart: boolean;
+  /** Which view the welcome dialog opens on; the menu's Templates entry opens it on "templates". */
+  quickstartView: QuickstartView;
   hoveredNodeId: string | null;
   incrementModalCount: () => void;
   decrementModalCount: () => void;
-  setShowQuickstart: (show: boolean) => void;
+  setShowQuickstart: (show: boolean, view?: QuickstartView) => void;
   setHoveredNodeId: (id: string | null) => void;
 
   // Execution
@@ -838,6 +841,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   openModalCount: 0,
   isModalOpen: false,
   showQuickstart: true,
+  quickstartView: "initial",
   hoveredNodeId: null,
   isRunning: false,
   currentNodeIds: [],  // Changed from currentNodeId for parallel execution
@@ -988,8 +992,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     });
   },
 
-  setShowQuickstart: (show: boolean) => {
-    set({ showQuickstart: show });
+  setShowQuickstart: (show: boolean, view: QuickstartView = "initial") => {
+    set({ showQuickstart: show, quickstartView: view });
   },
 
   setHoveredNodeId: (id: string | null) => {

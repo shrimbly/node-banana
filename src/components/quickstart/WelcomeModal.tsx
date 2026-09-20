@@ -14,6 +14,8 @@ interface WelcomeModalProps {
   onWorkflowGenerated: (workflow: WorkflowFile, directoryPath?: string) => void;
   onClose: () => void;
   onNewProject: () => void;
+  /** View to open on; the menu's Templates entry passes "templates". */
+  initialView?: QuickstartView;
 }
 
 /**
@@ -33,8 +35,9 @@ export function WelcomeModal({
   onWorkflowGenerated,
   onClose,
   onNewProject,
+  initialView = "initial",
 }: WelcomeModalProps) {
-  const [currentView, setCurrentView] = useState<QuickstartView>("initial");
+  const [currentView, setCurrentView] = useState<QuickstartView>(initialView);
 
   const handleNewProject = useCallback(() => {
     onNewProject();

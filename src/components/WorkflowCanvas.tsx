@@ -314,6 +314,7 @@ export function WorkflowCanvas() {
   const setNodeGroupId = useWorkflowStore((state) => state.setNodeGroupId);
   const executeWorkflow = useWorkflowStore((state) => state.executeWorkflow);
   const setShowQuickstart = useWorkflowStore((state) => state.setShowQuickstart);
+  const quickstartView = useWorkflowStore((state) => state.quickstartView);
   const setNavigationTarget = useWorkflowStore((state) => state.setNavigationTarget);
   const captureSnapshot = useWorkflowStore((state) => state.captureSnapshot);
   const applyEditOperations = useWorkflowStore((state) => state.applyEditOperations);
@@ -2327,6 +2328,7 @@ export function WorkflowCanvas() {
       {/* Welcome Modal */}
       {showQuickstart && (
         <WelcomeModal
+          initialView={quickstartView}
           onWorkflowGenerated={async (workflow, directoryPath) => {
             await useWorkflowStore.getState().openWorkflowInNewTab(workflow, directoryPath);
             setShowQuickstart(false);

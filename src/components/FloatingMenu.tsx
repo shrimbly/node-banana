@@ -402,17 +402,17 @@ export function FloatingMenu() {
             aria-expanded={isOpen}
             aria-label="Menu"
             title="Menu"
-            className={`${ICON_BUTTON} w-auto gap-0.5 px-1 ${isOpen ? "bg-neutral-700 text-neutral-100" : ""}`}
+            className={`${ICON_BUTTON} ${isOpen ? "bg-neutral-700 text-neutral-100" : ""}`}
           >
-            <img src="/banana_icon.png" alt="" className="h-6 w-6 rounded-[6px]" />
             <svg
-              className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
+              className="h-4 w-4"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
-              strokeWidth={2.25}
+              strokeWidth={1.75}
+              aria-hidden="true"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 9l6 6 6-6" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 7h16M4 12h16M4 17h16" />
             </svg>
           </button>
 
@@ -577,6 +577,15 @@ export function FloatingMenu() {
               }
               label="Welcome screen"
               onClick={choose(() => setShowQuickstart(true))}
+            />
+            <MenuRow
+              icon={
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h5a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM13 5a1 1 0 011-1h5a1 1 0 011 1v5a1 1 0 01-1 1h-5a1 1 0 01-1-1V5zM4 14a1 1 0 011-1h5a1 1 0 011 1v5a1 1 0 01-1 1H5a1 1 0 01-1-1v-5zM13 14a1 1 0 011-1h5a1 1 0 011 1v5a1 1 0 01-1 1h-5a1 1 0 01-1-1v-5z" />
+                </svg>
+              }
+              label="Templates"
+              onClick={choose(() => setShowQuickstart(true, "templates"))}
             />
             <MenuRow
               icon={

@@ -225,6 +225,7 @@ describe("FloatingMenu", () => {
         "New tab",
         "Close tab",
         "Welcome screen",
+        "Templates",
         "Keyboard shortcuts",
         "Discord",
         "Made by Willie",
