@@ -13,6 +13,8 @@ const twMerge = extendTailwindMerge({
       "font-size": [{ text: ["node"] }],
       rounded: [{ rounded: ["card", "media", "controls", "well"] }],
       shadow: [{ shadow: ["well", "menu", "dialog"] }],
+      "font-family": [{ font: ["display"] }],
+      tracking: [{ tracking: ["eyebrow", "display"] }],
     },
   },
 });

@@ -46,6 +46,46 @@
 
   --text-node: 10px;
   --text-node--line-height: 14px;
+
+  /* Split dialogs (welcome, settings, first use): a #0a0a0a pane beside the
+     canvas-coloured page, ruled rows, display headings, mono eyebrows.
+     Type comes from the landing page: Space Grotesk and JetBrains Mono,
+     loaded by next/font in layout.tsx. */
+  --color-pane: #0a0a0a;
+  --color-ink-3: #8a8a8a;
+  --font-display: var(--font-space-grotesk), "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "SF Mono", Menlo, Consolas, monospace;
+  --tracking-eyebrow: 0.08em;
+  --tracking-display: -0.03em;
+}
+
+/* Ink range slider for the split dialogs: a 4px track filled to --p. */
+@utility range-ink {
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(to right, #e5e5e5 var(--p, 50%), #404040 var(--p, 50%));
+  outline: none;
+  &::-webkit-slider-thumb {
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #e5e5e5;
+    border: 2px solid #171717;
+    box-shadow: 0 0 0 1px #404040;
+  }
+  &::-moz-range-thumb {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #e5e5e5;
+    border: 2px solid #171717;
+    box-shadow: 0 0 0 1px #404040;
+  }
+  &:focus-visible {
+    box-shadow: 0 0 0 2px #171717, 0 0 0 4px #3b82f6;
+  }
 }
 
 /* Squircle corners where the engine supports them (Chrome 139+); plain
