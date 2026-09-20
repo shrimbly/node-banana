@@ -345,7 +345,8 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
         left: `${position.x}px`,
         top: `${position.y - 26}px`,
         width: `${width}px`,
-        zIndex: selected ? 10000 : 9000,
+        // Above nodes/group controls (1000), below noodle context menus (2100).
+        zIndex: selected ? 2000 : 1500,
       }}
     >
       <div
