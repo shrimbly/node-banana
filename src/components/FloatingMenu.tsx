@@ -14,7 +14,7 @@ import { useShallow } from "zustand/shallow";
 import { ProjectSetupModal } from "./ProjectSetupModal";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { WorkflowBrowserModal } from "./WorkflowBrowserModal";
-import { MenuDivider, MenuSurface, menuItemClass } from "@/components/ui/Menu";
+import { MenuDivider, MenuShortcut, MenuSurface, menuItemClass } from "@/components/ui/Menu";
 
 const ICON_BUTTON =
   "relative flex h-7 w-7 items-center justify-center rounded text-neutral-400 transition-colors hover:bg-neutral-700 hover:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:opacity-50";
@@ -80,7 +80,7 @@ function MenuRow({
     <>
       {icon}
       <span>{label}</span>
-      {hint && <span className="ml-auto pl-4 text-[11px] text-neutral-500">{hint}</span>}
+      {hint && <MenuShortcut>{hint}</MenuShortcut>}
     </>
   );
   if (href) {

@@ -9,7 +9,9 @@ import { cn } from "@/components/nodes/ui/cn";
  * pickers and the small floating toolbars (handle, edge, multi-select) all
  * sit on this skin, which is the node's controls card lifted a tier: the
  * same surface, a solid border in place of the card's faint one, and a real
- * shadow.
+ * shadow. The type is the "Instrument" skin from the design canvas: mono
+ * uppercase section labels and hints, 28px rows, shortcuts in mono on the
+ * right, 6px corners.
  *
  * Two shapes: a `list` stacks rows, a `bar` lines up icon buttons. Position,
  * focus and dismissal stay with the caller — they differ per menu and are
@@ -17,7 +19,7 @@ import { cn } from "@/components/nodes/ui/cn";
  */
 
 /** Surface classes alone, for a menu that must keep its own element. */
-export const menuSurfaceClass = "bg-card border border-chrome-border rounded-controls shadow-menu";
+export const menuSurfaceClass = "bg-card border border-chrome-border rounded-md shadow-menu";
 
 export interface MenuSurfaceProps extends ComponentPropsWithRef<"div"> {
   variant?: "list" | "bar";
@@ -63,7 +65,7 @@ export function MenuSectionLabel({ className, children, ...rest }: HTMLAttribute
   return (
     <div
       {...rest}
-      className={cn("text-[10px] font-semibold uppercase tracking-wider text-neutral-500", className)}
+      className={cn("font-mono text-[10px] leading-[14px] uppercase tracking-eyebrow text-ink-3", className)}
     >
       {children}
     </div>
@@ -85,7 +87,7 @@ export interface MenuItemProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 /** Item classes alone, for a row that must be an `<a>` or keep its own element. */
 export const menuItemClass = cn(
-  "w-full px-3 py-2 text-left text-[11px] font-medium flex items-center gap-2 transition-colors",
+  "w-full min-h-7 px-2.5 py-1 text-left text-xs flex items-center gap-2 transition-colors",
   "focus-visible:outline-none focus-visible:bg-neutral-700 focus-visible:text-neutral-100",
   "disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent",
   "text-neutral-300 hover:bg-neutral-700 hover:text-neutral-100"
@@ -103,10 +105,19 @@ export function MenuItem({ selected = false, className, type = "button", childre
   );
 }
 
+/** Keyboard shortcut or meta at the right edge of an item, in mono. */
+export function MenuShortcut({ className, children, ...rest }: HTMLAttributes<HTMLSpanElement>) {
+  return (
+    <span {...rest} className={cn("ml-auto pl-3 font-mono text-[11px] text-ink-3 whitespace-nowrap", className)}>
+      {children}
+    </span>
+  );
+}
+
 /** Empty-result row. */
 export function MenuEmpty({ className, children, ...rest }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div {...rest} className={cn("px-3 py-2 text-[11px] text-neutral-500", className)}>
+    <div {...rest} className={cn("px-2.5 py-2 text-xs text-neutral-500", className)}>
       {children}
     </div>
   );
@@ -117,7 +128,7 @@ export function MenuFooter({ className, children, ...rest }: HTMLAttributes<HTML
   return (
     <div
       {...rest}
-      className={cn("px-2 py-1.5 border-t border-chrome-border flex items-center justify-between", className)}
+      className={cn("px-2.5 py-1.5 border-t border-chrome-border flex items-center justify-between gap-3", className)}
     >
       {children}
     </div>
@@ -127,8 +138,8 @@ export function MenuFooter({ className, children, ...rest }: HTMLAttributes<HTML
 /** `⌘ + K`-style hint: a key cap and what it does. */
 export function MenuHint({ keys, children }: { keys: string; children: ReactNode }) {
   return (
-    <span className="text-[9px] text-neutral-500">
-      <kbd className="px-1 py-0.5 bg-neutral-700 rounded text-[8px]">{keys}</kbd> {children}
+    <span className="font-mono text-[10px] leading-[14px] uppercase tracking-eyebrow text-ink-3 whitespace-nowrap">
+      <kbd className="font-mono text-neutral-400">{keys}</kbd> {children}
     </span>
   );
 }
