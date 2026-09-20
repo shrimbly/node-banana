@@ -1,6 +1,6 @@
 "use client";
 
-import { Dialog } from "@/components/ui/Dialog";
+import { Dialog, splitPanelClass } from "@/components/ui/Dialog";
 import { useState, useCallback } from "react";
 import { WorkflowFile } from "@/store/workflowStore";
 import { QuickstartView } from "@/types/quickstart";
@@ -8,12 +8,26 @@ import { QuickstartInitialView } from "./QuickstartInitialView";
 import { TemplateExplorerView } from "./TemplateExplorerView";
 import { PromptWorkflowView } from "./PromptWorkflowView";
 import { WorkflowBrowserView } from "./WorkflowBrowserView";
+import { cn } from "@/components/nodes/ui/cn";
 
 interface WelcomeModalProps {
   onWorkflowGenerated: (workflow: WorkflowFile, directoryPath?: string) => void;
   onClose: () => void;
   onNewProject: () => void;
 }
+
+/**
+ * The welcome dialog is a split dialog: every view keeps the dark pane on
+ * the left and swaps what it carries (the identity, the template filters,
+ * the folder). Sizes are the design canvas's: 820×470 for the initial,
+ * prompt and browse views, 1000×620 for the template explorer.
+ */
+const VIEW_SIZE: Record<QuickstartView, string> = {
+  initial: "w-[820px] h-[470px]",
+  vibe: "w-[820px] h-[470px]",
+  browse: "w-[820px] h-[470px]",
+  templates: "w-[1000px] h-[620px]",
+};
 
 export function WelcomeModal({
   onWorkflowGenerated,
@@ -49,41 +63,42 @@ export function WelcomeModal({
     [onWorkflowGenerated]
   );
 
-  // Template explorer needs more width for two-column layout
-  const dialogWidth = currentView === "templates" ? "max-w-6xl" : "max-w-2xl";
-  const dialogHeight = currentView === "templates" || currentView === "browse" ? "max-h-[85vh]" : "max-h-[80vh]";
-
   return (
-    <Dialog open onClose={onClose} label="Welcome" className={`w-full ${dialogWidth} ${dialogHeight}`}>
-        {currentView === "initial" && (
-          <QuickstartInitialView
-            onNewProject={handleNewProject}
-            onSelectTemplates={handleSelectTemplates}
-            onSelectVibe={handleSelectVibe}
-            onSelectLoad={handleSelectLoad}
-          />
-        )}
-        {currentView === "templates" && (
-          <TemplateExplorerView
-            onBack={handleBack}
-            onWorkflowSelected={handleWorkflowSelected}
-          />
-        )}
-        {currentView === "vibe" && (
-          <PromptWorkflowView
-            onBack={handleBack}
-            onWorkflowGenerated={handleWorkflowSelected}
-          />
-        )}
-        {currentView === "browse" && (
-          <WorkflowBrowserView
-            onBack={handleBack}
-            onWorkflowLoaded={(workflow, dirPath) =>
-              onWorkflowGenerated(workflow, dirPath)
-            }
-            onClose={onClose}
-          />
-        )}
+    <Dialog
+      open
+      onClose={onClose}
+      label="Welcome"
+      className={cn(splitPanelClass, "max-w-[92vw] max-h-[85vh]", VIEW_SIZE[currentView])}
+    >
+      {currentView === "initial" && (
+        <QuickstartInitialView
+          onNewProject={handleNewProject}
+          onSelectTemplates={handleSelectTemplates}
+          onSelectVibe={handleSelectVibe}
+          onSelectLoad={handleSelectLoad}
+        />
+      )}
+      {currentView === "templates" && (
+        <TemplateExplorerView
+          onBack={handleBack}
+          onWorkflowSelected={handleWorkflowSelected}
+        />
+      )}
+      {currentView === "vibe" && (
+        <PromptWorkflowView
+          onBack={handleBack}
+          onWorkflowGenerated={handleWorkflowSelected}
+        />
+      )}
+      {currentView === "browse" && (
+        <WorkflowBrowserView
+          onBack={handleBack}
+          onWorkflowLoaded={(workflow, dirPath) =>
+            onWorkflowGenerated(workflow, dirPath)
+          }
+          onClose={onClose}
+        />
+      )}
     </Dialog>
   );
 }
