@@ -1165,6 +1165,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       }
       return {
         nodes: nextNodes,
+        ...(nextNodes.some((n) => n.selected) && state.edges.some((e) => e.selected) ? { edges: state.edges.map((e) => e.selected ? { ...e, selected: false } : e) } : {}),
         ...(groups !== state.groups ? { groups } : {}),
         ...(hasMeaningfulChange ? { hasUnsavedChanges: true } : {}),
       };
@@ -1203,6 +1204,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     set((state) => ({
       edges: applyEdgeChanges(changes, state.edges),
+      ...(changes.some((c) => c.type === "select" && c.selected) && state.nodes.some((n) => n.selected) ? { nodes: state.nodes.map((n) => n.selected ? { ...n, selected: false } : n) } : {}),
       ...(hasMeaningfulChange ? { hasUnsavedChanges: true } : {}),
     }));
 

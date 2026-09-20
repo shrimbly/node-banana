@@ -84,6 +84,7 @@ import { resolveTextSourcesThroughRouters } from "@/store/utils/connectedInputs"
 import { wouldCreateCycle } from "@/store/utils/executionUtils";
 import { parseVarTags } from "@/utils/parseVarTags";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { EdgeMarqueeSelection } from "./edges/EdgeMarqueeSelection";
 import { EdgeHookSelection } from "./edges/EdgeHookSelection";
 import { ModelSearchDialog } from "./modals/ModelSearchDialog";
 import { LLMFallbackPopover } from "./nodes/LLMFallbackPopover";
@@ -2376,6 +2377,14 @@ export function WorkflowCanvas() {
             ...screenToFlowPosition({ x: event.clientX, y: event.clientY }),
           } });
         }}
+        onEdgeContextMenu={(event, edge) => {
+          event.preventDefault();
+          event.stopPropagation();
+          const store = useWorkflowStore.getState();
+          store.onNodesChange(store.nodes.filter((n) => n.selected).map((n) => ({ type: "select", id: n.id, selected: false })));
+          if (!edge.selected) store.onEdgesChange(store.edges.map((e) => ({ type: "select", id: e.id, selected: e.id === edge.id })));
+          useWorkflowStore.setState({ edgeMenuAnchor: { edgeId: edge.id, ...screenToFlowPosition({ x: event.clientX, y: event.clientY }) } });
+        }}
         onPaneClick={() => setExpandedStubGroup?.(null)}
         onMoveStart={handleMoveStart}
         onMove={handleMove}
@@ -2464,6 +2473,7 @@ export function WorkflowCanvas() {
           onOpenFallback={handleOpenFallback}
         />
       </ReactFlow>
+      <EdgeMarqueeSelection canvas={reactFlowWrapper} disabled={isModalOpen || isCanvasOverview} />
       <EdgeHookSelection canvas={reactFlowWrapper} disabled={isModalOpen || isCanvasOverview} />
 
       {/* Connection drop menu */}
