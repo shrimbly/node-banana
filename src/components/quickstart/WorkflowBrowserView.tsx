@@ -2,6 +2,20 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { WorkflowFile } from "@/store/workflowStore";
+import {
+  DialogButton,
+  DialogEyebrow,
+  DialogPage,
+  DialogPageBody,
+  DialogPageHead,
+  DialogPane,
+  DialogPaneFoot,
+  DialogRowTitle,
+  DialogStatus,
+  DialogTextButton,
+} from "@/components/ui/Dialog";
+import { cn } from "@/components/nodes/ui/cn";
+import { APP_VERSION } from "@/lib/appVersion";
 import { QuickstartBackButton } from "./QuickstartBackButton";
 import {
   getWorkflowsDirectory,
@@ -38,6 +52,28 @@ function dirBasename(dirPath: string): string {
   return dirPath.split("/").filter(Boolean).pop() || dirPath;
 }
 
+function FolderIcon({ className, strokeWidth = 1.5 }: { className?: string; strokeWidth?: number }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3.75 9.776c.112-.017.227-.026.344-.026h15.812c.117 0 .232.009.344.026m-16.5 0a2.25 2.25 0 00-1.883 2.542l.857 6a2.25 2.25 0 002.227 1.932H19.05a2.25 2.25 0 002.227-1.932l.857-6a2.25 2.25 0 00-1.883-2.542m-16.5 0V6A2.25 2.25 0 016 3.75h3.879a1.5 1.5 0 011.06.44l2.122 2.12a1.5 1.5 0 001.06.44H18A2.25 2.25 0 0120.25 9v.776" />
+    </svg>
+  );
+}
+
+/**
+ * "Your workflows": the pane names the folder and holds the actions on it,
+ * the page lists the projects inside as ruled rows. Without a folder the
+ * page is one centred prompt to choose it.
+ */
 export function WorkflowBrowserView({
   onBack,
   onWorkflowLoaded,
@@ -162,191 +198,141 @@ export function WorkflowBrowserView({
     [onWorkflowLoaded, onClose]
   );
 
+  const heading = (
+    <h2
+      id="workflow-browser-title"
+      className="font-display text-[28px] leading-8 font-bold tracking-display text-neutral-100"
+    >
+      Your workflows
+    </h2>
+  );
+
   // State A: No default directory configured
   if (defaultDir === null) {
     return (
-      <div className="p-8 flex flex-col items-center">
-        {onBack && (
-          <div className="w-full mb-4">
-            <QuickstartBackButton onClick={onBack} />
+      <>
+        <DialogPane width={300}>
+          <div className="flex flex-col gap-[18px]">
+            {onBack && <QuickstartBackButton onClick={onBack} />}
+            {heading}
           </div>
-        )}
-        <div className="flex flex-col items-center gap-4 py-8">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-lg bg-neutral-700/50 flex items-center justify-center">
-              <svg
-                className="w-5 h-5 text-neutral-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.5}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
-                />
-              </svg>
-            </div>
-            <h2 id="workflow-browser-title" className="text-lg font-medium text-neutral-200">
-              Your Workflows
-            </h2>
+          <DialogPaneFoot version={APP_VERSION || undefined} />
+        </DialogPane>
+
+        <DialogPage data-testid="workflow-browser-view">
+          <DialogPageHead eyebrow="No folder yet" />
+          <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-4 px-12 pb-6 text-center">
+            <FolderIcon className="w-10 h-10 text-neutral-600" strokeWidth={1.25} />
+            <p className="max-w-[300px] text-[13px] leading-[19px] text-neutral-400">
+              Choose the folder that contains your workflow projects. You can change this later.
+            </p>
+            <DialogButton variant="primary" size="md" onClick={browseAndSetDir}>
+              Choose folder
+            </DialogButton>
           </div>
-          <p className="text-sm text-neutral-500 max-w-xs text-center">
-            Choose the folder that contains your workflow projects. You can change this later.
-          </p>
-          <button
-            onClick={browseAndSetDir}
-            className="px-4 py-2 text-sm font-medium text-neutral-200 bg-neutral-700 hover:bg-neutral-600 rounded-lg transition-colors"
-          >
-            Choose folder
-          </button>
-        </div>
-      </div>
+        </DialogPage>
+      </>
     );
   }
 
   // State B: Default directory configured — show listing
-  return (
-    <div className="flex flex-col h-full max-h-[70vh]">
-      {/* Header */}
-      <div className="px-6 pt-4 pb-3 border-b border-neutral-700/50 flex-shrink-0">
-        {onBack && (
-          <div className="mb-2">
-            <QuickstartBackButton onClick={onBack} />
-          </div>
-        )}
-        <div className="flex items-baseline justify-between gap-3">
-          <h2 className="text-lg font-medium text-neutral-200">
-            Your Workflows
-          </h2>
-          <span className="text-xs text-neutral-600 tabular-nums flex-shrink-0">
-            {workflows.length} project{workflows.length !== 1 ? "s" : ""}
-          </span>
-        </div>
-        <p
-          className="text-xs text-neutral-500 truncate mt-0.5"
-          title={defaultDir}
-        >
-          {defaultDir}
-        </p>
-      </div>
+  const busy = loadingWorkflow !== null;
 
-      {/* Workflow list */}
-      <div className="flex-1 overflow-y-auto overscroll-contain px-4 py-2">
-        {isLoading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="w-5 h-5 border-2 border-neutral-600 border-t-neutral-300 rounded-full animate-spin" />
-          </div>
-        ) : error && workflows.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center">
-            <svg
-              className="w-10 h-10 text-neutral-700 mb-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={1.5}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
-              />
-            </svg>
-            <p className="text-sm text-neutral-400 mb-1">No workflows found</p>
-            <p className="text-xs text-neutral-600">
-              This folder doesn&apos;t contain any workflow projects
+  return (
+    <>
+      <DialogPane width={300}>
+        <div className="flex flex-col gap-[18px] min-h-0">
+          {onBack && <QuickstartBackButton onClick={onBack} />}
+          {heading}
+          <div className="flex flex-col gap-1.5 min-h-0">
+            <DialogEyebrow className="tabular-nums">
+              {workflows.length} project{workflows.length !== 1 ? "s" : ""}
+            </DialogEyebrow>
+            <p className="font-mono text-[11px] leading-4 text-neutral-500 break-all" title={defaultDir}>
+              {defaultDir}
             </p>
           </div>
-        ) : (
-          <div className="flex flex-col gap-0.5">
-            {workflows.map((entry) => {
-              const isActive = loadingWorkflow === entry.directoryPath;
-              return (
-                <button
-                  key={entry.directoryPath}
-                  onClick={() => handleSelectWorkflow(entry)}
-                  disabled={loadingWorkflow !== null}
-                  className={`
-                    group text-left px-3 py-2.5 rounded-lg transition-all duration-100
-                    disabled:opacity-50
-                    ${isActive
-                      ? "bg-neutral-700/60 border border-neutral-600"
-                      : "border border-transparent hover:bg-neutral-700/30 hover:border-neutral-700/50"
-                    }
-                  `}
-                >
-                  <div className="flex items-center gap-3">
-                    {/* Folder icon */}
-                    <div className={`
-                      w-8 h-8 rounded-md flex items-center justify-center flex-shrink-0 transition-colors
-                      ${isActive ? "bg-blue-500/20" : "bg-neutral-700/50 group-hover:bg-neutral-700"}
-                    `}>
+        </div>
+
+        <div className="flex flex-col items-start gap-2">
+          <DialogButton variant="outline" size="md" onClick={handleBrowseOther} disabled={busy}>
+            <FolderIcon className="w-3.5 h-3.5" />
+            Open from directory
+          </DialogButton>
+          <DialogTextButton onClick={browseAndSetDir} disabled={busy}>
+            Change folder
+          </DialogTextButton>
+        </div>
+      </DialogPane>
+
+      <DialogPage data-testid="workflow-browser-view">
+        <DialogPageHead eyebrow="Recent" />
+
+        <DialogPageBody className="overscroll-contain pt-2 pb-4">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-5 h-5 border-2 border-neutral-600 border-t-neutral-300 rounded-full animate-spin" />
+            </div>
+          ) : error && workflows.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <FolderIcon className="w-10 h-10 text-neutral-600 mb-4" strokeWidth={1.25} />
+              <p className="font-display text-sm leading-[18px] font-semibold tracking-[-0.01em] text-neutral-100">
+                No workflows found
+              </p>
+              <p className="mt-1 text-xs leading-4 text-ink-3">
+                This folder doesn&apos;t contain any workflow projects
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col">
+              {workflows.map((entry, index) => {
+                const isActive = loadingWorkflow === entry.directoryPath;
+                return (
+                  <button
+                    key={entry.directoryPath}
+                    type="button"
+                    onClick={() => handleSelectWorkflow(entry)}
+                    disabled={busy}
+                    aria-busy={isActive || undefined}
+                    className={cn(
+                      "group flex items-center gap-3 w-full py-3 px-1 text-left transition-colors",
+                      "hover:bg-white/[0.03] focus-visible:outline-none focus-visible:bg-white/[0.04]",
+                      "disabled:opacity-50 disabled:cursor-not-allowed",
+                      index > 0 && "border-t border-card",
+                      isActive && "bg-white/[0.03] opacity-100"
+                    )}
+                  >
+                    <span className="flex shrink-0 items-center justify-center w-[18px] h-[18px] text-neutral-500 group-hover:text-neutral-300 transition-colors">
                       {isActive ? (
-                        <div className="w-3.5 h-3.5 border-2 border-blue-400/40 border-t-blue-400 rounded-full animate-spin" />
+                        <span className="w-3.5 h-3.5 border-2 border-neutral-600 border-t-neutral-300 rounded-full animate-spin" />
                       ) : (
-                        <svg
-                          className="w-4 h-4 text-neutral-400 group-hover:text-neutral-300 transition-colors"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={1.5}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"
-                          />
-                        </svg>
+                        <FolderIcon className="w-[18px] h-[18px]" />
                       )}
-                    </div>
+                    </span>
 
-                    {/* Name + folder name */}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-neutral-200 group-hover:text-neutral-100 transition-colors truncate">
-                        {entry.name}
-                      </div>
-                      <div className="text-[11px] text-neutral-600 truncate">
+                    <span className="flex-1 min-w-0 flex flex-col gap-0.5">
+                      <DialogRowTitle className="truncate">{entry.name}</DialogRowTitle>
+                      <span className="font-mono text-[11px] leading-4 text-neutral-500 truncate">
                         {entry.relativePath || dirBasename(entry.directoryPath)}
-                      </div>
-                    </div>
+                      </span>
+                    </span>
 
-                    {/* Timestamp */}
-                    <span className="text-[11px] text-neutral-600 tabular-nums flex-shrink-0">
+                    <span className="shrink-0 font-mono text-[11px] leading-4 text-neutral-500 tabular-nums">
                       {formatRelativeTime(entry.lastModified)}
                     </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
 
-        {error && workflows.length > 0 && (
-          <p className="text-xs text-red-400 mt-2 px-3">{error}</p>
-        )}
-      </div>
-
-      {/* Footer */}
-      <div className="px-6 py-3 border-t border-neutral-700/50 flex-shrink-0 flex items-center justify-between">
-        <button
-          onClick={handleBrowseOther}
-          disabled={loadingWorkflow !== null}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-neutral-300 bg-neutral-700/50 hover:bg-neutral-700 border border-neutral-600/50 hover:border-neutral-600 rounded-md transition-colors disabled:opacity-50"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
-          </svg>
-          Open from directory
-        </button>
-        <button
-          onClick={browseAndSetDir}
-          disabled={loadingWorkflow !== null}
-          className="text-xs text-neutral-500 hover:text-neutral-300 transition-colors disabled:opacity-50"
-        >
-          Change folder
-        </button>
-      </div>
-    </div>
+          {error && workflows.length > 0 && (
+            <DialogStatus tone="error" className="mt-3 px-1 normal-case tracking-normal text-neutral-300">
+              {error}
+            </DialogStatus>
+          )}
+        </DialogPageBody>
+      </DialogPage>
+    </>
   );
 }

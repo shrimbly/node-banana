@@ -138,7 +138,7 @@ describe("WelcomeModal", () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText("Template Explorer")).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Templates" })).toBeInTheDocument();
         expect(screen.getByText("Quick Start")).toBeInTheDocument();
       });
     });
@@ -175,7 +175,7 @@ describe("WelcomeModal", () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText("Template Explorer")).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Templates" })).toBeInTheDocument();
       });
 
       // Click back
@@ -273,7 +273,7 @@ describe("WelcomeModal", () => {
       });
 
       await waitFor(() => {
-        expect(screen.getByText("Template Explorer")).toBeInTheDocument();
+        expect(screen.getByRole("heading", { name: "Templates" })).toBeInTheDocument();
       });
 
       // Verify templates view is showing - the actual workflow selection is tested in QuickstartTemplatesView tests
@@ -293,7 +293,7 @@ describe("WelcomeModal", () => {
       fireEvent.click(screen.getByText("Prompt a workflow"));
 
       expect(screen.getByText("Prompt a Workflow")).toBeInTheDocument();
-      expect(screen.getByText("Generate Workflow")).toBeInTheDocument();
+      expect(screen.getByText("Generate workflow")).toBeInTheDocument();
     });
   });
 });

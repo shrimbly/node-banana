@@ -2,7 +2,8 @@
 
 import { WorkflowFile } from "@/store/workflowStore";
 import { WorkflowBrowserView } from "./quickstart/WorkflowBrowserView";
-import { Dialog } from "@/components/ui/Dialog";
+import { Dialog, splitPanelClass } from "@/components/ui/Dialog";
+import { cn } from "@/components/nodes/ui/cn";
 
 interface WorkflowBrowserModalProps {
   isOpen: boolean;
@@ -16,7 +17,7 @@ export function WorkflowBrowserModal({
   onWorkflowLoaded,
 }: WorkflowBrowserModalProps) {
   return (
-    <Dialog open={isOpen} onClose={onClose} labelledBy="workflow-browser-title" className="w-full max-w-2xl">
+    <Dialog open={isOpen} onClose={onClose} labelledBy="workflow-browser-title" className={cn(splitPanelClass, "w-[820px] h-[470px] max-w-[92vw] max-h-[85vh]")}>
       <WorkflowBrowserView
         onWorkflowLoaded={onWorkflowLoaded}
         onClose={onClose}

@@ -532,8 +532,12 @@ export function DialogPane({
 }
 
 /** The right-hand column of a split dialog. */
-export function DialogPage({ className, children }: { className?: string; children: ReactNode }) {
-  return <div className={cn("flex-1 min-w-0 min-h-0 flex flex-col relative", className)}>{children}</div>;
+export function DialogPage({ className, children, ...rest }: HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div {...rest} className={cn("flex-1 min-w-0 min-h-0 flex flex-col relative", className)}>
+      {children}
+    </div>
+  );
 }
 
 /** Top strip of the page: a mono eyebrow on the left, the close button (or anything) on the right. */

@@ -79,7 +79,7 @@ describe("PromptWorkflowView", () => {
         />
       );
 
-      expect(screen.getByText(/Describe what you want your workflow to accomplish/i)).toBeInTheDocument();
+      expect(screen.getByText(/Say what it should accomplish/i)).toBeInTheDocument();
     });
 
     it("should render Generate Workflow button", () => {
@@ -90,7 +90,7 @@ describe("PromptWorkflowView", () => {
         />
       );
 
-      expect(screen.getByText("Generate Workflow")).toBeInTheDocument();
+      expect(screen.getByText("Generate workflow")).toBeInTheDocument();
     });
   });
 
@@ -125,7 +125,7 @@ describe("PromptWorkflowView", () => {
       fireEvent.change(textarea, { target: { value: "ab" } });
 
       // The button should be disabled when less than 3 chars (trimmed)
-      const button = screen.getByText("Generate Workflow").closest("button");
+      const button = screen.getByText("Generate workflow").closest("button");
       expect(button).toBeDisabled();
 
       // Type more and error should not appear since we never clicked generate
@@ -143,7 +143,7 @@ describe("PromptWorkflowView", () => {
         />
       );
 
-      const button = screen.getByText("Generate Workflow").closest("button");
+      const button = screen.getByText("Generate workflow").closest("button");
       expect(button).toBeDisabled();
     });
 
@@ -158,7 +158,7 @@ describe("PromptWorkflowView", () => {
       const textarea = screen.getByPlaceholderText(/Create product photography/i);
       fireEvent.change(textarea, { target: { value: "ab" } });
 
-      const button = screen.getByText("Generate Workflow").closest("button");
+      const button = screen.getByText("Generate workflow").closest("button");
       expect(button).toBeDisabled();
     });
 
@@ -173,7 +173,7 @@ describe("PromptWorkflowView", () => {
       const textarea = screen.getByPlaceholderText(/Create product photography/i);
       fireEvent.change(textarea, { target: { value: "abc" } });
 
-      const button = screen.getByText("Generate Workflow").closest("button");
+      const button = screen.getByText("Generate workflow").closest("button");
       expect(button).not.toBeDisabled();
     });
 
@@ -188,7 +188,7 @@ describe("PromptWorkflowView", () => {
       const textarea = screen.getByPlaceholderText(/Create product photography/i);
       fireEvent.change(textarea, { target: { value: "  ab  " } });
 
-      const button = screen.getByText("Generate Workflow").closest("button");
+      const button = screen.getByText("Generate workflow").closest("button");
       expect(button).toBeDisabled();
     });
   });
@@ -222,7 +222,7 @@ describe("PromptWorkflowView", () => {
       fireEvent.change(textarea, { target: { value: "Create a product shot workflow" } });
 
       await act(async () => {
-        fireEvent.click(screen.getByText("Generate Workflow"));
+        fireEvent.click(screen.getByText("Generate workflow"));
       });
 
       await waitFor(() => {
@@ -266,7 +266,7 @@ describe("PromptWorkflowView", () => {
       fireEvent.change(textarea, { target: { value: "Create a product shot workflow" } });
 
       await act(async () => {
-        fireEvent.click(screen.getByText("Generate Workflow"));
+        fireEvent.click(screen.getByText("Generate workflow"));
       });
 
       await waitFor(() => {
@@ -293,7 +293,7 @@ describe("PromptWorkflowView", () => {
       fireEvent.change(textarea, { target: { value: "Create a product shot workflow" } });
 
       await act(async () => {
-        fireEvent.click(screen.getByText("Generate Workflow"));
+        fireEvent.click(screen.getByText("Generate workflow"));
       });
 
       // Should show "Generating..." text
@@ -329,7 +329,7 @@ describe("PromptWorkflowView", () => {
       fireEvent.change(textarea, { target: { value: "Create a product shot workflow" } });
 
       await act(async () => {
-        fireEvent.click(screen.getByText("Generate Workflow"));
+        fireEvent.click(screen.getByText("Generate workflow"));
       });
 
       // Button should be disabled
@@ -362,7 +362,7 @@ describe("PromptWorkflowView", () => {
       fireEvent.change(textarea, { target: { value: "Create a product shot workflow" } });
 
       await act(async () => {
-        fireEvent.click(screen.getByText("Generate Workflow"));
+        fireEvent.click(screen.getByText("Generate workflow"));
       });
 
       // Textarea should be disabled
@@ -396,7 +396,7 @@ describe("PromptWorkflowView", () => {
       fireEvent.change(textarea, { target: { value: "Create a product shot workflow" } });
 
       await act(async () => {
-        fireEvent.click(screen.getByText("Generate Workflow"));
+        fireEvent.click(screen.getByText("Generate workflow"));
       });
 
       await waitFor(() => {
@@ -423,7 +423,7 @@ describe("PromptWorkflowView", () => {
       fireEvent.change(textarea, { target: { value: "Create a product shot workflow" } });
 
       await act(async () => {
-        fireEvent.click(screen.getByText("Generate Workflow"));
+        fireEvent.click(screen.getByText("Generate workflow"));
       });
 
       await waitFor(() => {
@@ -447,7 +447,7 @@ describe("PromptWorkflowView", () => {
       fireEvent.change(textarea, { target: { value: "Create a product shot workflow" } });
 
       await act(async () => {
-        fireEvent.click(screen.getByText("Generate Workflow"));
+        fireEvent.click(screen.getByText("Generate workflow"));
       });
 
       await waitFor(() => {
@@ -474,7 +474,7 @@ describe("PromptWorkflowView", () => {
       fireEvent.change(textarea, { target: { value: "Create a product shot workflow" } });
 
       await act(async () => {
-        fireEvent.click(screen.getByText("Generate Workflow"));
+        fireEvent.click(screen.getByText("Generate workflow"));
       });
 
       await waitFor(() => {
@@ -523,7 +523,7 @@ describe("PromptWorkflowView", () => {
       fireEvent.change(textarea, { target: { value: "Create a product shot workflow" } });
 
       await act(async () => {
-        fireEvent.click(screen.getByText("Generate Workflow"));
+        fireEvent.click(screen.getByText("Generate workflow"));
       });
 
       // Back button should be disabled
