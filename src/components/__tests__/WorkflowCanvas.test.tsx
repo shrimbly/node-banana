@@ -4,6 +4,7 @@ import { WorkflowCanvas } from "@/components/WorkflowCanvas";
 import { ReactFlowProvider } from "@xyflow/react";
 
 // Mock the workflow store
+const mockSetWorkflowState = vi.hoisted(() => vi.fn());
 const mockOnNodesChange = vi.fn();
 const mockOnEdgesChange = vi.fn();
 const mockOnConnect = vi.fn();
@@ -33,6 +34,7 @@ vi.mock("@/store/workflowStore", () => {
     return mockUseWorkflowStore((s: unknown) => s);
   };
   // Handlers that run outside render read the store directly
+  useWorkflowStore.setState = mockSetWorkflowState;
   useWorkflowStore.getState = () => mockUseWorkflowStore((s: unknown) => s);
   return { useWorkflowStore };
 });
@@ -180,6 +182,17 @@ describe("WorkflowCanvas", () => {
     act(() => (props.onSelectionEnd as () => void)());
     act(() => (props.onEdgesChange as (changes: unknown[]) => void)(select));
     expect(mockOnEdgesChange).toHaveBeenLastCalledWith(select);
+  });
+
+  it("anchors noodle selection above the release point converted to flow coordinates", () => {
+    mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({
+      nodes: [], edges: [{ id: "edge-1", source: "a", target: "b", selected: true }],
+    })));
+    mockScreenToFlowPosition.mockReturnValueOnce({ x: 130, y: 220 });
+    render(<TestWrapper><WorkflowCanvas /></TestWrapper>);
+    act(() => (mockReactFlowProps.current!.onSelectionEnd as (event: unknown) => void)({ clientX: 310, clientY: 480 }));
+    expect(mockScreenToFlowPosition).toHaveBeenLastCalledWith({ x: 310, y: 480 });
+    expect(mockSetWorkflowState).toHaveBeenCalledWith({ edgeMenuAnchor: { edgeId: "edge-1", x: 130, y: 220 } });
   });
 
   beforeEach(() => {

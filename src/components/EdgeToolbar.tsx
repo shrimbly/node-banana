@@ -104,7 +104,7 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
         >
           {grouped && (
             <span className="text-[10px] font-medium text-neutral-300 px-2 border-r border-neutral-600 whitespace-nowrap">
-              {selectedIds.length} connections
+              {selectedIds.length} noodles
             </span>
           )}
           {sequenceNumber !== null && (
@@ -165,23 +165,6 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
               className="nodrag nopan nokey w-24 h-6 px-2 text-[11px] text-neutral-100 bg-neutral-900 border border-neutral-600 rounded placeholder:text-neutral-500 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500/30"
             />
           )}
-          {!isLoop && (
-            <button
-              onClick={handleTogglePause}
-              className={`${iconButton} ${hasPause ? "text-amber-400 hover:text-amber-300" : "text-neutral-400 hover:text-neutral-100"}`}
-              title={hasPause ? (grouped ? "Remove pauses" : "Remove pause") : grouped ? "Pause all" : "Add pause"}
-            >
-              {hasPause ? (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-              ) : (
-                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
-                </svg>
-              )}
-            </button>
-          )}
           {canBundle && (
             <button
               onClick={() => hookEdges(selectedIds, { x: anchor.x, y: anchor.y })}
@@ -220,6 +203,23 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 5.1A9.8 9.8 0 0112 5c4.5 0 8.3 2.9 9.6 7a10 10 0 01-2.2 3.6M6.6 6.6A10 10 0 002.4 12c1.3 4.1 5.1 7 9.6 7 1.4 0 2.8-.3 4-.8" />
               </svg>
+            </button>
+          )}
+          {!isLoop && (
+            <button
+              onClick={handleTogglePause}
+              className={`${iconButton} ${hasPause ? "text-amber-400 hover:text-amber-300" : "text-neutral-400 hover:text-neutral-100"}`}
+              title={hasPause ? (grouped ? "Remove pauses" : "Remove pause") : grouped ? "Pause all" : "Add pause"}
+            >
+              {hasPause ? (
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              ) : (
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z" />
+                </svg>
+              )}
             </button>
           )}
           <button

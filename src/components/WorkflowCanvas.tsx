@@ -2367,7 +2367,17 @@ export function WorkflowCanvas() {
           selectingNodes.current = true;
           onEdgesChange(useWorkflowStore.getState().edges.filter((edge) => edge.selected).map((edge) => ({ type: "select", id: edge.id, selected: false })));
         }}
-        onSelectionEnd={() => { selectingNodes.current = false; }}
+        onSelectionEnd={(event) => {
+          selectingNodes.current = false;
+          const store = useWorkflowStore.getState();
+          const firstEdge = store.edges.find((edge) => edge.selected);
+          if (firstEdge && !store.nodes.some((node) => node.selected)) {
+            useWorkflowStore.setState({ edgeMenuAnchor: {
+              edgeId: firstEdge.id,
+              ...screenToFlowPosition({ x: event.clientX, y: event.clientY }),
+            } });
+          }
+        }}
         onConnect={handleConnect}
         onConnectEnd={handleConnectEnd}
         onReconnect={handleReconnect}

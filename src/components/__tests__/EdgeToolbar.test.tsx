@@ -198,7 +198,7 @@ describe("EdgeToolbar", () => {
     it("says how many are selected and offers no label field", () => {
       withEdges(three);
       render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
-      expect(screen.getByText("2 connections")).toBeInTheDocument();
+      expect(screen.getByText("2 noodles")).toBeInTheDocument();
       expect(screen.queryByText(/^Image \d/)).toBeNull();
       expect(screen.queryByLabelText("Connection label")).toBeNull();
     });
@@ -280,7 +280,7 @@ describe("EdgeToolbar bundles", () => {
       edge("e2", { target: "z", data: { sourceBundleId: "x", createdAt: 2 } }),
     ]);
     render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
-    expect(screen.getByText("2 connections")).toBeInTheDocument();
+    expect(screen.getByText("2 noodles")).toBeInTheDocument();
     expect(screen.queryByLabelText("Connection label")).toBeNull();
     fireEvent.click(screen.getByTitle("Pause all"));
     expect(mockSetEdgesPause).toHaveBeenCalledWith(["e1", "e2"], true);
@@ -312,3 +312,10 @@ describe("getImageSequenceNumber", () => {
     expect(getImageSequenceNumber(text, [text, edge("t2", { sourceHandle: "text", targetHandle: "text", source: "c" })])).toBeNull();
   });
 });
+
+  it("places pause immediately after hide in the multi-noodle menu", () => {
+    withEdges([edge("e1", { selected: true }), edge("e2", { selected: true })]);
+    render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
+    expect(screen.getByTitle("Hide 2 connections").nextElementSibling).toBe(screen.getByTitle("Pause all"));
+    expect(screen.getByText("2 noodles")).toBeInTheDocument();
+  });

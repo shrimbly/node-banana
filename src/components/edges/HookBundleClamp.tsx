@@ -26,7 +26,7 @@ export function HookBundleClamp({ bundle, members, selected }: {
           <MenuSurface variant="bar" floating={false} className="absolute w-max"
             style={{ transform: `translate(-50%, calc(-100% - 20px)) scale(${1 / zoom})`, transformOrigin: "bottom center" }}
             onPointerDown={(e) => e.stopPropagation()}>
-            <MenuBarLabel>{members.length} connections</MenuBarLabel>
+            <MenuBarLabel>{members.length} noodles</MenuBarLabel>
             <MenuIconButton title="Remove bundle" className="px-2 text-xs font-medium text-neutral-300" onClick={() => useWorkflowStore.getState().removeHookBundle(bundle.id)}>
               Unbundle
             </MenuIconButton>
