@@ -404,7 +404,7 @@ export function FloatingMenu() {
             title="Menu"
             className={`${ICON_BUTTON} w-auto gap-0.5 px-1 ${isOpen ? "bg-neutral-700 text-neutral-100" : ""}`}
           >
-            <img src="/banana_icon.png" alt="" className="h-[18px] w-[18px]" />
+            <img src="/banana_icon.png" alt="" className="h-6 w-6 rounded-[6px]" />
             <svg
               className={`h-3 w-3 transition-transform ${isOpen ? "rotate-180" : ""}`}
               fill="none"
