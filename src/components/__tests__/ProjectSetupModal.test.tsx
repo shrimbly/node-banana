@@ -148,11 +148,11 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      expect(screen.queryByText("New Project")).not.toBeInTheDocument();
-      expect(screen.queryByText("Project Settings")).not.toBeInTheDocument();
+      expect(screen.queryByText("New project")).not.toBeInTheDocument();
+      expect(screen.queryByText("Project settings")).not.toBeInTheDocument();
     });
 
-    it("should render with 'New Project' title when mode is 'new'", () => {
+    it("should render with 'New project' title when mode is 'new'", () => {
       render(
         <ProjectSetupModal
           isOpen={true}
@@ -162,10 +162,10 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      expect(screen.getByText("New Project")).toBeInTheDocument();
+      expect(screen.getByText("New project")).toBeInTheDocument();
     });
 
-    it("should render with 'Project Settings' title when mode is 'settings'", () => {
+    it("should render with 'Project settings' title when mode is 'settings'", () => {
       render(
         <ProjectSetupModal
           isOpen={true}
@@ -175,7 +175,7 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      expect(screen.getByText("Project Settings")).toBeInTheDocument();
+      expect(screen.getByText("Project settings")).toBeInTheDocument();
     });
   });
 
@@ -269,8 +269,8 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      expect(screen.getByText("Project Name")).toBeInTheDocument();
-      expect(screen.getByText("Project Directory")).toBeInTheDocument();
+      expect(screen.getByText("Project name")).toBeInTheDocument();
+      expect(screen.getByText("Project directory")).toBeInTheDocument();
     });
 
     it("should render Browse button for directory selection", () => {
@@ -998,8 +998,8 @@ describe("ProjectSetupModal", () => {
         />
       );
 
-      fireEvent.click(screen.getByText("Node Defaults"));
-      fireEvent.click(screen.getAllByText("Select Model")[0]);
+      fireEvent.click(screen.getByText("Node defaults"));
+      fireEvent.click(screen.getAllByText("Select model")[0]);
 
       const search = screen.getByPlaceholderText("Search models...");
       fireEvent.keyDown(search, { key: "Enter" });
@@ -1174,10 +1174,10 @@ describe("Noodles tab", () => {
     mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     render(<ProjectSetupModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} mode="settings" />);
     fireEvent.click(screen.getByRole("button", { name: "Noodles" }));
-    expect(screen.getByText("Connections")).toBeInTheDocument();
+    expect(screen.getByTestId("connection-preview")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: "Curved" })).toHaveAttribute("aria-checked", "true");
     // The Canvas tab no longer carries them
     fireEvent.click(screen.getByRole("button", { name: "Canvas" }));
-    expect(screen.queryByText("Connections")).toBeNull();
+    expect(screen.queryByTestId("connection-preview")).toBeNull();
   });
 });

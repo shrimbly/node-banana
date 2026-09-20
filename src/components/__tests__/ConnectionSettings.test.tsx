@@ -54,14 +54,14 @@ describe("ConnectionSettings", () => {
 
   it("offers to save the draft as the user default", () => {
     const props = renderSettings();
-    expect(screen.getByText("Saved with this workflow.")).toBeInTheDocument();
+    expect(screen.getByText("Saved with this workflow")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Set as my default" }));
     expect(props.onSetDefault).toHaveBeenCalled();
   });
 
   it("confirms once the default is saved", () => {
     renderSettings({ defaultSaved: true });
-    expect(screen.getByText("Saved as your default for new workflows.")).toBeInTheDocument();
+    expect(screen.getByText("Saved as your default for new workflows")).toBeInTheDocument();
   });
 });
 

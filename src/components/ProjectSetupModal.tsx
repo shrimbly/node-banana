@@ -16,12 +16,24 @@ import { isDesktop, comfySecretFields } from '@/lib/desktop/credentials';
 import { ConnectionSettings } from "@/components/settings/ConnectionSettings";
 import {
   Dialog,
-  DialogBody,
   DialogButton,
-  DialogDescription,
-  DialogFooter,
-  DialogTitle,
+  DialogEyebrow,
+  DialogPage,
+  DialogPageBody,
+  DialogPageFooter,
+  DialogPageHead,
+  DialogPageTitle,
+  DialogPane,
+  DialogPaneFoot,
+  DialogRailItem,
+  DialogRow,
+  DialogRowTitle,
+  DialogStatus,
+  DialogTextButton,
+  splitPanelClass,
 } from "@/components/ui/Dialog";
+import { Field, Segmented, Select, Slider, Switch, TextInput, labelClass, type SegmentedOption } from "@/components/ui/Controls";
+import { APP_VERSION } from "@/lib/appVersion";
 import { cn } from "@/components/nodes/ui/cn";
 
 import { DEFAULT_LLM_MODEL, LLM_PROVIDER_OPTIONS, defaultLLMModel, llmModelLabel, llmModelOptions } from "@/lib/llm/catalog";
@@ -78,9 +90,38 @@ const SETTINGS_PAGES: { id: SettingsTab; label: string; title: string; descripti
   { id: "project", label: "Project", title: "Project", description: "Name, location and how the file is written." },
   { id: "providers", label: "Providers", title: "Providers", description: "API keys for the model providers this project can call." },
   { id: "comfy", label: "ComfyUI", title: "ComfyUI", description: "Where Comfy app nodes run." },
-  { id: "nodeDefaults", label: "Node Defaults", title: "Node defaults", description: "Applied when a node is added from the bar or a shortcut." },
+  { id: "nodeDefaults", label: "Node defaults", title: "Node defaults", description: "Applied when a node is added from the bar or a shortcut." },
   { id: "canvas", label: "Canvas", title: "Canvas", description: "How you navigate and select on the canvas." },
   { id: "noodles", label: "Noodles", title: "Noodles", description: "How the connections between nodes are drawn." },
+];
+
+/** One ruled row per provider on the Providers page, in this order. */
+const PROVIDER_ROWS: { id: ProviderType; name: string; placeholder: string }[] = [
+  { id: "gemini", name: "Google Gemini", placeholder: "AIza..." },
+  { id: "openai", name: "OpenAI", placeholder: "sk-..." },
+  { id: "anthropic", name: "Anthropic", placeholder: "sk-ant-..." },
+  { id: "replicate", name: "Replicate", placeholder: "r8_..." },
+  { id: "fal", name: "fal.ai", placeholder: "..." },
+  { id: "kie", name: "Kie.ai", placeholder: "..." },
+  { id: "wavespeed", name: "WaveSpeed", placeholder: "..." },
+];
+
+const PAN_MODES: SegmentedOption<PanMode>[] = [
+  { value: "space", label: "Space + Drag" },
+  { value: "middleMouse", label: "Middle Mouse" },
+  { value: "always", label: "Always On" },
+];
+
+const ZOOM_MODES: SegmentedOption<ZoomMode>[] = [
+  { value: "altScroll", label: "Alt + Scroll" },
+  { value: "ctrlScroll", label: "Ctrl + Scroll" },
+  { value: "scroll", label: "Scroll" },
+];
+
+const SELECTION_MODES: SegmentedOption<SelectionMode>[] = [
+  { value: "click", label: "Click" },
+  { value: "altDrag", label: "Alt + Drag" },
+  { value: "shiftDrag", label: "Shift + Drag" },
 ];
 
 interface ProjectSetupModalProps {
@@ -429,121 +470,101 @@ export function ProjectSetupModal({
   if (!isOpen) return null;
 
   const page = SETTINGS_PAGES.find((p) => p.id === activeTab) ?? SETTINGS_PAGES[0];
+  const llmProvider = localNodeDefaults.llm?.provider || "google";
+  const llmTemperature = localNodeDefaults.llm?.temperature ?? 0.7;
+  const llmMaxTokens = localNodeDefaults.llm?.maxTokens ?? 8192;
+  // On the web there is no import row, so the first provider row opens the stack.
+  const hasImportRow = isDesktop();
 
   return (
     <Dialog
       open={isOpen}
       onClose={onClose}
-      className="w-[820px] max-w-[92vw] h-[560px]"
+      className={cn(splitPanelClass, "w-[840px] h-[560px] max-w-[92vw] max-h-[85vh]")}
       panelProps={{ onKeyDown: handleKeyDown }}
     >
-      <div className="flex-1 min-h-0 flex">
-        {/* Rail: one entry per page, the dialog's title at its head */}
-        <nav
-          aria-label="Settings pages"
-          className="w-44 shrink-0 flex flex-col gap-0.5 p-2 pt-3.5 bg-neutral-900/50 border-r border-chrome-border/50"
-        >
-          <div className="px-2.5 pb-3">
-            <DialogTitle>{mode === "new" ? "New Project" : "Project Settings"}</DialogTitle>
-          </div>
-          {SETTINGS_PAGES.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => setActiveTab(p.id)}
-              aria-current={activeTab === p.id ? "page" : undefined}
-              className={cn(
-                "h-8 px-2.5 rounded-md text-left text-sm whitespace-nowrap transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
-                activeTab === p.id
-                  ? "bg-neutral-700 text-neutral-100 font-medium"
-                  : "text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800/50"
-              )}
-            >
-              {p.label}
-            </button>
-          ))}
-        </nav>
+      {/* Rail: one entry per page, the dialog's eyebrow at its head */}
+      <DialogPane width={224}>
+        <div>
+          <DialogEyebrow className="block pl-4 pb-3.5 text-neutral-500">
+            {mode === "new" ? "New project" : "Project settings"}
+          </DialogEyebrow>
+          <nav aria-label="Settings pages" className="flex flex-col">
+            {SETTINGS_PAGES.map((p) => (
+              <DialogRailItem key={p.id} active={activeTab === p.id} onClick={() => setActiveTab(p.id)}>
+                {p.label}
+              </DialogRailItem>
+            ))}
+          </nav>
+        </div>
+        <DialogPaneFoot version={APP_VERSION} />
+      </DialogPane>
 
-        <div className="flex-1 min-w-0 flex flex-col">
-          <div className="px-5 pt-3.5 pb-2 shrink-0 flex flex-col gap-0.5">
-            <h3 className="text-base font-semibold leading-6 text-neutral-100">{page.title}</h3>
-            <DialogDescription>{page.description}</DialogDescription>
-          </div>
+      <DialogPage>
+        <DialogPageHead />
+        <DialogPageTitle heading={page.title} lead={page.description} />
 
         {/* Scrollable page content */}
-        <DialogBody className="pt-1">
+        <DialogPageBody>
 
         {/* Project Tab Content */}
         {activeTab === "project" && (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm text-neutral-400 mb-1">
-                Project Name
-              </label>
-              <input
+          <div className="flex flex-col gap-[18px]">
+            <Field id="project-name" label="Project name">
+              <TextInput
+                id="project-name"
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="my-project"
                 autoFocus
-                className="w-full px-3 py-2 bg-neutral-900 border border-neutral-600 rounded-lg text-neutral-100 text-sm focus:outline-none focus:border-neutral-500"
               />
-            </div>
+            </Field>
 
-            <div>
-              <label className="block text-sm text-neutral-400 mb-1">
-                Project Directory
-              </label>
+            <Field
+              id="project-directory"
+              label="Project directory"
+              help="Workflow files and images will be saved here. Subfolders for inputs and generations will be auto-created."
+            >
               <div className="flex gap-2">
-                <input
+                <TextInput
+                  id="project-directory"
                   type="text"
                   value={directoryPath}
                   onChange={(e) => setDirectoryPath(e.target.value)}
                   placeholder="/Users/username/projects/my-project"
-                  className="flex-1 px-3 py-2 bg-neutral-900 border border-neutral-600 rounded-lg text-neutral-100 text-sm focus:outline-none focus:border-neutral-500"
                 />
-                <button
-                  type="button"
+                <DialogButton
+                  variant="outline"
+                  size="md"
                   onClick={handleBrowse}
                   disabled={isBrowsing}
-                  className="px-3 py-2 bg-neutral-700 hover:bg-neutral-600 disabled:bg-neutral-700 disabled:opacity-50 text-neutral-200 text-sm rounded-lg transition-colors"
+                  className="shrink-0"
                 >
                   {isBrowsing ? "..." : "Browse"}
-                </button>
+                </DialogButton>
               </div>
-              <p className="text-xs text-neutral-400 mt-1">
-                Workflow files and images will be saved here. Subfolders for inputs and generations will be auto-created.
-              </p>
-            </div>
+            </Field>
 
-            <div className="pt-2 border-t border-neutral-700">
-              <label className="flex items-center justify-between gap-3 cursor-pointer">
-                <div>
-                  <span className="text-sm text-neutral-200">Embed images as base64</span>
-                  <p className="text-xs text-neutral-400">
-                    Embeds all images in workflow, larger workflow files. Can hit memory limits on very large workflows.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={!externalStorage}
-                  onClick={() => setExternalStorage(externalStorage ? false : true)}
-                  className={`relative inline-flex h-5 w-9 flex-shrink-0 items-center rounded-full transition-colors ${!externalStorage ? "bg-blue-500" : "bg-neutral-600"}`}
-                >
-                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${!externalStorage ? "translate-x-[18px]" : "translate-x-[3px]"}`} />
-                </button>
-              </label>
-            </div>
+            <DialogRow
+              title="Embed images as base64"
+              description="Embeds all images in workflow, larger workflow files. Can hit memory limits on very large workflows."
+              className="pt-[18px] pb-0"
+            >
+              <Switch
+                checked={!externalStorage}
+                onChange={() => setExternalStorage(externalStorage ? false : true)}
+                label="Embed images as base64"
+              />
+            </DialogRow>
 
-            {error && <p className="text-sm text-red-400">{error}</p>}
+            {error && <DialogStatus tone="error">{error}</DialogStatus>}
           </div>
         )}
 
         {/* Providers Tab Content */}
         {activeTab === "providers" && (
-          <div className="space-y-3">
+          <div>
             <EnvironmentImport onImported={result => {
               const imported = getProviderSettings();
               setLocalProviders(previous => ({ providers: Object.fromEntries(Object.entries(previous.providers).map(([id, config]) => [id, {
@@ -555,587 +576,258 @@ export function ProjectSetupModal({
                 ...Object.keys(result.preferences) as (keyof typeof result.preferences)[],
               ]);
             }} />
-            {/* Gemini Provider */}
-            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-neutral-100">Google Gemini</span>
-                {envStatus?.gemini && !overrideActive.gemini ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-green-400">Configured via .env</span>
-                    <button
-                      type="button"
-                      onClick={() => setOverrideActive((prev) => ({ ...prev, gemini: true }))}
-                      className="px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
-                    >
-                      Override
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type={showApiKey.gemini ? "text" : "password"}
-                      value={localProviders.providers.gemini?.apiKey || ""}
-                      onChange={(e) => updateLocalProvider("gemini", { apiKey: e.target.value || null })}
-                      placeholder="AIza..."
-                      className="w-48 px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowApiKey((prev) => ({ ...prev, gemini: !prev.gemini }))}
-                      className="text-xs text-neutral-400 hover:text-neutral-200"
-                    >
-                      {showApiKey.gemini ? "Hide" : "Show"}
-                    </button>
-                    {envStatus?.gemini && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOverrideActive((prev) => ({ ...prev, gemini: false }));
-                          updateLocalProvider("gemini", { apiKey: null });
-                        }}
-                        className="text-xs text-neutral-500 hover:text-neutral-300"
-                      >
-                        Cancel
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
 
-            {/* OpenAI Provider */}
-            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-neutral-100">OpenAI</span>
-                {envStatus?.openai && !overrideActive.openai ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-green-400">Configured via .env</span>
-                    <button
-                      type="button"
-                      onClick={() => setOverrideActive((prev) => ({ ...prev, openai: true }))}
-                      className="px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
-                    >
-                      Override
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type={showApiKey.openai ? "text" : "password"}
-                      value={localProviders.providers.openai?.apiKey || ""}
-                      onChange={(e) => updateLocalProvider("openai", { apiKey: e.target.value || null })}
-                      placeholder="sk-..."
-                      className="w-48 px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowApiKey((prev) => ({ ...prev, openai: !prev.openai }))}
-                      className="text-xs text-neutral-400 hover:text-neutral-200"
-                    >
-                      {showApiKey.openai ? "Hide" : "Show"}
-                    </button>
-                    {envStatus?.openai && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOverrideActive((prev) => ({ ...prev, openai: false }));
-                          updateLocalProvider("openai", { apiKey: null });
-                        }}
-                        className="text-xs text-neutral-500 hover:text-neutral-300"
+            {PROVIDER_ROWS.map((provider, index) => {
+              const fromEnv = Boolean(envStatus?.[provider.id]);
+              return (
+                <DialogRow
+                  key={provider.id}
+                  title={provider.name}
+                  first={index === 0 && !hasImportRow}
+                  className={index === 0 && !hasImportRow ? "pt-0 pb-2" : "py-2"}
+                >
+                  {fromEnv && !overrideActive[provider.id] ? (
+                    <div className="flex items-center gap-3.5">
+                      <DialogStatus tone="ok">Configured via .env</DialogStatus>
+                      <DialogTextButton
+                        onClick={() => setOverrideActive((prev) => ({ ...prev, [provider.id]: true }))}
                       >
-                        Cancel
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Anthropic Provider */}
-            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-neutral-100">Anthropic</span>
-                {envStatus?.anthropic && !overrideActive.anthropic ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-green-400">Configured via .env</span>
-                    <button
-                      type="button"
-                      onClick={() => setOverrideActive((prev) => ({ ...prev, anthropic: true }))}
-                      className="px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
-                    >
-                      Override
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type={showApiKey.anthropic ? "text" : "password"}
-                      value={localProviders.providers.anthropic?.apiKey || ""}
-                      onChange={(e) => updateLocalProvider("anthropic", { apiKey: e.target.value || null })}
-                      placeholder="sk-ant-..."
-                      className="w-48 px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowApiKey((prev) => ({ ...prev, anthropic: !prev.anthropic }))}
-                      className="text-xs text-neutral-400 hover:text-neutral-200"
-                    >
-                      {showApiKey.anthropic ? "Hide" : "Show"}
-                    </button>
-                    {envStatus?.anthropic && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOverrideActive((prev) => ({ ...prev, anthropic: false }));
-                          updateLocalProvider("anthropic", { apiKey: null });
-                        }}
-                        className="text-xs text-neutral-500 hover:text-neutral-300"
+                        Override
+                      </DialogTextButton>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1.5">
+                      <TextInput
+                        type={showApiKey[provider.id] ? "text" : "password"}
+                        value={localProviders.providers[provider.id]?.apiKey || ""}
+                        onChange={(e) => updateLocalProvider(provider.id, { apiKey: e.target.value || null })}
+                        placeholder={provider.placeholder}
+                        aria-label={`${provider.name} API key`}
+                        className="w-[220px] h-8"
+                      />
+                      <DialogTextButton
+                        onClick={() => setShowApiKey((prev) => ({ ...prev, [provider.id]: !prev[provider.id] }))}
                       >
-                        Cancel
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
+                        {showApiKey[provider.id] ? "Hide" : "Show"}
+                      </DialogTextButton>
+                      {fromEnv && (
+                        <DialogTextButton
+                          className="text-neutral-500"
+                          onClick={() => {
+                            setOverrideActive((prev) => ({ ...prev, [provider.id]: false }));
+                            updateLocalProvider(provider.id, { apiKey: null });
+                          }}
+                        >
+                          Cancel
+                        </DialogTextButton>
+                      )}
+                    </div>
+                  )}
+                </DialogRow>
+              );
+            })}
 
-            {/* Replicate Provider */}
-            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-neutral-100">Replicate</span>
-                {envStatus?.replicate && !overrideActive.replicate ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-green-400">Configured via .env</span>
-                    <button
-                      type="button"
-                      onClick={() => setOverrideActive((prev) => ({ ...prev, replicate: true }))}
-                      className="px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
-                    >
-                      Override
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type={showApiKey.replicate ? "text" : "password"}
-                      value={localProviders.providers.replicate?.apiKey || ""}
-                      onChange={(e) => updateLocalProvider("replicate", { apiKey: e.target.value || null })}
-                      placeholder="r8_..."
-                      className="w-48 px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowApiKey((prev) => ({ ...prev, replicate: !prev.replicate }))}
-                      className="text-xs text-neutral-400 hover:text-neutral-200"
-                    >
-                      {showApiKey.replicate ? "Hide" : "Show"}
-                    </button>
-                    {envStatus?.replicate && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOverrideActive((prev) => ({ ...prev, replicate: false }));
-                          updateLocalProvider("replicate", { apiKey: null });
-                        }}
-                        className="text-xs text-neutral-500 hover:text-neutral-300"
-                      >
-                        Cancel
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* fal.ai Provider */}
-            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-neutral-100">fal.ai</span>
-                {envStatus?.fal && !overrideActive.fal ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-green-400">Configured via .env</span>
-                    <button
-                      type="button"
-                      onClick={() => setOverrideActive((prev) => ({ ...prev, fal: true }))}
-                      className="px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
-                    >
-                      Override
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type={showApiKey.fal ? "text" : "password"}
-                      value={localProviders.providers.fal?.apiKey || ""}
-                      onChange={(e) => updateLocalProvider("fal", { apiKey: e.target.value || null })}
-                      placeholder="..."
-                      className="w-48 px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowApiKey((prev) => ({ ...prev, fal: !prev.fal }))}
-                      className="text-xs text-neutral-400 hover:text-neutral-200"
-                    >
-                      {showApiKey.fal ? "Hide" : "Show"}
-                    </button>
-                    {envStatus?.fal && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOverrideActive((prev) => ({ ...prev, fal: false }));
-                          updateLocalProvider("fal", { apiKey: null });
-                        }}
-                        className="text-xs text-neutral-500 hover:text-neutral-300"
-                      >
-                        Cancel
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Kie.ai Provider */}
-            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-neutral-100">Kie.ai</span>
-                {envStatus?.kie && !overrideActive.kie ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-green-400">Configured via .env</span>
-                    <button
-                      type="button"
-                      onClick={() => setOverrideActive((prev) => ({ ...prev, kie: true }))}
-                      className="px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
-                    >
-                      Override
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type={showApiKey.kie ? "text" : "password"}
-                      value={localProviders.providers.kie?.apiKey || ""}
-                      onChange={(e) => updateLocalProvider("kie", { apiKey: e.target.value || null })}
-                      placeholder="..."
-                      className="w-48 px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowApiKey((prev) => ({ ...prev, kie: !prev.kie }))}
-                      className="text-xs text-neutral-400 hover:text-neutral-200"
-                    >
-                      {showApiKey.kie ? "Hide" : "Show"}
-                    </button>
-                    {envStatus?.kie && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOverrideActive((prev) => ({ ...prev, kie: false }));
-                          updateLocalProvider("kie", { apiKey: null });
-                        }}
-                        className="text-xs text-neutral-500 hover:text-neutral-300"
-                      >
-                        Cancel
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* WaveSpeed Provider */}
-            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-neutral-100">WaveSpeed</span>
-                {envStatus?.wavespeed && !overrideActive.wavespeed ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-green-400">Configured via .env</span>
-                    <button
-                      type="button"
-                      onClick={() => setOverrideActive((prev) => ({ ...prev, wavespeed: true }))}
-                      className="px-2 py-1 text-xs text-neutral-400 hover:text-neutral-200 transition-colors"
-                    >
-                      Override
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type={showApiKey.wavespeed ? "text" : "password"}
-                      value={localProviders.providers.wavespeed?.apiKey || ""}
-                      onChange={(e) => updateLocalProvider("wavespeed", { apiKey: e.target.value || null })}
-                      placeholder="..."
-                      className="w-48 px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowApiKey((prev) => ({ ...prev, wavespeed: !prev.wavespeed }))}
-                      className="text-xs text-neutral-400 hover:text-neutral-200"
-                    >
-                      {showApiKey.wavespeed ? "Hide" : "Show"}
-                    </button>
-                    {envStatus?.wavespeed && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOverrideActive((prev) => ({ ...prev, wavespeed: false }));
-                          updateLocalProvider("wavespeed", { apiKey: null });
-                        }}
-                        className="text-xs text-neutral-500 hover:text-neutral-300"
-                      >
-                        Cancel
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <p className="text-xs text-neutral-400 mt-2">
-              {isDesktop() ? 'Keys are encrypted in your desktop profile. Imported keys are saved immediately.' : <>Add API keys via <code className="px-1 py-0.5 bg-neutral-800 rounded">.env.local</code> for server-side storage. Keys added here override .env and are stored in your browser.</>}
+            <p className="mt-2.5 pt-2.5 border-t border-card text-xs leading-4 text-neutral-500">
+              {isDesktop() ? 'Keys are encrypted in your desktop profile. Imported keys are saved immediately.' : <>Add API keys via <code className="px-1 py-0.5 rounded bg-card font-mono text-[11px] text-neutral-400">.env.local</code> for server-side storage. Keys added here override .env and are stored in your browser.</>}
             </p>
           </div>
         )}
 
         {/* Node Defaults Tab Content */}
         {activeTab === "nodeDefaults" && (
-          <div className="space-y-3">
+          <div>
             {/* GenerateImage Section */}
-            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-neutral-100">Default Image Model</span>
-                <div className="flex items-center gap-2">
-                  {localNodeDefaults.generateImage?.selectedModel ? (
-                    <>
-                      <div className="flex items-center gap-1.5 text-xs text-neutral-300">
-                        {getProviderIcon(localNodeDefaults.generateImage.selectedModel.provider)}
-                        <span className="truncate max-w-[150px]">
-                          {localNodeDefaults.generateImage.selectedModel.displayName}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowImageModelDialog(true)}
-                        className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-200 rounded transition-colors"
-                      >
-                        Change
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const { generateImage, ...rest } = localNodeDefaults;
-                          setLocalNodeDefaults(rest);
-                        }}
-                        className="text-xs text-neutral-400 hover:text-neutral-200"
-                      >
-                        Clear
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-xs text-neutral-400">System default (Gemini nano-banana-pro)</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowImageModelDialog(true)}
-                        className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-200 rounded transition-colors"
-                      >
-                        Select Model
-                      </button>
-                    </>
-                  )}
+            <DialogRow
+              first
+              title="Default image model"
+              description={localNodeDefaults.generateImage?.selectedModel ? undefined : "System default (Gemini nano-banana-pro)"}
+              className="pt-0 pb-3"
+            >
+              {localNodeDefaults.generateImage?.selectedModel ? (
+                <div className="flex items-center gap-2.5">
+                  <span className="inline-flex items-center gap-2 text-[13px] text-neutral-100">
+                    {getProviderIcon(localNodeDefaults.generateImage.selectedModel.provider)}
+                    <span className="truncate max-w-[150px]">
+                      {localNodeDefaults.generateImage.selectedModel.displayName}
+                    </span>
+                  </span>
+                  <DialogButton variant="outline" size="md" className="h-8" onClick={() => setShowImageModelDialog(true)}>
+                    Change
+                  </DialogButton>
+                  <DialogTextButton
+                    onClick={() => {
+                      const { generateImage, ...rest } = localNodeDefaults;
+                      setLocalNodeDefaults(rest);
+                    }}
+                  >
+                    Clear
+                  </DialogTextButton>
                 </div>
-              </div>
-            </div>
+              ) : (
+                <DialogButton variant="outline" size="md" className="h-8" onClick={() => setShowImageModelDialog(true)}>
+                  Select model
+                </DialogButton>
+              )}
+            </DialogRow>
 
             {/* GenerateVideo Section */}
-            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-neutral-100">Default Video Model</span>
-                <div className="flex items-center gap-2">
-                  {localNodeDefaults.generateVideo?.selectedModel ? (
-                    <>
-                      <div className="flex items-center gap-1.5 text-xs text-neutral-300">
-                        {getProviderIcon(localNodeDefaults.generateVideo.selectedModel.provider)}
-                        <span className="truncate max-w-[150px]">
-                          {localNodeDefaults.generateVideo.selectedModel.displayName}
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowVideoModelDialog(true)}
-                        className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-200 rounded transition-colors"
-                      >
-                        Change
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const { generateVideo, ...rest } = localNodeDefaults;
-                          setLocalNodeDefaults(rest);
-                        }}
-                        className="text-xs text-neutral-400 hover:text-neutral-200"
-                      >
-                        Clear
-                      </button>
-                    </>
-                  ) : (
-                    <>
-                      <span className="text-xs text-neutral-400">None set (select on first use)</span>
-                      <button
-                        type="button"
-                        onClick={() => setShowVideoModelDialog(true)}
-                        className="px-2 py-1 text-xs bg-neutral-700 hover:bg-neutral-600 text-neutral-200 rounded transition-colors"
-                      >
-                        Select Model
-                      </button>
-                    </>
-                  )}
+            <DialogRow
+              title="Default video model"
+              description={localNodeDefaults.generateVideo?.selectedModel ? undefined : "None set (select on first use)"}
+              className="py-3"
+            >
+              {localNodeDefaults.generateVideo?.selectedModel ? (
+                <div className="flex items-center gap-2.5">
+                  <span className="inline-flex items-center gap-2 text-[13px] text-neutral-100">
+                    {getProviderIcon(localNodeDefaults.generateVideo.selectedModel.provider)}
+                    <span className="truncate max-w-[150px]">
+                      {localNodeDefaults.generateVideo.selectedModel.displayName}
+                    </span>
+                  </span>
+                  <DialogButton variant="outline" size="md" className="h-8" onClick={() => setShowVideoModelDialog(true)}>
+                    Change
+                  </DialogButton>
+                  <DialogTextButton
+                    onClick={() => {
+                      const { generateVideo, ...rest } = localNodeDefaults;
+                      setLocalNodeDefaults(rest);
+                    }}
+                  >
+                    Clear
+                  </DialogTextButton>
                 </div>
-              </div>
-            </div>
+              ) : (
+                <DialogButton variant="outline" size="md" className="h-8" onClick={() => setShowVideoModelDialog(true)}>
+                  Select model
+                </DialogButton>
+              )}
+            </DialogRow>
 
             {/* LLM Section */}
-            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-neutral-100">Default LLM Settings</span>
-                  {localNodeDefaults.llm && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const { llm, ...rest } = localNodeDefaults;
-                        setLocalNodeDefaults(rest);
-                      }}
-                      className="text-xs text-neutral-400 hover:text-neutral-200"
-                    >
-                      Clear
-                    </button>
-                  )}
-                </div>
-
+            <div className="flex items-center justify-between gap-6 pt-3.5 pb-2.5 border-t border-card">
+              <div className="min-w-0">
+                <DialogRowTitle>Default LLM settings</DialogRowTitle>
                 {!localNodeDefaults.llm ? (
-                  <p className="text-xs text-neutral-400">{`Using system defaults (Google ${llmModelLabel(DEFAULT_LLM_MODEL)})`}</p>
+                  <p className="mt-0.5 text-xs leading-4 text-ink-3">{`Using system defaults (Google ${llmModelLabel(DEFAULT_LLM_MODEL)})`}</p>
                 ) : null}
+              </div>
+              {localNodeDefaults.llm && (
+                <DialogTextButton
+                  onClick={() => {
+                    const { llm, ...rest } = localNodeDefaults;
+                    setLocalNodeDefaults(rest);
+                  }}
+                >
+                  Clear
+                </DialogTextButton>
+              )}
+            </div>
 
-                {/* Provider dropdown */}
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-neutral-400 w-20">Provider</label>
-                  <select
-                    value={localNodeDefaults.llm?.provider || "google"}
-                    onChange={(e) => {
-                      const newProvider = e.target.value as LLMProvider;
-                      const firstModelForProvider = defaultLLMModel(newProvider);
-                      const currentTemp = localNodeDefaults.llm?.temperature ?? 0.7;
-                      setLocalNodeDefaults(prev => ({
-                        ...prev,
-                        llm: {
-                          ...prev.llm,
-                          provider: newProvider,
-                          model: firstModelForProvider,
-                          // Clamp temperature for Anthropic (max 1.0)
-                          ...(newProvider === "anthropic" && currentTemp > 1 ? { temperature: 1 } : {}),
-                        }
-                      }));
-                    }}
-                    className="flex-1 px-2 py-1 text-xs bg-neutral-800 border border-neutral-600 rounded text-neutral-100 focus:outline-none focus:border-neutral-500"
-                  >
-                    {LLM_PROVIDER_OPTIONS.map((p) => (
-                      <option key={p.value} value={p.value}>{p.label}</option>
-                    ))}
-                  </select>
-                </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+              {/* Provider dropdown */}
+              <Field id="llm-provider" label="Provider">
+                <Select
+                  id="llm-provider"
+                  value={llmProvider}
+                  onChange={(e) => {
+                    const newProvider = e.target.value as LLMProvider;
+                    const firstModelForProvider = defaultLLMModel(newProvider);
+                    const currentTemp = localNodeDefaults.llm?.temperature ?? 0.7;
+                    setLocalNodeDefaults(prev => ({
+                      ...prev,
+                      llm: {
+                        ...prev.llm,
+                        provider: newProvider,
+                        model: firstModelForProvider,
+                        // Clamp temperature for Anthropic (max 1.0)
+                        ...(newProvider === "anthropic" && currentTemp > 1 ? { temperature: 1 } : {}),
+                      }
+                    }));
+                  }}
+                >
+                  {LLM_PROVIDER_OPTIONS.map((p) => (
+                    <option key={p.value} value={p.value}>{p.label}</option>
+                  ))}
+                </Select>
+              </Field>
 
-                {/* Model dropdown */}
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-neutral-400 w-20">Model</label>
-                  <select
-                    value={localNodeDefaults.llm?.model || defaultLLMModel(localNodeDefaults.llm?.provider || "google")}
-                    onChange={(e) => {
-                      setLocalNodeDefaults(prev => ({
-                        ...prev,
-                        llm: { ...prev.llm, model: e.target.value as LLMModelType }
-                      }));
-                    }}
-                    className="flex-1 px-2 py-1 text-xs bg-neutral-800 border border-neutral-600 rounded text-neutral-100 focus:outline-none focus:border-neutral-500"
-                  >
-                    {llmModelOptions(localNodeDefaults.llm?.provider || "google", localNodeDefaults.llm?.model).map((m) => (
-                      <option key={m.value} value={m.value}>{m.label}</option>
-                    ))}
-                  </select>
-                </div>
+              {/* Model dropdown */}
+              <Field id="llm-model" label="Model">
+                <Select
+                  id="llm-model"
+                  value={localNodeDefaults.llm?.model || defaultLLMModel(llmProvider)}
+                  onChange={(e) => {
+                    setLocalNodeDefaults(prev => ({
+                      ...prev,
+                      llm: { ...prev.llm, model: e.target.value as LLMModelType }
+                    }));
+                  }}
+                >
+                  {llmModelOptions(llmProvider, localNodeDefaults.llm?.model).map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </Select>
+              </Field>
 
-                {/* Temperature slider */}
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-neutral-400 w-20">
-                    Temp: {(localNodeDefaults.llm?.temperature ?? 0.7).toFixed(1)}
-                  </label>
-                  <input
-                    type="range"
-                    min="0"
-                    max={(localNodeDefaults.llm?.provider || "google") === "anthropic" ? "1" : "2"}
-                    step="0.1"
-                    value={localNodeDefaults.llm?.temperature ?? 0.7}
-                    onChange={(e) => {
-                      setLocalNodeDefaults(prev => ({
-                        ...prev,
-                        llm: { ...prev.llm, temperature: parseFloat(e.target.value) }
-                      }));
-                    }}
-                    className="flex-1 h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-neutral-400"
-                  />
-                </div>
+              {/* Temperature slider */}
+              <div>
+                <label htmlFor="llm-temperature" className={cn(labelClass, "mb-2")}>Temperature</label>
+                <Slider
+                  id="llm-temperature"
+                  label="Temperature"
+                  min={0}
+                  max={llmProvider === "anthropic" ? 1 : 2}
+                  step={0.1}
+                  value={llmTemperature}
+                  readout={llmTemperature.toFixed(1)}
+                  onChange={(temperature) => {
+                    setLocalNodeDefaults(prev => ({
+                      ...prev,
+                      llm: { ...prev.llm, temperature }
+                    }));
+                  }}
+                />
+              </div>
 
-                {/* Max Tokens slider */}
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-neutral-400 w-20">
-                    Tokens: {(localNodeDefaults.llm?.maxTokens ?? 8192).toLocaleString()}
-                  </label>
-                  <input
-                    type="range"
-                    min="256"
-                    max="16384"
-                    step="256"
-                    value={localNodeDefaults.llm?.maxTokens ?? 8192}
-                    onChange={(e) => {
-                      setLocalNodeDefaults(prev => ({
-                        ...prev,
-                        llm: { ...prev.llm, maxTokens: parseInt(e.target.value, 10) }
-                      }));
-                    }}
-                    className="flex-1 h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-neutral-400"
-                  />
-                </div>
+              {/* Max Tokens slider */}
+              <div>
+                <label htmlFor="llm-max-tokens" className={cn(labelClass, "mb-2")}>Max tokens</label>
+                <Slider
+                  id="llm-max-tokens"
+                  label="Max tokens"
+                  min={256}
+                  max={16384}
+                  step={256}
+                  value={llmMaxTokens}
+                  readout={llmMaxTokens.toLocaleString()}
+                  onChange={(maxTokens) => {
+                    setLocalNodeDefaults(prev => ({
+                      ...prev,
+                      llm: { ...prev.llm, maxTokens }
+                    }));
+                  }}
+                />
               </div>
             </div>
 
             {/* Execution Section */}
-            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
-              <div className="flex flex-col gap-3">
-                <span className="text-sm font-medium text-neutral-100">Execution Settings</span>
+            <DialogRow
+              title="Max parallel calls"
+              description="Maximum number of nodes to execute in parallel during workflow execution. Higher values may improve speed but increase API rate limit risk."
+              className="mt-3.5"
+            >
+              <Slider
+                className="w-[200px] shrink-0"
+                label="Max parallel calls"
+                min={1}
+                max={10}
+                step={1}
+                value={maxConcurrentCalls}
+                onChange={(value) => setMaxConcurrentCalls(value)}
+              />
+            </DialogRow>
 
-                {/* Concurrency slider */}
-                <div className="flex items-center gap-2">
-                  <label className="text-xs text-neutral-400 w-32">
-                    Max Parallel Calls: {maxConcurrentCalls}
-                  </label>
-                  <input
-                    type="range"
-                    min="1"
-                    max="10"
-                    step="1"
-                    value={maxConcurrentCalls}
-                    onChange={(e) => setMaxConcurrentCalls(parseInt(e.target.value, 10))}
-                    className="flex-1 h-1 bg-neutral-700 rounded-lg appearance-none cursor-pointer accent-neutral-400"
-                  />
-                </div>
-                <p className="text-xs text-neutral-400">
-                  Maximum number of nodes to execute in parallel during workflow execution.
-                  Higher values may improve speed but increase API rate limit risk.
-                </p>
-              </div>
-            </div>
-
-            <p className="text-xs text-neutral-400 mt-2">
+            <p className="pt-3 border-t border-card text-xs leading-4 text-neutral-500">
               These defaults are applied when creating nodes via keyboard shortcuts (Shift+G, Shift+L, etc).
             </p>
           </div>
@@ -1148,133 +840,94 @@ export function ProjectSetupModal({
 
         {/* Canvas Tab Content */}
         {activeTab === "canvas" && (
-          <div className="space-y-3">
+          <div>
             {/* Pan Mode */}
-            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-neutral-100">Pan Mode</span>
-                  <p className="text-xs text-neutral-400">
-                    {localCanvasSettings.panMode === "space" && "Hold Space and drag to pan"}
-                    {localCanvasSettings.panMode === "middleMouse" && "Click and drag with middle mouse button"}
-                    {localCanvasSettings.panMode === "always" && "Pan without holding any keys"}
-                  </p>
-                </div>
-                <div className="flex gap-1 p-0.5 bg-neutral-800 rounded-md">
-                  {([
-                    { value: "space" as PanMode, label: "Space + Drag" },
-                    { value: "middleMouse" as PanMode, label: "Middle Mouse" },
-                    { value: "always" as PanMode, label: "Always On" },
-                  ] as const).map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setLocalCanvasSettings({ ...localCanvasSettings, panMode: option.value })}
-                      className={`flex-1 px-2 py-1.5 text-xs rounded transition-all duration-150 ${
-                        localCanvasSettings.panMode === option.value
-                          ? "bg-neutral-700 text-neutral-100 font-medium"
-                          : "text-neutral-400 hover:text-neutral-300"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <DialogRow
+              first
+              title="Pan mode"
+              description={
+                <>
+                  {localCanvasSettings.panMode === "space" && "Hold Space and drag to pan"}
+                  {localCanvasSettings.panMode === "middleMouse" && "Click and drag with middle mouse button"}
+                  {localCanvasSettings.panMode === "always" && "Pan without holding any keys"}
+                </>
+              }
+              className="pt-0 pb-[18px]"
+            >
+              <Segmented
+                className="w-[312px] shrink-0"
+                label="Pan mode"
+                options={PAN_MODES}
+                value={localCanvasSettings.panMode}
+                onChange={(panMode) => setLocalCanvasSettings({ ...localCanvasSettings, panMode })}
+              />
+            </DialogRow>
 
             {/* Zoom Mode */}
-            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-neutral-100">Zoom Mode</span>
-                  <p className="text-xs text-neutral-400">
-                    {localCanvasSettings.zoomMode === "altScroll" && "Hold Alt and scroll to zoom"}
-                    {localCanvasSettings.zoomMode === "ctrlScroll" && "Hold Ctrl/Cmd and scroll to zoom"}
-                    {localCanvasSettings.zoomMode === "scroll" && "Scroll to zoom without modifier keys"}
-                  </p>
-                </div>
-                <div className="flex gap-1 p-0.5 bg-neutral-800 rounded-md">
-                  {([
-                    { value: "altScroll" as ZoomMode, label: "Alt + Scroll" },
-                    { value: "ctrlScroll" as ZoomMode, label: "Ctrl + Scroll" },
-                    { value: "scroll" as ZoomMode, label: "Scroll" },
-                  ] as const).map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setLocalCanvasSettings({ ...localCanvasSettings, zoomMode: option.value })}
-                      className={`flex-1 px-2 py-1.5 text-xs rounded transition-all duration-150 ${
-                        localCanvasSettings.zoomMode === option.value
-                          ? "bg-neutral-700 text-neutral-100 font-medium"
-                          : "text-neutral-400 hover:text-neutral-300"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <DialogRow
+              title="Zoom mode"
+              description={
+                <>
+                  {localCanvasSettings.zoomMode === "altScroll" && "Hold Alt and scroll to zoom"}
+                  {localCanvasSettings.zoomMode === "ctrlScroll" && "Hold Ctrl/Cmd and scroll to zoom"}
+                  {localCanvasSettings.zoomMode === "scroll" && "Scroll to zoom without modifier keys"}
+                </>
+              }
+              className="py-[18px]"
+            >
+              <Segmented
+                className="w-[312px] shrink-0"
+                label="Zoom mode"
+                options={ZOOM_MODES}
+                value={localCanvasSettings.zoomMode}
+                onChange={(zoomMode) => setLocalCanvasSettings({ ...localCanvasSettings, zoomMode })}
+              />
+            </DialogRow>
 
             {/* Selection Mode */}
-            <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700">
-              <div className="flex flex-col gap-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-neutral-100">Selection Mode</span>
-                  <p className="text-xs text-neutral-400">
-                    {localCanvasSettings.selectionMode === "click" && "Click to select nodes"}
-                    {localCanvasSettings.selectionMode === "altDrag" && "Hold Alt and drag to select"}
-                    {localCanvasSettings.selectionMode === "shiftDrag" && "Hold Shift and drag to select"}
-                  </p>
-                </div>
-                <div className="flex gap-1 p-0.5 bg-neutral-800 rounded-md">
-                  {([
-                    { value: "click" as SelectionMode, label: "Click" },
-                    { value: "altDrag" as SelectionMode, label: "Alt + Drag" },
-                    { value: "shiftDrag" as SelectionMode, label: "Shift + Drag" },
-                  ] as const).map((option) => (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setLocalCanvasSettings({ ...localCanvasSettings, selectionMode: option.value })}
-                      className={`flex-1 px-2 py-1.5 text-xs rounded transition-all duration-150 ${
-                        localCanvasSettings.selectionMode === option.value
-                          ? "bg-neutral-700 text-neutral-100 font-medium"
-                          : "text-neutral-400 hover:text-neutral-300"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <DialogRow
+              title="Selection mode"
+              description={
+                <>
+                  {localCanvasSettings.selectionMode === "click" && "Click to select nodes"}
+                  {localCanvasSettings.selectionMode === "altDrag" && "Hold Alt and drag to select"}
+                  {localCanvasSettings.selectionMode === "shiftDrag" && "Hold Shift and drag to select"}
+                </>
+              }
+              className="py-[18px]"
+            >
+              <Segmented
+                className="w-[312px] shrink-0"
+                label="Selection mode"
+                options={SELECTION_MODES}
+                value={localCanvasSettings.selectionMode}
+                onChange={(selectionMode) => setLocalCanvasSettings({ ...localCanvasSettings, selectionMode })}
+              />
+            </DialogRow>
           </div>
         )}
 
         {/* Noodles Tab Content */}
         {activeTab === "noodles" && (
-          <div className="space-y-3">
-            <ConnectionSettings
-              edgeStyle={localEdgeStyle}
-              appearance={localEdgeAppearance}
-              onEdgeStyleChange={setLocalEdgeStyle}
-              onAppearanceChange={setLocalEdgeAppearance}
-              onSetDefault={handleSetEdgeDefault}
-              defaultSaved={edgeDefaultSaved}
-            />
-          </div>
+          <ConnectionSettings
+            edgeStyle={localEdgeStyle}
+            appearance={localEdgeAppearance}
+            onEdgeStyleChange={setLocalEdgeStyle}
+            onAppearanceChange={setLocalEdgeAppearance}
+            onSetDefault={handleSetEdgeDefault}
+            defaultSaved={edgeDefaultSaved}
+          />
         )}
 
-        </DialogBody>
+        </DialogPageBody>
 
-        <DialogFooter>
-          <DialogButton variant="ghost" onClick={onClose}>
+        <DialogPageFooter>
+          <DialogButton variant="ghost" size="md" onClick={onClose}>
             Cancel
           </DialogButton>
           <DialogButton
             variant="primary"
+            size="md"
             onClick={handleSave}
             disabled={activeTab === "project" && (isValidating || isBrowsing)}
           >
@@ -1283,9 +936,8 @@ export function ProjectSetupModal({
               : "Save"
             }
           </DialogButton>
-        </DialogFooter>
-        </div>
-      </div>
+        </DialogPageFooter>
+      </DialogPage>
 
       {/* Model Selection Dialogs */}
       {showImageModelDialog && (

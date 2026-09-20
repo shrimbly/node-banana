@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   COMFY_CLOUD_URL,
@@ -11,6 +11,9 @@ import {
   type ComfySettings,
 } from "@/lib/comfy/settings";
 import type { ComfyBackendMode } from "@/lib/comfy/types";
+import { DialogButton, DialogStatus } from "@/components/ui/Dialog";
+import { Field, Segmented, Switch, TextInput, helpClass, inputClass, labelClass } from "@/components/ui/Controls";
+import { cn } from "@/components/nodes/ui/cn";
 
 interface ComfySettingsTabProps {
   settings: ComfySettings;
@@ -29,6 +32,8 @@ const MODES: Array<{ value: ComfyBackendMode; label: string; hint: string }> = [
   { value: "local", label: "This computer", hint: "Your own ComfyUI, with your own models." },
   { value: "remote", label: "Remote", hint: "A ComfyUI elsewhere on your network." },
 ];
+
+const MODE_OPTIONS = MODES.map((mode) => ({ value: mode.value, label: mode.label, title: mode.hint }));
 
 /**
  * How Node Banana runs ComfyUI workflows.
@@ -124,188 +129,182 @@ export function ComfySettingsTab({ settings, onChange }: ComfySettingsTabProps) 
   }, [settings]);
 
   return (
-    <div className="space-y-4">
+    <div>
       <div>
-        <label className="block text-sm text-neutral-400 mb-2">Run workflows on</label>
-        <div className="grid grid-cols-3 gap-1.5 p-1 bg-neutral-900/50 rounded-lg">
-          {MODES.map((mode) => (
-            <button
-              key={mode.value}
-              type="button"
-              onClick={() => update({ mode: mode.value })}
-              title={mode.hint}
-              className={`px-3 py-1.5 text-sm rounded-md transition-all duration-150 ${
-                settings.mode === mode.value
-                  ? "bg-neutral-700 text-neutral-100 font-medium"
-                  : "text-neutral-400 hover:text-neutral-300 hover:bg-neutral-800/50"
-              }`}
-            >
-              {mode.label}
-            </button>
-          ))}
-        </div>
-        <p className="text-[11px] text-neutral-500 mt-1.5">
-          {MODES.find((m) => m.value === settings.mode)?.hint}
-        </p>
+        <span className={cn(labelClass, "mb-2")}>Run workflows on</span>
+        <Segmented
+          options={MODE_OPTIONS}
+          value={settings.mode}
+          onChange={(mode) => update({ mode })}
+          label="Run workflows on"
+        />
+        <p className={helpClass}>{MODES.find((m) => m.value === settings.mode)?.hint}</p>
       </div>
 
-      {settings.mode === "cloud" && (
-        <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700 space-y-3">
-          <Field label="API key">
-            <div className="flex items-center gap-2">
-              <input
-                type={showKey ? "text" : "password"}
-                value={settings.cloudApiKey ?? ""}
-                onChange={(e) => update({ cloudApiKey: e.target.value || null })}
-                placeholder="comfyui-..."
-                className="flex-1 min-w-0 px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
-              />
-              <button
-                type="button"
-                onClick={() => setShowKey((v) => !v)}
-                className="text-xs text-neutral-400 hover:text-neutral-200 shrink-0"
-              >
-                {showKey ? "Hide" : "Show"}
-              </button>
-            </div>
+      {/* The chosen mode's fields */}
+      <div className="flex flex-col gap-3.5 mt-[18px] pt-[18px] border-t border-card">
+        {settings.mode === "cloud" && (
+          <>
+            <Field id="comfy-cloud-key" label="API key">
+              <div className="flex gap-2">
+                <TextInput
+                  id="comfy-cloud-key"
+                  type={showKey ? "text" : "password"}
+                  value={settings.cloudApiKey ?? ""}
+                  onChange={(e) => update({ cloudApiKey: e.target.value || null })}
+                  placeholder="comfyui-..."
+                />
+                <DialogButton variant="outline" size="md" className="shrink-0" onClick={() => setShowKey((v) => !v)}>
+                  {showKey ? "Hide" : "Show"}
+                </DialogButton>
+              </div>
+            </Field>
             <a
               href="https://platform.comfy.org/profile/api-keys"
               target="_blank"
               rel="noreferrer"
-              className="text-[10px] text-neutral-500 hover:text-neutral-300 mt-1 inline-block"
+              className="-mt-1.5 self-start inline-flex items-center gap-1.5 text-xs leading-4 text-neutral-400 hover:text-neutral-100 transition-colors"
             >
-              Get a key at platform.comfy.org →
+              Get a key at platform.comfy.org
+              <ArrowIcon />
             </a>
-          </Field>
 
-          {settings.cloudUrl !== COMFY_CLOUD_URL && (
-            <Field label="Cloud URL">
-              <input
+            {settings.cloudUrl !== COMFY_CLOUD_URL && (
+              <Field id="comfy-cloud-url" label="Cloud URL">
+                <TextInput
+                  id="comfy-cloud-url"
+                  type="text"
+                  value={settings.cloudUrl}
+                  onChange={(e) => update({ cloudUrl: e.target.value })}
+                />
+              </Field>
+            )}
+          </>
+        )}
+
+        {settings.mode === "local" && (
+          <>
+            <Field id="comfy-local-url" label="ComfyUI URL">
+              <TextInput
+                id="comfy-local-url"
                 type="text"
-                value={settings.cloudUrl}
-                onChange={(e) => update({ cloudUrl: e.target.value })}
-                className="w-full px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
+                value={settings.localUrl}
+                onChange={(e) => update({ localUrl: e.target.value })}
+                placeholder={COMFY_LOCAL_URL}
               />
             </Field>
-          )}
-        </div>
-      )}
+            <ApiV2Toggle
+              checked={settings.localUsesApiV2}
+              onChange={(localUsesApiV2) => update({ localUsesApiV2 })}
+            />
+            <p className="text-xs leading-4 text-neutral-500">
+              A workflow only runs here if this ComfyUI has the models and custom nodes it needs.
+            </p>
+          </>
+        )}
 
-      {settings.mode === "local" && (
-        <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700 space-y-3">
-          <Field label="ComfyUI URL">
-            <input
-              type="text"
-              value={settings.localUrl}
-              onChange={(e) => update({ localUrl: e.target.value })}
-              placeholder={COMFY_LOCAL_URL}
-              className="w-full px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
+        {settings.mode === "remote" && (
+          <>
+            <Field id="comfy-remote-url" label="ComfyUI URL">
+              <TextInput
+                id="comfy-remote-url"
+                type="text"
+                value={settings.remoteUrl}
+                onChange={(e) => update({ remoteUrl: e.target.value })}
+                placeholder="http://192.168.1.20:8188"
+              />
+            </Field>
+            <Field id="comfy-remote-key" label="API key (optional)">
+              <TextInput
+                id="comfy-remote-key"
+                type="password"
+                value={settings.remoteApiKey ?? ""}
+                onChange={(e) => update({ remoteApiKey: e.target.value || null })}
+                placeholder="Only if it sits behind auth"
+              />
+            </Field>
+            <ApiV2Toggle
+              checked={settings.remoteUsesApiV2}
+              onChange={(remoteUsesApiV2) => update({ remoteUsesApiV2 })}
             />
-          </Field>
-          <ApiV2Toggle
-            checked={settings.localUsesApiV2}
-            onChange={(localUsesApiV2) => update({ localUsesApiV2 })}
-          />
-          <p className="text-[10px] text-neutral-500">
-            A workflow only runs here if this ComfyUI has the models and custom nodes it needs.
-          </p>
-        </div>
-      )}
-
-      {settings.mode === "remote" && (
-        <div className="p-3 bg-neutral-900 rounded-lg border border-neutral-700 space-y-3">
-          <Field label="ComfyUI URL">
-            <input
-              type="text"
-              value={settings.remoteUrl}
-              onChange={(e) => update({ remoteUrl: e.target.value })}
-              placeholder="http://192.168.1.20:8188"
-              className="w-full px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
-            />
-          </Field>
-          <Field label="API key (optional)">
-            <input
-              type="password"
-              value={settings.remoteApiKey ?? ""}
-              onChange={(e) => update({ remoteApiKey: e.target.value || null })}
-              placeholder="Only if it sits behind auth"
-              className="w-full px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
-            />
-          </Field>
-          <ApiV2Toggle
-            checked={settings.remoteUsesApiV2}
-            onChange={(remoteUsesApiV2) => update({ remoteUsesApiV2 })}
-          />
-        </div>
-      )}
+          </>
+        )}
+      </div>
 
       {/* Connection test */}
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
+      <div className="flex items-center gap-3.5 mt-[18px] pt-[18px] border-t border-card">
+        <DialogButton
+          variant="outline"
+          size="md"
+          className="h-8 shrink-0"
           onClick={test}
           disabled={testing || Boolean(configError)}
-          className="px-3 py-1.5 text-xs rounded-lg bg-neutral-700 hover:bg-neutral-600 text-neutral-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           {testing ? "Testing…" : "Test connection"}
-        </button>
-        {configError && <span className="text-[11px] text-amber-400">{configError}</span>}
+        </DialogButton>
+        {configError && <span className="text-xs leading-4 text-amber-400">{configError}</span>}
         {result && (
-          <span
-            className={`text-[11px] ${result.connected ? "text-green-400" : "text-red-400"}`}
-          >
+          <DialogStatus tone={result.connected ? "ok" : "error"}>
             {result.connected
               ? `Connected${result.nodeCount ? ` · ${result.nodeCount} node types` : ""}${
                   result.apiV2 ? " · API v2" : ""
                 }`
               : result.detail}
-          </span>
+          </DialogStatus>
         )}
       </div>
 
       {/* Advanced */}
-      <details className="group">
-        <summary className="text-xs text-neutral-500 hover:text-neutral-300 cursor-pointer select-none list-none flex items-center gap-1">
+      <details className="group mt-[18px] pt-3 border-t border-card">
+        <summary
+          className={cn(
+            "list-none [&::-webkit-details-marker]:hidden cursor-pointer select-none inline-flex items-center gap-2 rounded",
+            "font-display text-[13px] font-medium text-neutral-400 hover:text-neutral-100 group-open:text-neutral-100 transition-colors",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection"
+          )}
+        >
           <svg
-            className="w-3 h-3 transition-transform group-open:rotate-90"
+            className="w-3.5 h-3.5 transition-transform group-open:rotate-90"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
-            strokeWidth="2"
+            strokeWidth="1.75"
             strokeLinecap="round"
             strokeLinejoin="round"
+            aria-hidden="true"
           >
-            <polyline points="9 18 15 12 9 6" />
+            <path d="M9 6l6 6-6 6" />
           </svg>
           Advanced
         </summary>
 
-        <div className="mt-3 p-3 bg-neutral-900 rounded-lg border border-neutral-700 space-y-3">
-          <Field label="Comfy API-node key">
-            <div className="flex items-center gap-2">
-              <input
+        <div className="flex flex-col gap-3 mt-3">
+          <Field
+            id="comfy-org-key"
+            label="Comfy API-node key"
+            help="Authenticates partner nodes (Gemini, Kling, …) inside a workflow, wherever it runs."
+          >
+            <div className="flex gap-2">
+              <TextInput
+                id="comfy-org-key"
                 type={showOrgKey ? "text" : "password"}
                 value={settings.comfyOrgApiKey ?? ""}
                 onChange={(e) => update({ comfyOrgApiKey: e.target.value || null })}
                 placeholder={settings.cloudApiKey ? "Same as the Cloud key" : "comfyui-..."}
-                className="flex-1 min-w-0 px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
               />
-              <button
-                type="button"
-                onClick={() => setShowOrgKey((v) => !v)}
-                className="text-xs text-neutral-400 hover:text-neutral-200 shrink-0"
-              >
+              <DialogButton variant="outline" size="md" className="shrink-0" onClick={() => setShowOrgKey((v) => !v)}>
                 {showOrgKey ? "Hide" : "Show"}
-              </button>
+              </DialogButton>
             </div>
-            <p className="text-[10px] text-neutral-500 mt-1">
-              Authenticates partner nodes (Gemini, Kling, …) inside a workflow, wherever it runs.
-            </p>
           </Field>
 
-          <Field label="Job timeout">
+          <div className="flex items-center justify-between gap-6">
+            <label htmlFor="comfy-job-timeout" className={cn(labelClass, "mb-0")}>
+              Job timeout
+            </label>
             <div className="flex items-center gap-2">
               <input
+                id="comfy-job-timeout"
                 type="number"
                 min={1}
                 max={60}
@@ -314,28 +313,46 @@ export function ComfySettingsTab({ settings, onChange }: ComfySettingsTabProps) 
                   const minutes = Number(e.target.value);
                   if (Number.isFinite(minutes)) update({ jobTimeoutMs: minutes * 60_000 });
                 }}
-                className="w-16 px-2 py-1 bg-neutral-800 border border-neutral-600 rounded-lg text-neutral-100 text-xs focus:outline-none focus:border-neutral-500"
+                className={cn(inputClass, "w-16 h-8 px-2.5")}
               />
-              <span className="text-xs text-neutral-500">minutes</span>
+              <span className="text-xs text-neutral-400">minutes</span>
             </div>
-          </Field>
+          </div>
 
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
+          <div className="flex items-center justify-between gap-6">
+            <div>
+              <div className="text-[13px] leading-[18px] text-neutral-100">Randomise seeds on every run</div>
+              <p className="mt-0.5 text-xs leading-4 text-ink-3">
+                Off means repeat runs return the workflow&apos;s saved seed — and identical results.
+                A seed you set on a node is always kept either way.
+              </p>
+            </div>
+            <Switch
               checked={settings.randomizeSeeds}
-              onChange={(e) => update({ randomizeSeeds: e.target.checked })}
-              className="w-3.5 h-3.5 rounded bg-neutral-800"
+              onChange={(randomizeSeeds) => update({ randomizeSeeds })}
+              label="Randomise seeds on every run"
             />
-            <span className="text-xs text-neutral-300">Randomise seeds on every run</span>
-          </label>
-          <p className="text-[10px] text-neutral-500 -mt-1.5">
-            Off means repeat runs return the workflow&apos;s saved seed — and identical results.
-            A seed you set on a node is always kept either way.
-          </p>
+          </div>
         </div>
       </details>
     </div>
+  );
+}
+
+function ArrowIcon() {
+  return (
+    <svg
+      className="w-3.5 h-3.5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M5 12h14M13 6l6 6-6 6" />
+    </svg>
   );
 }
 
@@ -347,30 +364,21 @@ function ApiV2Toggle({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <div>
-      <label className="flex items-center gap-2 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={(e) => onChange(e.target.checked)}
-          className="w-3.5 h-3.5 rounded bg-neutral-800"
-        />
-        <span className="text-xs text-neutral-300">Behind comfy-api-proxy</span>
-      </label>
-      <p className="text-[10px] text-neutral-500 mt-1">
-        Turn on only if this endpoint serves the Comfy API v2. A stock ComfyUI does not —
-        leave it off and Node Banana drives it directly.
-      </p>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs text-neutral-400 mb-1">{label}</label>
-      {children}
-    </div>
+    <label className="flex items-start gap-3 cursor-pointer">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 w-4 h-4 shrink-0 rounded accent-neutral-200"
+      />
+      <span>
+        <span className="block text-[13px] leading-[18px] text-neutral-100">Behind comfy-api-proxy</span>
+        <span className="block text-xs leading-4 text-ink-3">
+          Turn on only if this endpoint serves the Comfy API v2. A stock ComfyUI does not —
+          leave it off and Node Banana drives it directly.
+        </span>
+      </span>
+    </label>
   );
 }
 
