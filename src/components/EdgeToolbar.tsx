@@ -42,7 +42,7 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
   const setLoopCount = useWorkflowStore((state) => state.setLoopCount);
   const setEdgesHidden = useWorkflowStore((state) => state.setEdgesHidden);
   const setEdgeLabel = useWorkflowStore((state) => state.setEdgeLabel);
-  const bundleEdges = useWorkflowStore((state) => state.bundleEdges);
+  const hookEdges = useWorkflowStore((state) => state.hookEdges);
   const unbundleEdges = useWorkflowStore((state) => state.unbundleEdges);
   const { zoom } = useViewport();
 
@@ -69,13 +69,13 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
   const loopCount = edge.data?.loopCount ?? 3;
   const allPaused = groupEdges.every((e) => e.data?.hasPause);
   const hasPause = grouped ? allPaused : Boolean(edge.data?.hasPause);
-  // A multi-selection leaving one handle can be bundled, unless it already is
+  // Gather any visible multi-selection into a movable bundle.
   const selectedEnd = multi ? sharedEnd(selectedEdges) : null;
   const alreadyBundled =
     selectedEnd !== null &&
     Boolean(bundleIdAt(selectedEdges[0], selectedEnd)) &&
     selectedEdges.every((e) => bundleIdAt(e, selectedEnd) === bundleIdAt(selectedEdges[0], selectedEnd));
-  const canBundle = selectedEnd !== null && !alreadyBundled && selectedEdges.every((e) => !e.data?.hidden && e.type !== "reference");
+  const canBundle = multi && !alreadyBundled && selectedEdges.every((e) => !e.hidden && !e.data?.hidden && e.type !== "reference");
   const canUnbundle = bundle !== null && (bundled || multi);
   const isHiddenEdge = Boolean(edge.data?.hidden);
 
@@ -90,7 +90,7 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
         className="nodrag nopan nokey"
         data-testid="edge-toolbar"
         // Above selected nodes (1000) and the hidden-connection pills and bundle clamps (2001)
-        style={{ position: "absolute", transform: `translate(${anchor.x}px, ${anchor.y}px)`, pointerEvents: "all", zIndex: 2100 }}
+        style={{ position: "absolute", transform: `translate(${anchor.x}px, ${anchor.y}px)`, pointerEvents: "none", zIndex: 2100 }}
         onPointerDown={(e) => e.stopPropagation()}
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
@@ -100,7 +100,7 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
           variant="bar"
           floating={false}
           className="relative"
-          style={{ transform: `translate(-50%, calc(-100% - 12px)) scale(${1 / zoom})`, transformOrigin: "bottom center" }}
+          style={{ transform: `translate(-50%, calc(-100% - 12px)) scale(${1 / zoom})`, transformOrigin: "bottom center", pointerEvents: "all" }}
         >
           {grouped && (
             <span className="text-[10px] font-medium text-neutral-300 px-2 border-r border-neutral-600 whitespace-nowrap">
@@ -184,24 +184,20 @@ export function EdgeToolbar({ edgeId, x, y }: EdgeToolbarProps) {
           )}
           {canBundle && (
             <button
-              onClick={() => bundleEdges(selectedIds)}
-              className={`${iconButton} text-neutral-400 hover:text-neutral-100`}
+              onClick={() => hookEdges(selectedIds, { x: anchor.x, y: anchor.y })}
+              className={`${iconButton} px-2 text-xs font-medium text-neutral-300 hover:text-neutral-100`}
               title={`Bundle ${selectedIds.length} connections`}
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 16 16" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
-                <path d="M2 4h3.5c2 0 2 4 4 4H14M2 8h3.5M2 12h3.5c2 0 2-4 4-4" />
-              </svg>
+              Bundle
             </button>
           )}
           {canUnbundle && (
             <button
               onClick={() => unbundleEdges(selectedIds, bundle?.end)}
-              className={`${iconButton} text-neutral-400 hover:text-neutral-100`}
+              className={`${iconButton} px-2 text-xs font-medium text-neutral-300 hover:text-neutral-100`}
               title="Unbundle"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 16 16" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
-                <path d="M2 8h3.5c2 0 2-4 4-4H14M9.5 8H14M5.5 8c2 0 2 4 4 4H14" />
-              </svg>
+              Unbundle
             </button>
           )}
           {isHiddenEdge ? (

@@ -9,7 +9,7 @@ import { edgeColorForHandles } from "@/lib/edges/colors";
 /**
  * The bar a single click on a handle opens, centred above it: a count of the
  * connections on that handle, then Bundle (or Unbundle), Hide (or Show) and
- * Remove all as icons. A drag on the handle still starts a connection.
+ * Remove all. Bundling actions use text labels. A drag on the handle still starts a connection.
  */
 
 export interface HandleMenuTarget {
@@ -93,16 +93,12 @@ export function HandleMenu({ target, onClose }: HandleMenuProps) {
       </MenuBarLabel>
 
       {allInOneBundle ? (
-        <MenuIconButton role="menuitem" title="Unbundle" aria-label="Unbundle" onClick={() => run(() => unbundleEdges(bundled.map((e) => e.id), target.type))}>
-          <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
-            <path d="M2 8h3.5c2 0 2-4 4-4H14M9.5 8H14M5.5 8c2 0 2 4 4 4H14" />
-          </svg>
+        <MenuIconButton role="menuitem" className="px-2 text-xs font-medium text-neutral-300" title="Unbundle" aria-label="Unbundle" onClick={() => run(() => unbundleEdges(bundled.map((e) => e.id), target.type))}>
+          Unbundle
         </MenuIconButton>
       ) : (
-        <MenuIconButton role="menuitem" title="Bundle" aria-label="Bundle" disabled={bundleable.length < 2} onClick={() => run(() => bundleEdges(bundleable.map((e) => e.id), target.type))}>
-          <svg className="w-4 h-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
-            <path d="M2 4h3.5c2 0 2 4 4 4H14M2 8h3.5M2 12h3.5c2 0 2-4 4-4" />
-          </svg>
+        <MenuIconButton role="menuitem" className="px-2 text-xs font-medium text-neutral-300" title="Bundle" aria-label="Bundle" disabled={bundleable.length < 2} onClick={() => run(() => bundleEdges(bundleable.map((e) => e.id), target.type))}>
+          Bundle
         </MenuIconButton>
       )}
 

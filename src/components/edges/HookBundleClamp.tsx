@@ -27,10 +27,8 @@ export function HookBundleClamp({ bundle, members, selected }: {
             style={{ transform: `translate(-50%, calc(-100% - 20px)) scale(${1 / zoom})`, transformOrigin: "bottom center" }}
             onPointerDown={(e) => e.stopPropagation()}>
             <MenuBarLabel>{members.length} connections</MenuBarLabel>
-            <MenuIconButton title="Remove bundle" onClick={() => useWorkflowStore.getState().removeHookBundle(bundle.id)}>
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 16 16" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round">
-                <path d="M2 8h3.5c2 0 2-4 4-4H14M9.5 8H14M5.5 8c2 0 2 4 4 4H14" />
-              </svg>
+            <MenuIconButton title="Remove bundle" className="px-2 text-xs font-medium text-neutral-300" onClick={() => useWorkflowStore.getState().removeHookBundle(bundle.id)}>
+              Unbundle
             </MenuIconButton>
             <MenuIconButton title={`Delete ${members.length} connections`} className="hover:text-red-400" onClick={() => useWorkflowStore.getState().removeEdges(members)}>
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">

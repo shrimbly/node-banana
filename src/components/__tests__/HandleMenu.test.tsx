@@ -53,7 +53,7 @@ describe("HandleMenu", () => {
     expect(screen.queryByText(/connections/)).toBeNull();
   });
 
-  it("offers Bundle, Hide and Remove all as icons", () => {
+  it("offers a labelled Bundle button alongside Hide and Remove all", () => {
     withEdges([edge("e1"), edge("e2")]);
     render(<HandleMenu target={target} onClose={onClose} />);
     expect(screen.getAllByRole("menuitem").map((b) => b.getAttribute("aria-label"))).toEqual(["Bundle", "Hide", "Remove all"]);
@@ -62,6 +62,7 @@ describe("HandleMenu", () => {
   it("bundles the connections on the handle", () => {
     withEdges([edge("e1"), edge("e2")]);
     render(<HandleMenu target={target} onClose={onClose} />);
+    expect(screen.getByRole("menuitem", { name: "Bundle" })).toHaveTextContent("Bundle");
     fireEvent.click(screen.getByRole("menuitem", { name: "Bundle" }));
     expect(mockBundleEdges).toHaveBeenCalledWith(["e1", "e2"], "source");
     expect(onClose).toHaveBeenCalled();

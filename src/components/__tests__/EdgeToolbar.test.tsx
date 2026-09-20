@@ -11,7 +11,7 @@ const mockRemoveEdges = vi.fn();
 const mockSetLoopCount = vi.fn();
 const mockSetEdgesHidden = vi.fn();
 const mockSetEdgeLabel = vi.fn();
-const mockBundleEdges = vi.fn();
+const mockHookEdges = vi.fn();
 const mockUnbundleEdges = vi.fn();
 const mockUseWorkflowStore = vi.fn();
 
@@ -53,7 +53,7 @@ const createDefaultState = (overrides = {}) => ({
   setLoopCount: mockSetLoopCount,
   setEdgesHidden: mockSetEdgesHidden,
   setEdgeLabel: mockSetEdgeLabel,
-  bundleEdges: mockBundleEdges,
+  hookEdges: mockHookEdges,
   unbundleEdges: mockUnbundleEdges,
   ...overrides,
 });
@@ -242,8 +242,9 @@ describe("EdgeToolbar bundles", () => {
   it("offers to bundle a multi-selection leaving one handle", () => {
     withEdges([edge("e1", { selected: true }), edge("e2", { selected: true, target: "z" })]);
     render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
+    expect(screen.getByRole("button", { name: "Bundle", exact: true })).toHaveTextContent("Bundle");
     fireEvent.click(screen.getByTitle("Bundle 2 connections"));
-    expect(mockBundleEdges).toHaveBeenCalledWith(["e1", "e2"]);
+    expect(mockHookEdges).toHaveBeenCalledWith(["e1", "e2"], { x: 0, y: 0 });
   });
 
   it("does not offer to bundle a selection that is already one bundle", () => {
@@ -265,10 +266,12 @@ describe("EdgeToolbar bundles", () => {
     expect(screen.getByTitle("Bundle 2 connections")).toBeTruthy();
   });
 
-  it("does not offer to bundle edges on different handles", () => {
+  it("gathers connections on different handles into a movable bundle", () => {
     withEdges([edge("e1", { selected: true }), edge("e2", { selected: true, sourceHandle: "text", target: "z", targetHandle: "text" })]);
     render(<EdgeToolbar edgeId="e1" x={0} y={0} />);
-    expect(screen.queryByTitle(/^Bundle/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Bundle", exact: true })).toHaveTextContent("Bundle");
+    fireEvent.click(screen.getByTitle("Bundle 2 connections"));
+    expect(mockHookEdges).toHaveBeenCalledWith(["e1", "e2"], { x: 0, y: 0 });
   });
 
   it("acts on the whole manual bundle from one selected member and offers to unbundle", () => {
