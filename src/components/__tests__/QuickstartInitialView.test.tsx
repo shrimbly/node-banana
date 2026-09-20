@@ -31,7 +31,7 @@ describe("QuickstartInitialView", () => {
       expect(screen.getAllByAltText("").length).toBeGreaterThan(0); // Logo images
     });
 
-    it("should render the description text", () => {
+    it("should render the site points in the pane", () => {
       render(
         <QuickstartInitialView
           onNewProject={mockOnNewProject}
@@ -41,9 +41,7 @@ describe("QuickstartInitialView", () => {
         />
       );
 
-      expect(
-        screen.getByText(/node based workflow editor for generative AI pipelines/i)
-      ).toBeInTheDocument();
+      expect(screen.getByText("Bring your own key")).toBeInTheDocument();
     });
 
     it("should render all four option buttons", () => {

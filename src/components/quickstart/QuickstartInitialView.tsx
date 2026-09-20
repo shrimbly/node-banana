@@ -21,7 +21,7 @@ interface QuickstartInitialViewProps {
 
 /**
  * The first view of the welcome dialog. The pane carries the mark, the
- * stacked wordmark and the one-line description; the page is four ruled
+ * stacked wordmark and the site's three points; the page is four ruled
  * rows, one per way in, and the links along the bottom.
  */
 export function QuickstartInitialView({
@@ -41,9 +41,11 @@ export function QuickstartInitialView({
         <div>
           <h1 className="sr-only">Node Banana</h1>
           <DialogWordmark />
-          <p className="mt-4 text-[13px] leading-[19px] text-neutral-400">
-            A node based workflow editor for generative AI pipelines. Connect nodes to build pipelines that transform and generate images, video, audio and 3D assets.
-          </p>
+          <ul className="mt-[18px] flex flex-col gap-1 font-mono text-[11px] leading-4 tracking-eyebrow uppercase text-ink-3">
+            <li>Free</li>
+            <li>Open source</li>
+            <li>Bring your own key</li>
+          </ul>
         </div>
       </DialogPane>
 
