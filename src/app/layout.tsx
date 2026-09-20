@@ -24,8 +24,11 @@ export default function RootLayout({
 }>) {
   return (
     // Electron's preload adds a platform styling attribute before hydration.
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${spaceGrotesk.variable} ${jetbrainsMono.variable} antialiased`}>
+    // The font variables sit on <html>: the theme's --font-display and
+    // --font-mono are defined on :root and resolve var() there, so a
+    // variable declared further down (on body) would not be seen.
+    <html lang="en" className={`${spaceGrotesk.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
+      <body className="antialiased">
         {children}
         <Toast />
         <GenerationToaster />
