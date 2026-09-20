@@ -12,7 +12,7 @@ describe("FTUXModal", () => {
   it("renders the welcome step in a labelled dialog that Escape does not dismiss", () => {
     const onComplete = vi.fn();
     render(<FTUXModal onComplete={onComplete} onStartTutorial={vi.fn()} />);
-    expect(screen.getByRole("dialog", { name: "Welcome to Node Banana" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Let's get started." })).toBeInTheDocument();
     expect(screen.getByText("welcome step")).toBeInTheDocument();
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.getByRole("dialog")).toBeInTheDocument();
