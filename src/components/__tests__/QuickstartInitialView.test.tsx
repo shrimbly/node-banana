@@ -201,7 +201,7 @@ describe("QuickstartInitialView", () => {
         />
       );
 
-      const twitterLink = screen.getByText("Willie").closest("a");
+      const twitterLink = screen.getByText("@ReflctWillie").closest("a");
       expect(twitterLink).toHaveAttribute("href", "https://x.com/ReflctWillie");
       expect(twitterLink).toHaveAttribute("target", "_blank");
       expect(twitterLink).toHaveAttribute("rel", "noopener noreferrer");

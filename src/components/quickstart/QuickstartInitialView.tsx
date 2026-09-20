@@ -78,8 +78,7 @@ export function QuickstartInitialView({
         <div className="shrink-0 flex flex-wrap gap-x-5 gap-y-2 px-8 pt-4 pb-5">
           <FootLink href="https://node-banana-docs.vercel.app/">Docs</FootLink>
           <FootLink href="https://discord.com/invite/89Nr6EKkTf">Discord</FootLink>
-          <FootLink href="https://x.com/ReflctWillie">Willie</FootLink>
-          <FootLink href="https://nodebananapro.com">Pro</FootLink>
+          <FootLink href="https://x.com/ReflctWillie">@ReflctWillie</FootLink>
         </div>
       </DialogPage>
     </>
