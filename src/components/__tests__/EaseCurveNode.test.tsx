@@ -36,6 +36,7 @@ vi.mock("@xyflow/react", () => {
     NodeResizeControl: () => null,
     useNodeConnections: () => [],
     useStore: () => undefined,
+    useStoreApi: () => ({ getState: () => ({ nodeLookup: new Map() }), subscribe: () => () => {} }),
     useUpdateNodeInternals: () => () => {},
     Position: { Left: "left", Right: "right", Top: "top", Bottom: "bottom" },
     ReactFlowProvider: ({ children }: { children: React.ReactNode }) => children,

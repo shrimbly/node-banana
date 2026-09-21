@@ -499,6 +499,7 @@ export function WorkflowCanvas() {
   // value here. WorkflowTabs restores subsequent tabs via setViewport. Reading
   // it reactively makes each wheel frame render the entire canvas again.
   const [initialViewport] = useState(() => useWorkflowStore.getState().canvasViewport);
+  const shouldFitView = useWorkflowStore((state) => !state.canvasViewport);
   const workflowLoadCount = useWorkflowStore((state) => state.workflowLoadCount);
   const nodeIdsRef = useRef<string[]>([]);
   nodeIdsRef.current = allNodes.map((n) => n.id);
@@ -2080,7 +2081,6 @@ export function WorkflowCanvas() {
 
   const handlePaneClick = useCallback(() => setExpandedStubGroup?.(null), [setExpandedStubGroup]);
 
-
   // Fix for React Flow selection bug where nodes with undefined bounds get incorrectly selected.
   // Uses statistical outlier detection to identify and deselect nodes that are clearly
   // outside the actual selection area.
@@ -2438,7 +2438,7 @@ export function WorkflowCanvas() {
         edgeTypes={edgeTypes}
         isValidConnection={isValidConnection}
         connectOnClick={false}
-        fitView={!initialViewport}
+        fitView={shouldFitView}
         deleteKeyCode={isModalOpen ? null : DELETE_KEYS}
         multiSelectionKeyCode="Shift"
         selectionOnDrag={
