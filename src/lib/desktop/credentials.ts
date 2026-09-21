@@ -50,7 +50,9 @@ export function initializeDesktopCredentials(): Promise<void> {
     memory = { ...legacy, ...memory };
     const bridge = window.nodeBananaDesktop!.credentials;
     const result = await bridge.read();
-    if (!result.ok) throw new Error(result.error);
+    // The code survives so the dialog can offer a reset only when the store is
+    // truly undecryptable, never for a locked keychain or an unwritable file.
+    if (!result.ok) throw Object.assign(new Error(result.error), result.code ? { code: result.code } : {});
     // Encrypted values (including deletion tombstones) always win over old storage.
     const merged = { ...legacy, ...result.value, ...pending };
     // A readable keychain can still have an unwritable credentials file. Keep

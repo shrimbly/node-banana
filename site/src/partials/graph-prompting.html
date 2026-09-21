@@ -1,0 +1,50 @@
+<div class="graph" role="img" aria-label="A prompt constructor and an image input feeding an LLM node">
+        <svg class="edges" width="1" height="1" aria-hidden="true">
+          <path class="edge edge--text" pathLength="1" d="M 325.5 50 C 385.5 50, 348.5 234, 408.5 234"></path>
+          <path class="edge edge--image" pathLength="1" d="M 325.5 274 C 385.5 274, 348.5 204, 408.5 204"></path>
+        </svg>
+          <div class="node node--constructor" data-node="s-ctor" data-i="1" style="--x: 0px; --y: 26px; --w: 320px; --i: 1;">
+              <div class="node__header"><span class="node__title">Prompt Constructor</span></div>
+            <div class="card">
+              <div class="prompt" style="--h: 140px;"><div class="prompt__text">A <mark>@product</mark> photographed on <mark>@surface</mark> in <mark>@lighting</mark>. Editorial, 35mm, no text, no hands.</div><span class="prompt__grip"></span></div>
+                <span class="socket socket--in socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="gap"></div>
+              <div class="controls controls--plain">
+                <span class="controls__title">Available: @product, @surface, @lighting</span>
+                <span class="controls__values"></span>
+                <span class="controls__end"></span>
+              </div>
+          </div>
+          <div class="node node--image" data-node="s-in" data-i="2" style="--x: 0px; --y: 250px; --w: 320px; --i: 2;">
+              <div class="node__header"><span class="node__title">Image Input</span></div>
+            <div class="card">
+              <img class="media" src="/assets/cars-cell-1.jpg" width="600" height="402" alt="" draggable="false">
+                <span class="socket socket--in socket--reference" data-handle="reference" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--image" data-handle="image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="gap"></div>
+              <div class="controls controls--plain">
+                <span class="controls__title">split-1-1.png</span>
+                <span class="controls__values"><span>843×565</span></span>
+                <span class="controls__end"></span>
+              </div>
+          </div>
+          <div class="node node--llm" data-node="s-llm" data-i="3" style="--x: 414px; --y: 180px; --w: 258px; --i: 3;">
+              <div class="node__header"><span class="node__title">LLM Generate</span></div>
+            <div class="card">
+              <div class="llm" style="--h: 150px;"><div class="llm__text">A 1973 MGB GT V8 in deep blue photographed on polished concrete in a single overhead softbox. Editorial, 35mm, no text, no hands.</div></div>
+                <span class="socket socket--in socket--image" data-handle="image" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--in socket--text" data-handle="text" style="--row: 1"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole socket__hole--on" cx="9.5" cy="14" r="3"></circle></svg></span>
+                <span class="socket socket--out socket--text" data-handle="text" style="--row: 0"><svg viewBox="0 0 18 28"><path class="socket__fill" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30 L18,30 L18,-2 Z"></path><path class="socket__swell" d="M14.5,-2 L14.5,0 A5,5 0 0 1 9.5,5 A9,9 0 0 0 9.5,23 A5,5 0 0 1 14.5,28 L14.5,30"></path><circle class="socket__hole" cx="9.5" cy="14" r="3"></circle></svg></span>
+            </div>
+            <div class="gap"></div>
+              <div class="controls">
+                <span class="controls__icon"><span class="mark">G</span></span>
+                <span class="controls__title">Gemini 3 Flash</span>
+                <span class="controls__values"><span>temp 0.70</span></span>
+                <span class="controls__toggle"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
+              </div>
+          </div>
+      </div>

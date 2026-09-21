@@ -14,6 +14,7 @@ test('encrypted updates, deletion tombstones and failures preserve credentials',
     encryptString: s => { const c = createCipheriv('aes-256-cbc', key, iv); return Buffer.concat([c.update(s), c.final()]); },
     decryptString: b => { const c = createDecipheriv('aes-256-cbc', key, iv); return Buffer.concat([c.update(b), c.final()]).toString(); },
   };
+  const encrypt = secure.encryptString;
   try {
     const store = createCredentialStore(temp, secure);
     store.write({ 'provider.gemini': 'test-secret-unique', 'comfy.remoteApiKey': 'another-secret' });
@@ -32,6 +33,17 @@ test('encrypted updates, deletion tombstones and failures preserve credentials',
     assert.equal(fs.readFileSync(filename, 'utf8'), previous);
     assert.throws(() => store.write({ arbitrary: 'nope' }), /Invalid/);
     fs.writeFileSync(filename, 'corrupt');
-    assert.throws(() => store.read(), /preserved/);
+    // Only a decrypt failure is resettable; macOS reports a locked keychain instead.
+    assert.throws(() => store.read(), error => /preserved/.test(error.message) && error.code === (process.platform === 'darwin' ? undefined : 'undecryptable'));
+    // A reset keeps the unreadable file beside a fresh, writable store.
+    secure.encryptString = encrypt;
+    assert.deepEqual(store.reset(), {});
+    assert.equal(fs.existsSync(filename), false);
+    const kept = fs.readdirSync(temp).filter(name => name.startsWith('credentials-v1.unreadable-'));
+    assert.equal(kept.length, 1);
+    assert.equal(fs.readFileSync(path.join(temp, kept[0]), 'utf8'), 'corrupt');
+    assert.equal(store.write({ 'provider.kie': 'fresh' })['provider.kie'], 'fresh');
+    assert.equal(createCredentialStore(temp, secure).read()['provider.kie'], 'fresh');
+    assert.deepEqual(createCredentialStore(temp, secure).reset(), {});
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 });

@@ -17,6 +17,8 @@ Multi-provider support. Dynamic prompting features. Local, private, MIT, BYOK.
 
 [**Documentation**](https://node-banana-docs.vercel.app/) &nbsp;&bull;&nbsp; [Discord](https://discord.com/invite/89Nr6EKkTf)
 
+Landing page source: [`site/`](site/)
+
 <br />
 
 </div>

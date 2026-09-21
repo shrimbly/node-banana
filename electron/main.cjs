@@ -10,6 +10,7 @@ const { createDiagnostics, createRedactor } = require('./lib/diagnostics.cjs');
 const { createBackend } = require('./lib/backend.cjs');
 const { atomicWrite } = require('./lib/files.cjs');
 const { visibleBounds } = require('./lib/window-state.cjs');
+const { pickHostEnvironment } = require('./lib/env.cjs');
 let root = path.resolve(__dirname, '..');
 let runtime, backend, window, credentialStore, recoveryStore, diagnostics;
 let quitting = false, rendererCrashed = false, starting;
@@ -89,7 +90,12 @@ async function createWindow() {
   const bounds = visibleBounds(saved?.bounds, screen.getAllDisplays(), screen.getPrimaryDisplay());
   window = new BrowserWindow({ title: 'Node Banana', ...bounds,
     minWidth: Math.min(900, bounds.width), minHeight: Math.min(600, bounds.height), backgroundColor: '#0f0f0f', show: false,
-    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' } : {}),
+    // Both desktop platforms draw their own window controls over the tab strip.
+    // Windows also hides the native menu bar (setMenuBarVisibility below, not
+    // autoHideMenuBar, which would let a lone Alt press draw it over the
+    // frameless window); the application menu stays installed so its
+    // accelerators keep working.
+    ...(process.platform === 'darwin' || process.platform === 'win32' ? { titleBarStyle: 'hidden' } : {}),
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.cjs') },
   });
   const current = window;
@@ -102,6 +108,11 @@ async function createWindow() {
   for (const event of ['resize', 'move', 'maximize', 'unmaximize']) current.on(event, () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveBounds, 300); });
   current.on('close', saveBounds);
   if (saved?.maximized) current.maximize();
+  // The renderer's maximise button swaps to a restore glyph from this state.
+  const sendMaximized = () => { if (!current.isDestroyed()) current.webContents.send('desktop:window-maximized', current.isMaximized()); };
+  for (const event of ['maximize', 'unmaximize']) current.on(event, sendMaximized);
+  current.webContents.on('did-finish-load', sendMaximized);
+  if (process.platform === 'win32') current.setMenuBarVisibility(false);
   if (process.platform === 'darwin') {
     current.setWindowButtonVisibility(false);
     current.on('enter-full-screen', () => current.setWindowButtonVisibility(false));
@@ -143,13 +154,15 @@ async function createWindow() {
 function registerBridge() {
   for (const [category, operations, getStore] of [
     ['recovery', ['read', 'write', 'assetChunk', 'readAsset', 'hydrate', 'discard'], () => recoveryStore],
-    ['credentials', ['read', 'write', 'delete'], () => credentialStore],
+    ['credentials', ['read', 'write', 'delete', 'reset'], () => credentialStore],
   ]) for (const operation of operations) ipcMain.handle(`desktop:${category}:${operation}`, (event, value) => {
     if (!validCaller(event)) throw new Error('Unauthorized desktop request');
     try { return { ok: true, value: getStore()[operation](value) }; }
     catch (error) {
       log(error);
-      return { ok: false, error: category === 'credentials' ? error.message : 'Recovery could not be read or saved. Check disk space and permissions, and save your workflows to disk.' };
+      return category === 'credentials'
+        ? { ok: false, error: error.message, ...(error.code ? { code: error.code } : {}) }
+        : { ok: false, error: 'Recovery could not be read or saved. Check disk space and permissions, and save your workflows to disk.' };
     }
   });
   ipcMain.on('desktop:recovery:discardTab', (event, id) => {
@@ -217,7 +230,7 @@ else {
     backend = createBackend({ fork: (...args) => utilityProcess.fork(...args),
       entry: app.isPackaged ? path.join(root, 'server.cjs') : path.join(__dirname, 'server.cjs'), diagnostics, onDisconnected: disconnected,
       options: () => ({ cwd: root, serviceName: 'Node Banana Server', stdio: 'pipe', env: {
-        ...(app.isPackaged ? Object.fromEntries(['PATH', 'HOME', 'TMPDIR', 'LANG'].filter(key => process.env[key]).map(key => [key, process.env[key]])) : process.env),
+        ...(app.isPackaged ? pickHostEnvironment() : process.env),
         NODE_ENV: dev ? 'development' : 'production', NODE_BANANA_ELECTRON: '1', NODE_BANANA_LOGS_DIR: app.getPath('logs'),
         NODE_BANANA_ELECTRON_PORT: String(port), NODE_BANANA_ELECTRON_TOKEN: token,
       } }),
