@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
-import { ReactFlowProvider } from "@xyflow/react";
+import { Profiler } from "react";
+import { render, screen, fireEvent, act } from "@testing-library/react";
+import { ReactFlowProvider, useStoreApi, type ReactFlowState } from "@xyflow/react";
 import { NodeShell } from "@/components/nodes/NodeShell";
 import { CONTROLS_GAP, GAP_ROW_H, socketMinHeight } from "@/components/nodes/ui/tokens";
 
@@ -49,6 +50,64 @@ describe("NodeShell", () => {
     };
     mockUseWorkflowStore.mockImplementation((selector) => selector(storeState));
     mockGetNodes.mockReturnValue([{ id: "n1", type: "nanoBanana", selected: true }]);
+  });
+
+  it("animates dragging controls without React commits and cancels on unmount", () => {
+    let flowStore: ReturnType<typeof useStoreApi>;
+    function CaptureStore() {
+      flowStore = useStoreApi();
+      return null;
+    }
+    const frames = new Map<number, FrameRequestCallback>();
+    let frameId = 0;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      frames.set(++frameId, callback);
+      return frameId;
+    });
+    vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => { frames.delete(id); });
+    const onRender = vi.fn();
+    const { container, unmount } = render(
+      <Wrap>
+        <CaptureStore />
+        <Profiler id="shell" onRender={onRender}>
+          <NodeShell id="n1" showLabels={false} media={{ kind: "fixed", height: 100 }} controls={<div>Controls</div>} />
+        </Profiler>
+      </Wrap>
+    );
+    const move = (x: number) => act(() => {
+      flowStore.setState({ nodeLookup: new Map([["n1", {
+        id: "n1", internals: { positionAbsolute: { x, y: 0 } },
+      }]]) as ReactFlowState["nodeLookup"] });
+    });
+    const tick = (time: number) => act(() => {
+      const pending = [...frames.values()];
+      frames.clear();
+      pending.forEach(callback => callback(time));
+    });
+    try {
+      move(0);
+      const commits = onRender.mock.calls.length;
+      move(100);
+      tick(performance.now() + 16.7);
+      const trailing = screen.getByText("Controls").parentElement!;
+      expect(trailing.style.transform).toContain("translate3d(");
+      expect(trailing.style.willChange).toBe("transform");
+      expect(onRender).toHaveBeenCalledTimes(commits);
+      for (let i = 2; i < 30; i++) tick(performance.now() + i * 16.7);
+      expect(trailing.style.transform).toBe("");
+      expect(trailing.style.willChange).toBe("");
+      expect(frames.size).toBe(0);
+      move(200);
+      expect(frames.size).toBe(1);
+      unmount();
+      expect(frames.size).toBe(0);
+      move(300);
+      expect(frames.size).toBe(0);
+      expect(container).toBeEmptyDOMElement();
+    } finally {
+      unmount();
+      vi.restoreAllMocks();
+    }
   });
 
   it("puts children in a clip sized by the media aspect", () => {

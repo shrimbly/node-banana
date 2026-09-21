@@ -6,12 +6,10 @@ import {
   OnResize,
   OnResizeEnd,
   useReactFlow,
-  useStore,
+  useStoreApi,
   useUpdateNodeInternals,
-  type ReactFlowState,
   type ResizeControlVariant,
 } from "@xyflow/react";
-import { shallow } from "zustand/shallow";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { isPanningRef, isDraggingNodeRef } from "@/components/WorkflowCanvas";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
@@ -40,13 +38,7 @@ const TRAIL_MAX = 18;
  * fights React Flow's own per-move re-render.
  */
 function useTrailingOffset(id: string): React.RefObject<HTMLDivElement | null> {
-  // Compared by value: React Flow hands every node a new position object
-  // whenever it re-measures one, and a new object here would re-render
-  // every node on the canvas
-  const position = useStore(
-    useCallback((s: ReactFlowState) => s.nodeLookup.get(id)?.internals.positionAbsolute, [id]),
-    shallow
-  );
+  const store = useStoreApi();
   const el = useRef<HTMLDivElement | null>(null);
   const target = useRef<{ x: number; y: number } | null>(null);
   const smoothed = useRef<{ x: number; y: number } | null>(null);
@@ -54,16 +46,6 @@ function useTrailingOffset(id: string): React.RefObject<HTMLDivElement | null> {
   const lastTime = useRef(0);
 
   useEffect(() => {
-    if (!position) return;
-    target.current = { x: position.x, y: position.y };
-    if (!smoothed.current) {
-      // First sighting: start in place, nothing to trail.
-      smoothed.current = { x: position.x, y: position.y };
-      return;
-    }
-    if (frame.current !== null) return;
-
-    lastTime.current = performance.now();
     const step = (now: number) => {
       frame.current = null;
       const t = target.current;
@@ -102,12 +84,35 @@ function useTrailingOffset(id: string): React.RefObject<HTMLDivElement | null> {
       }
       frame.current = requestAnimationFrame(step);
     };
-    frame.current = requestAnimationFrame(step);
-  }, [position?.x, position?.y]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => () => {
-    if (frame.current !== null) cancelAnimationFrame(frame.current);
-  }, []);
+    // Position is animation input, not render state. Subscribing directly
+    // avoids reconciling the shell, sockets and controls on every drag frame.
+    const updateTarget = () => {
+      const position = store.getState().nodeLookup.get(id)?.internals.positionAbsolute;
+      if (!position || (target.current?.x === position.x && target.current?.y === position.y)) return;
+      target.current = { x: position.x, y: position.y };
+      if (!smoothed.current) {
+        smoothed.current = { ...target.current };
+        return;
+      }
+      if (frame.current === null) {
+        lastTime.current = performance.now();
+        frame.current = requestAnimationFrame(step);
+      }
+    };
+    updateTarget();
+    const unsubscribe = store.subscribe(updateTarget);
+    return () => {
+      unsubscribe();
+      if (frame.current !== null) cancelAnimationFrame(frame.current);
+      frame.current = null;
+      target.current = null;
+      smoothed.current = null;
+      if (el.current) {
+        el.current.style.transform = "";
+        el.current.style.willChange = "";
+      }
+    };
+  }, [id, store]);
 
   return el;
 }
