@@ -36,5 +36,3 @@ export const CHROME_MENU_ITEM =
 
 export const CHROME_MENU_HEADING = "px-2 pb-0.5 pt-1.5 text-[10px] uppercase tracking-[0.06em] text-neutral-500";
 
-/** Right-aligned shortcut hint inside a menu item. */
-export const CHROME_MENU_HINT = "ml-auto pl-3 font-mono text-[11px] text-ink-3 whitespace-nowrap";

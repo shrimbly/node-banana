@@ -12,9 +12,9 @@ import { useFTUXStore, TutorialStep } from "@/store/ftuxStore";
 import type { EdgeStyle } from "@/types";
 import {
   CHROME_DIVIDER,
-  CHROME_MENU_HINT,
   CHROME_SURFACE,
 } from "./chromeStyles";
+import { KbdGroup } from "@/components/ui/Kbd";
 
 /** The action-bar button cycles curved → angular → straight → curved. */
 const NEXT_EDGE_STYLE: Record<EdgeStyle, EdgeStyle> = { curved: "angular", angular: "straight", straight: "curved" };
@@ -274,8 +274,8 @@ function GenerateMenu() {
               className="cursor-grab active:cursor-grabbing"
             >
               <span className="text-neutral-300">{g.icon}</span>
-              {g.label}
-              {g.shortcut && <span className={CHROME_MENU_HINT}>{g.shortcut}</span>}
+              <span className="whitespace-nowrap">{g.label}</span>
+              {g.shortcut && <KbdGroup keys={g.shortcut} className="ml-auto pl-3" />}
             </MenuItem>
           ))}
         </MenuSurface>
@@ -649,7 +649,7 @@ export function FloatingActionBar() {
               >
                 <PlayIcon />
                 Run entire workflow
-                <span className={CHROME_MENU_HINT}>{modKey}↵</span>
+                <KbdGroup keys={[modKey, "↵"]} className="ml-auto pl-3" />
               </MenuItem>
               <MenuItem
                 role="menuitem"

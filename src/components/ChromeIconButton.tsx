@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, type ReactNode } from "react";
+import { KbdGroup } from "@/components/ui/Kbd";
 import { CHROME_ICON_BUTTON, CHROME_ICON_BUTTON_OPEN, CHROME_ICON_BUTTON_SIZE } from "./chromeStyles";
 
 /**
@@ -16,11 +17,7 @@ function Tooltip({ label, shortcut, placement, align }: { label: string; shortcu
       className={`pointer-events-none absolute ${side} ${edge} z-10 flex items-center gap-1.5 whitespace-nowrap rounded-md squircle border border-white/10 bg-neutral-950 py-1 pl-2 pr-1.5 text-[10px] font-medium leading-3 text-neutral-200 opacity-0 shadow-[0_4px_12px_rgba(0,0,0,0.5)] transition-opacity delay-300 duration-[120ms] group-hover:opacity-100 group-has-focus-visible:opacity-100`}
     >
       {label}
-      {shortcut && (
-        <kbd className="rounded-[3px] border border-white/6 bg-white/6 px-1 font-sans text-[9px] text-neutral-500">
-          {shortcut}
-        </kbd>
-      )}
+      {shortcut && <KbdGroup keys={shortcut} size="xs" className="gap-0.5 [&_kbd]:text-neutral-400" />}
     </span>
   );
 }

@@ -3,6 +3,7 @@
 import type { ButtonHTMLAttributes, ComponentPropsWithRef, HTMLAttributes, ReactNode } from "react";
 
 import { cn } from "@/components/nodes/ui/cn";
+import { KbdGroup } from "@/components/ui/Kbd";
 
 /**
  * The one menu surface. Context menus, the node search, connection-drop
@@ -138,8 +139,9 @@ export function MenuFooter({ className, children, ...rest }: HTMLAttributes<HTML
 /** `⌘ + K`-style hint: a key cap and what it does. */
 export function MenuHint({ keys, children }: { keys: string; children: ReactNode }) {
   return (
-    <span className="font-mono text-[10px] leading-[14px] uppercase tracking-eyebrow text-ink-3 whitespace-nowrap">
-      <kbd className="font-mono text-neutral-400">{keys}</kbd> {children}
+    <span className="inline-flex items-center gap-1.5 font-mono text-[10px] leading-[14px] uppercase tracking-eyebrow text-ink-3 whitespace-nowrap">
+      <KbdGroup keys={keys} size="xs" />
+      {children}
     </span>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { Dialog, DialogBody, DialogHeader, DialogSectionHeader, DialogTitle } from "@/components/ui/Dialog";
+import { KbdGroup } from "@/components/ui/Kbd";
 
 interface ShortcutItem {
   keys: string[];
@@ -60,14 +61,6 @@ const shortcutGroups: ShortcutGroup[] = [
   },
 ];
 
-function Kbd({ children }: { children: string }) {
-  return (
-    <kbd className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 text-[11px] font-medium text-neutral-200 bg-neutral-700 border border-neutral-600 rounded shadow-sm">
-      {children}
-    </kbd>
-  );
-}
-
 interface KeyboardShortcutsDialogProps {
   isOpen: boolean;
   onClose: () => void;
@@ -93,16 +86,7 @@ export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDi
                     <span className="text-[13px] text-neutral-300">
                       {shortcut.description}
                     </span>
-                    <div className="flex items-center gap-1 ml-4 shrink-0">
-                      {shortcut.keys.map((key, keyIdx) => (
-                        <span key={keyIdx} className="flex items-center gap-1">
-                          {keyIdx > 0 && (
-                            <span className="text-[10px] text-neutral-500">+</span>
-                          )}
-                          <Kbd>{key}</Kbd>
-                        </span>
-                      ))}
-                    </div>
+                    <KbdGroup keys={shortcut.keys} size="md" className="ml-4 shrink-0" />
                   </div>
                 ))}
               </div>

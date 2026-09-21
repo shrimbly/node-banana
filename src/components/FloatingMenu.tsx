@@ -14,6 +14,7 @@ import { useShallow } from "zustand/shallow";
 import { ProjectSetupModal } from "./ProjectSetupModal";
 import { KeyboardShortcutsDialog } from "./KeyboardShortcutsDialog";
 import { WorkflowBrowserModal } from "./WorkflowBrowserModal";
+import { KbdGroup } from "@/components/ui/Kbd";
 import { MenuDivider, MenuShortcut, MenuSurface, menuItemClass } from "@/components/ui/Menu";
 
 const ICON_BUTTON =
@@ -63,6 +64,7 @@ function MenuRow({
   icon,
   label,
   hint,
+  shortcut,
   href,
   onClick,
   title,
@@ -71,6 +73,8 @@ function MenuRow({
   icon: ReactNode;
   label: string;
   hint?: string;
+  /** Keys that open this entry, drawn as caps. */
+  shortcut?: string;
   href?: string;
   onClick?: () => void;
   title?: string;
@@ -81,6 +85,7 @@ function MenuRow({
       {icon}
       <span>{label}</span>
       {hint && <MenuShortcut>{hint}</MenuShortcut>}
+      {shortcut && <KbdGroup keys={shortcut} className="ml-auto pl-3" />}
     </>
   );
   if (href) {
@@ -603,7 +608,7 @@ export function FloatingMenu() {
                 </svg>
               }
               label="Keyboard shortcuts"
-              hint="?"
+              shortcut="?"
               onClick={choose(() => setShortcutsDialogOpen(true))}
               title="Keyboard shortcuts (?)"
             />
