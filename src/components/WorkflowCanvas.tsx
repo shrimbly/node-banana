@@ -8,6 +8,7 @@ import {
   EdgeTypes,
   Connection,
   Edge,
+  type EdgeChange,
   useReactFlow,
   OnConnectEnd,
   Node,
@@ -288,6 +289,8 @@ function capabilityForNodeType(type: string): "image" | "video" | "3d" | "audio"
 const DEFAULT_EDGE_OPTIONS = { type: "editable", animated: false };
 const PRO_OPTIONS = { hideAttribution: true };
 const DELETE_KEYS = ["Backspace", "Delete"];
+const MIDDLE_MOUSE_PAN = [2];
+const DEFAULT_VIEWPORT = { x: 0, y: 0, zoom: 1 };
 
 export function WorkflowCanvas() {
   const { nodes, edges, groups, isModalOpen, showQuickstart, navigationTarget, canvasNavigationSettings, dimmedNodeIds, skippedNodeIds } =
@@ -490,7 +493,10 @@ export function WorkflowCanvas() {
   // land in the wrong place until something resizes a node. Re-measure every
   // node once the new DOM and viewport are up.
   const updateNodeInternals = useUpdateNodeInternals();
-  const canvasViewport = useWorkflowStore((state) => state.canvasViewport);
+  // React Flow owns live navigation; the saved viewport is only an initial
+  // value here. WorkflowTabs restores subsequent tabs via setViewport. Reading
+  // it reactively makes each wheel frame render the entire canvas again.
+  const [initialViewport] = useState(() => useWorkflowStore.getState().canvasViewport);
   const workflowLoadCount = useWorkflowStore((state) => state.workflowLoadCount);
   const nodeIdsRef = useRef<string[]>([]);
   nodeIdsRef.current = allNodes.map((n) => n.id);
@@ -893,6 +899,7 @@ export function WorkflowCanvas() {
   // Handle connection dropped on empty space or on a node
   const handleConnectEnd: OnConnectEnd = useCallback(
     (event, connectionState) => {
+      const { nodes, edges } = useWorkflowStore.getState();
       // A click on the handle (no drag) opens the handle menu instead
       const down = handlePointerDownRef.current;
       if (down && "clientX" in event && Math.hypot(event.clientX - down.x, event.clientY - down.y) <= HANDLE_CLICK_SLOP) {
@@ -1145,7 +1152,7 @@ export function WorkflowCanvas() {
         useFTUXStore.getState().setConnectionMenuShown(true);
       }
     },
-    [screenToFlowPosition, nodes, edges, handleConnect, tutorialActive]
+    [screenToFlowPosition, handleConnect, tutorialActive]
   );
 
   // Handle the splitGrid action - uses automated grid detection
@@ -2032,6 +2039,46 @@ export function WorkflowCanvas() {
     handleNodeDragStop(event, node);
   }, [handleNodeDragStop, interactionClasses]);
 
+  const handleEdgesChange = useCallback((changes: EdgeChange[]) => onEdgesChange(selectingNodes.current
+    ? changes.filter((change) => change.type !== "select" || !change.selected)
+    : changes), [onEdgesChange]);
+
+  const handleSelectionStart = useCallback(() => {
+    selectingNodes.current = true;
+    onEdgesChange(useWorkflowStore.getState().edges.filter((edge) => edge.selected).map((edge) => ({ type: "select", id: edge.id, selected: false })));
+  }, [onEdgesChange]);
+
+  const handleSelectionEnd = useCallback((event: React.MouseEvent) => {
+    selectingNodes.current = false;
+    const store = useWorkflowStore.getState();
+    const firstEdge = store.edges.find((edge) => edge.selected);
+    if (firstEdge && !store.nodes.some((node) => node.selected)) {
+      useWorkflowStore.setState({ edgeMenuAnchor: {
+        edgeId: firstEdge.id,
+        ...screenToFlowPosition({ x: event.clientX, y: event.clientY }),
+      } });
+    }
+  }, [screenToFlowPosition]);
+
+  const handleEdgeClick = useCallback((event: React.MouseEvent, edge: Edge) => {
+    useWorkflowStore.setState({ edgeMenuAnchor: {
+      edgeId: edge.id,
+      ...screenToFlowPosition({ x: event.clientX, y: event.clientY }),
+    } });
+  }, [screenToFlowPosition]);
+
+  const handleEdgeContextMenu = useCallback((event: React.MouseEvent, edge: Edge) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const store = useWorkflowStore.getState();
+    store.onNodesChange(store.nodes.filter((n) => n.selected).map((n) => ({ type: "select", id: n.id, selected: false })));
+    if (!edge.selected) store.onEdgesChange(store.edges.map((e) => ({ type: "select", id: e.id, selected: e.id === edge.id })));
+    useWorkflowStore.setState({ edgeMenuAnchor: { edgeId: edge.id, ...screenToFlowPosition({ x: event.clientX, y: event.clientY }) } });
+  }, [screenToFlowPosition]);
+
+  const handlePaneClick = useCallback(() => setExpandedStubGroup?.(null), [setExpandedStubGroup]);
+
+
   // Fix for React Flow selection bug where nodes with undefined bounds get incorrectly selected.
   // Uses statistical outlier detection to identify and deselect nodes that are clearly
   // outside the actual selection area.
@@ -2368,42 +2415,15 @@ export function WorkflowCanvas() {
         nodes={allNodes}
         edges={isCanvasOverview ? OVERVIEW_EDGES : edges}
         onNodesChange={onNodesChange}
-        onEdgesChange={(changes) => onEdgesChange(selectingNodes.current
-          ? changes.filter((change) => change.type !== "select" || !change.selected)
-          : changes)}
-        onSelectionStart={() => {
-          selectingNodes.current = true;
-          onEdgesChange(useWorkflowStore.getState().edges.filter((edge) => edge.selected).map((edge) => ({ type: "select", id: edge.id, selected: false })));
-        }}
-        onSelectionEnd={(event) => {
-          selectingNodes.current = false;
-          const store = useWorkflowStore.getState();
-          const firstEdge = store.edges.find((edge) => edge.selected);
-          if (firstEdge && !store.nodes.some((node) => node.selected)) {
-            useWorkflowStore.setState({ edgeMenuAnchor: {
-              edgeId: firstEdge.id,
-              ...screenToFlowPosition({ x: event.clientX, y: event.clientY }),
-            } });
-          }
-        }}
+        onEdgesChange={handleEdgesChange}
+        onSelectionStart={handleSelectionStart}
+        onSelectionEnd={handleSelectionEnd}
         onConnect={handleConnect}
         onConnectEnd={handleConnectEnd}
         onReconnect={handleReconnect}
-        onEdgeClick={(event, edge) => {
-          useWorkflowStore.setState({ edgeMenuAnchor: {
-            edgeId: edge.id,
-            ...screenToFlowPosition({ x: event.clientX, y: event.clientY }),
-          } });
-        }}
-        onEdgeContextMenu={(event, edge) => {
-          event.preventDefault();
-          event.stopPropagation();
-          const store = useWorkflowStore.getState();
-          store.onNodesChange(store.nodes.filter((n) => n.selected).map((n) => ({ type: "select", id: n.id, selected: false })));
-          if (!edge.selected) store.onEdgesChange(store.edges.map((e) => ({ type: "select", id: e.id, selected: e.id === edge.id })));
-          useWorkflowStore.setState({ edgeMenuAnchor: { edgeId: edge.id, ...screenToFlowPosition({ x: event.clientX, y: event.clientY }) } });
-        }}
-        onPaneClick={() => setExpandedStubGroup?.(null)}
+        onEdgeClick={handleEdgeClick}
+        onEdgeContextMenu={handleEdgeContextMenu}
+        onPaneClick={handlePaneClick}
         onMoveStart={handleMoveStart}
         onMove={handleMove}
         onMoveEnd={handleMoveEnd}
@@ -2416,7 +2436,7 @@ export function WorkflowCanvas() {
         edgeTypes={edgeTypes}
         isValidConnection={isValidConnection}
         connectOnClick={false}
-        fitView={!canvasViewport}
+        fitView={!initialViewport}
         deleteKeyCode={isModalOpen ? null : DELETE_KEYS}
         multiSelectionKeyCode="Shift"
         selectionOnDrag={
@@ -2440,7 +2460,7 @@ export function WorkflowCanvas() {
             : canvasNavigationSettings.panMode === "always"
             ? true
             : canvasNavigationSettings.panMode === "middleMouse"
-            ? [2]
+            ? MIDDLE_MOUSE_PAN
             : !isMacOS
         }
         selectNodesOnDrag={false}
@@ -2451,7 +2471,7 @@ export function WorkflowCanvas() {
         zoomOnDoubleClick={false}
         minZoom={0.1}
         maxZoom={4}
-        defaultViewport={canvasViewport ?? { x: 0, y: 0, zoom: 1 }}
+        defaultViewport={initialViewport ?? DEFAULT_VIEWPORT}
         panActivationKeyCode={
           tutorialActive
             ? null

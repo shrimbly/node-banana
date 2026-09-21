@@ -170,6 +170,20 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe("WorkflowCanvas", () => {
+  it("keeps React Flow configuration stable across position and saved viewport updates", () => {
+    let state = { ...createDefaultState(), canvasViewport: { x: 10, y: 20, zoom: 0.8 } };
+    mockUseWorkflowStore.mockImplementation((selector) => selector(state));
+    const { rerender } = render(<TestWrapper><WorkflowCanvas /></TestWrapper>);
+    const before = mockReactFlowProps.current!;
+    state = { ...state, canvasViewport: { x: 100, y: 200, zoom: 0.8 }, nodes: [...state.nodes] };
+    rerender(<TestWrapper><WorkflowCanvas /></TestWrapper>);
+    const after = mockReactFlowProps.current!;
+    for (const key of ["onEdgesChange", "onConnectEnd", "onSelectionStart", "onSelectionEnd", "onEdgeClick", "onEdgeContextMenu", "defaultViewport"]) {
+      expect(after[key], key).toBe(before[key]);
+    }
+    expect(after.defaultViewport).toEqual({ x: 10, y: 20, zoom: 0.8 });
+  });
+
   it("keeps automatic edge selection out of node marquee selection", () => {
     mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState()));
     render(<TestWrapper><WorkflowCanvas /></TestWrapper>);

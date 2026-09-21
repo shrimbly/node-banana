@@ -23,7 +23,6 @@ export function WorkflowTabs() {
     isRunning,
     isSaving,
     pendingMediaSaves,
-    canvasViewport,
     setCanvasViewport,
     switchTab,
     closeTab,
@@ -37,7 +36,6 @@ export function WorkflowTabs() {
       isRunning: state.isRunning,
       isSaving: state.isSaving,
       pendingMediaSaves: state.pendingMediaSaves,
-      canvasViewport: state.canvasViewport,
       setCanvasViewport: state.setCanvasViewport,
       switchTab: state.switchTab,
       closeTab: state.closeTab,
@@ -51,6 +49,7 @@ export function WorkflowTabs() {
   useEffect(() => {
     // A tab that has been viewed before comes back where it was left; a tab
     // shown for the first time adopts the current view as its own
+    const { canvasViewport } = useWorkflowStore.getState();
     if (canvasViewport) setViewport(canvasViewport);
     else setCanvasViewport(getViewport());
     // eslint-disable-next-line react-hooks/exhaustive-deps

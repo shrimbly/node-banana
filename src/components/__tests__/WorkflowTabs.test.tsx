@@ -17,10 +17,10 @@ vi.mock("@xyflow/react", () => ({
 }));
 
 vi.mock("@/store/workflowStore", () => ({
-  useWorkflowStore: (selector?: (state: unknown) => unknown) => {
+  useWorkflowStore: Object.assign((selector?: (state: unknown) => unknown) => {
     if (selector) return mockUseWorkflowStore(selector);
     return mockUseWorkflowStore((s: unknown) => s);
-  },
+  }, { getState: () => mockUseWorkflowStore((s: unknown) => s) }),
 }));
 
 const parked = (name: string | null, hasUnsavedChanges = false) =>
