@@ -1,0 +1,204 @@
+{
+  "recordedOn": "2026-09-22",
+  "hardware": {
+    "cpu": "Apple M5",
+    "arch": "arm64",
+    "platform": "darwin"
+  },
+  "runtime": {
+    "electron": "44.2.0",
+    "chromium": "152.0.7977.76"
+  },
+  "fixture": {
+    "nodes": 240,
+    "edges": 160,
+    "images": 160,
+    "imageSize": 1024,
+    "windowCssPixels": [
+      1440,
+      900
+    ],
+    "inputHz": 125,
+    "eventsPerGesture": 500,
+    "producerDurationMs": 4000,
+    "rounds": 3
+  },
+  "baseline": {
+    "commit": "e606636",
+    "results": [
+      {
+        "name": "rapid-drag",
+        "inputEvents": 500,
+        "durationMs": 4092,
+        "fps": 39.3,
+        "frameMsP50": 25,
+        "frameMsP95": 33.4,
+        "frameMsMax": 91.3,
+        "framesOver25ms": 56,
+        "scriptMs": 2677,
+        "layoutMs": 163,
+        "styleMs": 72,
+        "taskMs": 4075
+      },
+      {
+        "name": "rapid-pan",
+        "inputEvents": 500,
+        "durationMs": 12133,
+        "fps": 42.4,
+        "frameMsP50": 25,
+        "frameMsP95": 33.4,
+        "frameMsMax": 91.7,
+        "framesOver25ms": 150,
+        "scriptMs": 7904,
+        "layoutMs": 77,
+        "styleMs": 101,
+        "taskMs": 12088
+      },
+      {
+        "name": "rapid-drag",
+        "inputEvents": 500,
+        "durationMs": 4067,
+        "fps": 41.6,
+        "frameMsP50": 25,
+        "frameMsP95": 33.3,
+        "frameMsMax": 66.6,
+        "framesOver25ms": 52,
+        "scriptMs": 2598,
+        "layoutMs": 165,
+        "styleMs": 67,
+        "taskMs": 4053
+      },
+      {
+        "name": "rapid-pan",
+        "inputEvents": 500,
+        "durationMs": 15775,
+        "fps": 32.8,
+        "frameMsP50": 33.2,
+        "frameMsP95": 41.7,
+        "frameMsMax": 166.8,
+        "framesOver25ms": 365,
+        "scriptMs": 10529,
+        "layoutMs": 89,
+        "styleMs": 163,
+        "taskMs": 15719
+      },
+      {
+        "name": "rapid-drag",
+        "inputEvents": 500,
+        "durationMs": 4080,
+        "fps": 30.9,
+        "frameMsP50": 33.3,
+        "frameMsP95": 50.1,
+        "frameMsMax": 99,
+        "framesOver25ms": 93,
+        "scriptMs": 2466,
+        "layoutMs": 164,
+        "styleMs": 71,
+        "taskMs": 4066
+      },
+      {
+        "name": "rapid-pan",
+        "inputEvents": 500,
+        "durationMs": 16033,
+        "fps": 32.7,
+        "frameMsP50": 33.1,
+        "frameMsP95": 42,
+        "frameMsMax": 117.1,
+        "framesOver25ms": 359,
+        "scriptMs": 10951,
+        "layoutMs": 103,
+        "styleMs": 151,
+        "taskMs": 16006
+      }
+    ]
+  },
+  "optimized": {
+    "commit": "7f3b6ff",
+    "results": [
+      {
+        "name": "rapid-drag",
+        "inputEvents": 500,
+        "durationMs": 4075,
+        "fps": 51.3,
+        "frameMsP50": 16.9,
+        "frameMsP95": 25.6,
+        "frameMsMax": 109.1,
+        "framesOver25ms": 38,
+        "scriptMs": 1590,
+        "layoutMs": 284,
+        "styleMs": 114,
+        "taskMs": 4044
+      },
+      {
+        "name": "rapid-pan",
+        "inputEvents": 500,
+        "durationMs": 10109,
+        "fps": 52.8,
+        "frameMsP50": 16.7,
+        "frameMsP95": 25.5,
+        "frameMsMax": 92,
+        "framesOver25ms": 59,
+        "scriptMs": 4638,
+        "layoutMs": 100,
+        "styleMs": 112,
+        "taskMs": 9994
+      },
+      {
+        "name": "rapid-drag",
+        "inputEvents": 500,
+        "durationMs": 4066,
+        "fps": 55.1,
+        "frameMsP50": 16.8,
+        "frameMsP95": 25.8,
+        "frameMsMax": 99.6,
+        "framesOver25ms": 43,
+        "scriptMs": 1113,
+        "layoutMs": 261,
+        "styleMs": 97,
+        "taskMs": 4060
+      },
+      {
+        "name": "rapid-pan",
+        "inputEvents": 500,
+        "durationMs": 11008,
+        "fps": 50.3,
+        "frameMsP50": 17.3,
+        "frameMsP95": 25.8,
+        "frameMsMax": 91.6,
+        "framesOver25ms": 88,
+        "scriptMs": 5796,
+        "layoutMs": 89,
+        "styleMs": 113,
+        "taskMs": 10907
+      },
+      {
+        "name": "rapid-drag",
+        "inputEvents": 500,
+        "durationMs": 4100,
+        "fps": 56.3,
+        "frameMsP50": 16.7,
+        "frameMsP95": 25.9,
+        "frameMsMax": 91.2,
+        "framesOver25ms": 40,
+        "scriptMs": 1149,
+        "layoutMs": 265,
+        "styleMs": 92,
+        "taskMs": 4077
+      },
+      {
+        "name": "rapid-pan",
+        "inputEvents": 500,
+        "durationMs": 11008,
+        "fps": 49.2,
+        "frameMsP50": 17.2,
+        "frameMsP95": 26,
+        "frameMsMax": 116.7,
+        "framesOver25ms": 99,
+        "scriptMs": 6081,
+        "layoutMs": 109,
+        "styleMs": 127,
+        "taskMs": 10874
+      }
+    ]
+  }
+}

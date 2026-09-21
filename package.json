@@ -18,7 +18,8 @@
     "comfy:smoke": "node scripts/comfy-smoke.mjs run",
     "electron:package": "node scripts/package-electron.cjs",
     "electron:test": "node --test electron/tests/*.test.cjs",
-    "electron:acceptance": "node scripts/electron-acceptance.cjs"
+    "electron:acceptance": "node scripts/electron-acceptance.cjs",
+    "electron:performance": "node scripts/electron-canvas-performance.cjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.13",
