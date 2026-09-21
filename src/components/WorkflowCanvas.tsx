@@ -1751,6 +1751,12 @@ export function WorkflowCanvas() {
           case "c":
             nodeType = "comfyApp";
             break;
+          case "d":
+            nodeType = "generate3d";
+            break;
+          case "o":
+            nodeType = "output";
+            break;
         }
 
         if (nodeType) {

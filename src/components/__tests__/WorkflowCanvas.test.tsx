@@ -767,6 +767,30 @@ describe("WorkflowCanvas", () => {
       expect(mockAddNode).toHaveBeenCalledWith("nanoBanana", expect.any(Object));
     });
 
+    it("should add generate3d node on Shift+D", () => {
+      render(
+        <TestWrapper>
+          <WorkflowCanvas />
+        </TestWrapper>
+      );
+
+      fireEvent.keyDown(window, { key: "d", shiftKey: true });
+
+      expect(mockAddNode).toHaveBeenCalledWith("generate3d", expect.any(Object));
+    });
+
+    it("should add output node on Shift+O", () => {
+      render(
+        <TestWrapper>
+          <WorkflowCanvas />
+        </TestWrapper>
+      );
+
+      fireEvent.keyDown(window, { key: "o", shiftKey: true });
+
+      expect(mockAddNode).toHaveBeenCalledWith("output", expect.any(Object));
+    });
+
     it("should add llmGenerate node on Shift+L", () => {
       render(
         <TestWrapper>

@@ -133,6 +133,8 @@ Returns `{ images: string[], text: string | null }`.
 - `Shift + A` - Add annotation node
 - `Shift + T` - Add audio (generateAudio) node
 - `Shift + C` - Add ComfyUI app node
+- `Shift + D` - Add 3D (generate3d) node
+- `Shift + O` - Add output node
 - `H` - Stack selected nodes horizontally
 - `V` - Stack selected nodes vertically
 - `G` - Arrange selected nodes in grid

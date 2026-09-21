@@ -231,7 +231,7 @@ function NodeButton({ type, label, shortcut, dataTutorial, children }: NodeButto
 const GENERATORS: { type: NodeType; label: string; shortcut?: string; icon: ReactNode }[] = [
   { type: "nanoBanana", label: "Image", shortcut: "⇧G", icon: <ImageIcon /> },
   { type: "generateVideo", label: "Video", shortcut: "⇧V", icon: <VideoIcon /> },
-  { type: "generate3d", label: "3D", icon: <CubeIcon /> },
+  { type: "generate3d", label: "3D", shortcut: "⇧D", icon: <CubeIcon /> },
   { type: "llmGenerate", label: "Text (LLM)", shortcut: "⇧L", icon: <LlmIcon /> },
 ];
 
@@ -559,7 +559,7 @@ export function FloatingActionBar() {
         <NodeButton type="videoInput" label="Video" shortcut="⇧Y"><VideoIcon /></NodeButton>
         <NodeButton type="prompt" label="Prompt" shortcut="⇧P" dataTutorial="prompt-button"><PromptIcon /></NodeButton>
         <GenerateMenu />
-        <NodeButton type="output" label="Output" dataTutorial="output-button"><OutputIcon /></NodeButton>
+        <NodeButton type="output" label="Output" shortcut="⇧O" dataTutorial="output-button"><OutputIcon /></NodeButton>
 
         <Divider />
 
