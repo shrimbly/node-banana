@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, type MouseEvent } from "react";
+import { useEffect, useMemo, type MouseEvent } from "react";
 import { useOnViewportChange, useReactFlow } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { useShallow } from "zustand/shallow";
@@ -46,11 +46,13 @@ export function WorkflowTabs() {
   // The viewport lives in React Flow; mirror it into the store so it parks with the tab
   const { getViewport, setViewport } = useReactFlow();
   useOnViewportChange({ onEnd: setCanvasViewport });
+  // Capture the incoming tab's viewport during render, before React Flow's
+  // effects can publish navigation events for the outgoing view.
+  const tabViewport = useMemo(() => useWorkflowStore.getState().canvasViewport, [activeTabId]);
   useEffect(() => {
     // A tab that has been viewed before comes back where it was left; a tab
     // shown for the first time adopts the current view as its own
-    const { canvasViewport } = useWorkflowStore.getState();
-    if (canvasViewport) setViewport(canvasViewport);
+    if (tabViewport) setViewport(tabViewport);
     else setCanvasViewport(getViewport());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTabId]);

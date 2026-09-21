@@ -1,3 +1,4 @@
+import { useLayoutEffect } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { WorkflowTabs } from "@/components/WorkflowTabs";
@@ -48,6 +49,7 @@ function useState(overrides = {}) {
     ...overrides,
   };
   mockUseWorkflowStore.mockImplementation((selector) => selector(state));
+  return state;
 }
 
 describe("WorkflowTabs", () => {
@@ -156,6 +158,19 @@ describe("WorkflowTabs", () => {
     useState({ activeTabId: "tab-1", canvasViewport: { x: 10, y: 20, zoom: 1.5 } });
     rerender(<WorkflowTabs />);
     expect(mockSetViewport).toHaveBeenCalledWith({ x: 10, y: 20, zoom: 1.5 });
+  });
+
+  it("captures the incoming viewport before navigation effects can update the store", () => {
+    const incoming = { x: 120, y: -50, zoom: 0.7 };
+    const state = useState({ canvasViewport: incoming });
+    mockUseOnViewportChange.mockImplementationOnce(() => {
+      useLayoutEffect(() => {
+        // An outgoing navigation event can arrive during the same commit.
+        Object.assign(state, { canvasViewport: { x: 999, y: 999, zoom: 1 } });
+      }, []);
+    });
+    render(<WorkflowTabs />);
+    expect(mockSetViewport).toHaveBeenCalledWith(incoming);
   });
 
   it("blocks switching, closing and opening while a run is in flight", () => {
