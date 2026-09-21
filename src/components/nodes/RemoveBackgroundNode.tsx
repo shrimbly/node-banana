@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { NodeProps, Node } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
+import { selectNodeContent } from "@/store/selectors/nodeContent";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { BackgroundRemovalModel, RemoveBackgroundNodeData } from "@/types";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
@@ -35,7 +36,7 @@ export function RemoveBackgroundNode({ id, data, selected }: NodeProps<RemoveBac
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const getConnectedInputs = useWorkflowStore((state) => state.getConnectedInputs);
   const edges = useWorkflowStore((state) => state.edges);
-  const nodes = useWorkflowStore((state) => state.nodes);
+  const nodes = useWorkflowStore(selectNodeContent);
   const [expanded, setExpanded] = useState(true);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 

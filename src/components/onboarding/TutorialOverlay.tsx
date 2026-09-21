@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useFTUXStore } from "@/store/ftuxStore";
+import { selectNodeContent } from "@/store/selectors/nodeContent";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { ElementHighlight } from "./ElementHighlight";
 import { TutorialMessage } from "./TutorialMessage";
@@ -31,7 +32,7 @@ export function TutorialOverlay() {
   const nanoBananaAddedFromMenu = useFTUXStore((state) => state.nanoBananaAddedFromMenu);
   const tutorialSampleImage = useFTUXStore((state) => state.tutorialSampleImage);
 
-  const nodes = useWorkflowStore((state) => state.nodes);
+  const nodes = useWorkflowStore(selectNodeContent);
   const edges = useWorkflowStore((state) => state.edges);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
 

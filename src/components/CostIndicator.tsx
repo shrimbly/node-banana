@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { selectNodeContent } from "@/store/selectors/nodeContent";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { calculatePredictedCost, formatCost, hasNonGeminiProviders } from "@/utils/costCalculator";
 import { CostDialog } from "./CostDialog";
 
 export function CostIndicator() {
   const [showDialog, setShowDialog] = useState(false);
-  const nodes = useWorkflowStore((state) => state.nodes);
+  const nodes = useWorkflowStore(selectNodeContent);
   const incurredCost = useWorkflowStore((state) => state.incurredCost);
 
   const predictedCost = useMemo(() => {

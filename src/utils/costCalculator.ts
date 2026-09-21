@@ -101,7 +101,7 @@ export interface LegacyCostBreakdownItem {
  * @returns PredictedCostResult with total cost, breakdown, and counts
  */
 export function calculatePredictedCost(
-  nodes: WorkflowNode[],
+  nodes: Pick<WorkflowNode, "id" | "type" | "data">[],
   modelPricing?: Map<string, ModelPricing>
 ): PredictedCostResult {
   // Group by provider + modelId for breakdown
@@ -252,7 +252,7 @@ export function calculatePredictedCost(
  * Check whether any generation node in the workflow uses a non-Gemini provider.
  * Used to hide the CostIndicator when pricing data would be incomplete/misleading.
  */
-export function hasNonGeminiProviders(nodes: WorkflowNode[]): boolean {
+export function hasNonGeminiProviders(nodes: Pick<WorkflowNode, "id" | "type" | "data">[]): boolean {
   return nodes.some((node) => {
     if (node.type === "nanoBanana") {
       const data = node.data as NanoBananaNodeData;

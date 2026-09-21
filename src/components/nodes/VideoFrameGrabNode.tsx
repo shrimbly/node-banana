@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from "react";
 import { NodeProps, Node } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
+import { selectNodeContent } from "@/store/selectors/nodeContent";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { VideoFrameGrabNodeData } from "@/types";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
@@ -26,7 +27,7 @@ export function VideoFrameGrabNode({ id, data, selected }: NodeProps<VideoFrameG
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const edges = useWorkflowStore((state) => state.edges);
-  const nodes = useWorkflowStore((state) => state.nodes);
+  const nodes = useWorkflowStore(selectNodeContent);
   const [expanded, setExpanded] = useState(true);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 

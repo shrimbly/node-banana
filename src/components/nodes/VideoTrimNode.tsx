@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NodeProps, Node } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
+import { selectNodeContent } from "@/store/selectors/nodeContent";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { VideoTrimNodeData } from "@/types";
 import { checkEncoderSupport } from "@/hooks/useStitchVideos";
@@ -42,7 +43,7 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const edges = useWorkflowStore((state) => state.edges);
-  const nodes = useWorkflowStore((state) => state.nodes);
+  const nodes = useWorkflowStore(selectNodeContent);
 
   // Track whether user wants to see source or output video
   const [showOutput, setShowOutput] = useState(false);

@@ -376,7 +376,9 @@ const EyeIcon = ({ off = false }: { off?: boolean }) =>
 
 export function FloatingActionBar() {
   const {
-    nodes,
+    nodeCount,
+    hasStandaloneNode,
+    runningNodeName,
     isRunning,
     currentNodeIds,
     executeWorkflow,
@@ -391,7 +393,12 @@ export function FloatingActionBar() {
     modelSearchOpen,
     modelSearchProvider,
   } = useWorkflowStore(useShallow((state) => ({
-    nodes: state.nodes,
+    nodeCount: state.nodes.length,
+    hasStandaloneNode: state.nodes.some((node) => node.type === "comfyApp"),
+    runningNodeName: (() => {
+      const node = state.currentNodeIds.length === 1 ? state.nodes.find((node) => node.id === state.currentNodeIds[0]) : undefined;
+      return node?.data?.customTitle || node?.type || "node";
+    })(),
     isRunning: state.isRunning,
     currentNodeIds: state.currentNodeIds,
     executeWorkflow: state.executeWorkflow,
@@ -438,9 +445,7 @@ export function FloatingActionBar() {
   const getRunningLabel = () => {
     if (runningNodeCount === 0) return "Running...";
     if (runningNodeCount === 1) {
-      const node = nodes.find((n) => n.id === currentNodeIds[0]);
-      const nodeName = node?.data?.customTitle || node?.type || "node";
-      return `Running ${nodeName}...`;
+      return `Running ${runningNodeName}...`;
     }
     return `Running ${runningNodeCount} nodes...`;
   };
@@ -451,19 +456,11 @@ export function FloatingActionBar() {
   // no connections at all has nothing to run, unless it holds a node that runs
   // on its own (a ComfyUI app with its values baked in).
   const totalEdgeCount = useWorkflowStore((state) => state.edges.length);
-  const hasStandaloneNode = nodes.some((n) => n.type === "comfyApp");
-  const valid = nodes.length > 0 && (totalEdgeCount > 0 || hasStandaloneNode);
-  const errors = valid ? [] : [nodes.length === 0 ? "Workflow is empty" : "Connect some nodes to run"];
+  const valid = nodeCount > 0 && (totalEdgeCount > 0 || hasStandaloneNode);
+  const errors = valid ? [] : [nodeCount === 0 ? "Workflow is empty" : "Connect some nodes to run"];
 
-  // Get the selected nodes
-  const selectedNodes = useMemo(() => {
-    return nodes.filter((n) => n.selected);
-  }, [nodes]);
-
-  // Get the selected node (if exactly one is selected)
-  const selectedNode = useMemo(() => {
-    return selectedNodes.length === 1 ? selectedNodes[0] : null;
-  }, [selectedNodes]);
+  const selectedNodeIds = useWorkflowStore(useShallow((state) => state.nodes.filter((node) => node.selected).map((node) => node.id)));
+  const selectedNodeId = selectedNodeIds.length === 1 ? selectedNodeIds[0] : null;
 
   // Check if we're on the run options tutorial step
   const isRunOptionsTutorialStep = useMemo(() => {
@@ -524,22 +521,22 @@ export function FloatingActionBar() {
   }, [isRunning, stopWorkflow, executeWorkflow, mockTutorialExecution]);
 
   const handleRunFromSelected = () => {
-    if (selectedNode) {
-      executeWorkflow(selectedNode.id);
+    if (selectedNodeId) {
+      executeWorkflow(selectedNodeId);
       setRunMenuOpen(false);
     }
   };
 
   const handleRunSelectedOnly = () => {
-    if (selectedNode) {
-      regenerateNode(selectedNode.id);
+    if (selectedNodeId) {
+      regenerateNode(selectedNodeId);
       setRunMenuOpen(false);
     }
   };
 
   const handleRunSelectedNodes = () => {
-    if (selectedNodes.length > 0) {
-      executeSelectedNodes(selectedNodes.map((n) => n.id));
+    if (selectedNodeIds.length > 0) {
+      executeSelectedNodes(selectedNodeIds);
       setRunMenuOpen(false);
     }
   };
@@ -654,8 +651,8 @@ export function FloatingActionBar() {
               <MenuItem
                 role="menuitem"
                 onClick={handleRunFromSelected}
-                disabled={!selectedNode}
-                title={!selectedNode ? "Select a single node first" : undefined}
+                disabled={!selectedNodeId}
+                title={!selectedNodeId ? "Select a single node first" : undefined}
               >
                 <svg className="h-3.5 w-3.5" {...iconProps} strokeWidth={2}>
                   <path d="M13 5l7 7-7 7M5 5l7 7-7 7" />
@@ -665,8 +662,8 @@ export function FloatingActionBar() {
               <MenuItem
                 role="menuitem"
                 onClick={handleRunSelectedOnly}
-                disabled={!selectedNode}
-                title={!selectedNode ? "Select a single node first" : undefined}
+                disabled={!selectedNodeId}
+                title={!selectedNodeId ? "Select a single node first" : undefined}
               >
                 <svg className="h-3.5 w-3.5" {...iconProps} strokeWidth={2}>
                   <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
@@ -676,15 +673,15 @@ export function FloatingActionBar() {
               <MenuItem
                 role="menuitem"
                 onClick={handleRunSelectedNodes}
-                disabled={selectedNodes.length === 0}
-                title={selectedNodes.length === 0 ? "Select one or more nodes first" : `Run ${selectedNodes.length} selected node${selectedNodes.length > 1 ? 's' : ''}`}
+                disabled={selectedNodeIds.length === 0}
+                title={selectedNodeIds.length === 0 ? "Select one or more nodes first" : `Run ${selectedNodeIds.length} selected node${selectedNodeIds.length > 1 ? 's' : ''}`}
               >
                 <svg className="h-3.5 w-3.5" {...iconProps} strokeWidth={2}>
                   <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
                   <path d="M9.75 9.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V9.653z" />
                 </svg>
-                {selectedNodes.length > 0
-                  ? `Run ${selectedNodes.length} selected node${selectedNodes.length !== 1 ? 's' : ''}`
+                {selectedNodeIds.length > 0
+                  ? `Run ${selectedNodeIds.length} selected node${selectedNodeIds.length !== 1 ? 's' : ''}`
                   : 'Run selected nodes'}
               </MenuItem>
             </MenuSurface>

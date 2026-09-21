@@ -474,7 +474,7 @@ export interface NodeReadiness {
  * and finishes the rest. Loop edges are excluded because they carry no data
  * on the first iteration.
  */
-export function nodeReadinessPure(nodes: WorkflowNode[], edges: WorkflowEdge[]): Record<string, NodeReadiness> {
+export function nodeReadinessPure(nodes: Pick<WorkflowNode, "id" | "type" | "data">[], edges: WorkflowEdge[]): Record<string, NodeReadiness> {
   const readiness: Record<string, NodeReadiness> = {};
   const connected = (nodeId: string, accept: (handle: string | null | undefined) => boolean, includeLoops = false) =>
     edges.some((e) => e.target === nodeId && (includeLoops || !e.data?.isLoop) && accept(e.targetHandle));

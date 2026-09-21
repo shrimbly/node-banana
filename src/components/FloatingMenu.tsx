@@ -121,30 +121,27 @@ function MenuRow({
  * to nodes so the counts follow comments being added, viewed or removed.
  */
 function useCommentNavigation() {
-  const nodes = useWorkflowStore((state) => state.nodes);
-  const getNodesWithComments = useWorkflowStore((state) => state.getNodesWithComments);
+  const commentNodeIds = useWorkflowStore(useShallow((state) => state.getNodesWithComments().map((node) => node.id)));
   const viewedCommentNodeIds = useWorkflowStore((state) => state.viewedCommentNodeIds);
   const markCommentViewed = useWorkflowStore((state) => state.markCommentViewed);
   const setNavigationTarget = useWorkflowStore((state) => state.setNavigationTarget);
 
-  // `nodes` is a dependency on purpose: it is what changes when comments do
-  const nodesWithComments = useMemo(() => getNodesWithComments(), [getNodesWithComments, nodes]);
   const unviewedCount = useMemo(
-    () => nodesWithComments.filter((node) => !viewedCommentNodeIds.has(node.id)).length,
-    [nodesWithComments, viewedCommentNodeIds]
+    () => commentNodeIds.filter((id) => !viewedCommentNodeIds.has(id)).length,
+    [commentNodeIds, viewedCommentNodeIds]
   );
-  const totalCount = nodesWithComments.length;
+  const totalCount = commentNodeIds.length;
 
   const goToNext = useCallback(() => {
     if (totalCount === 0) return;
     // First unviewed comment, or the first comment once all are viewed
-    const targetNode =
-      nodesWithComments.find((node) => !viewedCommentNodeIds.has(node.id)) || nodesWithComments[0];
-    if (targetNode) {
-      markCommentViewed(targetNode.id);
-      setNavigationTarget(targetNode.id);
+    const targetId =
+      commentNodeIds.find((id) => !viewedCommentNodeIds.has(id)) || commentNodeIds[0];
+    if (targetId) {
+      markCommentViewed(targetId);
+      setNavigationTarget(targetId);
     }
-  }, [totalCount, nodesWithComments, viewedCommentNodeIds, markCommentViewed, setNavigationTarget]);
+  }, [totalCount, commentNodeIds, viewedCommentNodeIds, markCommentViewed, setNavigationTarget]);
 
   return { totalCount, unviewedCount, goToNext };
 }

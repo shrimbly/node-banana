@@ -3,6 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { NodeProps, Node } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
+import { selectNodeContent } from "@/store/selectors/nodeContent";
 import { useWorkflowStore } from "@/store/workflowStore";
 import type { GifEncoderNodeData, WorkflowNode } from "@/types";
 import {
@@ -91,7 +92,7 @@ function FrameThumbnail({ src, alt }: { src: string; alt: string }) {
   );
 }
 
-function getImageFromSourceNode(node: WorkflowNode): string | null {
+function getImageFromSourceNode(node: Pick<WorkflowNode, "type" | "data">): string | null {
   const d = node.data as Record<string, unknown>;
   // Common image-producing fields (outputGif lets a GIF encoder feed another)
   return (
@@ -117,7 +118,7 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
   const removeEdge = useWorkflowStore((state) => state.removeEdge);
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const edges = useWorkflowStore((state) => state.edges);
-  const nodes = useWorkflowStore((state) => state.nodes);
+  const nodes = useWorkflowStore(selectNodeContent);
   const [expanded, setExpanded] = useState(true);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
