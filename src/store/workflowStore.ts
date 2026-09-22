@@ -2,6 +2,7 @@ import { desktopCredentialsReady } from "@/lib/desktop/credentials";
 import type { QuickstartView } from "@/types/quickstart";
 import { pushGenerationToast } from "@/components/GenerationToast";
 import { create, StateCreator } from "zustand";
+import { COMFY_SETTINGS_CHANGED_EVENT, getComfySettings } from "@/lib/comfy/settings";
 import { useShallow } from "zustand/shallow";
 import {
   Connection,
@@ -485,6 +486,8 @@ export interface WorkflowStore {
 
   // Provider settings state
   providerSettings: ProviderSettings;
+  /** The Comfy Cloud key from the ComfyUI settings, mirrored so Comfy Router consumers re-render when it changes. */
+  comfyCloudApiKey: string | null;
 
   // Provider settings actions
   updateProviderSettings: (settings: ProviderSettings) => void;
@@ -882,6 +885,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
   // Provider settings initial state
   providerSettings: getProviderSettings(),
+  comfyCloudApiKey: typeof window === "undefined" ? null : getComfySettings().cloudApiKey,
 
   // Model search dialog initial state
   modelSearchOpen: false,
@@ -3933,6 +3937,14 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
 export const useWorkflowStore = create<WorkflowStore>()(workflowStoreImpl);
 
+// Keep the mirrored Comfy Cloud key current: the ComfyUI settings tab saves
+// to its own localStorage key and announces it with this event.
+if (typeof window !== "undefined") {
+  window.addEventListener(COMFY_SETTINGS_CHANGED_EVENT, () => {
+    useWorkflowStore.setState({ comfyCloudApiKey: getComfySettings().cloudApiKey });
+  });
+}
+
 /**
  * Stable hook for provider API keys.
  *
@@ -3953,10 +3965,13 @@ export function useProviderApiKeys() {
       kieApiKey: state.providerSettings.providers.kie?.apiKey ?? null,
       wavespeedApiKey: state.providerSettings.providers.wavespeed?.apiKey ?? null,
       openaiApiKey: state.providerSettings.providers.openai?.apiKey ?? null,
+      // Router accepts the Comfy Cloud key, so it stands in when no provider key is set.
+      comfyApiKey: state.providerSettings.providers.comfy?.apiKey || state.comfyCloudApiKey || null,
       // Provider enabled states (for conditional UI)
       replicateEnabled: state.providerSettings.providers.replicate?.enabled ?? false,
       kieEnabled: state.providerSettings.providers.kie?.enabled ?? false,
       openaiEnabled: state.providerSettings.providers.openai?.enabled ?? false,
+      comfyEnabled: state.providerSettings.providers.comfy?.enabled ?? false,
     }))
   );
 }

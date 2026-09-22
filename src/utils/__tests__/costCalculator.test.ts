@@ -137,6 +137,26 @@ describe("hasNonGeminiProviders", () => {
     expect(hasNonGeminiProviders(nodes)).toBe(true);
   });
 
+  it("should return true for nanoBanana node with comfy provider", () => {
+    const nodes: WorkflowNode[] = [
+      {
+        id: "1",
+        type: "nanoBanana",
+        position: { x: 0, y: 0 },
+        data: {
+          model: "nano-banana",
+          resolution: "1K",
+          selectedModel: {
+            provider: "comfy",
+            modelId: "black-forest-labs/flux-2-pro",
+            displayName: "FLUX.2 Pro",
+          },
+        },
+      },
+    ];
+    expect(hasNonGeminiProviders(nodes)).toBe(true);
+  });
+
   it("should return true for generateVideo node with non-Gemini provider", () => {
     const nodes: WorkflowNode[] = [
       {

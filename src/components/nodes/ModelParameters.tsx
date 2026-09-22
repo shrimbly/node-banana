@@ -74,7 +74,7 @@ function ModelParametersInner({
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Use stable selector for API keys to prevent unnecessary re-fetches
-  const { replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey } = useProviderApiKeys();
+  const { replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, comfyApiKey } = useProviderApiKeys();
 
   // Fetch schema when modelId changes
   useEffect(() => {
@@ -119,6 +119,9 @@ function ModelParametersInner({
         if (wavespeedApiKey) {
           headers["X-WaveSpeed-Key"] = wavespeedApiKey;
         }
+        if (comfyApiKey) {
+          headers["X-Comfy-Router-Key"] = comfyApiKey;
+        }
 
         const encodedModelId = encodeURIComponent(modelId);
         const response = await deduplicatedFetch(
@@ -162,7 +165,7 @@ function ModelParametersInner({
     return () => {
       cancelled = true;
     };
-  }, [modelId, provider, replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, onInputsLoaded]);
+  }, [modelId, provider, replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, comfyApiKey, onInputsLoaded]);
 
   // Pre-populate schema defaults into parameters
   useEffect(() => {

@@ -4,12 +4,15 @@
  * Fetches parameter schema for a specific model from its provider.
  * Returns simplified parameter list for UI rendering.
  *
- * GET /api/models/:modelId?provider=replicate|fal|wavespeed
+ * GET /api/models/:modelId?provider=replicate|fal|kie|wavespeed|gemini|openai|comfy
  *
  * Headers:
  *   - X-Replicate-Key: Required for Replicate models
  *   - X-Fal-Key: Optional for fal.ai models
  *   - X-WaveSpeed-Key: Optional for WaveSpeed models
+ *
+ * Kie.ai, OpenAI, Gemini and Comfy Router schemas are static; no key or API
+ * call is needed. Comfy Router ids contain a slash and arrive URL-encoded.
  *
  * Response:
  *   {
@@ -32,6 +35,7 @@ import {
   setCachedWaveSpeedSchemas,
   WaveSpeedApiSchema,
 } from "@/lib/providers/cache";
+import { comfyRouterSchema } from "@/lib/providers/comfyRouter";
 
 // Cache for model schemas (10 minute TTL)
 const schemaCache = new Map<string, { parameters: ModelParameter[]; inputs: ModelInput[]; timestamp: number }>();
@@ -1575,11 +1579,11 @@ export async function GET(
   const decodedModelId = decodeURIComponent(modelId);
   const provider = request.nextUrl.searchParams.get("provider") as ProviderType | null;
 
-  if (!provider || (provider !== "replicate" && provider !== "fal" && provider !== "kie" && provider !== "wavespeed" && provider !== "gemini" && provider !== "openai")) {
+  if (!provider || (provider !== "replicate" && provider !== "fal" && provider !== "kie" && provider !== "wavespeed" && provider !== "gemini" && provider !== "openai" && provider !== "comfy")) {
     return NextResponse.json<SchemaErrorResponse>(
       {
         success: false,
-        error: "Invalid or missing provider. Use ?provider=replicate, ?provider=fal, ?provider=kie, ?provider=wavespeed, ?provider=openai, or ?provider=gemini",
+        error: "Invalid or missing provider. Use ?provider=replicate, ?provider=fal, ?provider=kie, ?provider=wavespeed, ?provider=openai, ?provider=comfy, or ?provider=gemini",
       },
       { status: 400 }
     );
@@ -1634,6 +1638,16 @@ export async function GET(
     } else if (provider === "openai") {
       // OpenAI uses hardcoded schemas (no schema discovery API for image models)
       result = getOpenAiSchema(decodedModelId);
+    } else if (provider === "comfy") {
+      // Comfy Router uses the curated catalog (src/lib/providers/comfyRouter.ts)
+      const comfySchema = comfyRouterSchema(decodedModelId);
+      if (!comfySchema) {
+        return NextResponse.json<SchemaErrorResponse>(
+          { success: false, error: "Unknown Comfy Router model" },
+          { status: 404 }
+        );
+      }
+      result = comfySchema;
     } else {
       // User-provided key takes precedence over env variable
       const apiKey = request.headers.get("X-Fal-Key") || process.env.FAL_API_KEY || null;

@@ -1,13 +1,23 @@
 /**
  * Poll API Route
  *
- * Handles status polling for long-running Kie.ai tasks.
+ * Handles status polling for long-running Kie.ai and Comfy Router tasks.
  * The client calls this endpoint repeatedly with short-lived requests
  * instead of holding a single connection open for minutes.
+ *
+ * Headers:
+ *   - X-Kie-Key: Kie.ai API key (provider "kie")
+ *   - X-Comfy-Router-Key: Comfy API key (provider "comfy")
  */
 import { NextRequest, NextResponse } from "next/server";
 import type { GenerateResponse } from "@/types";
 import { checkKieTaskOnce, fetchKieMediaResult, isVeoModel } from "../providers/kie";
+import {
+  COMFY_ROUTER_HEADER,
+  checkComfyTaskOnce,
+  fetchComfyMediaResult,
+  resolveComfyRouterKey,
+} from "../providers/comfy";
 import { buildMediaResponse } from "../shared";
 
 export const maxDuration = 120; // 2 min — enough for media fetch, not for polling
@@ -33,6 +43,59 @@ export async function POST(request: NextRequest) {
         { success: false, error: "taskId and provider are required" },
         { status: 400 }
       );
+    }
+
+    if (provider === 'comfy') {
+      // Same key resolution as route.ts: header, then COMFY_API_KEY / COMFY_CLOUD_API_KEY
+      const apiKey = resolveComfyRouterKey(request.headers.get(COMFY_ROUTER_HEADER));
+      if (!apiKey) {
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: "Comfy API key not configured" },
+          { status: 401 }
+        );
+      }
+
+      const pollResult = await checkComfyTaskOnce(requestId, apiKey, modelId, taskId);
+
+      if (pollResult.status === "processing") {
+        return NextResponse.json<GenerateResponse>({
+          success: true,
+          polling: true,
+          taskId,
+          pollProvider: provider,
+          pollModelId: modelId,
+          pollModelName: modelName,
+          pollMediaType: mediaType,
+          ...(pollResult.retryAfterMs ? { retryAfterMs: pollResult.retryAfterMs } : {}),
+        });
+      }
+
+      if (pollResult.status === "failed") {
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: `${modelName}: ${pollResult.error}` },
+          { status: 500 }
+        );
+      }
+
+      // completed — collect the native result and return the media
+      const result = await fetchComfyMediaResult(requestId, apiKey, modelId, taskId, mediaType);
+
+      if (!result.success) {
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: result.error || "Failed to fetch result" },
+          { status: 500 }
+        );
+      }
+
+      const output = result.outputs?.[0];
+      if (!output?.data && !output?.url) {
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: "No output in generation result" },
+          { status: 500 }
+        );
+      }
+
+      return buildMediaResponse(output);
     }
 
     if (provider !== 'kie') {

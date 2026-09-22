@@ -35,6 +35,7 @@ import {
 import { Field, Segmented, Select, Slider, Switch, TextInput, labelClass, type SegmentedOption } from "@/components/ui/Controls";
 import { APP_VERSION } from "@/lib/appVersion";
 import { cn } from "@/components/nodes/ui/cn";
+import { ComfyMark } from "@/components/icons/ComfyMark";
 
 import { DEFAULT_LLM_MODEL, LLM_PROVIDER_OPTIONS, defaultLLMModel, llmModelLabel, llmModelOptions } from "@/lib/llm/catalog";
 
@@ -78,6 +79,8 @@ const getProviderIcon = (provider: ProviderType) => {
       return <FalIcon />;
     case "wavespeed":
       return <WaveSpeedIcon />;
+    case "comfy":
+      return <ComfyMark />;
     default:
       return null;
   }
@@ -96,7 +99,7 @@ const SETTINGS_PAGES: { id: SettingsTab; label: string; title: string; descripti
 ];
 
 /** One ruled row per provider on the Providers page, in this order. */
-const PROVIDER_ROWS: { id: ProviderType; name: string; placeholder: string }[] = [
+const PROVIDER_ROWS: { id: ProviderType; name: string; placeholder: string; description?: string }[] = [
   { id: "gemini", name: "Google Gemini", placeholder: "AIza..." },
   { id: "openai", name: "OpenAI", placeholder: "sk-..." },
   { id: "anthropic", name: "Anthropic", placeholder: "sk-ant-..." },
@@ -104,6 +107,7 @@ const PROVIDER_ROWS: { id: ProviderType; name: string; placeholder: string }[] =
   { id: "fal", name: "fal.ai", placeholder: "..." },
   { id: "kie", name: "Kie.ai", placeholder: "..." },
   { id: "wavespeed", name: "WaveSpeed", placeholder: "..." },
+  { id: "comfy", name: "ComfyUI", placeholder: "comfyui-...", description: "Uses your Comfy Cloud key from the ComfyUI tab when left empty." },
 ];
 
 const PAN_MODES: SegmentedOption<PanMode>[] = [
@@ -212,6 +216,7 @@ export function ProjectSetupModal({
     fal: false,
     kie: false,
     wavespeed: false,
+    comfy: false,
   });
   const [overrideActive, setOverrideActive] = useState<Record<ProviderType, boolean>>({
     gemini: false,
@@ -221,6 +226,7 @@ export function ProjectSetupModal({
     fal: false,
     kie: false,
     wavespeed: false,
+    comfy: false,
   });
   const [envStatus, setEnvStatus] = useState<EnvStatusResponse | null>(null);
 
@@ -261,7 +267,7 @@ export function ProjectSetupModal({
       // Sync local providers state
       editedProviderKeys.current.clear();
       setLocalProviders(providerSettings);
-      setShowApiKey({ gemini: false, openai: false, anthropic: false, replicate: false, fal: false, kie: false, wavespeed: false });
+      setShowApiKey({ gemini: false, openai: false, anthropic: false, replicate: false, fal: false, kie: false, wavespeed: false, comfy: false });
       // Initialize override as active if user already has a key set
       setOverrideActive({
         gemini: !!providerSettings.providers.gemini?.apiKey,
@@ -271,6 +277,7 @@ export function ProjectSetupModal({
         fal: !!providerSettings.providers.fal?.apiKey,
         kie: !!providerSettings.providers.kie?.apiKey,
         wavespeed: !!providerSettings.providers.wavespeed?.apiKey,
+        comfy: !!providerSettings.providers.comfy?.apiKey,
       });
       setError(null);
 
@@ -375,7 +382,7 @@ export function ProjectSetupModal({
 
   const handleSaveProviders = () => {
     // Save each provider's settings
-    const providerIds: ProviderType[] = ["gemini", "openai", "anthropic", "replicate", "fal", "kie", "wavespeed"];
+    const providerIds: ProviderType[] = ["gemini", "openai", "anthropic", "replicate", "fal", "kie", "wavespeed", "comfy"];
     for (const providerId of providerIds) {
       const local = localProviders.providers[providerId];
       const current = providerSettings.providers[providerId];
@@ -583,6 +590,7 @@ export function ProjectSetupModal({
                 <DialogRow
                   key={provider.id}
                   title={provider.name}
+                  description={provider.description}
                   first={index === 0 && !hasImportRow}
                   className={index === 0 && !hasImportRow ? "pt-0 pb-2" : "py-2"}
                 >

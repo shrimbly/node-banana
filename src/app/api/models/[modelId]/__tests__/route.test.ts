@@ -897,6 +897,49 @@ describe("/api/models/[modelId] schema endpoint", () => {
       expect(byName.video).toBe("video");
     });
   });
+
+  describe("Comfy Router provider", () => {
+    it("should return the curated schema for a URL-encoded Comfy Router id", async () => {
+      const request = createMockSchemaRequest("bfl/flux-2-pro", "comfy");
+      const response = await GET(request, { params: Promise.resolve({ modelId: "bfl%2Fflux-2-pro" }) });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+
+      const parameterNames = data.parameters.map((p: { name: string }) => p.name);
+      expect(parameterNames).toEqual(
+        expect.arrayContaining(["width", "height", "output_format", "prompt_upsampling", "safety_tolerance", "seed"])
+      );
+
+      const promptInput = data.inputs.find((i: { name: string }) => i.name === "prompt");
+      expect(promptInput).toMatchObject({ type: "text", required: true });
+      const imageInput = data.inputs.find((i: { name: string }) => i.name === "image");
+      expect(imageInput).toMatchObject({ type: "image", required: false, isArray: true });
+
+      // Static catalog: no provider API call, no key needed
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("should return 404 for an id that is not in the Comfy Router catalog", async () => {
+      const request = createMockSchemaRequest("nobody/no-such-model", "comfy");
+      const response = await GET(request, { params: Promise.resolve({ modelId: "nobody%2Fno-such-model" }) });
+      const data = await response.json();
+
+      expect(response.status).toBe(404);
+      expect(data).toEqual({ success: false, error: "Unknown Comfy Router model" });
+    });
+
+    it("should serve a video model's inputs, including the last frame", async () => {
+      const request = createMockSchemaRequest("veo/veo-3.1-generate-001", "comfy");
+      const response = await GET(request, { params: Promise.resolve({ modelId: "veo%2Fveo-3.1-generate-001" }) });
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      const inputNames = data.inputs.map((i: { name: string }) => i.name);
+      expect(inputNames).toEqual(["prompt", "image", "last_frame"]);
+    });
+  });
 });
 
 describe("OpenAI GPT Image 2.5 schemas", () => {

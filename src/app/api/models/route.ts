@@ -1,13 +1,14 @@
 /**
  * Unified Models API Endpoint
  *
- * Aggregates models from all configured providers (Replicate, fal.ai, Gemini, WaveSpeed).
+ * Aggregates models from all configured providers (Replicate, fal.ai, Gemini, WaveSpeed,
+ * Kie.ai, OpenAI, Comfy Router).
  * Uses in-memory caching to reduce external API calls.
  *
  * GET /api/models
  *
  * Query params:
- *   - provider: Optional, filter to specific provider ("replicate" | "fal" | "gemini" | "wavespeed")
+ *   - provider: Optional, filter to specific provider ("replicate" | "fal" | "gemini" | "wavespeed" | "kie" | "openai" | "comfy")
  *   - search: Optional, search query
  *   - refresh: Optional, bypass cache if "true"
  *   - capabilities: Optional, filter by capabilities (comma-separated)
@@ -16,6 +17,9 @@
  *   - X-Replicate-Key: Replicate API key
  *   - X-Fal-Key: fal.ai API key (optional, works without but rate limited)
  *   - X-WaveSpeed-Key: WaveSpeed API key
+ *   - X-Kie-Key: Kie.ai API key
+ *   - X-OpenAI-API-Key: OpenAI API key
+ *   - X-Comfy-Router-Key: Comfy API key (falls back to COMFY_API_KEY / COMFY_CLOUD_API_KEY)
  *
  * Response:
  *   {
@@ -39,6 +43,8 @@ import {
   setCachedWaveSpeedSchemas,
   WaveSpeedApiSchema,
 } from "@/lib/providers/cache";
+import { comfyRouterProviderModels } from "@/lib/providers/comfyRouter";
+import { COMFY_ROUTER_HEADER, resolveComfyRouterKey } from "../generate/providers/comfy";
 
 // API base URLs
 const REPLICATE_API_BASE = "https://api.replicate.com/v1";
@@ -1259,6 +1265,7 @@ export async function GET(
   const kieKey = request.headers.get("X-Kie-Key") || process.env.KIE_API_KEY || null;
   const wavespeedKey = request.headers.get("X-WaveSpeed-Key") || process.env.WAVESPEED_API_KEY || null;
   const openaiKey = request.headers.get("X-OpenAI-API-Key") || process.env.OPENAI_API_KEY || null;
+  const comfyKey = resolveComfyRouterKey(request.headers.get(COMFY_ROUTER_HEADER));
 
   // Build list of all available providers (have keys from env or client headers)
   const availableProviders: string[] = ["gemini"]; // Gemini always available
@@ -1267,12 +1274,14 @@ export async function GET(
   if (kieKey) availableProviders.push("kie");
   if (wavespeedKey) availableProviders.push("wavespeed");
   if (openaiKey) availableProviders.push("openai");
+  if (comfyKey) availableProviders.push("comfy");
 
-  // Determine which providers to fetch from (gemini/kie/openai handled separately as hardcoded)
+  // Determine which providers to fetch from (gemini/kie/openai/comfy handled separately as hardcoded)
   const providersToFetch: ProviderType[] = [];
   let includeGemini = false;
   let includeKie = false;
   let includeOpenai = false;
+  let includeComfy = false;
 
   if (providerFilter) {
     if (providerFilter === "gemini") {
@@ -1319,6 +1328,19 @@ export async function GET(
           { status: 400 }
         );
       }
+    } else if (providerFilter === "comfy") {
+      // Only Comfy Router requested - curated catalog, no external API call needed
+      if (comfyKey) {
+        includeComfy = true;
+      } else {
+        return NextResponse.json<ModelsErrorResponse>(
+          {
+            success: false,
+            error: "Comfy API key required. Add COMFY_API_KEY to .env.local or configure in Settings.",
+          },
+          { status: 400 }
+        );
+      }
     } else if (providerFilter === "replicate" && replicateKey) {
       providersToFetch.push("replicate");
     } else if (providerFilter === "fal" && falKey) {
@@ -1329,6 +1351,7 @@ export async function GET(
     includeGemini = true; // Gemini always available
     includeKie = kieKey ? true : false; // Kie only if API key is configured
     includeOpenai = openaiKey ? true : false; // OpenAI only if API key is configured
+    includeComfy = comfyKey ? true : false; // Comfy Router only if API key is configured
     if (wavespeedKey) {
       providersToFetch.push("wavespeed"); // WaveSpeed if key is configured
     }
@@ -1340,13 +1363,13 @@ export async function GET(
     }
   }
 
-  // Gemini/Kie/OpenAI are handled as hardcoded, so we don't fail if no external providers
-  if (providersToFetch.length === 0 && !includeGemini && !includeKie && !includeOpenai) {
+  // Gemini/Kie/OpenAI/Comfy are handled as hardcoded, so we don't fail if no external providers
+  if (providersToFetch.length === 0 && !includeGemini && !includeKie && !includeOpenai && !includeComfy) {
     return NextResponse.json<ModelsErrorResponse>(
       {
         success: false,
         error:
-          "No providers available. Add REPLICATE_API_KEY, FAL_API_KEY, KIE_API_KEY, WAVESPEED_API_KEY, or OPENAI_API_KEY to .env.local or configure in Settings.",
+          "No providers available. Add REPLICATE_API_KEY, FAL_API_KEY, KIE_API_KEY, WAVESPEED_API_KEY, OPENAI_API_KEY, or COMFY_API_KEY to .env.local or configure in Settings.",
       },
       { status: 400 }
     );
@@ -1401,6 +1424,22 @@ export async function GET(
     providerResults["openai"] = {
       success: true,
       count: openaiModels.length,
+      cached: true, // Hardcoded models are effectively "cached"
+    };
+    anyFromCache = true;
+  }
+
+  // Add Comfy Router models if included (curated catalog, no API call needed)
+  if (includeComfy) {
+    // Filter by search query if provided
+    let comfyModels = comfyRouterProviderModels();
+    if (searchQuery) {
+      comfyModels = filterModelsBySearch(comfyModels, searchQuery);
+    }
+    allModels.push(...comfyModels);
+    providerResults["comfy"] = {
+      success: true,
+      count: comfyModels.length,
       cached: true, // Hardcoded models are effectively "cached"
     };
     anyFromCache = true;

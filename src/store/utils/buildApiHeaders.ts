@@ -6,6 +6,7 @@
  */
 
 import { ProviderType, ProviderSettings, LLMProvider } from "@/types";
+import { getComfyRouterKey } from "@/lib/providers/comfyRouterKey";
 
 /**
  * Header name mapping for each provider
@@ -18,6 +19,7 @@ const PROVIDER_HEADER_MAP: Record<ProviderType, string> = {
   wavespeed: "X-WaveSpeed-Key",
   openai: "X-OpenAI-API-Key",
   anthropic: "X-Anthropic-API-Key",
+  comfy: "X-Comfy-Router-Key",
 };
 
 /**
@@ -35,9 +37,10 @@ export function buildGenerateHeaders(
   const providerKey = provider as ProviderType;
   const headerName = PROVIDER_HEADER_MAP[providerKey];
   if (headerName) {
-    const config = providerSettings.providers[providerKey];
-    if (config?.apiKey) {
-      headers[headerName] = config.apiKey;
+    // Comfy Router accepts the Comfy Cloud key, so fall back to it.
+    const apiKey = providerKey === "comfy" ? getComfyRouterKey(providerSettings) : providerSettings.providers[providerKey]?.apiKey;
+    if (apiKey) {
+      headers[headerName] = apiKey;
     }
   }
 

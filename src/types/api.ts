@@ -56,6 +56,7 @@ export interface GenerateResponse {
   pollModelId?: string; // model ID for result handling
   pollModelName?: string; // display name for error messages
   pollMediaType?: string; // 'video' | 'image' | 'audio' — for result handling
+  retryAfterMs?: number; // server's suggested wait before the next poll (Comfy Router's Retry-After)
 }
 
 // API Request/Response types for LLM Text Generation

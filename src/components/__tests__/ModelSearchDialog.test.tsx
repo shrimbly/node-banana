@@ -17,6 +17,18 @@ const mockIncrementModalCount = vi.fn();
 const mockDecrementModalCount = vi.fn();
 const mockTrackModelUsage = vi.fn();
 const mockUseWorkflowStore = vi.fn();
+// Mutable so a test can hand the dialog a Comfy Router key; reset in beforeEach.
+const providerApiKeys = {
+  replicateApiKey: "test-replicate-key" as string | null,
+  falApiKey: "test-fal-key" as string | null,
+  kieApiKey: null as string | null,
+  wavespeedApiKey: null as string | null,
+  openaiApiKey: null as string | null,
+  comfyApiKey: null as string | null,
+  comfyEnabled: true,
+  replicateEnabled: true,
+  kieEnabled: false,
+};
 
 vi.mock("@/store/workflowStore", () => ({
   useWorkflowStore: (selector?: (state: unknown) => unknown) => {
@@ -25,14 +37,7 @@ vi.mock("@/store/workflowStore", () => ({
     }
     return mockUseWorkflowStore((s: unknown) => s);
   },
-  useProviderApiKeys: () => ({
-    replicateApiKey: "test-replicate-key",
-    falApiKey: "test-fal-key",
-    kieApiKey: null,
-    wavespeedApiKey: null,
-    replicateEnabled: true,
-    kieEnabled: false,
-  }),
+  useProviderApiKeys: () => ({ ...providerApiKeys }),
 }));
 
 // Mock useReactFlow
@@ -75,6 +80,7 @@ const defaultProviderSettings: ProviderSettings = {
     fal: { id: "fal", name: "fal.ai", enabled: true, apiKey: "test-fal-key" },
     kie: { id: "kie", name: "Kie.ai", enabled: false, apiKey: null },
     wavespeed: { id: "wavespeed", name: "WaveSpeed", enabled: false, apiKey: null },
+    comfy: { id: "comfy", name: "ComfyUI", enabled: false, apiKey: null },
   },
 };
 
@@ -119,6 +125,7 @@ describe("ModelSearchDialog", () => {
     vi.clearAllMocks();
     localStorage.clear();
     vi.useFakeTimers({ shouldAdvanceTime: true });
+    providerApiKeys.comfyApiKey = null;
 
     // Default mock fetch response
     mockFetch.mockResolvedValue({
@@ -291,6 +298,40 @@ describe("ModelSearchDialog", () => {
         expect(mockFetch).toHaveBeenCalled();
         const fetchCall = mockFetch.mock.calls[0][0] as string;
         expect(fetchCall).toContain("provider=replicate");
+      });
+    });
+
+    it("should not show the ComfyUI filter without a Comfy Router key", async () => {
+      render(
+        <TestWrapper>
+          <ModelSearchDialog isOpen={true} onClose={vi.fn()} />
+        </TestWrapper>
+      );
+
+      await vi.advanceTimersByTimeAsync(100);
+      expect(screen.queryByTitle("ComfyUI")).not.toBeInTheDocument();
+    });
+
+    it("should show the ComfyUI filter when a Comfy Router key is set and fetch provider=comfy with its header", async () => {
+      providerApiKeys.comfyApiKey = "comfyui-test-key";
+
+      render(
+        <TestWrapper>
+          <ModelSearchDialog isOpen={true} onClose={vi.fn()} />
+        </TestWrapper>
+      );
+
+      await vi.advanceTimersByTimeAsync(100);
+      mockFetch.mockClear();
+
+      const comfyButton = screen.getByTitle("ComfyUI");
+      fireEvent.click(comfyButton);
+
+      await waitFor(() => {
+        expect(mockFetch).toHaveBeenCalled();
+        const [url, options] = mockFetch.mock.calls[0] as [string, RequestInit];
+        expect(url).toContain("provider=comfy");
+        expect(options.headers).toMatchObject({ "X-Comfy-Router-Key": "comfyui-test-key" });
       });
     });
 

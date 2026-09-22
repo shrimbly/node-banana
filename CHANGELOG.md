@@ -17,6 +17,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - The `ControlPanel` rail, the inline-parameters preference, the aspect-fit resize gesture and per-node height writes.
 
+## [1.10.0] - 2026-09-23
+
+The ComfyUI provider release. One Comfy key now runs the partner models Comfy
+hosts, through Comfy Router, alongside the other providers.
+
+### Added
+
+- **ComfyUI as a model provider** — A `comfy` provider, shown as ComfyUI, backed by [Comfy Router](https://docs.comfy.org/development/comfy-router/quickstart). Enter a key from platform.comfy.org in Settings → Providers, or leave it empty and the Comfy Cloud key from the ComfyUI tab is used; `COMFY_API_KEY` works for `.env` setups too.
+- **38 models under one key** — Image: FLUX.2 Pro and Max, FLUX Kontext Pro and Max, FLUX 1.1 Pro and Ultra, GPT Image 2 and 1.5, Nano Banana Pro, Nano Banana 2 and Nano Banana via Vertex, Seedream 5.0 and 4.5, Grok Imagine Image 2.0 and 1, Ideogram v4, Recraft V4, Qwen Image 3.0, Kling Image O1. Video: Seedance 2.5, 2.0, 2.0 Fast and 1.5 Pro, Kling V3, V3 Omni, V2.6 and 3.0 Turbo, Veo 3.1, 3.1 Fast and 3, Grok Imagine Video 1.5, Runway Gen-4 Turbo, LTX 2.5 Pro and Fast, MiniMax H3, Wan 2.7 text and image to video, Luma Ray 2. Each shows in the model browser with its parameters and image handles.
+- **Queued runs** — Every Comfy Router job goes through the Router queue with an idempotency key and is polled the way Kie jobs are, so long video generations survive connection limits. The Router's `Retry-After` hint now sets the poll interval, capped at 60 seconds.
+
+### Changed
+
+- **Poller honours server hints** — The client poller used by async providers waits as long as the server suggests before its own 3 to 8 second ramp, bounded by the overall timeout.
+- **Large outputs stream to a bound** — Video results above 20MB are returned as a URL without being buffered; images are always inlined.
+
+### Notes
+
+Comfy Router returns each partner's native response, so the app carries its own
+catalog of supported models with a request builder and result reader per model
+family. Adding a model of an existing family is one catalog entry; the schemas
+for every Router model are published at docs.comfy.org/router-schemas.
+
 ## [1.9.0] - 2026-08-06
 
 The ComfyUI release. A ComfyUI workflow becomes a node on the canvas, wired to

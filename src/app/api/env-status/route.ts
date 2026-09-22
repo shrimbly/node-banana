@@ -8,6 +8,7 @@ export interface EnvStatusResponse {
   fal: boolean;
   kie: boolean;
   wavespeed: boolean;
+  comfy: boolean;
 }
 
 export async function GET() {
@@ -20,6 +21,8 @@ export async function GET() {
     fal: !!process.env.FAL_API_KEY,
     kie: !!process.env.KIE_API_KEY,
     wavespeed: !!process.env.WAVESPEED_API_KEY,
+    // Comfy Router takes the Comfy Cloud key as well.
+    comfy: !!(process.env.COMFY_API_KEY || process.env.COMFY_CLOUD_API_KEY),
   };
 
   return NextResponse.json(status);

@@ -10,6 +10,7 @@ function makeSettings(overrides: Partial<Record<string, { apiKey: string | null 
     kie: { id: "kie", name: "Kie.ai", enabled: true, apiKey: null },
     wavespeed: { id: "wavespeed", name: "WaveSpeed", enabled: true, apiKey: null },
     openai: { id: "openai", name: "OpenAI", enabled: true, apiKey: null },
+    comfy: { id: "comfy", name: "ComfyUI", enabled: true, apiKey: null },
   };
   for (const [key, val] of Object.entries(overrides)) {
     if (defaults[key]) {
@@ -53,6 +54,12 @@ describe("buildGenerateHeaders", () => {
     const settings = makeSettings({ wavespeed: { apiKey: "ws-key" } });
     const headers = buildGenerateHeaders("wavespeed", settings);
     expect(headers["X-WaveSpeed-Key"]).toBe("ws-key");
+  });
+
+  it("should add Comfy Router key header", () => {
+    const settings = makeSettings({ comfy: { apiKey: "comfyui-key" } });
+    const headers = buildGenerateHeaders("comfy", settings);
+    expect(headers["X-Comfy-Router-Key"]).toBe("comfyui-key");
   });
 
   it("should not add header when API key is null", () => {

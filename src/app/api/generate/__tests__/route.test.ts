@@ -3239,4 +3239,148 @@ describe("/api/generate route", () => {
       consoleSpy.mockRestore();
     });
   });
+
+  describe("Comfy provider", () => {
+    const mockFetch = vi.fn();
+    const originalFetch = global.fetch;
+
+    beforeEach(() => {
+      global.fetch = mockFetch;
+      mockFetch.mockReset();
+      // The key is resolved from the header, then either Comfy env var
+      delete process.env.COMFY_API_KEY;
+      delete process.env.COMFY_CLOUD_API_KEY;
+    });
+
+    afterEach(() => {
+      global.fetch = originalFetch;
+    });
+
+    const selectedModel = {
+      provider: "comfy",
+      modelId: "bfl/flux-2-pro",
+      displayName: "FLUX.2 Pro",
+    };
+
+    it("should return 401 when no Comfy API key is configured", async () => {
+      const request = createMockPostRequest({
+        prompt: "A test prompt",
+        selectedModel,
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data.success).toBe(false);
+      expect(data.error).toBe(
+        "Comfy API key not configured. Add COMFY_API_KEY to .env.local or configure in Settings."
+      );
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("should return 400 when selectedModel is incomplete", async () => {
+      const request = createMockPostRequest(
+        {
+          prompt: "A test prompt",
+          selectedModel: { provider: "comfy", modelId: "bfl/flux-2-pro" },
+        },
+        { "X-Comfy-Router-Key": "test-comfy-key" }
+      );
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.error).toContain("selectedModel with modelId and displayName is required");
+    });
+
+    it("should submit the task and return a comfy polling envelope", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        headers: new Headers(),
+        json: () => Promise.resolve({ request_id: "req_1", status: "IN_QUEUE" }),
+      });
+
+      const request = createMockPostRequest(
+        {
+          prompt: "A test prompt",
+          selectedModel,
+          parameters: { width: 1024, height: 768 },
+          dynamicInputs: { image: "", last_frame: "" },
+        },
+        { "X-Comfy-Router-Key": "test-comfy-key" }
+      );
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data).toMatchObject({
+        success: true,
+        polling: true,
+        pollProvider: "comfy",
+        taskId: "req_1",
+        pollModelId: "bfl/flux-2-pro",
+        pollModelName: "FLUX.2 Pro",
+        pollMediaType: "image",
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const [url, init] = mockFetch.mock.calls[0];
+      expect(url).toBe("https://api.comfy.org/v2/models/bfl/flux-2-pro/requests");
+      expect(init.method).toBe("POST");
+      expect(init.headers["X-API-Key"]).toBe("test-comfy-key");
+      expect(init.headers["Content-Type"]).toBe("application/json");
+      expect(init.headers["Idempotency-Key"]).toEqual(expect.any(String));
+      expect(init.headers["Idempotency-Key"].length).toBeGreaterThan(0);
+
+      const body = JSON.parse(init.body);
+      expect(body.prompt).toBe("A test prompt");
+      expect(body.width).toBe(1024);
+      expect(body.height).toBe(768);
+      // Empty dynamic inputs are filtered before the body is built
+      expect(body).not.toHaveProperty("input_image");
+    });
+
+    it("should fall back to COMFY_API_KEY from the environment", async () => {
+      process.env.COMFY_API_KEY = "env-comfy-key";
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        headers: new Headers(),
+        json: () => Promise.resolve({ request_id: "req_2", status: "IN_QUEUE" }),
+      });
+
+      const request = createMockPostRequest({ prompt: "A test prompt", selectedModel });
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.taskId).toBe("req_2");
+      expect(mockFetch.mock.calls[0][1].headers["X-API-Key"]).toBe("env-comfy-key");
+    });
+
+    it("should return 500 with the Router's message when submission is rejected", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 402,
+        headers: new Headers(),
+        json: () => Promise.resolve({ detail: "Insufficient credits", error_type: "payment_required" }),
+      });
+
+      const request = createMockPostRequest(
+        { prompt: "A test prompt", selectedModel },
+        { "X-Comfy-Router-Key": "test-comfy-key" }
+      );
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data.success).toBe(false);
+      expect(data.error).toBe("Insufficient credits (payment_required)");
+    });
+  });
 });

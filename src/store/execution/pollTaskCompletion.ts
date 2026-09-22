@@ -20,6 +20,9 @@ export interface PollGenerateTaskOptions {
 
 const INITIAL_INTERVAL = 3000; // 3s
 const MAX_INTERVAL = 8000; // 8s
+// Ceiling for a wait the server asks for (Retry-After). Long enough to honour a
+// real queue estimate, short enough that a bad header cannot park the poller.
+const MAX_SERVER_INTERVAL = 60 * 1000; // 60s
 const INTERVAL_STEP = 500; // grow by 500ms each poll
 const MAX_POLL_TIME = 10 * 60 * 1000; // 10 minutes
 const MAX_CONSECUTIVE_ERRORS = 10;
@@ -125,9 +128,17 @@ export async function pollGenerateTask(
     // Reset on successful response
     consecutiveErrors = 0;
 
-    // Still polling — task not done yet
+    // Still polling — task not done yet. A server-suggested wait (Retry-After)
+    // wins over the local ramp, capped at MAX_SERVER_INTERVAL and by the time
+    // left before the overall timeout.
     if (result.polling) {
-      interval = Math.min(interval + INTERVAL_STEP, MAX_INTERVAL);
+      const suggested = result.retryAfterMs;
+      if (typeof suggested === "number" && suggested > 0) {
+        const remaining = Math.max(0, MAX_POLL_TIME - (Date.now() - startTime));
+        interval = Math.min(suggested, MAX_SERVER_INTERVAL, remaining);
+      } else {
+        interval = Math.min(interval + INTERVAL_STEP, MAX_INTERVAL);
+      }
       continue;
     }
 

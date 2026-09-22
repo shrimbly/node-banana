@@ -17,6 +17,7 @@ vi.mock("@/lib/providers/cache", () => ({
 }));
 
 import { GET } from "../route";
+import { COMFY_ROUTER_MODELS } from "@/lib/providers/comfyRouter";
 
 // Store original env and fetch
 const originalEnv = { ...process.env };
@@ -949,6 +950,74 @@ describe("/api/models route", () => {
       expect(searchApiCalled).toBe(true);
       // ...and surface the model that only the search API knew about.
       expect(data.models.find((m: { id: string }) => m.id === "obscure/flux-rare")).toBeDefined();
+    });
+  });
+
+  describe("Comfy Router provider", () => {
+    beforeEach(() => {
+      // The key is resolved from the header, then either Comfy env var
+      delete process.env.COMFY_API_KEY;
+      delete process.env.COMFY_CLOUD_API_KEY;
+    });
+
+    it("GET: provider=comfy with the header returns the curated catalog", async () => {
+      const request = createMockGetRequest(
+        { provider: "comfy" },
+        { "X-Comfy-Router-Key": "test-comfy-key" }
+      );
+      const response = await GET(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(data.models).toHaveLength(COMFY_ROUTER_MODELS.length);
+      expect(data.models.every((m: { provider: string }) => m.provider === "comfy")).toBe(true);
+      expect(data.providers.comfy).toEqual({
+        success: true,
+        count: COMFY_ROUTER_MODELS.length,
+        cached: true,
+      });
+      expect(data.availableProviders).toContain("comfy");
+      // The catalog is static; no external call is made
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("GET: provider=comfy without any key returns 400", async () => {
+      const request = createMockGetRequest({ provider: "comfy" });
+      const response = await GET(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.success).toBe(false);
+      expect(data.error).toBe(
+        "Comfy API key required. Add COMFY_API_KEY to .env.local or configure in Settings."
+      );
+    });
+
+    it("GET: provider=comfy with a search query filters the catalog", async () => {
+      process.env.COMFY_API_KEY = "env-comfy-key";
+      const request = createMockGetRequest({ provider: "comfy", search: "flux" });
+      const response = await GET(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.models.length).toBeGreaterThan(0);
+      expect(data.models.length).toBeLessThan(COMFY_ROUTER_MODELS.length);
+      expect(data.models.every((m: { id: string }) => m.id.startsWith("bfl/"))).toBe(true);
+      expect(data.providers.comfy.count).toBe(data.models.length);
+    });
+
+    it("GET: comfy models join the aggregate when COMFY_CLOUD_API_KEY is set", async () => {
+      process.env.COMFY_CLOUD_API_KEY = "env-cloud-key";
+      const request = createMockGetRequest();
+      const response = await GET(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      // The Gemini models (always included) + the Comfy Router catalog
+      expect(data.providers.comfy.count).toBe(COMFY_ROUTER_MODELS.length);
+      expect(data.models).toHaveLength(data.providers.gemini.count + COMFY_ROUTER_MODELS.length);
+      expect(data.availableProviders).toEqual(expect.arrayContaining(["gemini", "comfy"]));
     });
   });
 });

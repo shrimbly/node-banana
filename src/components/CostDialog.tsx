@@ -23,6 +23,7 @@ function ProviderIcon({ provider }: { provider: ProviderType }) {
     anthropic: { bg: "bg-amber-500/20", text: "text-amber-300" },
     kie: { bg: "bg-orange-500/20", text: "text-orange-300" },
     wavespeed: { bg: "bg-purple-500/20", text: "text-purple-300" },
+    comfy: { bg: "bg-neutral-500/20", text: "text-neutral-300" },
   };
 
   const labels: Record<ProviderType, string> = {
@@ -33,6 +34,7 @@ function ProviderIcon({ provider }: { provider: ProviderType }) {
     anthropic: "A",
     kie: "K",
     wavespeed: "W",
+    comfy: "C",
   };
 
   const color = colors[provider] || colors.gemini;
@@ -56,6 +58,7 @@ function getProviderDisplayName(provider: ProviderType): string {
     anthropic: "Anthropic",
     kie: "Kie.ai",
     wavespeed: "WaveSpeed",
+    comfy: "ComfyUI",
   };
   return names[provider] || provider;
 }
@@ -76,6 +79,9 @@ function getModelUrl(provider: ProviderType, modelId: string): string | null {
   if (provider === "wavespeed") {
     // modelId format: "wavespeed-ai/model-name"
     return `https://wavespeed.ai`;
+  }
+  if (provider === "comfy") {
+    return "https://docs.comfy.org/development/comfy-router/models";
   }
   return null;
 }

@@ -137,6 +137,9 @@ export function getComfySettings(): ComfySettings {
   }
 }
 
+/** Fired on `window` after the settings are saved, so stores that mirror a field can refresh. */
+export const COMFY_SETTINGS_CHANGED_EVENT = "node-banana:comfy-settings-changed";
+
 export function saveComfySettings(settings: ComfySettings): void {
   if (typeof window === "undefined") return;
   const preferences = { ...normalizeComfySettings(settings) } as Partial<ComfySettings>;
@@ -150,9 +153,12 @@ export function saveComfySettings(settings: ComfySettings): void {
       for (const key of comfySecretFields) if (saved[key] !== undefined) preferences[key] = saved[key];
     }
     localStorage.setItem(COMFY_SETTINGS_KEY, JSON.stringify(preferences));
+  window.dispatchEvent(new Event(COMFY_SETTINGS_CHANGED_EVENT));
+    window.dispatchEvent(new Event(COMFY_SETTINGS_CHANGED_EVENT));
     return;
   }
   localStorage.setItem(COMFY_SETTINGS_KEY, JSON.stringify(preferences));
+  window.dispatchEvent(new Event(COMFY_SETTINGS_CHANGED_EVENT));
 }
 
 /* ── connection resolution ─────────────────────────────────────── */

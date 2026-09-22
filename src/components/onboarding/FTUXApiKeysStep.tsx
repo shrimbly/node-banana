@@ -12,6 +12,7 @@ import { cn } from "@/components/nodes/ui/cn";
 import { EnvironmentImport } from '@/components/settings/EnvironmentImport';
 import { getProviderSettings } from '@/store/utils/localStorage';
 
+
 interface ProviderInfo {
   id: ProviderType;
   name: string;
@@ -27,6 +28,7 @@ const providers: ProviderInfo[] = [
   { id: "replicate", name: "Replicate", apiKeyUrl: "https://replicate.com/account/api-tokens" },
   { id: "kie", name: "Kie.ai", apiKeyUrl: "https://kie.ai/api-key" },
   { id: "wavespeed", name: "WaveSpeed", apiKeyUrl: "https://wavespeed.ai/accesskey" },
+  { id: "comfy", name: "ComfyUI", apiKeyUrl: "https://platform.comfy.org/profile/api-keys?onboarding=router" },
 ];
 
 /**
@@ -45,6 +47,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
     fal: false,
     kie: false,
     wavespeed: false,
+    comfy: false,
   });
   const [localKeys, setLocalKeys] = useState<Record<ProviderType, string>>(() => {
     const keys: Record<ProviderType, string> = {
@@ -55,6 +58,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
       fal: "",
       kie: "",
       wavespeed: "",
+      comfy: "",
     };
     for (const id of Object.keys(keys) as ProviderType[]) {
       const saved = providerSettings.providers[id]?.apiKey;

@@ -61,7 +61,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   const adaptiveOutputImage = useAdaptiveImageSrc(data.outputImage, id);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   // Use stable selector for API keys to prevent unnecessary re-fetches
-  const { replicateApiKey, falApiKey, kieApiKey, openaiApiKey, replicateEnabled, kieEnabled, openaiEnabled } = useProviderApiKeys();
+  const { replicateApiKey, falApiKey, kieApiKey, openaiApiKey, comfyApiKey, comfyEnabled, replicateEnabled, kieEnabled, openaiEnabled } = useProviderApiKeys();
   const [externalModels, setExternalModels] = useState<ProviderModel[]>([]);
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelsFetchError, setModelsFetchError] = useState<string | null>(null);
@@ -106,8 +106,12 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
     if (openaiEnabled && openaiApiKey) {
       providers.push({ id: "openai", name: "OpenAI" });
     }
+    // Add ComfyUI (Comfy Router) if a key is available (its own or the Comfy Cloud key)
+    if (comfyEnabled && comfyApiKey) {
+      providers.push({ id: "comfy", name: "ComfyUI" });
+    }
     return providers;
-  }, [replicateEnabled, replicateApiKey, kieEnabled, kieApiKey, openaiEnabled, openaiApiKey]);
+  }, [replicateEnabled, replicateApiKey, kieEnabled, kieApiKey, openaiEnabled, openaiApiKey, comfyEnabled, comfyApiKey]);
 
   // Migrate legacy data: derive selectedModel from model field if missing
   useEffect(() => {
@@ -147,6 +151,9 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
       if (openaiApiKey) {
         headers["X-OpenAI-API-Key"] = openaiApiKey;
       }
+      if (comfyApiKey) {
+        headers["X-Comfy-Router-Key"] = comfyApiKey;
+      }
       const response = await deduplicatedFetch(`/api/models?provider=${currentProvider}&capabilities=${capabilities}`, { headers });
       if (response.ok) {
         const data = await response.json();
@@ -169,7 +176,7 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
     } finally {
       setIsLoadingModels(false);
     }
-  }, [currentProvider, replicateApiKey, falApiKey, kieApiKey, openaiApiKey]);
+  }, [currentProvider, replicateApiKey, falApiKey, kieApiKey, openaiApiKey, comfyApiKey]);
 
   useEffect(() => {
     fetchModels();

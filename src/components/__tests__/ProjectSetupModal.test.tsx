@@ -70,6 +70,7 @@ const defaultProviderSettings: ProviderSettings = {
     fal: { id: "fal", name: "fal.ai", enabled: false, apiKey: null },
     kie: { id: "kie", name: "Kie.ai", enabled: false, apiKey: null },
     wavespeed: { id: "wavespeed", name: "WaveSpeed", enabled: false, apiKey: null },
+    comfy: { id: "comfy", name: "ComfyUI", enabled: false, apiKey: null },
   },
 };
 
@@ -1035,6 +1036,12 @@ describe("ProjectSetupModal", () => {
         expect(screen.getByText("OpenAI")).toBeInTheDocument();
         expect(screen.getByText("Replicate")).toBeInTheDocument();
         expect(screen.getByText("fal.ai")).toBeInTheDocument();
+        // "ComfyUI" is also the settings tab label, so the provider card is
+        // identified by its Comfy Cloud fallback hint as well.
+        expect(screen.getAllByText("ComfyUI").length).toBeGreaterThanOrEqual(2);
+        expect(
+          screen.getByText("Uses your Comfy Cloud key from the ComfyUI tab when left empty.")
+        ).toBeInTheDocument();
       });
     });
 
@@ -1055,6 +1062,7 @@ describe("ProjectSetupModal", () => {
         expect(screen.getByPlaceholderText("AIza...")).toBeInTheDocument();
         expect(screen.getByPlaceholderText("sk-...")).toBeInTheDocument();
         expect(screen.getByPlaceholderText("r8_...")).toBeInTheDocument();
+        expect(screen.getByPlaceholderText("comfyui-...")).toBeInTheDocument();
       });
     });
 

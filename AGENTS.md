@@ -20,6 +20,7 @@ Create `.env.local` in the root directory:
 GEMINI_API_KEY=your_gemini_api_key
 OPENAI_API_KEY=your_openai_api_key  # Optional, for OpenAI LLM provider
 KIE_API_KEY=your_kie_api_key        # Optional, for Kie.ai models (Sora, Veo, Kling, etc.)
+COMFY_API_KEY=your_comfy_api_key    # Optional, for ComfyUI-hosted models via Comfy Router (Flux, GPT Image, Nano Banana, Kling, Veo, etc.)
 ```
 
 ## Architecture Overview
@@ -184,11 +185,11 @@ Use separate entries for each capability variant (e.g., `model/text-to-video` an
 Define `parameters` (user-configurable settings) and `inputs` (connectable handles like prompt, images).
 
 ### Step 4: Add Default Parameters
-**File:** `src/app/api/generate/route.ts` — Add case to `getKieModelDefaults()`.
+**File:** `src/app/api/generate/providers/kie.ts` — Add case to `getKieModelDefaults()`.
 Provide required defaults that must be present even if the user doesn't set them.
 
 ### Step 5: Add Image Input Key Mapping
-**File:** `src/app/api/generate/route.ts` — Add to `getKieImageInputKey()`.
+**File:** `src/app/api/generate/providers/kie.ts` — Add to `getKieImageInputKey()`.
 Map the model to its correct image parameter name if it differs from the default `image_urls`.
 
 ### Step 6: Handle Non-Standard API (if applicable)
@@ -198,13 +199,27 @@ If the model uses different endpoints than `/api/v1/jobs/createTask` and `/api/v
 - Add a custom polling function for the model's status endpoint
 - Add a branch in the Kie request-building logic (see `src/app/api/generate/providers/kie.ts`) for the custom request format
 
+## Adding Comfy Router Models
+
+Comfy Router (`https://api.comfy.org/v2/models/{provider}/{model}`, header `X-API-Key`) fronts ~220 partner models behind one Comfy key. Its catalog endpoint lists only ids and every model keeps its partner's native request and response shape, so the app curates its own list. Provider id is `comfy`, shown as "ComfyUI"; the key falls back to the Comfy Cloud key from the ComfyUI settings.
+
+- **Catalog:** `src/lib/providers/comfyRouter.ts` — one entry per model (`id` is the Router id with its slash, e.g. `bfl/flux-2-pro`), its `family`, capabilities, `parameters` and `inputs`. The registry and schema routes read straight from it.
+- **Wire format per family:** `src/app/api/generate/providers/comfy.ts` — `buildComfyRouterBody(family, input)` and `readComfyRouterResult(family, result)`. A new model of an existing family is a catalog entry only. A new family needs a case in both functions.
+- **Schemas:** every Router model's input/output schema is published at `https://docs.comfy.org/router-schemas/{provider}/{model}.json` (no key needed). Check image fields there: some take raw base64 (`bfl`, `veo`, Gemini `inlineData`), some data URIs (`openai`, `runway`, `xai`, `minimax`), some URLs only (`luma`, `wan` images) — those last stay text-only.
+- **Transport:** always the queue (`POST …/requests` → poll `…/requests/{id}/status` respecting `Retry-After` → `GET …/requests/{id}`), with an `Idempotency-Key` per submit. The generate route returns the polling envelope with `pollProvider: "comfy"` and `/api/generate/poll` finishes the run.
+- **Tests:** `src/app/api/generate/providers/__tests__/comfy.test.ts` covers the body builders and result readers per family; add a case for any family you touch.
+
 ## API Routes
 
 All routes in `src/app/api/`:
 
 | Route | Timeout | Purpose |
 |-------|---------|---------|
-| `/api/generate` | 5 min | Image generation via Gemini |
+| `/api/generate` | 10 min | Image/video generation, dispatched by `selectedModel.provider`; async providers (Kie, Comfy) return a polling envelope |
+| `/api/generate/poll` | 2 min | Finish an async run (Kie, Comfy Router) |
+| `/api/models` | default | Model registry across providers (`?provider=`, `?search=`) |
+| `/api/models/[modelId]` | default | Per-model parameters and inputs |
+| `/api/env-status` | default | Which provider keys the server has from `.env` |
 | `/api/llm` | 1 min | Text generation (Google/OpenAI) |
 | `/api/workflow` | default | Save/load workflow files |
 | `/api/save-generation` | default | Auto-save generated images |
@@ -213,6 +228,7 @@ All routes in `src/app/api/`:
 ## localStorage Keys
 
 - `node-banana-workflow-configs` - Project metadata (paths)
+- `node-banana-provider-settings` - Provider API keys and enabled flags (the `comfy` entry falls back to `node-banana-comfy-settings`' cloud key)
 - `node-banana-workflow-costs` - Cost tracking per workflow
 - `node-banana-nanoBanana-defaults` - Sticky generation settings
 

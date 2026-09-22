@@ -44,7 +44,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
   const nodeData = data;
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   // Use stable selector for API keys to prevent unnecessary re-fetches
-  const { geminiApiKey, replicateApiKey, falApiKey, kieApiKey } = useProviderApiKeys();
+  const { geminiApiKey, replicateApiKey, falApiKey, kieApiKey, comfyApiKey } = useProviderApiKeys();
   const [, setExternalModels] = useState<ProviderModel[]>([]);
   const [, setIsLoadingModels] = useState(false);
   const [, setModelsFetchError] = useState<string | null>(null);
@@ -89,6 +89,9 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
       if (kieApiKey) {
         headers["X-Kie-Key"] = kieApiKey;
       }
+      if (comfyApiKey) {
+        headers["X-Comfy-Router-Key"] = comfyApiKey;
+      }
       const response = await deduplicatedFetch(`/api/models?provider=${currentProvider}&capabilities=${capabilities}`, { headers });
       if (response.ok) {
         const data = await response.json();
@@ -111,7 +114,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
     } finally {
       setIsLoadingModels(false);
     }
-  }, [currentProvider, geminiApiKey, replicateApiKey, falApiKey, kieApiKey]);
+  }, [currentProvider, geminiApiKey, replicateApiKey, falApiKey, kieApiKey, comfyApiKey]);
 
   useEffect(() => {
     fetchModels();
