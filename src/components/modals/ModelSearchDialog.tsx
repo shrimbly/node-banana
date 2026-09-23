@@ -10,7 +10,6 @@ import {
   DialogPageBody,
   DialogPageHead,
   DialogPane,
-  DialogRailItem,
   DialogRowTitle,
   DialogStatus,
   DialogTextButton,
@@ -227,7 +226,7 @@ interface ModelSearchDialogProps {
   showClearOption?: boolean;
   /** Callback when the "Remove fallback" row is clicked */
   onClearSelection?: () => void;
-  /** Custom dialog title (defaults to "Browse Models") */
+  /** Custom dialog title (defaults to "Browse models") */
   title?: string;
 }
 
@@ -239,7 +238,7 @@ export function ModelSearchDialog({
   initialCapabilityFilter,
   showClearOption,
   onClearSelection,
-  title = "Browse Models",
+  title = "Browse models",
 }: ModelSearchDialogProps) {
   const {
     addNode,
@@ -626,15 +625,15 @@ export function ModelSearchDialog({
       onClose={onClose}
       portal
       initialFocusRef={searchInputRef}
-      className={cn(splitPanelClass, "w-[1040px] h-[680px] max-w-[92vw] max-h-[85vh]")}
+      className={cn(splitPanelClass, "w-[1200px] h-[720px] max-w-[92vw] max-h-[85vh]")}
     >
-      <DialogPane width={260}>
-        {/* Scroll box spans the pane so the rail items' bleed is not clipped. */}
-        <div className="flex-1 min-h-0 -mx-6 px-6 overflow-y-auto overscroll-contain flex flex-col gap-[18px]">
-          <DialogHeading>{title}</DialogHeading>
+      {/* Everything in the pane starts on one line: the search icon's, 11px in. */}
+      <DialogPane width={232} className="px-4 pt-5 pb-3 gap-2">
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain flex flex-col">
+          <DialogHeading className="pl-[11px] text-[17px] leading-6 font-semibold tracking-[-0.02em]">{title}</DialogHeading>
 
-          <div className="relative">
-            <SearchGlyph className="pointer-events-none absolute left-3 top-2.5 w-4 h-4 text-neutral-500" />
+          <div className="relative mt-3 shrink-0">
+            <SearchGlyph className="pointer-events-none absolute left-[11px] top-2 w-4 h-4 text-neutral-500" />
             <input
               ref={searchInputRef}
               type="text"
@@ -644,69 +643,50 @@ export function ModelSearchDialog({
               onKeyDown={handleSearchKeyDown}
               placeholder="Search models..."
               // Focused on open: a quiet ring, since the caret already says where typing goes.
-              className={cn(inputClass, "bg-canvas-bg pl-9 focus-visible:ring-1 focus-visible:ring-neutral-500")}
+              className={cn(inputClass, "h-8 bg-canvas-bg pl-[34px] focus-visible:ring-1 focus-visible:ring-neutral-500")}
             />
           </div>
 
-          <div>
-            <DialogEyebrow className="block mb-1.5 text-neutral-500">Type</DialogEyebrow>
-            <div className="flex flex-col">
+          <div className="mt-[18px] flex flex-col gap-3.5">
+            <FilterGroup label="Type">
               {CAPABILITY_OPTIONS.map((option) => (
-                <DialogRailItem
+                <FilterItem
                   key={option.id}
                   active={capabilityFilter === option.id}
-                  aria-current={undefined}
-                  aria-pressed={capabilityFilter === option.id}
                   onClick={() => setCapabilityFilter(option.id)}
-                  className="h-8"
                 >
                   {option.label}
-                </DialogRailItem>
+                </FilterItem>
               ))}
-            </div>
-          </div>
+            </FilterGroup>
 
-          <div>
-            <DialogEyebrow className="block mb-1.5 text-neutral-500">Provider</DialogEyebrow>
-            <div className="flex flex-col">
-              <DialogRailItem
-                active={providerFilter === "all"}
-                aria-current={undefined}
-                aria-pressed={providerFilter === "all"}
-                title="All Providers"
-                onClick={() => setProviderFilter("all")}
-                className="h-8"
-              >
-                All
-              </DialogRailItem>
+            <div className="h-px bg-white/[0.06]" />
+
+            <FilterGroup label="Provider">
+              <FilterItem active={providerFilter === "all"} title="All Providers" onClick={() => setProviderFilter("all")}>
+                All providers
+              </FilterItem>
               {PROVIDER_OPTIONS.filter((option) => availableProviders.has(option.id)).map(({ id, label, Icon }) => (
-                <DialogRailItem
+                <FilterItem
                   key={id}
                   active={providerFilter === id}
-                  aria-current={undefined}
-                  aria-pressed={providerFilter === id}
                   title={label}
                   onClick={() => setProviderFilter(id)}
-                  className="h-8"
+                  icon={<Icon />}
                 >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span className="w-3.5 flex justify-center shrink-0 opacity-80">
-                      <Icon />
-                    </span>
-                    {label}
-                  </span>
-                </DialogRailItem>
+                  {label}
+                </FilterItem>
               ))}
-            </div>
+            </FilterGroup>
           </div>
         </div>
 
-        <div className="flex items-center justify-between -mx-1.5">
+        <div className="flex items-center pt-2 border-t border-white/[0.06]">
           <DialogTextButton
             onClick={handleRefresh}
             disabled={isRefreshing || isLoading}
             title="Refresh models & schemas"
-            className="inline-flex items-center gap-2"
+            className="inline-flex items-center gap-[7px] px-[11px] text-xs whitespace-nowrap"
           >
             <svg
               className={cn("w-3.5 h-3.5", isRefreshing && "animate-spin")}
@@ -722,12 +702,14 @@ export function ModelSearchDialog({
             </svg>
             Refresh catalog
           </DialogTextButton>
-          {hasActiveFilters && <DialogTextButton onClick={clearFilters}>Clear filters</DialogTextButton>}
         </div>
       </DialogPane>
 
       <DialogPage>
-        <DialogPageHead eyebrow={<span aria-live="polite">{countLabel}</span>} />
+        <DialogPageHead
+          eyebrow={<span aria-live="polite">{countLabel}</span>}
+          actions={hasActiveFilters && <DialogTextButton onClick={clearFilters}>Clear filters</DialogTextButton>}
+        />
 
         <DialogPageBody className="overscroll-contain pt-3 pb-6 flex flex-col gap-5">
           {/* The spinner is for a first load only; a new search keeps the old results, dimmed. */}
@@ -813,30 +795,30 @@ export function ModelSearchDialog({
                         <button
                           type="button"
                           onClick={() => handleSelectModel(model)}
-                          className={cn(cardClass, "flex items-stretch w-full h-full min-h-[104px] overflow-hidden")}
+                          className={cn(cardClass, "flex items-stretch w-full h-[124px] overflow-hidden")}
                         >
                           {/* Full-height cover image */}
-                          <Thumb src={model.coverImage} alt={model.name} className="w-24 self-stretch" large />
+                          <Thumb src={model.coverImage} alt={model.name} className="w-[122px] self-stretch" large />
 
-                          <span className={cn("flex-1 min-w-0 p-3 flex flex-col gap-1.5", url && "pr-9")}>
-                            <span className="min-w-0">
+                          {/* Fixed height: title, id line, one row of chips and two lines of description. */}
+                          <span className="flex-1 min-w-0 px-3.5 py-3 flex flex-col gap-1.5 overflow-hidden">
+                            <span className={cn("min-w-0", url && "pr-[26px]")}>
                               <DialogRowTitle className="truncate">{getDisplayName(model)}</DialogRowTitle>
-                              <span className="block mt-0.5 font-mono text-[11px] leading-4 text-ink-3 truncate">
-                                {model.id}
+                              <span className="flex items-center gap-1.5 mt-0.5 min-w-0 font-mono text-[11px] leading-4">
+                                <span className="flex items-center gap-[5px] shrink-0 text-neutral-400 [&_svg]:w-[11px] [&_svg]:h-[11px]">
+                                  <ProviderIcon provider={model.provider} />
+                                  {getProviderDisplayName(model.provider)}
+                                </span>
+                                <span aria-hidden="true" className="shrink-0 text-neutral-600">·</span>
+                                <span className="text-ink-3 truncate">{model.id}</span>
                               </span>
                             </span>
-                            <span className="flex items-center gap-1 flex-wrap">
-                              <DialogChip className="gap-1 text-neutral-300">
-                                <ProviderIcon provider={model.provider} />
-                                {getProviderDisplayName(model.provider)}
-                              </DialogChip>
+                            <span className="flex items-center gap-1 overflow-hidden">
                               {model.capabilities.map((cap) =>
-                                CAPABILITY_LABELS[cap] ? <DialogChip key={cap}>{CAPABILITY_LABELS[cap]}</DialogChip> : null
+                                CAPABILITY_LABELS[cap] ? <DialogChip key={cap} className="shrink-0">{CAPABILITY_LABELS[cap]}</DialogChip> : null
                               )}
                             </span>
-                            {model.description && (
-                              <span className="text-xs leading-4 text-ink-3 line-clamp-2">{model.description}</span>
-                            )}
+                            <span className="h-8 shrink-0 text-xs leading-4 text-ink-3 line-clamp-2">{model.description}</span>
                           </span>
                         </button>
 
@@ -873,6 +855,47 @@ export function ModelSearchDialog({
 }
 
 /* ------------------------------------------------------------------ parts */
+
+/** A labelled group of filter rows in the pane. */
+function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div role="group" aria-label={label}>
+      <DialogEyebrow className="block mb-1 pl-[11px] text-neutral-500">{label}</DialogEyebrow>
+      <div className="flex flex-col">{children}</div>
+    </div>
+  );
+}
+
+/**
+ * One filter row: 28px, inset to the search icon, a soft fill as wide as the
+ * search box when it is the current filter.
+ */
+function FilterItem({
+  active,
+  icon,
+  className,
+  children,
+  ...rest
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & { active: boolean; icon?: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      {...rest}
+      className={cn(
+        "flex items-center gap-2.5 h-7 px-[11px] rounded-md text-left font-display text-[13px] tracking-[-0.01em] transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
+        active
+          ? "bg-white/[0.06] text-neutral-100 font-semibold"
+          : "text-neutral-400 font-medium hover:text-neutral-200 hover:bg-white/[0.03]",
+        className
+      )}
+    >
+      {icon && <span className={cn("w-4 flex justify-center shrink-0", !active && "opacity-75")}>{icon}</span>}
+      {children}
+    </button>
+  );
+}
 
 /** Card surface shared by recent and catalogue entries, drawn like the template cards. */
 const cardClass = cn(

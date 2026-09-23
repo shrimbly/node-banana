@@ -184,7 +184,7 @@ describe("ModelSearchDialog", () => {
         </TestWrapper>
       );
 
-      expect(screen.queryByText("Browse Models")).not.toBeInTheDocument();
+      expect(screen.queryByText("Browse models")).not.toBeInTheDocument();
     });
 
     it("should render with title when isOpen is true", async () => {
@@ -194,7 +194,7 @@ describe("ModelSearchDialog", () => {
         </TestWrapper>
       );
 
-      expect(screen.getByText("Browse Models")).toBeInTheDocument();
+      expect(screen.getByText("Browse models")).toBeInTheDocument();
     });
 
     it("should register and unregister modal count", async () => {
@@ -667,7 +667,7 @@ describe("ModelSearchDialog", () => {
       );
 
       // Click on the dialog title (inside the dialog)
-      fireEvent.click(screen.getByText("Browse Models"));
+      fireEvent.click(screen.getByText("Browse models"));
 
       expect(onClose).not.toHaveBeenCalled();
     });
