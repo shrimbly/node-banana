@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { ProviderSettings } from "@/types";
@@ -184,7 +184,7 @@ describe("ModelSearchDialog", () => {
         </TestWrapper>
       );
 
-      expect(screen.queryByText("Browse Models")).not.toBeInTheDocument();
+      expect(screen.queryByText("Browse models")).not.toBeInTheDocument();
     });
 
     it("should render with title when isOpen is true", async () => {
@@ -194,7 +194,7 @@ describe("ModelSearchDialog", () => {
         </TestWrapper>
       );
 
-      expect(screen.getByText("Browse Models")).toBeInTheDocument();
+      expect(screen.getByText("Browse models")).toBeInTheDocument();
     });
 
     it("should register and unregister modal count", async () => {
@@ -351,15 +351,16 @@ describe("ModelSearchDialog", () => {
   });
 
   describe("Capability Filter", () => {
-    it("should render capability filter dropdown", async () => {
+    it("should render the type rail with All selected", async () => {
       render(
         <TestWrapper>
           <ModelSearchDialog isOpen={true} onClose={vi.fn()} />
         </TestWrapper>
       );
 
-      const capabilitySelect = screen.getByDisplayValue("All Types");
-      expect(capabilitySelect).toBeInTheDocument();
+      const typeRail = screen.getByText("Type").nextElementSibling as HTMLElement;
+      const allType = within(typeRail).getByRole("button", { name: "All" });
+      expect(allType).toHaveAttribute("aria-pressed", "true");
     });
 
     it("should filter by image capabilities when selected", async () => {
@@ -372,8 +373,7 @@ describe("ModelSearchDialog", () => {
       await vi.advanceTimersByTimeAsync(100);
       mockFetch.mockClear();
 
-      const capabilitySelect = screen.getByDisplayValue("All Types");
-      fireEvent.change(capabilitySelect, { target: { value: "image" } });
+      fireEvent.click(screen.getByRole("button", { name: "Image" }));
 
       await waitFor(() => {
         expect(mockFetch).toHaveBeenCalled();
@@ -393,8 +393,7 @@ describe("ModelSearchDialog", () => {
       await vi.advanceTimersByTimeAsync(100);
       mockFetch.mockClear();
 
-      const capabilitySelect = screen.getByDisplayValue("All Types");
-      fireEvent.change(capabilitySelect, { target: { value: "video" } });
+      fireEvent.click(screen.getByRole("button", { name: "Video" }));
 
       await waitFor(() => {
         expect(mockFetch).toHaveBeenCalled();
@@ -437,22 +436,17 @@ describe("ModelSearchDialog", () => {
     });
 
     it("should render provider badges on model cards", async () => {
-      const { container } = render(
+      render(
         <TestWrapper>
           <ModelSearchDialog isOpen={true} onClose={vi.fn()} />
         </TestWrapper>
       );
 
       await waitFor(() => {
-        // Check provider badges in the model cards grid
-        const modelGrid = container.querySelector(".grid");
-        expect(modelGrid).toBeInTheDocument();
-        // fal.ai appears for 2 models (FLUX.1 Dev and Kling Video)
-        const falBadges = modelGrid!.querySelectorAll('span[class*="bg-yellow"]');
-        expect(falBadges.length).toBeGreaterThanOrEqual(2);
-        // Replicate appears for 1 model (SDXL)
-        const replicateBadges = modelGrid!.querySelectorAll('span[class*="bg-blue"]');
-        expect(replicateBadges.length).toBeGreaterThanOrEqual(1);
+        const card = (name: string) => screen.getByText(name).closest("button") as HTMLElement;
+        expect(within(card("FLUX.1 Dev")).getByText("fal.ai")).toBeInTheDocument();
+        expect(within(card("Kling Video Pro")).getByText("fal.ai")).toBeInTheDocument();
+        expect(within(card("SDXL")).getByText("Replicate")).toBeInTheDocument();
       });
     });
 
@@ -477,7 +471,7 @@ describe("ModelSearchDialog", () => {
       });
     });
 
-    it("should render model count in footer", async () => {
+    it("should render the model count", async () => {
       render(
         <TestWrapper>
           <ModelSearchDialog isOpen={true} onClose={vi.fn()} />
@@ -485,7 +479,7 @@ describe("ModelSearchDialog", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText(/4 models? found/)).toBeInTheDocument();
+        expect(screen.getByText(/^4 models$/)).toBeInTheDocument();
       });
     });
   });
@@ -673,7 +667,7 @@ describe("ModelSearchDialog", () => {
       );
 
       // Click on the dialog title (inside the dialog)
-      fireEvent.click(screen.getByText("Browse Models"));
+      fireEvent.click(screen.getByText("Browse models"));
 
       expect(onClose).not.toHaveBeenCalled();
     });
@@ -743,7 +737,7 @@ describe("ModelSearchDialog", () => {
       });
     });
 
-    it("should show Try Again button on error", async () => {
+    it("should show Try again button on error", async () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({ success: false, error: "API error" }),
@@ -756,11 +750,11 @@ describe("ModelSearchDialog", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("Try Again")).toBeInTheDocument();
+        expect(screen.getByText("Try again")).toBeInTheDocument();
       });
     });
 
-    it("should refetch when Try Again button is clicked", async () => {
+    it("should refetch when Try again button is clicked", async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: () => Promise.resolve({ success: false, error: "API error" }),
@@ -773,7 +767,7 @@ describe("ModelSearchDialog", () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText("Try Again")).toBeInTheDocument();
+        expect(screen.getByText("Try again")).toBeInTheDocument();
       });
 
       mockFetch.mockResolvedValueOnce({
@@ -781,7 +775,7 @@ describe("ModelSearchDialog", () => {
         json: () => Promise.resolve({ success: true, models: sampleModels }),
       });
 
-      fireEvent.click(screen.getByText("Try Again"));
+      fireEvent.click(screen.getByText("Try again"));
 
       await waitFor(() => {
         expect(screen.getByText("FLUX.1 Dev")).toBeInTheDocument();
