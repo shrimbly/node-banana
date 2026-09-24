@@ -580,3 +580,134 @@ describe("getExtensionFromUrl", () => {
     expect(getExtensionFromUrl("https://cdn.example.com/model.zip")).toBeNull();
   });
 });
+
+describe("/api/save-generation security validation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    global.fetch = originalFetch;
+  });
+
+  afterEach(() => {
+    vi.resetAllMocks();
+    global.fetch = originalFetch;
+  });
+
+  describe("directory path validation", () => {
+    it("rejects a relative directoryPath", async () => {
+      const request = createMockPostRequest({
+        directoryPath: "relative/dir",
+        image: createBase64DataUrl("x"),
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.success).toBe(false);
+      expect(mockMkdir).not.toHaveBeenCalled();
+      expect(mockWriteFile).not.toHaveBeenCalled();
+    });
+
+    it("rejects a directoryPath containing traversal sequences", async () => {
+      const request = createMockPostRequest({
+        directoryPath: "/Users/someone/projects/../../../etc",
+        image: createBase64DataUrl("x"),
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.success).toBe(false);
+      expect(mockWriteFile).not.toHaveBeenCalled();
+    });
+
+    it("rejects a directoryPath pointing at a system directory", async () => {
+      const request = createMockPostRequest({
+        directoryPath: "/etc/cron.d",
+        image: createBase64DataUrl("x"),
+        createDirectory: true,
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.success).toBe(false);
+      expect(mockMkdir).not.toHaveBeenCalled();
+      expect(mockWriteFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("remote URL validation (SSRF)", () => {
+    const privateTargets = [
+      "http://127.0.0.1:8080/x.mp4",
+      "http://localhost/x.mp4",
+      "http://169.254.169.254/latest/meta-data/",
+      "http://10.0.0.5/x.mp4",
+      "http://192.168.1.1/x.mp4",
+      "http://172.16.0.1/x.mp4",
+    ];
+
+    for (const url of privateTargets) {
+      it(`refuses to fetch ${url}`, async () => {
+        const fetchSpy = vi.fn();
+        global.fetch = fetchSpy as unknown as typeof global.fetch;
+        mockStat.mockResolvedValue({ isDirectory: () => true });
+
+        const request = createMockPostRequest({
+          directoryPath: "/tmp/generations",
+          video: url,
+        });
+
+        const response = await POST(request);
+        const data = await response.json();
+
+        expect(response.status).toBe(400);
+        expect(data.success).toBe(false);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(mockWriteFile).not.toHaveBeenCalled();
+      });
+    }
+
+    it("never hands a non-http scheme to fetch", async () => {
+      // `file:` is not treated as a remote URL at all — it falls through to the
+      // base64 branch — but assert it explicitly so a future change to
+      // isHttpUrl cannot quietly turn it into a fetchable scheme.
+      const fetchSpy = vi.fn();
+      global.fetch = fetchSpy as unknown as typeof global.fetch;
+      mockStat.mockResolvedValue({ isDirectory: () => true });
+
+      const request = createMockPostRequest({
+        directoryPath: "/tmp/generations",
+        video: "file:///etc/passwd",
+      });
+
+      await POST(request);
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it("still allows a legitimate public provider URL through", async () => {
+      const fetchSpy = vi.fn().mockResolvedValue({
+        ok: true,
+        headers: { get: (h: string) => (h === "content-type" ? "video/mp4" : null) },
+        arrayBuffer: async () => new ArrayBuffer(8),
+      });
+      global.fetch = fetchSpy as unknown as typeof global.fetch;
+      mockStat.mockResolvedValue({ isDirectory: () => true });
+      mockReaddir.mockResolvedValue([]);
+      mockWriteFile.mockResolvedValue(undefined);
+
+      const request = createMockPostRequest({
+        directoryPath: "/tmp/generations",
+        video: "https://replicate.delivery/pbxt/abc/out.mp4",
+      });
+
+      const response = await POST(request);
+
+      expect(response.status).toBe(200);
+      expect(fetchSpy).toHaveBeenCalled();
+    });
+  });
+});

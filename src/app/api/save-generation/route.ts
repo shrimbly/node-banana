@@ -3,6 +3,8 @@ import * as fs from "fs/promises";
 import * as path from "path";
 import * as crypto from "crypto";
 import { logger } from "@/utils/logger";
+import { validateWorkflowPath } from "@/utils/pathValidation";
+import { validateMediaUrl } from "@/utils/urlValidation";
 
 export const maxDuration = 300; // 5 minute timeout for large media operations
 
@@ -140,6 +142,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // The directory is chosen by the caller, so it has to be checked before it
+    // reaches mkdir/writeFile — the sibling workflow routes do the same.
+    const pathCheck = validateWorkflowPath(directoryPath);
+    if (!pathCheck.valid) {
+      logger.warn('file.error', 'Generation save rejected: invalid directory path', {
+        directoryPath,
+        reason: pathCheck.error,
+      });
+      return NextResponse.json(
+        { success: false, error: pathCheck.error },
+        { status: 400 }
+      );
+    }
+
     // Validate directory exists (or create if requested)
     try {
       const stats = await fs.stat(directoryPath);
@@ -182,6 +198,19 @@ export async function POST(request: NextRequest) {
     let extension: string;
 
     if (isHttpUrl(content)) {
+      // The URL is caller-supplied and fetched by the server, so it has to be
+      // screened the same way the provider adapters screen their media URLs.
+      const urlCheck = validateMediaUrl(content);
+      if (!urlCheck.valid) {
+        logger.warn('file.error', 'Generation save rejected: unsafe content URL', {
+          reason: urlCheck.error,
+        });
+        return NextResponse.json(
+          { success: false, error: urlCheck.error },
+          { status: 400 }
+        );
+      }
+
       // Handle HTTP URL (common for large video files from providers)
       logger.info('file.save', 'Fetching content from URL', { url: content.substring(0, 100) });
 
