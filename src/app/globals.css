@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./agent-theme.css";
 
 @theme {
   --color-canvas-bg: #171717;

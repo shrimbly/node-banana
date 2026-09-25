@@ -1,0 +1,123 @@
+/*
+ * Theme for the agent chat panel: shadcn/ui primitives (src/components/agent/ui)
+ * and Vercel AI Elements (src/components/ai-elements).
+ *
+ * Imported from globals.css right after `@import "tailwindcss"`. Everything
+ * here is additive — new CSS variables and new utilities the rest of the app
+ * does not use. Unlike `shadcn init` it does NOT:
+ *   - set body { bg-background text-foreground } (would flip the page to the light palette)
+ *   - add `* { border-color: var(--border) }` globally
+ *   - override --radius-sm/md/lg/xl or --font-sans (would restyle every rounded-lg in the app)
+ *   - define --color-card (the app already owns bg-card = node card #262626)
+ */
+@import "tw-animate-css";
+
+/* Streamdown (MessageResponse) ships Tailwind classes in its dist. */
+@source "../../node_modules/streamdown/dist/*.js";
+@source "../../node_modules/@streamdown/code/dist/*.js";
+
+/* The app is dark-only: <html class="dark"> switches on the components' dark: tweaks. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Vendored from shadcn/dist/tailwind.css (shadcn@4.21.0) — the variants the
+   radix-nova primitives use — so the 285-package `shadcn` CLI is not a runtime dep. */
+@custom-variant data-open {
+  &:where([data-state="open"]),
+  &:where([data-open]:not([data-open="false"])) {
+    @slot;
+  }
+}
+@custom-variant data-closed {
+  &:where([data-state="closed"]),
+  &:where([data-closed]:not([data-closed="false"])) {
+    @slot;
+  }
+}
+@custom-variant data-selected {
+  &:where([data-selected="true"]) {
+    @slot;
+  }
+}
+@custom-variant data-disabled {
+  &:where([data-disabled="true"]),
+  &:where([data-disabled]:not([data-disabled="false"])) {
+    @slot;
+  }
+}
+@custom-variant data-horizontal {
+  &:where([data-orientation="horizontal"]) {
+    @slot;
+  }
+}
+@custom-variant data-vertical {
+  &:where([data-orientation="vertical"]) {
+    @slot;
+  }
+}
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-border: var(--sidebar-border);
+}
+
+/* Tailwind's neutral scale — the same colors the app spells neutral-800 / -700 / blue-600.
+   --background / --foreground are the app's existing #0a0a0a / #fafafa and are left alone. */
+:root {
+  --popover: oklch(0.269 0 0);           /* neutral-800 */
+  --popover-foreground: oklch(0.922 0 0);/* neutral-200 */
+  --primary: oklch(0.546 0.245 262.881); /* blue-600 */
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.371 0 0);         /* neutral-700 */
+  --secondary-foreground: oklch(0.922 0 0);
+  --muted: oklch(0.371 0 0);
+  --muted-foreground: oklch(0.708 0 0);  /* neutral-400 */
+  --accent: oklch(0.371 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(0.371 0 0);            /* neutral-700 */
+  --input: oklch(0.439 0 0);             /* neutral-600 */
+  --ring: oklch(0.623 0.214 259.815);    /* blue-500 */
+  --sidebar: oklch(0.205 0 0);           /* neutral-900 */
+  --sidebar-border: oklch(0.371 0 0);
+}
+
+/* shadcn's rounder radius scale, only inside the panel. */
+.nb-agent {
+  --radius: 0.625rem;
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+@layer base {
+  /* shadcn assumes `* { border-color: var(--border) }`. Scoped to the panel and to
+     portalled primitives (every shadcn primitive renders data-slot). */
+  :where(.nb-agent, .nb-agent *, [data-slot], [data-slot] *) {
+    border-color: var(--border);
+    outline-color: color-mix(in oklab, var(--ring) 50%, transparent);
+  }
+}
