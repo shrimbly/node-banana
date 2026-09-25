@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 npm run dev      # Start Next.js dev server at http://localhost:3000
 npm run build    # Build for production
-npm run start    # Start production server
+npm run start    # Start production server (node server.js --production)
 npm run lint     # Run Next.js linting
 npm run test     # Run all tests with Vitest (watch mode)
 npm run test:run # Run all tests once (CI mode)
@@ -319,6 +319,51 @@ is a real published Blueprint that once broke it in a different way.
 Point the live tier at a local ComfyUI with
 `node scripts/comfy-smoke.mjs run --mode local --url http://127.0.0.1:8188`.
 
+## Agent
+
+The agent is a chat window opened from the button stacked above the canvas
+navigator. It creates workflows, edits the canvas and changes node settings.
+Every turn runs on the user's own **Claude Code** or **Codex (ChatGPT)** login
+through the vendor's official CLI, never on API credits:
+
+- Both CLIs ship as pinned npm packages (`@anthropic-ai/claude-agent-sdk`,
+  `@openai/codex`, in `serverExternalPackages` in `next.config.shared.cjs`).
+  `NB_CLAUDE_BIN` / `NB_CODEX_BIN` point at another binary.
+- The child environment is stripped of API keys. Before and during a turn the
+  harness checks that the login is a subscription and that the plan has room,
+  and stops rather than use extra usage or credits.
+- Sign-in only starts the vendor's own flow (`claude auth login`, Codex's
+  app-server login). Node Banana never reads or relays tokens, and never
+  relays Claude's manual-code URL.
+- The agent can only call our tools: Claude has every built-in tool off,
+  Codex runs with shell/patch disabled in a read-only sandbox.
+
+Flow: the panel sends a media-free canvas snapshot with each message →
+`/api/agent/chat` runs the turn on the chosen harness → tools edit a
+server-side draft and emit resolved graph ops → the browser applies them with
+`applyAgentGraphOps` (one undo step per tool call; "Revert AI changes" covers
+the whole reply). Edits from a turn are dropped if the canvas is replaced
+mid-turn (`canvasGeneration`: load, clear, tab switch).
+
+| Purpose | Location |
+|---------|----------|
+| Shared contracts | `src/lib/agent/types.ts` |
+| Node catalog, handle rules, draft, layout, snapshot | `src/lib/agent/graph/` |
+| Tools and the system prompt | `src/lib/agent/tools/`, `src/lib/agent/prompt.ts` |
+| Harnesses (Claude Agent SDK, codex app-server), env, billing checks | `src/lib/agent/server/` |
+| UI message stream bridge | `src/lib/agent/server/chatStream.ts` |
+| Panel, button, sign-in card | `src/components/agent/`, `src/lib/agent/client/` |
+| Chat UI kit (Vercel AI Elements + radix-nova primitives, scoped theme) | `src/components/ai-elements/`, `src/components/agent/ui/`, `src/app/agent-theme.css` |
+
+The agent routes only answer requests the server vouches for: `server.js`
+stamps sockets that really are loopback and `electron/server.cjs` stamps every
+request it has authorised, with a per-process secret `sameOrigin.ts` requires.
+Run the app with `npm run dev` / `npm start` / Electron (plain `next dev` /
+`next start` refuse agent requests). `NB_AGENT_ALLOWED_HOSTS` opts other hosts
+in. `NB_CODEX_EFFORT` overrides Codex's reasoning effort (default `medium`).
+When the canvas rules in `WorkflowCanvas.tsx` or a node's sockets change,
+update `src/lib/agent/graph/catalog.ts` / `handles.ts` too (the server's copy).
+
 ## API Routes
 
 All routes in `src/app/api/`:
@@ -340,6 +385,9 @@ All routes in `src/app/api/`:
 | `/api/comfy/run` | 5 min | Submit a Comfy app run |
 | `/api/comfy/poll` | 5 min | Poll a run and collect its outputs |
 | `/api/comfy/preview` | 5 min | Stream a running job's preview images (NDJSON) |
+| `/api/agent/chat` | 10 min | Run one agent turn (AI SDK UI message stream) |
+| `/api/agent/status` | 1 min | Each harness: installed, signed in, subscription billing, models |
+| `/api/agent/sign-in` | 1 min | Start a harness's own sign-in flow |
 
 ## localStorage Keys
 
@@ -350,6 +398,7 @@ All routes in `src/app/api/`:
 - `node-banana-comfy-settings` - ComfyUI backend (cloud/local/remote), keys, job timeout
 - `node-banana-edge-appearance` - User default for connection line style and appearance (thickness, faded opacity, gradient, loading pulse)
 - `node-banana-comfy-apps` - Saved Comfy nodes (workflow + contract + settings)
+- `node-banana-agent-settings` - Agent harness and model choice
 
 ## Git Workflow
 
