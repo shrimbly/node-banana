@@ -359,7 +359,7 @@ export function FloatingMenu() {
   };
 
   const handleRevertAIChanges = useCallback(() => {
-    const confirmed = window.confirm("Are you sure? This will restore your previous workflow.");
+    const confirmed = window.confirm("Restore the canvas from before the latest AI change? You can undo this with Ctrl+Z.");
     if (confirmed) {
       revertToSnapshot();
     }

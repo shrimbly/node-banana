@@ -42,6 +42,8 @@ import type { ProviderModel } from "@/lib/providers/types";
 import { isGenerateNodeType, modelSelectionData } from "./utils/modelSelection";
 import { externalizeWorkflowMedia, hydrateWorkflowMedia } from "@/utils/mediaStorage";
 import { EditOperation, applyEditOperations as executeEditOps } from "@/lib/chat/editOperations";
+import { applyGraphOps } from "@/lib/agent/graph/applyOps";
+import type { AgentGraphOpBatch } from "@/lib/agent/types";
 import { findNearestFreePosition } from "@/utils/spatialLayout";
 import { getNodeSize } from "@/utils/nodeDimensions";
 import { hookHandles, insertHookHandle, withHookHandles } from "@/lib/edges/hook";
@@ -540,6 +542,22 @@ export interface WorkflowStore {
   clearSnapshot: () => void;
   incrementManualChangeCount: () => void;
   applyEditOperations: (operations: EditOperation[]) => { applied: number; skipped: string[] };
+  /**
+   * Applies one batch of resolved canvas changes from the agent as a single
+   * undo step. `revertPoint` (the first batch of a turn) also captures the
+   * snapshot behind "Revert AI changes". Ops that no longer fit the live
+   * canvas are skipped and returned with reasons.
+   */
+  applyAgentGraphOps: (
+    batch: AgentGraphOpBatch,
+    options?: { revertPoint?: boolean }
+  ) => { applied: number; skipped: string[] };
+  /**
+   * Bumped whenever a different canvas replaces the live one (loadWorkflow,
+   * clearWorkflow, a tab switch). An agent turn remembers the generation it
+   * was sent from and drops edits that arrive after its canvas was replaced.
+   */
+  canvasGeneration: number;
 
   // Canvas navigation settings state
   canvasNavigationSettings: CanvasNavigationSettings;
@@ -778,6 +796,8 @@ function applyTabSnapshot(
     _abortController: null,
     workflowLoadCount: get().workflowLoadCount + 1,
     showQuickstart: false,
+    // A different canvas: a running agent turn must not edit it
+    canvasGeneration: get().canvasGeneration + 1,
   });
   // Undo history belongs to the outgoing graph; a switch starts fresh
   pendingDataSnapshot = null;
@@ -905,6 +925,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   // AI change snapshot initial state
   previousWorkflowSnapshot: null,
   manualChangeCount: 0,
+  canvasGeneration: 0,
 
   // Canvas navigation settings initial state
   canvasNavigationSettings: getCanvasNavigationSettings(),
@@ -3175,6 +3196,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       workflowId: workflow.id || null,
       workflowName: workflow.name,
       workflowLoadCount: get().workflowLoadCount + 1,
+      // A different canvas: a running agent turn must not edit it
+      canvasGeneration: get().canvasGeneration + 1,
       saveDirectoryPath: directoryPath || null,
       generationsPath,
       lastSavedAt: savedConfig?.lastSavedAt || null,
@@ -3368,6 +3391,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       dimmedNodeIds: new Set<string>(),
       // Reset skipped nodes
       skippedNodeIds: new Set<string>(),
+      // A different canvas: a running agent turn must not edit it
+      canvasGeneration: get().canvasGeneration + 1,
     });
     get().clearSnapshot();
     // Clear undo history and cancel any pending debounced snapshot
@@ -3864,6 +3889,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   revertToSnapshot: () => {
     const state = get();
     if (state.previousWorkflowSnapshot) {
+      // One undo step, so Ctrl+Z brings back what the revert removed.
+      pushUndoCheckpoint(get, set);
       set({
         nodes: state.previousWorkflowSnapshot.nodes,
         edges: state.previousWorkflowSnapshot.edges,
@@ -3911,6 +3938,51 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       edges: result.edges,
       hasUnsavedChanges: true,
     });
+
+    return { applied: result.applied, skipped: result.skipped };
+  },
+
+  applyAgentGraphOps: (batch, options) => {
+    if (batch.ops.length === 0) return { applied: 0, skipped: [] };
+
+    const state = get();
+    const result = applyGraphOps({ nodes: state.nodes, edges: state.edges }, batch.ops, {
+      createDefaultNodeData,
+      defaultNodeDimensions,
+    });
+    // Nothing landed (every op was stale): leave undo history and the revert point alone.
+    if (result.applied === 0) return { applied: 0, skipped: result.skipped };
+
+    if (options?.revertPoint) get().captureSnapshot();
+    pushUndoCheckpoint(get, set);
+
+    const remainingNodeIds = new Set(result.nodes.map((node) => node.id));
+    const removedNodeIds = new Set(
+      state.nodes.filter((node) => !remainingNodeIds.has(node.id)).map((node) => node.id)
+    );
+    const remainingEdgeIds = new Set(result.edges.map((edge) => edge.id));
+    const removedEdges = state.edges.filter((edge) => !remainingEdgeIds.has(edge.id));
+    const groups = result.clearedCanvas
+      ? {}
+      : pruneEmptiedGroups(state.groups, state.nodes, removedNodeIds, result.nodes);
+
+    set({
+      nodes: removedNodeIds.size > 0 ? healSplitGridRouterRefs(result.nodes, removedNodeIds) : result.nodes,
+      edges: result.edges,
+      groups,
+      hasUnsavedChanges: true,
+    });
+
+    // Same follow-up as a manual disconnect, folded into this batch's undo step.
+    if (removedEdges.length > 0) {
+      deleteCheckpointActive = true;
+      try {
+        clearStaleInputImages(removedEdges, get);
+      } finally {
+        deleteCheckpointActive = false;
+      }
+    }
+    get().recomputeDimmedNodes();
 
     return { applied: result.applied, skipped: result.skipped };
   },

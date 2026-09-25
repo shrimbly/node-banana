@@ -54,6 +54,8 @@ import {
 
 // Lazy-load GLBViewerNode to avoid bundling three.js for users who don't use 3D nodes
 const GLBViewerNode = dynamic(() => import("./nodes/GLBViewerNode").then(mod => ({ default: mod.GLBViewerNode })), { ssr: false });
+// The agent window (chat UI, Markdown, code highlighting) loads on first open
+const AgentPanel = dynamic(() => import("./agent/AgentPanel").then(mod => ({ default: mod.AgentPanel })), { ssr: false });
 import { EditableEdge, ReferenceEdge, SharedEdgeGradients } from "./edges";
 import { ConnectionDropMenu, MenuAction } from "./ConnectionDropMenu";
 import { HandleMenu, type HandleMenuTarget } from "./HandleMenu";
@@ -62,7 +64,9 @@ import { nodeReadinessPure } from "@/store/utils/connectedInputs";
 import { NodeSearchMenu } from "./NodeSearchMenu";
 import { MultiSelectToolbar } from "./MultiSelectToolbar";
 import { GlobalImageHistory } from "./GlobalImageHistory";
-import { CanvasMinimap } from "./CanvasMinimap";
+import { CanvasMinimap, MINIMAP_GEOMETRY, getNavigatorHeight } from "./CanvasMinimap";
+import { AgentButton } from "./agent/AgentButton";
+import { getAgentButtonBottom } from "@/lib/agent/client/layout";
 import { GroupBackgroundsPortal, GroupControlsOverlay } from "./GroupsOverlay";
 import { NodeType, NanoBananaNodeData, HandleType, PromptNodeData, LLMGenerateNodeData, PromptConstructorNodeData, AvailableVariable, WorkflowNodeData } from "@/types";
 import { isComfyWorkflow, isNodeBananaWorkflow } from "@/lib/comfy/detect";
@@ -340,6 +344,20 @@ export function WorkflowCanvas() {
   >(null);
   const [isSplitting, setIsSplitting] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  // Agent window: mounted on first open, then kept (hidden) so a running turn survives closing it
+  const [isAgentOpen, setIsAgentOpen] = useState(false);
+  const [isAgentMounted, setIsAgentMounted] = useState(false);
+  const [isAgentBusy, setIsAgentBusy] = useState(false);
+  const [isMinimapVisible, setIsMinimapVisible] = useState(true);
+  const agentButtonBottom = getAgentButtonBottom({
+    margin: MINIMAP_GEOMETRY.margin,
+    navigatorHeight: getNavigatorHeight(isMinimapVisible),
+  });
+  const toggleAgent = useCallback(() => {
+    setIsAgentMounted(true);
+    setIsAgentOpen((open) => !open);
+  }, []);
+  const closeAgent = useCallback(() => setIsAgentOpen(false), []);
   const [isBuildingWorkflow, setIsBuildingWorkflow] = useState(false);
   const [showNewProjectSetup, setShowNewProjectSetup] = useState(false);
   const [expandingNode, setExpandingNode] = useState<{ id: string; type: string } | null>(null);
@@ -2499,7 +2517,15 @@ export function WorkflowCanvas() {
           size={1}
           className={tutorialActive && lockedFeatures ? "opacity-30 pointer-events-none" : ""}
         />
-        <CanvasMinimap disabled={tutorialActive && lockedFeatures} />
+        <CanvasMinimap disabled={tutorialActive && lockedFeatures} onMinimapVisibleChange={setIsMinimapVisible} />
+        <AgentButton
+          open={isAgentOpen}
+          busy={isAgentBusy && !isAgentOpen}
+          disabled={tutorialActive && lockedFeatures}
+          dimmed={tutorialActive && lockedFeatures}
+          onClick={toggleAgent}
+          style={{ right: MINIMAP_GEOMETRY.margin, bottom: agentButtonBottom }}
+        />
         <FloatingNodeHeaders
           nodes={allNodes}
           hints={readinessHints}
@@ -2559,6 +2585,17 @@ export function WorkflowCanvas() {
         workflowState={chatWorkflowState}
         selectedNodeIds={selectedNodeIds}
       />
+
+      {/* Agent window - floats above the agent button */}
+      {isAgentMounted && (
+        <AgentPanel
+          open={isAgentOpen}
+          onClose={closeAgent}
+          buttonRight={MINIMAP_GEOMETRY.margin}
+          buttonBottom={agentButtonBottom}
+          onBusyChange={setIsAgentBusy}
+        />
+      )}
 
       {/* Control panel - renders on right side when a configurable node is selected */}
 

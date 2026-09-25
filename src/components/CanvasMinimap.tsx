@@ -29,6 +29,17 @@ export const MINIMAP_GEOMETRY = {
   padding: MINIMAP_PADDING,
 } as const;
 
+/** The control row beneath the minimap (h-10). */
+const CONTROL_ROW_HEIGHT = 40;
+
+/** The navigator card's outer height, for chrome stacked above it (the agent button). */
+export function getNavigatorHeight(minimapVisible: boolean): number {
+  const border = 2;
+  return minimapVisible
+    ? MINIMAP_GEOMETRY.padding + MINIMAP_GEOMETRY.height + CONTROL_ROW_HEIGHT + border
+    : CONTROL_ROW_HEIGHT + border;
+}
+
 export function getMiniMapNodeColor(node: Node): string {
   switch (node.type) {
     case "imageInput": return "#3b82f6";
@@ -98,13 +109,15 @@ function ZoomReadout() {
 interface CanvasMinimapProps {
   /** Tutorial lock: greyed out and inert. */
   disabled?: boolean;
+  /** Told when the minimap is shown or hidden, so chrome above the card can follow its height. */
+  onMinimapVisibleChange?: (visible: boolean) => void;
 }
 
 /**
  * The navigator: minimap on top, one row of canvas controls beneath. Hiding
  * the minimap leaves the row on its own, so zoom, fit and lock never move.
  */
-export function CanvasMinimap({ disabled = false }: CanvasMinimapProps) {
+export function CanvasMinimap({ disabled = false, onMinimapVisibleChange }: CanvasMinimapProps) {
   const [isMinimapVisible, setIsMinimapVisible] = useState(true);
   const { zoomIn, zoomOut, fitView } = useReactFlow();
   const store = useStoreApi();
@@ -182,7 +195,11 @@ export function CanvasMinimap({ disabled = false }: CanvasMinimapProps) {
           pressed={isMinimapVisible}
           on={isMinimapVisible}
           disabled={disabled}
-          onClick={() => setIsMinimapVisible((v) => !v)}
+          onClick={() => {
+            const next = !isMinimapVisible;
+            setIsMinimapVisible(next);
+            onMinimapVisibleChange?.(next);
+          }}
         >
           <svg className="h-[18px] w-[18px]" {...iconProps} strokeWidth={1.5}>
             <rect x="3" y="4" width="18" height="16" rx="2" />
