@@ -43,6 +43,41 @@ export const CLAUDE_MODELS: AgentModelOption[] = [
 
 export const CLAUDE_DEFAULT_MODEL = "sonnet";
 
+/** One row of Claude Code's model list (the Agent SDK's ModelInfo), as far as the picker goes. */
+export interface ClaudeModelInfo {
+  value: string;
+  displayName?: string;
+  description?: string;
+  resolvedModel?: string;
+}
+
+/**
+ * The picker's models from Claude Code's own list (initializationResult().models):
+ * real names ("Opus 5.5") and the exact model each alias runs today. Node Banana's
+ * default stays Sonnet (fast, and what the evals passed on); the CLI's own
+ * "Default (recommended)" row is kept, labelled by the model it resolves to.
+ * Falls back to the static aliases when the CLI reports no list.
+ */
+export function claudeModelOptions(models: readonly ClaudeModelInfo[] | undefined): AgentModelOption[] {
+  const rows = (models ?? []).filter((row) => typeof row?.value === "string" && row.value.trim());
+  if (rows.length === 0) return CLAUDE_MODELS;
+  const options = rows.map((row): AgentModelOption => {
+    const summary = row.description?.split("·")[0]?.trim();
+    const label =
+      row.value === "default"
+        ? `Plan default${summary ? ` (${summary})` : ""}`
+        : row.displayName?.trim() || row.value;
+    return {
+      id: row.value,
+      label,
+      ...(row.description ? { description: row.description } : {}),
+      ...(row.resolvedModel ? { resolvedModel: row.resolvedModel } : {}),
+    };
+  });
+  const defaultId = options.some((option) => option.id === CLAUDE_DEFAULT_MODEL) ? CLAUDE_DEFAULT_MODEL : options[0].id;
+  return options.map((option) => (option.id === defaultId ? { ...option, isDefault: true } : option));
+}
+
 export const CLAUDE_SIGN_IN_COMMAND = "claude auth login";
 
 const SIGNED_OUT_PROBLEM =

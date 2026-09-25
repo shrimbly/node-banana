@@ -247,8 +247,8 @@ describe("createAgentChatStream: text and reasoning", () => {
       expect.objectContaining({ type: "reasoning", text: "The user wants a prompt node.", state: "done" }),
       expect.objectContaining({ type: "text", text: "Adding a prompt node.", state: "done" }),
     ]);
-    expect(chunks.at(-1)).toEqual({ type: "finish", finishReason: "stop", messageMetadata: { harness: "claude", model: "sonnet" } });
-    expect(message.metadata).toEqual({ harness: "claude", model: "sonnet" });
+    expect(chunks.at(-1)).toEqual({ type: "finish", finishReason: "stop", messageMetadata: { harness: "claude", model: "sonnet", modelLabel: "Sonnet" } });
+    expect(message.metadata).toEqual({ harness: "claude", model: "sonnet", modelLabel: "Sonnet" });
   });
 
   it("reports the model the panel picked, and passes it to the harness", async () => {
@@ -257,7 +257,7 @@ describe("createAgentChatStream: text and reasoning", () => {
     const { chunks, message } = await run({ harness, body: requestBody({ model: "haiku" }) });
 
     expect(chunks[0]).toMatchObject({ type: "start", messageMetadata: { harness: "claude", model: "haiku" } });
-    expect(message.metadata).toEqual({ harness: "claude", model: "haiku" });
+    expect(message.metadata).toEqual({ harness: "claude", model: "haiku", modelLabel: "Haiku" });
     expect(turns[0].model).toBe("haiku");
   });
 
@@ -277,7 +277,7 @@ describe("createAgentChatStream: text and reasoning", () => {
 
       expect(turns.at(-1), model).not.toHaveProperty("model");
       expect(chunks.at(-1)).toMatchObject({ type: "finish", finishReason: "stop", messageMetadata: { model: "sonnet" } });
-      expect(message.metadata).toEqual({ harness: "claude", model: "sonnet" });
+      expect(message.metadata).toEqual({ harness: "claude", model: "sonnet", modelLabel: "Sonnet" });
     }
   });
 
@@ -375,7 +375,10 @@ describe("createAgentChatStream: what the harness is given", () => {
       { role: "assistant", text: "Added a prompt.\n\nPress Run when ready." },
     ]);
     expect(params.prompt).toBe("<canvas nodes=1/>\n<user>now make it a dog</user>");
-    expect(params.systemPrompt).toBe("SYSTEM for claude");
+    // The prompt builder's text, then which model the turn runs on (our prompt replaces the CLI's own).
+    expect(params.systemPrompt).toBe(
+      "SYSTEM for claude\n\nYou are running on Sonnet (sonnet), through the user's Claude Code. Say so if asked which model you are.",
+    );
     expect(params.sessionId).toBe("session-9");
     expect(params.signal).toBe(controller.signal);
     expect(params.tools.definitions).toEqual(definitions);

@@ -47,16 +47,20 @@ export function AgentConversation({
       <ConversationContent className="gap-5 px-4 py-4">
         {messages.map((message, index) => {
           const switchedTo = switches.get(message.id);
+          const streaming = busy && index === messages.length - 1;
+          const stopped = stoppedMessageIds.has(message.id);
+          // Which model answered, once the reply is done (the one it actually ran on).
+          const modelLabel = message.role === "assistant" && !streaming ? message.metadata?.modelLabel : undefined;
           return (
             <Fragment key={message.id}>
               {switchedTo && <HarnessDivider harness={switchedTo} />}
-              <AgentMessage
-                message={message}
-                streaming={busy && index === messages.length - 1}
-                onSignIn={onSignIn}
-              />
-              {stoppedMessageIds.has(message.id) && (
-                <p className="-mt-3 font-mono text-[10px] leading-4 uppercase tracking-eyebrow text-ink-3">Stopped</p>
+              <AgentMessage message={message} streaming={streaming} onSignIn={onSignIn} />
+              {(modelLabel || stopped) && (
+                <p className="-mt-3 font-mono text-[10px] leading-4 uppercase tracking-eyebrow text-ink-3">
+                  {modelLabel && <span>{modelLabel}</span>}
+                  {modelLabel && stopped && " · "}
+                  {stopped && <span>Stopped</span>}
+                </p>
               )}
             </Fragment>
           );

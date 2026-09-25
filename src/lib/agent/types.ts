@@ -32,6 +32,10 @@ export interface AgentModelOption {
   id: string;
   label: string;
   isDefault?: boolean;
+  /** One line from the vendor ("Most capable for ambitious work"). */
+  description?: string;
+  /** The exact model an alias runs today (`opus` → `claude-opus-5-5`), when the CLI says. */
+  resolvedModel?: string;
 }
 
 export interface AgentSignInState {
@@ -341,6 +345,8 @@ export interface AgentWorkflowSnapshot {
 export interface AgentMessageMetadata {
   harness?: AgentHarnessId;
   model?: string;
+  /** The model's display name, shown under the reply ("Opus 5.5"). */
+  modelLabel?: string;
 }
 
 export interface AgentToolUIOutput {

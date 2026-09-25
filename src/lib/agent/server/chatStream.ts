@@ -272,6 +272,19 @@ export function harnessNotReady(status: AgentHarnessStatus): { code: AgentErrorC
  * list (a stale saved pick, or any string a caller sends) never reaches the
  * CLI's command line or JSON-RPC.
  */
+/**
+ * Tells the model which model it is. Our system prompt replaces the CLI's own,
+ * which is where Claude Code normally says so; without it a model asked
+ * "which model are you?" guesses, and often names the wrong one.
+ */
+export function modelIdentity(option: AgentModelOption | undefined, harnessLabel: string): string {
+  if (!option) return "";
+  const exact = option.resolvedModel ?? option.id;
+  const name = option.id === "default" ? exact : option.label;
+  const exactNote = name === exact ? "" : ` (${exact})`;
+  return `\n\nYou are running on ${name}${exactNote}, through the user's ${harnessLabel}. Say so if asked which model you are.`;
+}
+
 export function pickTurnModel(requested: string | undefined, options: readonly AgentModelOption[]): string | undefined {
   if (!requested) return undefined;
   return options.some((option) => option.id === requested) ? requested : undefined;
@@ -376,6 +389,7 @@ class TurnWriter {
   private statusShown = false;
   private sessionId: string | undefined;
   private model: string | undefined;
+  private modelLabel: string | undefined;
   noticeCount = 0;
   toolCallCount = 0;
 
@@ -389,8 +403,9 @@ class TurnWriter {
     this.writer.write({ type: "start", messageMetadata: this.metadata() });
   }
 
-  setModel(model: string | undefined): void {
+  setModel(model: string | undefined, label?: string): void {
     this.model = model;
+    this.modelLabel = label;
   }
 
   delta(kind: StreamedPartKind, sourceId: string, delta: string): void {
@@ -528,7 +543,11 @@ class TurnWriter {
   }
 
   private metadata(): AgentMessageMetadata {
-    return { harness: this.harnessId, ...(this.model ? { model: this.model } : {}) };
+    return {
+      harness: this.harnessId,
+      ...(this.model ? { model: this.model } : {}),
+      ...(this.modelLabel ? { modelLabel: this.modelLabel } : {}),
+    };
   }
 }
 
@@ -772,7 +791,8 @@ async function runClaimedTurn(
     });
   }
   const model = requestedModel ?? status.models.find((option) => option.isDefault)?.id;
-  turn.setModel(model);
+  const modelOption = status.models.find((option) => option.id === model);
+  turn.setModel(model, modelOption?.label);
 
   let params: HarnessTurnParams;
   try {
@@ -783,7 +803,8 @@ async function runClaimedTurn(
         userText: conversation.userText,
         snapshot: body.workflow,
       }),
-      systemPrompt: (options.buildSystemPrompt ?? buildAgentSystemPrompt)({ harness: harness.id }),
+      systemPrompt:
+        (options.buildSystemPrompt ?? buildAgentSystemPrompt)({ harness: harness.id }) + modelIdentity(modelOption, status.label),
       tools: wrapToolRuntime(runtime, turn, { chatId: body.id }),
       signal,
       ...(body.sessionId ? { sessionId: body.sessionId } : {}),

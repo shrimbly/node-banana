@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { classifyClaudeAccount, classifyClaudeAuthStatus, formatClaudePlan } from "../claudeStatus";
+import { classifyClaudeAccount, classifyClaudeAuthStatus, CLAUDE_MODELS, claudeModelOptions, formatClaudePlan } from "../claudeStatus";
 
 /**
  * `claude auth status` JSON, shaped like the CLI prints it (2.1.282; see
@@ -241,5 +241,27 @@ describe("formatClaudePlan", () => {
     ["", undefined],
   ])("%s → %s", (input, expected) => {
     expect(formatClaudePlan(input)).toBe(expected);
+  });
+});
+
+describe("claudeModelOptions", () => {
+  it("names the picker's models from Claude Code's own list, keeping Sonnet the default", () => {
+    const options = claudeModelOptions([
+      { value: "default", displayName: "Default (recommended)", description: "Opus 5.5 · Best for everyday, complex tasks", resolvedModel: "claude-opus-5-5" },
+      { value: "opus", displayName: "Opus 5.5", description: "Most capable for ambitious work", resolvedModel: "claude-opus-5-5" },
+      { value: "sonnet", displayName: "Sonnet 5", resolvedModel: "claude-sonnet-5" },
+      { value: "haiku", displayName: "Haiku 4.5", resolvedModel: "claude-haiku-4-5-20251001" },
+    ]);
+    expect(options.map((o) => [o.id, o.label, o.resolvedModel, Boolean(o.isDefault)])).toEqual([
+      ["default", "Plan default (Opus 5.5)", "claude-opus-5-5", false],
+      ["opus", "Opus 5.5", "claude-opus-5-5", false],
+      ["sonnet", "Sonnet 5", "claude-sonnet-5", true],
+      ["haiku", "Haiku 4.5", "claude-haiku-4-5-20251001", false],
+    ]);
+  });
+
+  it("falls back to the static aliases when the CLI reports no list", () => {
+    expect(claudeModelOptions(undefined)).toBe(CLAUDE_MODELS);
+    expect(claudeModelOptions([])).toBe(CLAUDE_MODELS);
   });
 });

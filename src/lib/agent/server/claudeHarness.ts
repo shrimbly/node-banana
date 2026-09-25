@@ -56,6 +56,8 @@ import {
   classifyClaudeAuthStatus,
   CLAUDE_DEFAULT_MODEL,
   CLAUDE_MODELS,
+  claudeModelOptions,
+  type ClaudeModelInfo,
   CLAUDE_SIGN_IN_COMMAND,
   type ClaudeAccountInfo,
 } from "./claudeStatus";
@@ -506,7 +508,10 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
    * The account a turn would use: Claude Code started like a turn (same
    * binary, env, cwd, `settingSources: []`), never given a prompt.
    */
-  async function probeAccount(bin: string, env: Record<string, string>): Promise<ClaudeAccountInfo | undefined> {
+  async function probeAccount(
+    bin: string,
+    env: Record<string, string>,
+  ): Promise<{ account: ClaudeAccountInfo | undefined; models: ClaudeModelInfo[] | undefined }> {
     const release = deferred<void>();
     async function* noPrompt(): AsyncGenerator<SDKUserMessage> {
       await release.promise;
@@ -517,7 +522,7 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
     });
     try {
       const init = await withTimeout(q.initializationResult(), deps.probeTimeoutMs, "Claude Code didn't report its account in time.");
-      return init.account ?? undefined;
+      return { account: init.account ?? undefined, models: init.models as ClaudeModelInfo[] | undefined };
     } finally {
       release.resolve();
       try {
@@ -535,10 +540,12 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
     const env = deps.buildEnv();
     await ensureCwd();
 
-    const [account, version] = await Promise.all([
+    const [probe, version] = await Promise.all([
       probeAccount(bin, env).catch(() => undefined),
       versionOf(bin, env),
     ]);
+    const account = probe?.account;
+    const models = claudeModelOptions(probe?.models);
 
     let verdict: BillingVerdict;
     if (account) {
@@ -570,6 +577,7 @@ export function createClaudeHarness(overrides: Partial<ClaudeHarnessDeps> = {}):
       signedIn: verdict.signedIn,
       billing: verdict.billing,
       account: verdict.account,
+      models,
       signIn: ready ? { state: "idle" } : deps.signIn.state(),
       problem: ready ? undefined : verdict.problem,
     };
