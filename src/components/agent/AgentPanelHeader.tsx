@@ -1,12 +1,12 @@
 "use client";
 
 import type { KeyboardEvent } from "react";
-import { SparklesIcon, SquarePenIcon, XIcon } from "lucide-react";
+import { SquarePenIcon, XIcon } from "lucide-react";
 import { cn } from "@/components/agent/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/agent/ui/tooltip";
 import { HARNESS_LABELS, readinessTone, type AgentReadiness } from "@/lib/agent/client/readiness";
 import { AGENT_HARNESS_IDS, type AgentHarnessId } from "@/lib/agent/types";
-import { AGENT_POPOVER_LAYER, PanelIconButton, StatusDot } from "./AgentChrome";
+import { AGENT_ICON, AGENT_POPOVER_LAYER, PanelIconButton, StatusDot } from "./AgentChrome";
 
 export interface AgentPanelHeaderProps {
   harness: AgentHarnessId;
@@ -69,15 +69,17 @@ export function AgentPanelHeader({
   };
 
   return (
-    <div className="flex h-11 shrink-0 items-center gap-2 border-b border-neutral-700 pl-3.5 pr-2">
-      <SparklesIcon className="size-4 shrink-0 text-blue-400" aria-hidden="true" />
-      <h2 className="text-sm font-medium text-neutral-100">Agent</h2>
+    <div className="flex h-12 shrink-0 items-center gap-3 border-b border-white/[0.06] pl-4 pr-2">
+      <h2 data-agent-eyebrow className="font-mono text-[11px] leading-4 uppercase tracking-eyebrow text-ink-3">
+        Agent
+      </h2>
 
+      {/* The dialogs' ink segmented control, at the compact size, with a status dot per harness. */}
       <div
         role="radiogroup"
         aria-label="Run the agent with"
         onKeyDown={handleArrowKeys}
-        className="ml-1.5 flex items-center rounded-lg border border-neutral-700 bg-neutral-900/70 p-0.5"
+        className="flex items-center gap-0.5 rounded-lg bg-white/[0.06] p-0.5"
       >
         {AGENT_HARNESS_IDS.map((id) => {
           const selected = id === harness;
@@ -96,10 +98,12 @@ export function AgentPanelHeader({
                     if (!locked && !selected) onHarnessChange(id);
                   }}
                   className={cn(
-                    "flex h-6 items-center gap-1.5 rounded-md px-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 aria-disabled:cursor-not-allowed aria-disabled:opacity-50",
+                    "flex h-6 items-center gap-1.5 whitespace-nowrap rounded-md px-2 font-display text-xs tracking-[-0.01em] transition-colors",
+                    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
+                    "aria-disabled:cursor-not-allowed aria-disabled:opacity-50",
                     selected
-                      ? "bg-neutral-700 text-neutral-100 shadow-sm"
-                      : "text-neutral-400 hover:text-neutral-200 aria-disabled:hover:text-neutral-400",
+                      ? "bg-neutral-200 font-semibold text-neutral-900"
+                      : "font-medium text-neutral-400 hover:text-neutral-200 aria-disabled:hover:text-neutral-400",
                   )}
                 >
                   <StatusDot tone={readinessTone(readiness[id])} />
@@ -116,10 +120,10 @@ export function AgentPanelHeader({
 
       <div className="ml-auto flex items-center gap-0.5">
         <PanelIconButton label="New chat" onClick={onNewChat} disabled={!canStartNewChat}>
-          <SquarePenIcon />
+          <SquarePenIcon {...AGENT_ICON} />
         </PanelIconButton>
-        <PanelIconButton label="Close" onClick={onClose}>
-          <XIcon />
+        <PanelIconButton label="Close" onClick={onClose} tooltipAlign="end">
+          <XIcon {...AGENT_ICON} />
         </PanelIconButton>
       </div>
     </div>

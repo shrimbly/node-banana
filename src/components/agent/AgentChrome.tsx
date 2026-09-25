@@ -2,9 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { CheckIcon, CopyIcon } from "lucide-react";
+import { ChromeIconButton, type TooltipAlign, type TooltipPlacement } from "@/components/ChromeIconButton";
 import { cn } from "@/components/agent/lib/utils";
 import { Spinner } from "@/components/agent/ui/spinner";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/agent/ui/tooltip";
 import type { AgentStatusTone } from "@/lib/agent/client/readiness";
 
 /**
@@ -14,34 +14,34 @@ import type { AgentStatusTone } from "@/lib/agent/client/readiness";
  */
 export const AGENT_POPOVER_LAYER = "z-[95]";
 
+/** Lucide icons at the chrome's weight: 18px on the canvas, 16px inside the window. */
+export const AGENT_ICON = { strokeWidth: 1.75, "aria-hidden": true } as const;
+
+/** One of the window's icon buttons: the canvas chrome's own, with its hover label below. */
 export function PanelIconButton({
   label,
   onClick,
   disabled,
+  tooltipAlign = "center",
   children,
 }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  tooltipAlign?: TooltipAlign;
   children: ReactNode;
 }) {
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={label}
-          onClick={onClick}
-          disabled={disabled}
-          className="flex size-7 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-700 hover:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:pointer-events-none disabled:opacity-40 [&_svg]:size-4"
-        >
-          {children}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent className={AGENT_POPOVER_LAYER} side="bottom">
-        {label}
-      </TooltipContent>
-    </Tooltip>
+    <ChromeIconButton
+      label={label}
+      onClick={onClick}
+      disabled={disabled}
+      tooltipPlacement="bottom"
+      tooltipAlign={tooltipAlign}
+      className="[&_svg]:size-4"
+    >
+      {children}
+    </ChromeIconButton>
   );
 }
 
@@ -50,25 +50,56 @@ export function InlineSpinner({ className }: { className?: string }) {
   return <Spinner role="presentation" aria-hidden="true" aria-label={undefined} className={cn("size-3.5", className)} />;
 }
 
+/** Status colours: green only here, as a dot. */
 const TONE_CLASSES: Record<AgentStatusTone, string> = {
-  ready: "bg-emerald-500",
+  ready: "bg-handle-image",
   attention: "bg-amber-400",
-  blocked: "bg-red-500",
+  blocked: "bg-error",
   unknown: "bg-neutral-500",
 };
 
-export function StatusDot({ tone, className }: { tone: AgentStatusTone; className?: string }) {
+export function StatusDot({
+  tone,
+  pulse = false,
+  className,
+}: {
+  tone: AgentStatusTone;
+  /** Something is under way (a sign-in waiting on the browser). */
+  pulse?: boolean;
+  className?: string;
+}) {
+  if (!pulse) {
+    return (
+      <span
+        aria-hidden="true"
+        data-tone={tone}
+        className={cn("inline-block size-1.5 shrink-0 rounded-full", TONE_CLASSES[tone], className)}
+      />
+    );
+  }
   return (
-    <span
-      aria-hidden="true"
-      data-tone={tone}
-      className={cn("inline-block size-1.5 shrink-0 rounded-full", TONE_CLASSES[tone], className)}
-    />
+    <span aria-hidden="true" data-tone={tone} className={cn("relative inline-flex size-1.5 shrink-0", className)}>
+      <span
+        className={cn(
+          "absolute inline-flex size-full animate-ping rounded-full opacity-60 motion-reduce:animate-none",
+          TONE_CLASSES[tone],
+        )}
+      />
+      <span className={cn("relative inline-flex size-1.5 rounded-full", TONE_CLASSES[tone])} />
+    </span>
   );
 }
 
 /** A copy button for one line of text; shows a check for a moment after copying. */
-export function CopyButton({ value, label }: { value: string; label: string }) {
+export function CopyButton({
+  value,
+  label,
+  tooltipPlacement = "top",
+}: {
+  value: string;
+  label: string;
+  tooltipPlacement?: TooltipPlacement;
+}) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -87,29 +118,38 @@ export function CopyButton({ value, label }: { value: string; label: string }) {
   }, [value]);
 
   return (
-    <button
-      type="button"
+    <ChromeIconButton
+      label={copied ? "Copied" : label}
       onClick={copy}
-      aria-label={copied ? "Copied" : label}
-      title={copied ? "Copied" : label}
-      className="flex size-7 shrink-0 items-center justify-center rounded-md text-neutral-400 transition-colors hover:bg-neutral-700 hover:text-neutral-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+      tooltipPlacement={tooltipPlacement}
+      tooltipAlign="end"
+      className="[&_svg]:size-4"
     >
-      {copied ? <CheckIcon className="size-3.5 text-emerald-400" /> : <CopyIcon className="size-3.5" />}
-    </button>
+      {copied ? <CheckIcon {...AGENT_ICON} /> : <CopyIcon {...AGENT_ICON} />}
+    </ChromeIconButton>
   );
 }
 
-/** A terminal command in a mono box with a copy button. */
+/** A well holding one line of mono text, with a copy button at its end. */
+export function MonoWell({ className, children }: { className?: string; children: ReactNode }) {
+  return (
+    <div className={cn("flex min-h-9 items-center gap-1 rounded-lg bg-well py-0.5 pl-3 pr-0.5 shadow-well", className)}>
+      {children}
+    </div>
+  );
+}
+
+/** A terminal command in a mono well with a copy button. */
 export function CommandLine({ command }: { command: string }) {
   return (
-    <div className="flex items-center gap-1 rounded-lg border border-neutral-700 bg-neutral-900/80 py-0.5 pl-3 pr-0.5">
-      <code className="min-w-0 flex-1 select-all truncate font-mono text-xs text-neutral-200">
-        <span aria-hidden="true" className="mr-1.5 text-neutral-500 select-none">
+    <MonoWell>
+      <code className="min-w-0 flex-1 select-all truncate font-mono text-xs leading-4 text-neutral-200">
+        <span aria-hidden="true" className="mr-2 select-none text-neutral-500">
           $
         </span>
         {command}
       </code>
       <CopyButton value={command} label="Copy command" />
-    </div>
+    </MonoWell>
   );
 }

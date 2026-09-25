@@ -8,7 +8,7 @@ import {
 } from "@/components/agent/ui/collapsible";
 import { cn } from "@/components/agent/lib/utils";
 import { code } from "@streamdown/code";
-import { BrainIcon, ChevronDownIcon } from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import {
   createContext,
@@ -101,9 +101,12 @@ export const Reasoning = memo(
       }
     }, [isStreaming, isOpen, setIsOpen, isExplicitlyClosed]);
 
-    // Auto-close when streaming ends (once only, and only if it ever streamed)
+    // Auto-close when streaming ends (once only, and only if it ever streamed).
+    // Not for a block that starts closed: it never auto-opened, so the first
+    // time the user opens it after the reply would snap shut a second later.
     useEffect(() => {
       if (
+        !isExplicitlyClosed &&
         hasEverStreamedRef.current &&
         !isStreaming &&
         isOpen &&
@@ -116,7 +119,7 @@ export const Reasoning = memo(
 
         return () => clearTimeout(timer);
       }
-    }, [isStreaming, isOpen, setIsOpen, hasAutoClosed]);
+    }, [isStreaming, isOpen, setIsOpen, hasAutoClosed, isExplicitlyClosed]);
 
     const handleOpenChange = useCallback(
       (newOpen: boolean) => {
@@ -173,19 +176,21 @@ export const ReasoningTrigger = memo(
     return (
       <CollapsibleTrigger
         className={cn(
-          "flex w-full items-center gap-2 text-muted-foreground text-sm transition-colors hover:text-foreground",
+          "flex w-fit items-center gap-1 rounded text-ink-3 text-xs leading-5 transition-colors hover:text-neutral-200",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
           className
         )}
         {...props}
       >
         {children ?? (
           <>
-            <BrainIcon className="size-4" />
             {getThinkingMessage(isStreaming, duration)}
-            <ChevronDownIcon
+            <ChevronRightIcon
+              aria-hidden="true"
+              strokeWidth={1.75}
               className={cn(
-                "size-4 transition-transform",
-                isOpen ? "rotate-180" : "rotate-0"
+                "size-3.5 transition-transform duration-150",
+                isOpen ? "rotate-90" : "rotate-0"
               )}
             />
           </>
@@ -207,13 +212,14 @@ export const ReasoningContent = memo(
   ({ className, children, ...props }: ReasoningContentProps) => (
     <CollapsibleContent
       className={cn(
-        "mt-4 text-sm",
-        "data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-top-2 data-[state=open]:slide-in-from-top-2 text-muted-foreground outline-none data-[state=closed]:animate-out data-[state=open]:animate-in",
+        // The model's working notes: a quiet ruled aside under the line.
+        "mt-2 border-white/10 border-l pl-3 text-ink-3 text-xs leading-[18px]",
+        "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 outline-none data-[state=closed]:animate-out data-[state=open]:animate-in motion-reduce:animate-none",
         className
       )}
       {...props}
     >
-      <Streamdown plugins={streamdownPlugins}>{children}</Streamdown>
+      <Streamdown className="space-y-2" lineNumbers={false} plugins={streamdownPlugins}>{children}</Streamdown>
     </CollapsibleContent>
   )
 );

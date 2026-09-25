@@ -69,8 +69,9 @@ export const ConversationEmptyState = ({
   </div>
 );
 
-export type ConversationScrollButtonProps = ComponentProps<typeof Button>;
+export type ConversationScrollButtonProps = ComponentProps<"button">;
 
+/** Back to the newest line: a small glass chip, like the canvas chrome. */
 export const ConversationScrollButton = ({
   className,
   ...props
@@ -83,19 +84,21 @@ export const ConversationScrollButton = ({
 
   return (
     !isAtBottom && (
-      <Button
+      <button
+        aria-label="Scroll to the latest message"
         className={cn(
-          "absolute bottom-4 left-[50%] translate-x-[-50%] rounded-full dark:bg-background dark:hover:bg-muted",
+          "absolute bottom-3 left-[50%] flex size-7 translate-x-[-50%] items-center justify-center rounded-lg squircle",
+          "border border-white/8 bg-neutral-800/92 text-neutral-300 shadow-[0_1px_2px_rgba(0,0,0,0.4),0_8px_20px_-6px_rgba(0,0,0,0.5)] backdrop-blur-md",
+          "transition-colors duration-[120ms] hover:bg-neutral-700 hover:text-white",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
           className
         )}
         onClick={handleScrollToBottom}
-        size="icon"
         type="button"
-        variant="outline"
         {...props}
       >
-        <ArrowDownIcon className="size-4" />
-      </Button>
+        <ArrowDownIcon aria-hidden="true" className="size-4" strokeWidth={1.75} />
+      </button>
     )
   );
 };

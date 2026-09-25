@@ -10,6 +10,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
+import { CHROME_SURFACE } from "@/components/chromeStyles";
 import { cn } from "@/components/agent/lib/utils";
 import { TooltipProvider } from "@/components/agent/ui/tooltip";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -314,7 +315,9 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
         tabIndex={-1}
         data-testid="agent-panel"
         className={cn(
-          "nb-agent nowheel nokey nodrag nopan fixed flex-col overflow-hidden rounded-xl border border-neutral-700 bg-neutral-800 text-neutral-200 shadow-2xl shadow-black/50 outline-none",
+          // The navigator's glass, one size up: the window stacks on the same chrome as the button below it.
+          CHROME_SURFACE,
+          "nb-agent nowheel nokey nodrag nopan fixed flex-col overflow-hidden rounded-xl text-[13px] leading-5 text-neutral-200 outline-none",
           // Fades up on open.
           "animate-in fade-in-0 slide-in-from-bottom-2 transition-[right] duration-150 motion-reduce:animate-none motion-reduce:transition-none",
           open ? "flex" : "hidden",
@@ -348,7 +351,7 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
         {body}
         {!hasMessages && ready && <AgentBillingNote harness={harness} />}
         {alreadySignedIn?.harness === harness && (
-          <div className="shrink-0 px-3.5 pb-3">
+          <div className="shrink-0 px-4 pb-3">
             <AgentAlreadySignedInHint
               harness={harness}
               message={alreadySignedIn.message}

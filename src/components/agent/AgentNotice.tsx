@@ -1,11 +1,12 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { CircleAlertIcon, HourglassIcon, InfoIcon, LogInIcon, TriangleAlertIcon } from "lucide-react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
+import { LogInIcon } from "lucide-react";
+import { DialogTextButton } from "@/components/ui/Dialog";
 import { cn } from "@/components/agent/lib/utils";
-import { Button } from "@/components/agent/ui/button";
-import { HARNESS_LABELS } from "@/lib/agent/client/readiness";
+import { HARNESS_LABELS, type AgentStatusTone } from "@/lib/agent/client/readiness";
 import type { AgentDataParts, AgentErrorCode, AgentHarnessId } from "@/lib/agent/types";
+import { StatusDot } from "./AgentChrome";
 
 type Tone = "info" | "warning" | "danger";
 
@@ -20,42 +21,45 @@ const NOTICE_TONES: Record<AgentErrorCode, Tone> = {
   harness_error: "danger",
 };
 
-const TONE_CLASSES: Record<Tone, string> = {
-  info: "border-neutral-600 bg-neutral-900/60 text-neutral-300 [&>svg]:text-neutral-400",
-  warning: "border-amber-500/30 bg-amber-500/10 text-amber-100 [&>svg]:text-amber-400",
-  danger: "border-red-500/30 bg-red-500/10 text-red-100 [&>svg]:text-red-400",
+/** The dot carries the tone; the text stays plain. */
+const TONE_DOTS: Record<Tone, AgentStatusTone> = {
+  info: "unknown",
+  warning: "attention",
+  danger: "blocked",
 };
 
-const TONE_ICONS: Record<Tone, ReactNode> = {
-  info: <InfoIcon />,
-  warning: <TriangleAlertIcon />,
-  danger: <CircleAlertIcon />,
-};
+/** A text-only action under a notice or on a card: "Try again", "Dismiss", "Check again". */
+export function AgentTextButton({ className, children, ...rest }: ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <DialogTextButton
+      {...rest}
+      className={cn("inline-flex items-center gap-1.5 [&_svg]:size-3.5 [&_svg]:shrink-0", className)}
+    >
+      {children}
+    </DialogTextButton>
+  );
+}
 
-/** An inline alert in the conversation. */
+/** An inline notice in the conversation: a status dot, plain text, text-button actions. */
 export function AgentAlert({
   tone,
-  icon,
   children,
   actions,
 }: {
   tone: Tone;
-  icon?: ReactNode;
   children: ReactNode;
   actions?: ReactNode;
 }) {
   return (
     <div
       role={tone === "info" ? "status" : "alert"}
-      className={cn(
-        "flex w-full gap-2.5 rounded-lg border px-3 py-2.5 text-[13px] leading-5 [&>svg]:mt-0.5 [&>svg]:size-4 [&>svg]:shrink-0",
-        TONE_CLASSES[tone],
-      )}
+      data-tone={tone}
+      className="flex w-full gap-2.5 text-[13px] leading-5 text-neutral-300"
     >
-      {icon ?? TONE_ICONS[tone]}
-      <div className="min-w-0 flex-1 space-y-2">
+      <StatusDot tone={TONE_DOTS[tone]} className="mt-[7px]" />
+      <div className="min-w-0 flex-1">
         <div className="break-words">{children}</div>
-        {actions && <div className="flex flex-wrap gap-1.5">{actions}</div>}
+        {actions && <div className="-ml-1.5 mt-1 flex flex-wrap items-center gap-1">{actions}</div>}
       </div>
     </div>
   );
@@ -83,13 +87,12 @@ export function AgentNotice({
   return (
     <AgentAlert
       tone={tone}
-      icon={notice.code === "usage_limit" ? <HourglassIcon /> : undefined}
       actions={
         offersSignIn ? (
-          <Button size="xs" variant="secondary" onClick={() => onSignIn(notice.harness, notice.code)}>
-            <LogInIcon />
+          <AgentTextButton onClick={() => onSignIn(notice.harness, notice.code)}>
+            <LogInIcon aria-hidden="true" strokeWidth={1.75} />
             Sign in to {label}
-          </Button>
+          </AgentTextButton>
         ) : undefined
       }
     >

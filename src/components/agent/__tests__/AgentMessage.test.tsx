@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { AgentMessage } from "@/components/agent/AgentMessage";
 import type { AgentUIMessage } from "@/lib/agent/types";
 
@@ -26,5 +26,24 @@ describe("AgentMessage reasoning", () => {
     render(<AgentMessage message={thinking} streaming />);
     fireEvent.click(screen.getByRole("button", { name: /Thinking/ }));
     expect(screen.getByText(/create_workflow/)).toBeInTheDocument();
+  });
+
+  it("stays open when opened after the reply finished", () => {
+    vi.useFakeTimers();
+    try {
+      const { rerender } = render(<AgentMessage message={thinking} streaming />);
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+      const done: AgentUIMessage = { ...thinking, parts: [{ ...thinking.parts[0], state: "done" } as AgentUIMessage["parts"][number]] };
+      rerender(<AgentMessage message={done} streaming={false} />);
+      fireEvent.click(screen.getByRole("button", { name: /Thought for/ }));
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(screen.getByText(/create_workflow/)).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

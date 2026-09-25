@@ -1,28 +1,22 @@
 "use client";
 
 import type { ReactNode } from "react";
-import {
-  CircleAlertIcon,
-  CreditCardIcon,
-  ExternalLinkIcon,
-  LogInIcon,
-  PlugIcon,
-  RefreshCwIcon,
-  WifiOffIcon,
-} from "lucide-react";
+import { ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
+import { DialogButton } from "@/components/ui/Dialog";
 import { cn } from "@/components/agent/lib/utils";
-import { Button } from "@/components/agent/ui/button";
 import {
   HARNESS_BILLING_COPY,
   HARNESS_CLI_OPENS_BROWSER,
   HARNESS_LABELS,
   HARNESS_SIGN_IN_COMMANDS,
+  readinessTone,
   type AgentReadiness,
+  type AgentStatusTone,
 } from "@/lib/agent/client/readiness";
 import { safeExternalUrl } from "@/lib/agent/client/request";
 import type { AgentHarnessId } from "@/lib/agent/types";
-import { CommandLine, CopyButton, InlineSpinner } from "./AgentChrome";
-import { AgentAlert } from "./AgentNotice";
+import { CommandLine, CopyButton, InlineSpinner, MonoWell, StatusDot } from "./AgentChrome";
+import { AgentAlert, AgentTextButton } from "./AgentNotice";
 
 export type AgentBlockedReadiness = Exclude<AgentReadiness, { kind: "ready" }>;
 
@@ -70,14 +64,13 @@ export function AgentSignInCard({
   const status = "status" in readiness ? readiness.status : undefined;
   const command = status?.signInCommand || HARNESS_SIGN_IN_COMMANDS[harness];
 
+  const full = variant === "full";
+
   if (readiness.kind === "loading") {
     return (
       <div
         role="status"
-        className={cn(
-          "flex items-center gap-2 text-[13px] text-neutral-400",
-          variant === "full" ? "m-auto p-6" : "px-4 py-3",
-        )}
+        className={cn("flex items-center gap-2 text-[13px] text-ink-3", full ? "m-auto p-6" : "px-4 py-3")}
       >
         <InlineSpinner />
         Checking {label}…
@@ -85,32 +78,41 @@ export function AgentSignInCard({
     );
   }
 
+  // The primary path: the vendor's own sign-in, as the dialogs' ink button.
   const signInButton = (text = SIGN_IN_BUTTON_LABELS[harness]) => (
-    <div className="space-y-1.5">
-      <Button onClick={onSignIn} disabled={startingSignIn} className="w-full">
-        {startingSignIn ? <InlineSpinner /> : <LogInIcon />}
+    <div className="flex flex-col items-start gap-2">
+      <DialogButton
+        variant="primary"
+        size="md"
+        data-agent-primary
+        onClick={onSignIn}
+        disabled={startingSignIn}
+        // The billing card's label is longer than the column: wrap it rather than overflow.
+        className="h-auto min-h-9 max-w-full whitespace-normal py-2 text-center leading-[18px]"
+      >
+        {startingSignIn && <InlineSpinner />}
         {startingSignIn ? "Starting sign-in…" : text}
-      </Button>
-      <p className="text-center text-[11px] leading-4 text-neutral-500">{signInNote}</p>
+      </DialogButton>
+      <p className="text-[11px] leading-4 text-ink-3">{signInNote}</p>
     </div>
   );
   const checkAgain = (
-    <Button
-      variant="ghost"
-      size="sm"
-      onClick={onCheckAgain}
-      disabled={checking}
-      className="self-start text-neutral-400"
-    >
-      {checking ? <InlineSpinner /> : <RefreshCwIcon />}
+    <AgentTextButton onClick={onCheckAgain} disabled={checking} className="-ml-1.5 self-start">
+      {checking ? <InlineSpinner /> : <RefreshCwIcon aria-hidden="true" strokeWidth={1.75} />}
       {checking ? "Checking…" : "Check again"}
-    </Button>
+    </AgentTextButton>
   );
+  // The fallback, ruled off from the primary path.
   const terminalFallback = (lead: string) => (
-    <div className="space-y-1.5">
-      <p className="text-xs text-neutral-500">{lead}</p>
+    <div className={cn("space-y-2 border-t border-white/[0.06]", full ? "pt-4" : "pt-3.5")}>
+      <p className="text-xs leading-4 text-ink-3">{lead}</p>
       <CommandLine command={command} />
     </div>
+  );
+  const heading = (title: string, lead: ReactNode) => (
+    <CardHeading harness={label} tone={readinessTone(readiness)} pulse={readiness.kind === "signing_in"} title={title} size={variant}>
+      {lead}
+    </CardHeading>
   );
 
   let content: ReactNode;
@@ -118,13 +120,11 @@ export function AgentSignInCard({
     case "unavailable":
       content = (
         <>
-          <CardHeading icon={<WifiOffIcon />} tone="danger" title="Couldn't check the agent">
-            {readiness.message}
-          </CardHeading>
-          <Button variant="outline" size="sm" onClick={onCheckAgain} disabled={checking} className="self-start">
-            {checking ? <InlineSpinner /> : <RefreshCwIcon />}
+          {heading("Couldn't check the agent", readiness.message)}
+          <DialogButton variant="outline" onClick={onCheckAgain} disabled={checking} className="self-start">
+            {checking ? <InlineSpinner /> : <RefreshCwIcon aria-hidden="true" strokeWidth={1.75} className="size-3.5" />}
             Try again
-          </Button>
+          </DialogButton>
         </>
       );
       break;
@@ -132,10 +132,11 @@ export function AgentSignInCard({
     case "not_installed":
       content = (
         <>
-          <CardHeading icon={<PlugIcon />} tone="danger" title={`${label} isn't available`}>
-            {readiness.status.problem || `Node Banana couldn't find or start the ${label} command-line tool.`}
-          </CardHeading>
-          <p className="text-xs leading-5 text-neutral-400">
+          {heading(
+            `${label} isn't available`,
+            readiness.status.problem || `Node Banana couldn't find or start the ${label} command-line tool.`,
+          )}
+          <p className="text-xs leading-5 text-ink-3">
             The agent runs through {label} on this computer. Once it is installed and signed in, check again.
           </p>
           {checkAgain}
@@ -146,10 +147,8 @@ export function AgentSignInCard({
     case "signed_out":
       content = (
         <>
-          <CardHeading icon={<LogInIcon />} title={`Sign in to ${label}`}>
-            {runsOn}
-          </CardHeading>
-          {readiness.status.problem && <p className="text-xs leading-5 text-neutral-500">{readiness.status.problem}</p>}
+          {heading(`Sign in to ${label}`, runsOn)}
+          {readiness.status.problem && <StatusLine tone="attention">{readiness.status.problem}</StatusLine>}
           {signInButton()}
           {terminalFallback("Or sign in from a terminal:")}
           {checkAgain}
@@ -163,25 +162,28 @@ export function AgentSignInCard({
       const url = cliOpensBrowser ? null : safeExternalUrl(readiness.url);
       content = (
         <>
-          <CardHeading icon={<InlineSpinner className="size-4" />} title="Finish signing in">
-            {cliOpensBrowser
-              ? `${label} opened its sign-in page in your browser.`
-              : `Sign in with your ${plan} account in your browser.`}{" "}
-            This window updates on its own when you&apos;re done.
-          </CardHeading>
+          {heading(
+            "Finish signing in",
+            <>
+              {cliOpensBrowser
+                ? `${label} opened its sign-in page in your browser.`
+                : `Sign in with your ${plan} account in your browser.`}{" "}
+              This window updates on its own when you&apos;re done.
+            </>,
+          )}
           {/* Replacing a login that can't run: keep saying why. */}
           {readiness.status.signedIn && readiness.status.problem && (
-            <p className="text-xs leading-5 text-neutral-500">{readiness.status.problem}</p>
+            <StatusLine tone="blocked">{readiness.status.problem}</StatusLine>
           )}
           {readiness.userCode && (
-            <div className="space-y-1.5">
-              <p className="text-xs text-neutral-400">Enter this code on the sign-in page:</p>
-              <div className="flex items-center justify-between gap-2 rounded-lg border border-blue-500/30 bg-blue-500/10 py-1 pl-3 pr-1">
-                <code className="select-all font-mono text-base font-semibold tracking-[0.2em] text-blue-100">
+            <div className="space-y-2">
+              <p className="text-xs leading-4 text-ink-3">Enter this code on the sign-in page:</p>
+              <MonoWell className="min-h-12 pl-4">
+                <code className="min-w-0 flex-1 select-all font-mono text-xl font-medium leading-7 tracking-[0.2em] text-neutral-100">
                   {readiness.userCode}
                 </code>
                 <CopyButton value={readiness.userCode} label="Copy code" />
-              </div>
+              </MonoWell>
             </div>
           )}
           {url && (
@@ -189,17 +191,14 @@ export function AgentSignInCard({
               href={url}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 self-start text-[13px] text-blue-400 underline-offset-4 hover:text-blue-300 hover:underline"
+              className="inline-flex items-center gap-1.5 self-start rounded font-display text-[13px] font-medium text-neutral-200 underline decoration-white/30 underline-offset-4 transition-colors hover:text-white hover:decoration-white/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection"
             >
-              <ExternalLinkIcon className="size-3.5" />
+              <ExternalLinkIcon aria-hidden="true" strokeWidth={1.75} className="size-3.5" />
               Open the sign-in page
             </a>
           )}
-          <p role="status" className="flex items-center gap-2 text-xs text-neutral-500">
-            <span className="relative flex size-2">
-              <span className="absolute inline-flex size-full animate-ping rounded-full bg-amber-400/60 motion-reduce:animate-none" />
-              <span className="relative inline-flex size-2 rounded-full bg-amber-400" />
-            </span>
+          <p role="status" className="flex items-center gap-2 text-xs leading-4 text-ink-3">
+            <StatusDot tone="attention" pulse />
             Waiting for {label}…
           </p>
           {terminalFallback(
@@ -216,9 +215,7 @@ export function AgentSignInCard({
     case "sign_in_failed":
       content = (
         <>
-          <CardHeading icon={<CircleAlertIcon />} tone="danger" title="Sign-in didn't finish">
-            {readiness.message}
-          </CardHeading>
+          {heading("Sign-in didn't finish", readiness.message)}
           {signInButton("Try again")}
           {terminalFallback("Or sign in from a terminal:")}
           {checkAgain}
@@ -231,21 +228,16 @@ export function AgentSignInCard({
       const api = readiness.kind === "wrong_billing";
       content = (
         <>
-          <CardHeading
-            icon={api ? <CreditCardIcon /> : <CircleAlertIcon />}
-            tone="warning"
-            title={api ? "This login would use API credits" : `No ${plan} plan found on this login`}
-          >
-            Node Banana only runs the agent on your {plan} subscription, so it won&apos;t use the current {label}{" "}
-            login.
-          </CardHeading>
-          {readiness.status.problem && (
-            <p className="rounded-lg border border-amber-500/25 bg-amber-500/10 px-3 py-2 text-xs leading-5 text-amber-100">
-              {readiness.status.problem}
-            </p>
+          {heading(
+            api ? "This login would use API credits" : `No ${plan} plan found on this login`,
+            <>
+              Node Banana only runs the agent on your {plan} subscription, so it won&apos;t use the current {label}{" "}
+              login.
+            </>,
           )}
+          {readiness.status.problem && <StatusLine tone="blocked">{readiness.status.problem}</StatusLine>}
           {readiness.signInError && (
-            <p className="text-xs leading-5 text-red-300">Sign-in didn&apos;t finish: {readiness.signInError}</p>
+            <StatusLine tone="blocked">Sign-in didn&apos;t finish: {readiness.signInError}</StatusLine>
           )}
           {signInButton(`Switch ${label} to your ${plan} account`)}
           {terminalFallback("Or switch from a terminal:")}
@@ -261,7 +253,10 @@ export function AgentSignInCard({
       data-readiness={readiness.kind}
       className={cn(
         "flex w-full flex-col",
-        variant === "full" ? "my-auto gap-4 px-5 py-6" : "gap-3 border-t border-neutral-700 bg-neutral-800 p-4",
+        full
+          ? "gap-5 px-4 pb-6 pt-5"
+          : // Under a conversation: capped and scrolling on its own, so the transcript keeps some room.
+            "max-h-[65%] shrink-0 gap-3.5 overflow-y-auto border-t border-white/[0.06] p-4",
       )}
     >
       {content}
@@ -291,9 +286,7 @@ export function AgentAlreadySignedInHint({
     <AgentAlert
       tone="info"
       actions={
-        <Button size="xs" variant="ghost" onClick={onDismiss}>
-          Dismiss
-        </Button>
+        <AgentTextButton onClick={onDismiss}>Dismiss</AgentTextButton>
       }
     >
       <div className="space-y-2" data-testid="agent-already-signed-in">
@@ -307,37 +300,57 @@ export function AgentAlreadySignedInHint({
   );
 }
 
-const HEADING_TONES = {
-  neutral: "border-neutral-700 bg-neutral-900 text-neutral-300",
-  warning: "border-amber-500/30 bg-amber-500/10 text-amber-300",
-  danger: "border-red-500/30 bg-red-500/10 text-red-300",
-} as const;
+/** A status line inside a card: a dot for the tone, plain text. */
+function StatusLine({ tone, children }: { tone: AgentStatusTone; children: ReactNode }) {
+  return (
+    <p className="flex gap-2 text-xs leading-5 text-neutral-300">
+      <StatusDot tone={tone} className="mt-[7px]" />
+      <span className="min-w-0 flex-1">{children}</span>
+    </p>
+  );
+}
 
+/** A split-dialog page head: the harness as a mono eyebrow with its status dot, a display heading, a lead. */
 function CardHeading({
-  icon,
+  harness,
+  tone,
+  pulse,
   title,
-  tone = "neutral",
+  size,
   children,
 }: {
-  icon: ReactNode;
+  harness: string;
+  tone: AgentStatusTone;
+  pulse: boolean;
   title: string;
-  tone?: keyof typeof HEADING_TONES;
+  size: "full" | "inline";
   children: ReactNode;
 }) {
   return (
-    <div className="flex items-start gap-3">
-      <div
+    <div>
+      <p
+        data-agent-eyebrow
+        className="mb-2.5 flex items-center gap-1.5 font-mono text-[11px] uppercase leading-4 tracking-eyebrow text-ink-3"
+      >
+        <StatusDot tone={tone} pulse={pulse} />
+        {harness}
+      </p>
+      <h3
         className={cn(
-          "flex size-8 shrink-0 items-center justify-center rounded-lg border [&_svg]:size-4",
-          HEADING_TONES[tone],
+          "font-display font-bold tracking-display text-neutral-100",
+          size === "full" ? "text-xl leading-6" : "text-base leading-5",
         )}
       >
-        {icon}
-      </div>
-      <div className="min-w-0 space-y-1">
-        <h3 className="text-sm font-medium text-neutral-100">{title}</h3>
-        <p className="text-[13px] leading-5 text-neutral-400">{children}</p>
-      </div>
+        {title}
+      </h3>
+      <p
+        className={cn(
+          "mt-1.5 font-display font-medium text-neutral-400",
+          size === "full" ? "text-[13px] leading-5" : "text-xs leading-[18px]",
+        )}
+      >
+        {children}
+      </p>
     </div>
   );
 }

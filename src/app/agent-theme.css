@@ -83,34 +83,139 @@
   --color-sidebar-border: var(--sidebar-border);
 }
 
-/* Tailwind's neutral scale — the same colors the app spells neutral-800 / -700 / blue-600.
+/* shadcn's tokens mapped onto the app's own (globals.css @theme), so any primitive
+   still in use sits on the same surfaces as the menus and dialogs: popovers are
+   cards, borders are the chrome border, primary is ink, hover fills are alpha
+   whites. Blue is the focus ring and nothing else. Only the agent's classes read
+   these names (nothing else in the app uses bg-popover, bg-primary, ...).
    --background / --foreground are the app's existing #0a0a0a / #fafafa and are left alone. */
 :root {
-  --popover: oklch(0.269 0 0);           /* neutral-800 */
-  --popover-foreground: oklch(0.922 0 0);/* neutral-200 */
-  --primary: oklch(0.546 0.245 262.881); /* blue-600 */
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.371 0 0);         /* neutral-700 */
-  --secondary-foreground: oklch(0.922 0 0);
-  --muted: oklch(0.371 0 0);
-  --muted-foreground: oklch(0.708 0 0);  /* neutral-400 */
-  --accent: oklch(0.371 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.371 0 0);            /* neutral-700 */
-  --input: oklch(0.439 0 0);             /* neutral-600 */
-  --ring: oklch(0.623 0.214 259.815);    /* blue-500 */
-  --sidebar: oklch(0.205 0 0);           /* neutral-900 */
-  --sidebar-border: oklch(0.371 0 0);
+  --popover: #262626;                    /* card */
+  --popover-foreground: #e5e5e5;         /* neutral-200 */
+  --primary: #f5f5f5;                    /* ink */
+  --primary-foreground: #171717;
+  --secondary: #2a2a2a;                  /* panel */
+  --secondary-foreground: #e5e5e5;
+  --muted: rgb(255 255 255 / 0.07);      /* the chrome's hover fill */
+  --muted-foreground: #8a8a8a;           /* ink-3 */
+  --accent: rgb(255 255 255 / 0.07);
+  --accent-foreground: #f5f5f5;
+  --destructive: #ef4444;                /* error */
+  --border: #404040;                     /* chrome-border */
+  --input: rgb(64 64 64 / 0.6);          /* card-border */
+  --ring: #3b82f6;                       /* selection: focus rings only */
+  --sidebar: #1a1a1a;                    /* well */
+  --sidebar-border: #404040;
 }
 
-/* shadcn's rounder radius scale, only inside the panel. */
+/* shadcn sizes some corners off --radius: give it the app's 10px controls radius.
+   The named steps (rounded-md/-lg/-xl) keep the app's scale, so the chrome
+   components reused inside the window look exactly as they do on the canvas. */
 .nb-agent {
-  --radius: 0.625rem;
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
+  --radius: 10px;
+}
+
+/*
+ * Markdown in agent replies (Streamdown). Its elements carry their own Tailwind
+ * classes; these rules are unlayered so they win, and scoped to the window so
+ * nothing else changes. 13px text, code in a well, no card-in-a-card.
+ */
+.nb-agent [data-streamdown^="heading-"] {
+  margin: 12px 0 4px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #f5f5f5;
+}
+.nb-agent [data-streamdown="heading-1"] { font-size: 16px; line-height: 22px; }
+.nb-agent [data-streamdown="heading-2"] { font-size: 15px; line-height: 20px; }
+.nb-agent [data-streamdown="heading-3"],
+.nb-agent [data-streamdown="heading-4"],
+.nb-agent [data-streamdown="heading-5"],
+.nb-agent [data-streamdown="heading-6"] { font-size: 13px; line-height: 20px; }
+.nb-agent [data-streamdown="strong"] { color: #f5f5f5; }
+.nb-agent [data-streamdown="list-item"] { padding: 1px 0; }
+.nb-agent [data-streamdown="ordered-list"],
+.nb-agent [data-streamdown="unordered-list"] { padding-left: 2px; }
+.nb-agent [data-streamdown="link"] {
+  color: #f5f5f5;
+  font-weight: 500;
+  text-decoration-color: rgb(255 255 255 / 0.3);
+  text-underline-offset: 3px;
+}
+.nb-agent [data-streamdown="blockquote"] {
+  margin: 8px 0;
+  border-left: 2px solid rgb(255 255 255 / 0.12);
+  padding-left: 12px;
+  font-style: normal;
+  color: #a3a3a3;
+}
+.nb-agent [data-streamdown="horizontal-rule"] { margin: 12px 0; border-color: rgb(255 255 255 / 0.08); }
+.nb-agent [data-streamdown="inline-code"] {
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.07);
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #e5e5e5;
+}
+.nb-agent [data-streamdown="code-block"] {
+  margin: 4px 0;
+  gap: 0;
+  border: 0;
+  border-radius: var(--radius-well);
+  background: var(--color-well);
+  box-shadow: var(--shadow-well);
+  padding: 0;
+}
+.nb-agent [data-streamdown="code-block-header"] {
+  height: 28px;
+  padding: 0 10px;
+}
+.nb-agent [data-streamdown="code-block-header"] > span {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+}
+/* The copy button rides over the header's right end. */
+.nb-agent [data-streamdown="code-block"] > div:has(> [data-streamdown="code-block-actions"]) {
+  top: 0;
+  margin-top: -28px;
+  height: 28px;
+  padding-right: 4px;
+}
+.nb-agent [data-streamdown="code-block-actions"] {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  backdrop-filter: none;
+}
+.nb-agent [data-streamdown="code-block-copy-button"] {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #8a8a8a;
+}
+.nb-agent [data-streamdown="code-block-copy-button"]:hover { background: rgb(255 255 255 / 0.07); color: #f5f5f5; }
+.nb-agent [data-streamdown="code-block-body"] {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 12px 10px;
+  font-size: 12px;
+}
+.nb-agent [data-streamdown="code-block-body"] pre,
+.nb-agent [data-streamdown="code-block-body"] code {
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
 }
 
 @layer base {

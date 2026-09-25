@@ -2,6 +2,9 @@
 
 import type { CSSProperties } from "react";
 import { SparklesIcon } from "lucide-react";
+import { ChromeIconButton } from "@/components/ChromeIconButton";
+import { CHROME_SURFACE } from "@/components/chromeStyles";
+import { cn } from "@/components/agent/lib/utils";
 
 export interface AgentButtonProps {
   open: boolean;
@@ -14,30 +17,42 @@ export interface AgentButtonProps {
   onClick: () => void;
 }
 
-/** Opens the agent window. Sits directly above the minimap, styled like the minimap toggle. */
+/**
+ * Opens the agent window. Sits directly above the navigator as one slot of its
+ * control row: the same glass card, the same 32px icon button and hover label.
+ */
 export function AgentButton({ open, busy = false, disabled = false, dimmed = false, style, onClick }: AgentButtonProps) {
   return (
-    <button
-      type="button"
-      aria-label="Open agent"
-      aria-pressed={open}
-      title={busy ? "Agent — working" : "Agent"}
-      disabled={disabled}
-      onClick={onClick}
+    <div
+      data-testid="agent-button"
       style={style}
-      className={`nodrag nopan nowheel absolute z-[5] flex h-10 w-10 items-center justify-center rounded-lg border shadow-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 disabled:cursor-not-allowed ${
-        open
-          ? "border-blue-500/60 bg-neutral-700 text-blue-300 hover:bg-neutral-600"
-          : "border-neutral-700 bg-neutral-800 text-neutral-400 hover:border-neutral-600 hover:bg-neutral-700 hover:text-neutral-100"
-      } ${dimmed ? "opacity-30 pointer-events-none" : ""}`}
-    >
-      <SparklesIcon aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={1.75} />
-      {busy && (
-        <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 flex h-2.5 w-2.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blue-400 opacity-60 motion-reduce:animate-none" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-blue-500 ring-2 ring-neutral-900" />
-        </span>
+      className={cn(
+        CHROME_SURFACE,
+        "nodrag nopan nowheel absolute z-[5] flex h-10 w-10 items-center justify-center rounded-xl",
+        dimmed && "pointer-events-none opacity-30",
       )}
-    </button>
+    >
+      <ChromeIconButton
+        label={busy ? "Agent — working" : "Agent"}
+        aria-label="Open agent"
+        aria-pressed={open}
+        open={open}
+        // The window covers the label while it is open.
+        silent={open}
+        tooltipAlign="end"
+        disabled={disabled}
+        onClick={onClick}
+        badge={
+          busy && (
+            <span aria-hidden="true" className="pointer-events-none absolute -right-0.5 -top-0.5 flex size-2">
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-neutral-200 opacity-50 motion-reduce:animate-none" />
+              <span className="relative inline-flex size-2 rounded-full bg-neutral-200 ring-2 ring-neutral-800" />
+            </span>
+          )
+        }
+      >
+        <SparklesIcon aria-hidden="true" className="h-[18px] w-[18px]" strokeWidth={1.75} />
+      </ChromeIconButton>
+    </div>
   );
 }

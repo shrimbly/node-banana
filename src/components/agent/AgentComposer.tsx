@@ -16,6 +16,7 @@ import {
   PromptInputTextarea,
   PromptInputTools,
 } from "@/components/ai-elements/prompt-input";
+import { SelectGroup, SelectLabel } from "@/components/agent/ui/select";
 import { isImeKeyEvent } from "@/lib/agent/client/keyboard";
 import type { AgentModelOption } from "@/lib/agent/types";
 import { AGENT_POPOVER_LAYER } from "./AgentChrome";
@@ -86,29 +87,38 @@ export function AgentComposer({
   );
 
   return (
-    <div className="shrink-0 border-t border-neutral-700 bg-neutral-800 p-3 pt-2.5">
+    <div className="shrink-0 px-4 pb-4 pt-1">
       {notes.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-1.5">
           {notes.map((note) => (
+            // Neutral chips, shaped like the dialogs' DialogChip: hairline, small radius, quiet text.
             <span
               key={note.key}
-              className={
-                note.kind === "selection"
-                  ? "inline-flex max-w-full items-center gap-1.5 rounded-full border border-blue-500/30 bg-blue-500/10 px-2 py-0.5 text-[11px] leading-4 text-blue-200"
-                  : "inline-flex max-w-full items-center gap-1.5 rounded-full border border-neutral-600 bg-neutral-900/60 px-2 py-0.5 text-[11px] leading-4 text-neutral-300"
-              }
+              data-note={note.kind}
+              className="inline-flex h-6 max-w-full items-center gap-1.5 rounded-md squircle border border-white/10 px-2 text-[11px] leading-4 text-neutral-400"
             >
               {note.kind === "selection" ? (
-                <SquareDashedMousePointerIcon className="size-3 shrink-0" aria-hidden="true" />
+                <SquareDashedMousePointerIcon className="size-3 shrink-0 text-neutral-500" aria-hidden="true" strokeWidth={1.75} />
               ) : (
-                <ArrowLeftRightIcon className="size-3 shrink-0" aria-hidden="true" />
+                <ArrowLeftRightIcon className="size-3 shrink-0 text-neutral-500" aria-hidden="true" strokeWidth={1.75} />
               )}
               <span className="truncate">{note.text}</span>
             </span>
           ))}
         </div>
       )}
-      <PromptInput onSubmit={handleSubmit} className="[&_[data-slot=input-group]]:bg-neutral-900/50">
+      <PromptInput
+        onSubmit={handleSubmit}
+        // The message box is a well, like the dialogs' inputs and the navigator's minimap.
+        // Focus lifts its edge instead of drawing a ring: the box has focus whenever the window is open.
+        // shadcn fades the whole group when anything in it is disabled (the empty-draft send
+        // button, the model picker during a turn): the well stays put and only that control dims.
+        groupClassName={
+          "rounded-controls squircle border-0 bg-well shadow-well dark:bg-well " +
+          "has-disabled:bg-well has-disabled:opacity-100 dark:has-disabled:bg-well " +
+          "has-[[data-slot=input-group-control]:focus-visible]:ring-1 has-[[data-slot=input-group-control]:focus-visible]:ring-white/15"
+        }
+      >
         <PromptInputBody>
           <PromptInputTextarea
             ref={textareaRef}
@@ -120,31 +130,42 @@ export function AgentComposer({
             onPaste={pasteTextOnly}
             placeholder="Describe a workflow, or a change to this one…"
             aria-label="Message the agent"
-            className="max-h-40 min-h-12 px-3 text-sm placeholder:text-neutral-500"
+            className="max-h-40 min-h-11 px-3 pb-1 pt-2.5 text-[13px] leading-5 text-neutral-100 placeholder:text-neutral-500 md:text-[13px]"
           />
         </PromptInputBody>
-        <PromptInputFooter className="px-1.5 pb-1.5">
+        <PromptInputFooter className="px-1.5 pb-1.5 pt-0">
           <PromptInputTools>
             {models.length > 0 && (
               <PromptInputSelect value={model} onValueChange={onModelChange} disabled={busy}>
-                <PromptInputSelectTrigger size="sm" aria-label="Model" className="h-7 px-2 text-xs">
+                <PromptInputSelectTrigger size="sm" aria-label="Model">
                   <PromptInputSelectValue placeholder="Model" />
                 </PromptInputSelectTrigger>
-                <PromptInputSelectContent className={AGENT_POPOVER_LAYER} position="popper" side="top" align="start">
-                  {models.map((option) => (
-                    <PromptInputSelectItem key={option.id} value={option.id} className="text-xs">
-                      {option.label}
-                    </PromptInputSelectItem>
-                  ))}
+                <PromptInputSelectContent className={AGENT_POPOVER_LAYER} position="popper" side="top" align="start" sideOffset={6}>
+                  <SelectGroup className="p-0">
+                    <SelectLabel className="px-2.5 pb-1 pt-1 font-mono text-[10px] uppercase leading-[14px] tracking-eyebrow text-ink-3">
+                      Model
+                    </SelectLabel>
+                    {models.map((option) => (
+                      <PromptInputSelectItem key={option.id} value={option.id}>
+                        {option.label}
+                      </PromptInputSelectItem>
+                    ))}
+                  </SelectGroup>
                 </PromptInputSelectContent>
               </PromptInputSelect>
             )}
           </PromptInputTools>
+          {/* Ink square: the dialogs' primary action, at the chrome's control size. */}
           <PromptInputSubmit
             status={busy ? status : "ready"}
             onStop={onStop}
             disabled={!busy && !draft.trim()}
-            className="size-7 rounded-md"
+            className={
+              "size-7 rounded-lg squircle bg-neutral-200 text-neutral-900 transition-[background-color,color,transform] duration-[120ms] " +
+              "hover:bg-white active:not-aria-[haspopup]:translate-y-0 active:scale-[0.96] " +
+              "focus-visible:ring-2 focus-visible:ring-selection focus-visible:ring-offset-2 focus-visible:ring-offset-well " +
+              "disabled:bg-white/8 disabled:text-neutral-500 disabled:opacity-100"
+            }
           />
         </PromptInputFooter>
       </PromptInput>

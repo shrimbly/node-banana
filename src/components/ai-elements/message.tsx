@@ -25,7 +25,7 @@ import {
   useMemo,
   useState,
 } from "react";
-import { Streamdown } from "streamdown";
+import { Streamdown, type ThemeInput } from "streamdown";
 
 export type MessageProps = HTMLAttributes<HTMLDivElement> & {
   from: UIMessage["role"];
@@ -51,9 +51,11 @@ export const MessageContent = ({
 }: MessageContentProps) => (
   <div
     className={cn(
-      "is-user:dark flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-sm",
-      "group-[.is-user]:ml-auto group-[.is-user]:rounded-lg group-[.is-user]:bg-secondary group-[.is-user]:px-4 group-[.is-user]:py-3 group-[.is-user]:text-foreground",
-      "group-[.is-assistant]:text-foreground",
+      "flex w-fit min-w-0 max-w-full flex-col gap-2 overflow-hidden text-[13px] leading-5",
+      // The user's turn: a quiet alpha-white bubble at the controls radius.
+      "group-[.is-user]:ml-auto group-[.is-user]:rounded-controls group-[.is-user]:squircle group-[.is-user]:bg-white/7 group-[.is-user]:px-3 group-[.is-user]:py-2 group-[.is-user]:text-neutral-100",
+      // The agent's: plain text on the surface.
+      "group-[.is-assistant]:text-neutral-200",
       className
     )}
     {...props}
@@ -320,14 +322,42 @@ export type MessageResponseProps = ComponentProps<typeof Streamdown>;
 
 const streamdownPlugins = { code };
 
+/**
+ * Code in replies is set in greys, like the rest of the window: keys in ink,
+ * strings a step down, punctuation and comments quiet. No syntax hues.
+ */
+const INK_CODE_THEME = {
+  name: "node-banana-ink",
+  type: "dark",
+  colors: { "editor.background": "#1a1a1a", "editor.foreground": "#d4d4d4" },
+  tokenColors: [
+    { settings: { foreground: "#d4d4d4" } },
+    { scope: ["comment", "punctuation.definition.comment"], settings: { foreground: "#737373", fontStyle: "italic" } },
+    { scope: ["string", "string.quoted", "string.template"], settings: { foreground: "#a3a3a3" } },
+    {
+      scope: ["support.type.property-name", "meta.object-literal.key", "entity.name.tag", "entity.other.attribute-name", "variable.other.property"],
+      settings: { foreground: "#f5f5f5" },
+    },
+    { scope: ["keyword", "storage", "storage.type", "constant.language", "constant.numeric"], settings: { foreground: "#e5e5e5" } },
+    { scope: ["entity.name.function", "support.function"], settings: { foreground: "#f5f5f5" } },
+    { scope: ["punctuation", "meta.brace", "punctuation.separator", "punctuation.definition"], settings: { foreground: "#737373" } },
+  ],
+} as unknown as ThemeInput;
+const INK_CODE_THEMES: [ThemeInput, ThemeInput] = [INK_CODE_THEME, INK_CODE_THEME];
+/** A copy button on code blocks; no download (a reply's snippet is not a file). */
+const STREAMDOWN_CONTROLS = { code: { copy: true, download: false } };
+
 export const MessageResponse = memo(
   ({ className, ...props }: MessageResponseProps) => (
     <Streamdown
       className={cn(
-        "size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+        "size-full space-y-2.5 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
         className
       )}
+      controls={STREAMDOWN_CONTROLS}
+      lineNumbers={false}
       plugins={streamdownPlugins}
+      shikiTheme={INK_CODE_THEMES}
       {...props}
     />
   ),

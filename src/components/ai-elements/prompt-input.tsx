@@ -33,7 +33,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/agent/ui/select";
-import { Spinner } from "@/components/agent/ui/spinner";
 import {
   Tooltip,
   TooltipContent,
@@ -42,7 +41,7 @@ import {
 import { cn } from "@/components/agent/lib/utils";
 import type { ChatStatus, FileUIPart, SourceDocumentUIPart } from "ai";
 import {
-  CornerDownLeftIcon,
+  ArrowUpIcon,
   ImageIcon,
   Monitor,
   PlusIcon,
@@ -509,10 +508,13 @@ export type PromptInputProps = Omit<
     message: PromptInputMessage,
     event: FormEvent<HTMLFormElement>
   ) => void | Promise<void>;
+  /** Extra classes on the input group (the box around the textarea and its tools). */
+  groupClassName?: string;
 };
 
 export const PromptInput = ({
   className,
+  groupClassName,
   accept,
   multiple,
   globalDrop,
@@ -921,7 +923,7 @@ export const PromptInput = ({
         ref={formRef}
         {...props}
       >
-        <InputGroup className="overflow-hidden">{children}</InputGroup>
+        <InputGroup className={cn("overflow-hidden", groupClassName)}>{children}</InputGroup>
       </form>
     </>
   );
@@ -1225,14 +1227,13 @@ export const PromptInputSubmit = ({
 }: PromptInputSubmitProps) => {
   const isGenerating = status === "submitted" || status === "streaming";
 
-  let Icon = <CornerDownLeftIcon className="size-4" />;
+  // Send is an arrow; while a reply is on its way the same button stops it.
+  let Icon = <ArrowUpIcon aria-hidden="true" className="size-4" strokeWidth={2} />;
 
-  if (status === "submitted") {
-    Icon = <Spinner />;
-  } else if (status === "streaming") {
-    Icon = <SquareIcon className="size-4" />;
+  if (isGenerating) {
+    Icon = <SquareIcon aria-hidden="true" className="size-3 fill-current" strokeWidth={0} />;
   } else if (status === "error") {
-    Icon = <XIcon className="size-4" />;
+    Icon = <XIcon aria-hidden="true" className="size-4" strokeWidth={2} />;
   }
 
   const handleClick = useCallback(
@@ -1278,8 +1279,11 @@ export const PromptInputSelectTrigger = ({
 }: PromptInputSelectTriggerProps) => (
   <SelectTrigger
     className={cn(
-      "border-none bg-transparent font-medium text-muted-foreground shadow-none transition-colors",
-      "hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground",
+      // A chrome text button: alpha-white hover, the open state lit like an open popover's trigger.
+      "h-7 gap-1 rounded-md squircle border-none bg-transparent px-2 pr-1.5 font-medium text-neutral-400 text-xs shadow-none transition-colors duration-[120ms]",
+      "hover:bg-white/7 hover:text-neutral-100 aria-expanded:bg-white/10 aria-expanded:text-white",
+      "dark:bg-transparent dark:hover:bg-white/7 dark:aria-expanded:bg-white/10",
+      "focus-visible:ring-2 focus-visible:ring-selection [&>svg]:size-3.5 [&>svg]:text-neutral-500",
       className
     )}
     {...props}
@@ -1294,7 +1298,14 @@ export const PromptInputSelectContent = ({
   className,
   ...props
 }: PromptInputSelectContentProps) => (
-  <SelectContent className={cn(className)} {...props} />
+  // The Instrument menu surface: card, chrome border, 6px corners, menu shadow.
+  <SelectContent
+    className={cn(
+      "min-w-[184px] rounded-md border border-chrome-border bg-card py-1 text-neutral-300 shadow-menu ring-0",
+      className
+    )}
+    {...props}
+  />
 );
 
 export type PromptInputSelectItemProps = ComponentProps<typeof SelectItem>;
@@ -1303,7 +1314,16 @@ export const PromptInputSelectItem = ({
   className,
   ...props
 }: PromptInputSelectItemProps) => (
-  <SelectItem className={cn(className)} {...props} />
+  // A 28px Instrument row, full bleed, with the check at the right.
+  <SelectItem
+    className={cn(
+      "min-h-7 rounded-none py-1 pr-8 pl-2.5 text-neutral-300 text-xs",
+      "focus:bg-neutral-700 focus:text-neutral-100 not-data-[variant=destructive]:focus:**:text-neutral-100",
+      "data-[state=checked]:text-neutral-100 [&>span:first-child]:right-2.5",
+      className
+    )}
+    {...props}
+  />
 );
 
 export type PromptInputSelectValueProps = ComponentProps<typeof SelectValue>;
