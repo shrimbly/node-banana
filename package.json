@@ -9,7 +9,7 @@
     "electron:start": "electron .",
     "electron:smoke": "node scripts/electron-smoke.cjs",
     "build": "next build",
-    "start": "next start",
+    "start": "node server.js --production",
     "lint": "next lint",
     "test": "vitest",
     "test:run": "vitest run",
