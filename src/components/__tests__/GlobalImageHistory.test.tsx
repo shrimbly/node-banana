@@ -109,6 +109,11 @@ describe("GlobalImageHistory", () => {
 
       rerender(<GlobalImageHistory rightInset={432} />);
       expect(screen.getByTestId("image-history")).toHaveStyle({ top: "16px", right: "432px" });
+      // The notifications hanging beneath it follow (Toast.tsx reads this).
+      expect(document.documentElement.style.getPropertyValue("--nb-history-right")).toBe("432px");
+
+      rerender(<GlobalImageHistory />);
+      expect(document.documentElement.style.getPropertyValue("--nb-history-right")).toBe("");
     });
 
     it("should show history count badge", () => {

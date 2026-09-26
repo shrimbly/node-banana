@@ -3,7 +3,7 @@
 import { Toaster, toast } from "sonner";
 import { CHROME_SURFACE } from "./chromeStyles";
 import { producerName, setHistoryDragData } from "./GlobalImageHistory";
-import { STACK_RIGHT, STACK_TOP } from "./Toast";
+import { STACK_RIGHT_CSS, STACK_TOP } from "./Toast";
 
 /** One finished generation, or a burst of them collapsed into a single card. */
 export interface GenerationToastItem {
@@ -157,8 +157,9 @@ export function GenerationToaster() {
       expand
       gap={8}
       visibleToasts={MAX_VISIBLE}
-      offset={{ top: STACK_TOP, right: STACK_RIGHT }}
-      mobileOffset={{ top: STACK_TOP, right: STACK_RIGHT }}
+      // Follows the history button when the agent window moves it.
+      offset={{ top: STACK_TOP, right: STACK_RIGHT_CSS }}
+      mobileOffset={{ top: STACK_TOP, right: STACK_RIGHT_CSS }}
       style={{ "--width": `${CARD_WIDTH}px`, zIndex: 200 } as React.CSSProperties}
     />
   );

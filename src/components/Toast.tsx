@@ -11,6 +11,14 @@ import { create } from "zustand";
  */
 export const STACK_TOP = 38 + 1 + 16 + 42 + 8;
 export const STACK_RIGHT = 4 + 1 + 16;
+/**
+ * The history button's distance from the canvas's right edge, published by
+ * the button while it is moved (the agent window covers the corner), so the
+ * notifications keep hanging beneath it.
+ */
+export const HISTORY_RIGHT_VAR = "--nb-history-right";
+/** STACK_RIGHT as CSS, following the history button when it moves. */
+export const STACK_RIGHT_CSS = `calc(${STACK_RIGHT - 16}px + var(${HISTORY_RIGHT_VAR}, 16px))`;
 
 interface ToastState {
   message: string | null;
@@ -92,7 +100,7 @@ export function Toast() {
   return (
     <div
       className="pointer-events-none fixed z-[200] flex w-96 min-w-0 flex-col items-end gap-2 [&>*]:pointer-events-auto"
-      style={{ top: STACK_TOP, right: STACK_RIGHT, maxWidth: `calc(100vw - ${STACK_RIGHT * 2}px)` }}
+      style={{ top: STACK_TOP, right: STACK_RIGHT_CSS, maxWidth: `calc(100vw - ${STACK_RIGHT * 2}px)` }}
     >
       {message && (
       <div

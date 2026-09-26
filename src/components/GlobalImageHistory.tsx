@@ -6,6 +6,7 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { ImageHistoryItem } from "@/types";
 import { ChromeIconButton } from "./ChromeIconButton";
 import { CHROME_SURFACE } from "./chromeStyles";
+import { HISTORY_RIGHT_VAR } from "./Toast";
 
 /** Inset of the history button from the canvas edges (matches the navigator). */
 export const HISTORY_MARGIN = 16;
@@ -272,6 +273,16 @@ export const GlobalImageHistory = memo(function GlobalImageHistory({ rightInset 
 
   const history = useWorkflowStore((state) => state.globalImageHistory);
   const clearGlobalHistory = useWorkflowStore((state) => state.clearGlobalHistory);
+
+  // Notifications hang beneath this button (Toast.tsx); tell them where it went.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (rightInset === HISTORY_MARGIN) root.style.removeProperty(HISTORY_RIGHT_VAR);
+    else root.style.setProperty(HISTORY_RIGHT_VAR, `${rightInset}px`);
+    return () => {
+      root.style.removeProperty(HISTORY_RIGHT_VAR);
+    };
+  }, [rightInset]);
 
   const recent = history.slice(0, RECENT_COUNT);
   const hasOverflow = history.length > RECENT_COUNT;
