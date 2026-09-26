@@ -3,8 +3,8 @@
  *
  * applyGraphOps (the pure op applier) belongs to the graph module and is
  * replaced here by a small faithful fake, so these tests pin the store's own
- * contract: one undo step per batch, the revert snapshot, group handling and
- * skipped-op reporting.
+ * contract: one undo step per batch, group handling and skipped-op
+ * reporting.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -226,58 +226,6 @@ describe("applyAgentGraphOps", () => {
     expect(state.canUndo).toBe(false);
   });
 
-  it("captures the revert snapshot only for a revert point", () => {
-    seed([promptNode("prompt-1")]);
-
-    useWorkflowStore.getState().applyAgentGraphOps(
-      batch([{ op: "updateNode", id: "prompt-1", data: { prompt: "first" } }]),
-      { revertPoint: true },
-    );
-    const snapshot = useWorkflowStore.getState().previousWorkflowSnapshot;
-    expect(snapshot?.nodes.map((n) => (n.data as { prompt?: string }).prompt)).toEqual(["hello"]);
-
-    // Later batches of the same turn keep the turn's starting point.
-    useWorkflowStore.getState().applyAgentGraphOps(
-      batch([{ op: "updateNode", id: "prompt-1", data: { prompt: "second" } }], { batchId: "b2" }),
-    );
-    expect(useWorkflowStore.getState().previousWorkflowSnapshot).toBe(snapshot);
-
-    useWorkflowStore.getState().revertToSnapshot();
-    expect((useWorkflowStore.getState().nodes[0].data as { prompt?: string }).prompt).toBe("hello");
-  });
-
-  it("makes Revert AI Changes one undo step, so Ctrl+Z brings the agent's edits back (UX audit)", () => {
-    seed([promptNode("prompt-1")]);
-    const prompt = () => (useWorkflowStore.getState().nodes[0].data as { prompt?: string }).prompt;
-    const store = useWorkflowStore.getState();
-
-    // Turn 1, then turn 2 (a new revert point).
-    store.applyAgentGraphOps(batch([{ op: "updateNode", id: "prompt-1", data: { prompt: "fox" } }]), { revertPoint: true });
-    store.applyAgentGraphOps(batch([{ op: "updateNode", id: "prompt-1", data: { prompt: "whale" } }], { batchId: "b2" }), {
-      revertPoint: true,
-    });
-
-    useWorkflowStore.getState().revertToSnapshot();
-    expect(prompt()).toBe("fox");
-    expect(useWorkflowStore.getState().canUndo).toBe(true);
-
-    useWorkflowStore.getState().undo();
-    expect(prompt()).toBe("whale");
-    useWorkflowStore.getState().redo();
-    expect(prompt()).toBe("fox");
-  });
-
-  it("does not count agent edits as manual changes (the revert point survives them)", () => {
-    seed([promptNode("prompt-1")]);
-    const store = useWorkflowStore.getState();
-    store.applyAgentGraphOps(batch([{ op: "updateNode", id: "prompt-1", data: { prompt: "a" } }]), { revertPoint: true });
-    for (let i = 0; i < 4; i++) {
-      store.applyAgentGraphOps(batch([{ op: "updateNode", id: "prompt-1", data: { prompt: `b${i}` } }]));
-    }
-    expect(useWorkflowStore.getState().manualChangeCount).toBe(0);
-    expect(useWorkflowStore.getState().previousWorkflowSnapshot).not.toBeNull();
-  });
-
   it("clears groups when the batch cleared the canvas", () => {
     seed([promptNode("prompt-1", { groupId: "group-1" })], [], {
       "group-1": { id: "group-1", name: "Group 1", color: "blue", position: { x: 0, y: 0 }, size: { width: 400, height: 300 } },
@@ -394,23 +342,19 @@ describe("applyAgentGraphOps", () => {
     expect(result.skipped).toEqual(["updateNode gone: node no longer exists"]);
   });
 
-  it("leaves undo history and the revert point alone when nothing applied", () => {
+  it("leaves undo history alone when nothing applied", () => {
     seed([promptNode("prompt-1")]);
 
-    const result = useWorkflowStore.getState().applyAgentGraphOps(
-      batch([{ op: "removeNode", id: "gone" }]),
-      { revertPoint: true },
-    );
+    const result = useWorkflowStore.getState().applyAgentGraphOps(batch([{ op: "removeNode", id: "gone" }]));
 
     const state = useWorkflowStore.getState();
     expect(result).toEqual({ applied: 0, skipped: ["removeNode gone: node no longer exists"] });
     expect(state.canUndo).toBe(false);
-    expect(state.previousWorkflowSnapshot).toBeNull();
     expect(state.hasUnsavedChanges).toBe(false);
   });
 
   it("ignores an empty batch without calling the applier", () => {
-    const result = useWorkflowStore.getState().applyAgentGraphOps(batch([]), { revertPoint: true });
+    const result = useWorkflowStore.getState().applyAgentGraphOps(batch([]));
     expect(result).toEqual({ applied: 0, skipped: [] });
     expect(applyGraphOpsMock).not.toHaveBeenCalled();
     expect(useWorkflowStore.getState().canUndo).toBe(false);

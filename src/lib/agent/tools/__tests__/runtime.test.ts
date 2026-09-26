@@ -1274,7 +1274,7 @@ describe("removals the user must hear about (review C32, C33)", () => {
     expect(result.ok, result.text).toBe(true);
     const next = result.text.split("\n").find((line) => line.startsWith("Next:"))!;
     expect(next).toContain("Tell the user you removed 3 of their nodes, including imageInput-1 (uploaded image), nanoBanana-2 (\"Hero\") (generated image)");
-    expect(next).toContain("Revert AI Changes");
+    expect(next).toContain("Ctrl+Z (one step per change) brings them back");
     expect(result.summary).toMatch(/^Replaced canvas \(3 removed\)/);
   });
 

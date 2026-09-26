@@ -325,7 +325,6 @@ export function WorkflowCanvas() {
   const setShowQuickstart = useWorkflowStore((state) => state.setShowQuickstart);
   const quickstartView = useWorkflowStore((state) => state.quickstartView);
   const setNavigationTarget = useWorkflowStore((state) => state.setNavigationTarget);
-  const captureSnapshot = useWorkflowStore((state) => state.captureSnapshot);
   const applyEditOperations = useWorkflowStore((state) => state.applyEditOperations);
   const setWorkflowMetadata = useWorkflowStore((state) => state.setWorkflowMetadata);
   const setShortcutsDialogOpen = useWorkflowStore((state) => state.setShortcutsDialogOpen);
@@ -1302,8 +1301,7 @@ export function WorkflowCanvas() {
       const data = await response.json();
 
       if (data.success && data.workflow) {
-        captureSnapshot(); // Capture BEFORE loading new workflow
-        await loadWorkflow(data.workflow, undefined, { preserveSnapshot: true });
+        await loadWorkflow(data.workflow);
         setIsChatOpen(false);
         showToast("Workflow generated successfully", "success");
       } else {
@@ -1315,7 +1313,7 @@ export function WorkflowCanvas() {
     } finally {
       setIsBuildingWorkflow(false);
     }
-  }, [loadWorkflow, showToast, captureSnapshot]);
+  }, [loadWorkflow, showToast]);
 
   // Create lightweight workflow state for chat (strip base64 images).
   // Keep a ref to the raw nodes/edges and expose the stripped payload lazily via
@@ -1351,7 +1349,6 @@ export function WorkflowCanvas() {
 
   // Handle applying edit operations from chat
   const handleApplyEdits = useCallback((operations: EditOperation[]) => {
-    captureSnapshot(); // Snapshot before AI edits
     const result = applyEditOperations(operations);
     if (result.applied > 0) {
       showToast(`Applied ${result.applied} edit(s)`, "success");
@@ -1360,7 +1357,7 @@ export function WorkflowCanvas() {
       console.warn('Skipped operations:', result.skipped);
     }
     return result;
-  }, [captureSnapshot, applyEditOperations, showToast]);
+  }, [applyEditOperations, showToast]);
 
   // Handle node selection from drop menu
   const handleMenuSelect = useCallback(

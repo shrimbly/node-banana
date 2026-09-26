@@ -64,8 +64,7 @@ interface ChatCallbacks {
 /**
  * The agent conversation: an AI SDK chat against /api/agent/chat whose request
  * carries the live canvas, and whose `data-graph-ops` parts are applied to the
- * workflow store as they stream in (one undo step per batch; the first batch
- * of a turn is also the "Revert AI Changes" point).
+ * workflow store as they stream in (one undo step per batch).
  *
  * A turn belongs to the canvas it was sent from. When another workflow is
  * opened (or the canvas cleared) mid-turn, the turn is stopped and any of its
@@ -88,8 +87,6 @@ export function useAgentChat({
 
   const [statusLine, setStatusLine] = useState<AgentStatusLine | null>(null);
   const [stoppedMessageIds, setStoppedMessageIds] = useState<ReadonlySet<string>>(() => new Set());
-  // Whether this turn already captured the revert snapshot.
-  const revertCapturedRef = useRef(false);
   // The store's canvasGeneration the current turn was sent from.
   const turnGenerationRef = useRef(useWorkflowStore.getState().canvasGeneration);
 
@@ -160,16 +157,13 @@ export function useAgentChat({
     if (useWorkflowStore.getState().canvasGeneration !== turnGenerationRef.current) return;
     let result: { applied: number; skipped: string[] };
     try {
-      result = useWorkflowStore
-        .getState()
-        .applyAgentGraphOps(batch, { revertPoint: !revertCapturedRef.current });
+      result = useWorkflowStore.getState().applyAgentGraphOps(batch);
     } catch (applyError) {
       const detail = applyError instanceof Error ? applyError.message : String(applyError);
       console.error("[agent] applying canvas changes failed", applyError);
       useToast.getState().show("Couldn't apply the agent's changes to the canvas", "error", false, detail);
       return;
     }
-    if (result.applied > 0) revertCapturedRef.current = true;
     if (result.skipped.length > 0) {
       const count = result.skipped.length;
       useToast
@@ -217,7 +211,6 @@ export function useAgentChat({
   const busy = status === "submitted" || status === "streaming";
 
   const beginTurn = useCallback(() => {
-    revertCapturedRef.current = false;
     // Also stamped when the request is built; set now so the check below never
     // compares a new turn against the previous turn's canvas.
     turnGenerationRef.current = useWorkflowStore.getState().canvasGeneration;

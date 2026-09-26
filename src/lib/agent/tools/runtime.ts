@@ -435,7 +435,7 @@ function successResult(draft: GraphDraft, tx: DraftTransaction, replacedCount: n
   const updatedIds = [...log.changes.keys()].filter((id) => draft.nodes.has(id) && !created.some((c) => c.id === id));
   const lines: string[] = [];
 
-  if (tx.cleared) lines.push(`Cleared the canvas (${replacedCount} node${replacedCount === 1 ? "" : "s"} removed; the user can undo it with Ctrl+Z, one step per change, or "Revert AI Changes" for everything from this reply).`);
+  if (tx.cleared) lines.push(`Cleared the canvas (${replacedCount} node${replacedCount === 1 ? "" : "s"} removed; the user can undo it with Ctrl+Z, one step per change).`);
   if (created.length > 0) {
     lines.push("Added nodes:");
     for (const c of created) lines.push(`- ${c.ref ? `ref "${c.ref}" = ` : ""}${nodeLine(draft.nodes.get(c.id)!)}`);
@@ -549,7 +549,7 @@ function nextSteps(draft: GraphDraft, createdIds: string[], removed: RemovedNode
     const media = theirs.filter((n) => n.content && (n.content.image || n.content.video || n.content.audio || n.content.model3d));
     const named = media.slice(0, 6).map((n) => `${n.id}${n.title ? ` ("${n.title}")` : ""} (${heldContent(n)})`);
     const including = named.length > 0 ? `, including ${named.join(", ")}${media.length > named.length ? ` and ${media.length - named.length} more with media` : ""}` : "";
-    hints.push(`Tell the user you removed ${theirs.length} of their nodes${including}, and that Ctrl+Z (one step per change) or the header's "Revert AI Changes" button (everything from this reply) brings ${theirs.length === 1 ? "it" : "them"} back.`);
+    hints.push(`Tell the user you removed ${theirs.length} of their nodes${including}, and that Ctrl+Z (one step per change) brings ${theirs.length === 1 ? "it" : "them"} back.`);
   }
   const uploads = createdIds.filter((id) => {
     const node = draft.nodes.get(id);

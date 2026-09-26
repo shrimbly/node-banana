@@ -341,9 +341,9 @@ through the vendor's official CLI, never on API credits:
 Flow: the panel sends a media-free canvas snapshot with each message →
 `/api/agent/chat` runs the turn on the chosen harness → tools edit a
 server-side draft and emit resolved graph ops → the browser applies them with
-`applyAgentGraphOps` (one undo step per tool call; "Revert AI changes" covers
-the whole reply). Edits from a turn are dropped if the canvas is replaced
-mid-turn (`canvasGeneration`: load, clear, tab switch).
+`applyAgentGraphOps` (one undo step per tool call). Edits from a turn are
+dropped if the canvas is replaced mid-turn (`canvasGeneration`: load, clear,
+tab switch).
 
 | Purpose | Location |
 |---------|----------|

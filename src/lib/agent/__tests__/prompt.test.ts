@@ -36,7 +36,7 @@ describe("buildAgentSystemPrompt", () => {
   it("covers removals, placeholders, settings and questions about nodes (review C32-C37, C40)", () => {
     expect(prompt).toContain("including to get around a tool error");
     expect(prompt).toContain("never needs an existing connection or node removed");
-    expect(prompt).toMatch(/replaced the canvas, say so, name any lost uploads or generated results, and mention that Ctrl\+Z \(one step per change\) or "Revert AI Changes" \(everything from this reply\)/);
+    expect(prompt).toMatch(/replaced the canvas, say so, name any lost uploads or generated results, and mention that Ctrl\+Z \(one step per change\) brings them back/);
     // Reasoning streams into the panel: no "as per rule 4" or raw tool names there.
     expect(prompt).toMatch(/never cite these rules or their numbers/);
     expect(prompt).toContain("build now with sensible placeholder content");

@@ -359,7 +359,7 @@ describe("AgentPanel", () => {
 
     expect(chatBodies[0]).toMatchObject({ harness: "claude", model: "sonnet", workflow: snapshot });
     expect(chatBodies[0].sessionId).toBeUndefined();
-    expect(applyAgentGraphOps).toHaveBeenCalledWith(batch, { revertPoint: true });
+    expect(applyAgentGraphOps).toHaveBeenCalledWith(batch);
 
     fireEvent.change(textarea, { target: { value: "Make it a cat" } });
     fireEvent.keyDown(textarea, { key: "Enter" });

@@ -412,7 +412,7 @@ export interface WorkflowStore {
 
   // Save/Load
   saveWorkflow: (name?: string) => void;
-  loadWorkflow: (workflow: WorkflowFile, workflowPath?: string, options?: { preserveSnapshot?: boolean }) => Promise<void>;
+  loadWorkflow: (workflow: WorkflowFile, workflowPath?: string) => Promise<void>;
   /** Drop carousel entries whose files are no longer in the generations folder. */
   pruneMissingHistory: () => Promise<void>;
   clearWorkflow: () => void;
@@ -526,32 +526,13 @@ export interface WorkflowStore {
   setFocusedCommentNodeId: (nodeId: string | null) => void;
   resetViewedComments: () => void;
 
-  // AI change snapshot state
-  previousWorkflowSnapshot: {
-    nodes: WorkflowNode[];
-    edges: WorkflowEdge[];
-    groups: Record<string, NodeGroup>;
-    edgeStyle: EdgeStyle;
-    edgeAppearance: EdgeAppearance;
-  } | null;
-  manualChangeCount: number;
-
-  // AI change snapshot actions
-  captureSnapshot: () => void;
-  revertToSnapshot: () => void;
-  clearSnapshot: () => void;
-  incrementManualChangeCount: () => void;
   applyEditOperations: (operations: EditOperation[]) => { applied: number; skipped: string[] };
   /**
    * Applies one batch of resolved canvas changes from the agent as a single
-   * undo step. `revertPoint` (the first batch of a turn) also captures the
-   * snapshot behind "Revert AI changes". Ops that no longer fit the live
-   * canvas are skipped and returned with reasons.
+   * undo step. Ops that no longer fit the live canvas are skipped and
+   * returned with reasons.
    */
-  applyAgentGraphOps: (
-    batch: AgentGraphOpBatch,
-    options?: { revertPoint?: boolean }
-  ) => { applied: number; skipped: string[] };
+  applyAgentGraphOps: (batch: AgentGraphOpBatch) => { applied: number; skipped: string[] };
   /**
    * Bumped whenever a different canvas replaces the live one (loadWorkflow,
    * clearWorkflow, a tab switch). An agent turn remembers the generation it
@@ -922,9 +903,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   navigationTarget: null,
   focusedCommentNodeId: null,
 
-  // AI change snapshot initial state
-  previousWorkflowSnapshot: null,
-  manualChangeCount: 0,
   canvasGeneration: 0,
 
   // Canvas navigation settings initial state
@@ -1060,8 +1038,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       hasUnsavedChanges: true,
     }));
 
-    get().incrementManualChangeCount();
-
     return id;
   },
 
@@ -1136,7 +1112,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         hasUnsavedChanges: true,
       };
     });
-    get().incrementManualChangeCount();
   },
 
   onNodesChange: (changes: NodeChange<WorkflowNode>[]) => {
@@ -1199,10 +1174,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         ...(hasMeaningfulChange ? { hasUnsavedChanges: true } : {}),
       };
     });
-
-    if (hasRemoveChange) {
-      get().incrementManualChangeCount();
-    }
   },
 
   onEdgesChange: (changes: EdgeChange<WorkflowEdge>[]) => {
@@ -1239,7 +1210,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     if (hasRemoveChange) {
       clearStaleInputImages(removedEdges, get);
-      get().incrementManualChangeCount();
     }
 
     // Recompute dimming when edges are added or removed
@@ -1263,7 +1233,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         hasUnsavedChanges: true,
       };
     });
-    get().incrementManualChangeCount();
     get().recomputeDimmedNodes();
   },
 
@@ -1299,7 +1268,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         deleteCheckpointActive = false;
       }
     }
-    get().incrementManualChangeCount();
   },
 
   reconnectEdge: (edgeId: string, connection: Connection) => {
@@ -1353,7 +1321,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       deleteCheckpointActive = false;
     }
     get().recomputeDimmedNodes();
-    get().incrementManualChangeCount();
     return true;
   },
 
@@ -1385,7 +1352,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       deleteCheckpointActive = false;
     }
     get().recomputeDimmedNodes();
-    get().incrementManualChangeCount();
   },
 
   setEdgesPause: (edgeIds: string[], hasPause: boolean) => {
@@ -3058,7 +3024,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     URL.revokeObjectURL(url);
   },
 
-  loadWorkflow: async (workflow: WorkflowFile, workflowPath?: string, options?: { preserveSnapshot?: boolean }) => {
+  loadWorkflow: async (workflow: WorkflowFile, workflowPath?: string) => {
     // Abort any in-flight workflow run before swapping the graph. Otherwise old
     // executors keep polling/spending and stamp stale results (by node id) onto
     // the freshly loaded nodes — especially when ids are reused across reloads.
@@ -3215,11 +3181,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       // Dismiss welcome modal after loading a workflow
       showQuickstart: false,
     });
-
-    // Clear snapshot unless explicitly preserving (e.g., AI workflow generation)
-    if (!options?.preserveSnapshot) {
-      get().clearSnapshot();
-    }
 
     // Clear undo history — loading a workflow is a fresh start
     // Cancel any pending debounced snapshot so it doesn't fire into the new workflow
@@ -3394,7 +3355,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       // A different canvas: a running agent turn must not edit it
       canvasGeneration: get().canvasGeneration + 1,
     });
-    get().clearSnapshot();
     // Clear undo history and cancel any pending debounced snapshot
     pendingDataSnapshot = null;
     if (dataChangeTimer) {
@@ -3869,63 +3829,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     set({ viewedCommentNodeIds: new Set<string>() });
   },
 
-  // AI change snapshot actions
-  captureSnapshot: () => {
-    const state = get();
-    // Deep copy the current workflow state to avoid reference sharing
-    const snapshot = clonePreservingStrings({
-      nodes: state.nodes,
-      edges: state.edges,
-      groups: state.groups,
-      edgeStyle: state.edgeStyle,
-      edgeAppearance: state.edgeAppearance,
-    });
-    set({
-      previousWorkflowSnapshot: snapshot,
-      manualChangeCount: 0,
-    });
-  },
-
-  revertToSnapshot: () => {
-    const state = get();
-    if (state.previousWorkflowSnapshot) {
-      // One undo step, so Ctrl+Z brings back what the revert removed.
-      pushUndoCheckpoint(get, set);
-      set({
-        nodes: state.previousWorkflowSnapshot.nodes,
-        edges: state.previousWorkflowSnapshot.edges,
-        groups: state.previousWorkflowSnapshot.groups,
-        edgeStyle: state.previousWorkflowSnapshot.edgeStyle,
-        edgeAppearance: state.previousWorkflowSnapshot.edgeAppearance,
-        previousWorkflowSnapshot: null,
-        manualChangeCount: 0,
-        hasUnsavedChanges: true,
-      });
-    }
-  },
-
-  clearSnapshot: () => {
-    set({
-      previousWorkflowSnapshot: null,
-      manualChangeCount: 0,
-    });
-  },
-
-  incrementManualChangeCount: () => {
-    const state = get();
-    const newCount = state.manualChangeCount + 1;
-
-    // Automatically clear snapshot after 3 manual changes
-    if (newCount >= 3) {
-      set({
-        previousWorkflowSnapshot: null,
-        manualChangeCount: 0,
-      });
-    } else {
-      set({ manualChangeCount: newCount });
-    }
-  },
-
   applyEditOperations: (operations) => {
     const state = get();
     const result = executeEditOps(operations, {
@@ -3942,7 +3845,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     return { applied: result.applied, skipped: result.skipped };
   },
 
-  applyAgentGraphOps: (batch, options) => {
+  applyAgentGraphOps: (batch) => {
     if (batch.ops.length === 0) return { applied: 0, skipped: [] };
 
     const state = get();
@@ -3950,10 +3853,9 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       createDefaultNodeData,
       defaultNodeDimensions,
     });
-    // Nothing landed (every op was stale): leave undo history and the revert point alone.
+    // Nothing landed (every op was stale): leave undo history alone.
     if (result.applied === 0) return { applied: 0, skipped: result.skipped };
 
-    if (options?.revertPoint) get().captureSnapshot();
     pushUndoCheckpoint(get, set);
 
     const remainingNodeIds = new Set(result.nodes.map((node) => node.id));
@@ -3981,7 +3883,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       deleteCheckpointActive = true;
       try {
         clearStaleInputImages(removedEdges, get);
-      } finally {
+    } finally {
         deleteCheckpointActive = false;
       }
     }

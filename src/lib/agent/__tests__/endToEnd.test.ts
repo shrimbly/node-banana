@@ -113,7 +113,6 @@ async function runPanelTurn(harness: AgentHarness, messages: AgentUIMessage[], p
   const stream = createAgentChatStream({ body: parsed.body, harness, signal: new AbortController().signal, providerKeys });
   const chunks: AgentUIMessageChunk[] = [];
   const batches: AgentGraphOpBatch[] = [];
-  let revertPoint = true;
   const tapped = stream.pipeThrough(
     new TransformStream<AgentUIMessageChunk, AgentUIMessageChunk>({
       transform(chunk, controller) {
@@ -121,8 +120,7 @@ async function runPanelTurn(harness: AgentHarness, messages: AgentUIMessage[], p
         chunks.push(copy);
         if (copy.type === "data-graph-ops") {
           batches.push(copy.data);
-          const result = useWorkflowStore.getState().applyAgentGraphOps(copy.data, { revertPoint });
-          if (result.applied > 0) revertPoint = false;
+          const result = useWorkflowStore.getState().applyAgentGraphOps(copy.data);
           expect(result.skipped).toEqual([]);
         }
         controller.enqueue(chunk);
