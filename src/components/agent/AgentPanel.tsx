@@ -34,6 +34,7 @@ import { useAgentStatus } from "@/lib/agent/client/useAgentStatus";
 import {
   AGENT_HARNESS_IDS,
   type AgentDataParts,
+  type AgentGraphOpBatch,
   type AgentErrorCode,
   type AgentHarnessId,
 } from "@/lib/agent/types";
@@ -42,6 +43,7 @@ import { AgentBillingNote, AgentConversation, AgentEmptyState } from "./AgentCon
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { AgentAlreadySignedInHint, AgentSignInCard, type AgentBlockedReadiness } from "./AgentSignInCard";
 import { useAgentCanvasView } from "./hooks/useAgentCanvasView";
+import { useAgentShimmer } from "./hooks/useAgentShimmer";
 import { useAgentChat } from "./hooks/useAgentChat";
 import { useAgentSignIn } from "./hooks/useAgentSignIn";
 import { useViewportWidth } from "./hooks/useViewportWidth";
@@ -130,6 +132,16 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
 
   // --- Conversation ----------------------------------------------------------
   const canvasView = useAgentCanvasView(occludedRight);
+  const shimmer = useAgentShimmer();
+  const { focusBatch } = canvasView;
+  // Bring the edit into view and mark the nodes it changed.
+  const showBatch = useCallback(
+    (batch: AgentGraphOpBatch) => {
+      focusBatch(batch);
+      shimmer(batch);
+    },
+    [focusBatch, shimmer],
+  );
   const handleNotice = useCallback(
     (notice: AgentDataParts["agent-notice"]) => {
       if (STATUS_NOTICE_CODES.has(notice.code)) void refreshStatus(notice.harness);
@@ -141,7 +153,7 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
     model,
     effort,
     getViewport: canvasView.getViewport,
-    onBatchApplied: canvasView.focusBatch,
+    onBatchApplied: showBatch,
     onNotice: handleNotice,
   });
   const { busy, messages } = chat;

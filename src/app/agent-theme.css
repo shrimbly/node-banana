@@ -232,3 +232,55 @@
     outline-color: color-mix(in oklab, var(--ring) 50%, transparent);
   }
 }
+
+/* The agent's edits: a light sweep across the cards of each node it just
+   changed (useAgentShimmer sets the attribute for two passes, so the sweep
+   is still going once the view has panned to them). */
+@keyframes nb-agent-shimmer {
+  from {
+    background-position: 160% 0;
+  }
+  to {
+    background-position: -60% 0;
+  }
+}
+@keyframes nb-agent-glow {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+/* The media card is positioned already; the controls card needs it for the sweep. */
+.react-flow__node[data-agent-shimmer] [data-controls-card] {
+  position: relative;
+}
+.react-flow__node[data-agent-shimmer] :is([data-media-card], [data-controls-card])::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 20;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgb(255 255 255 / 0.08) 40%,
+    rgb(255 255 255 / 0.24) 50%,
+    rgb(255 255 255 / 0.08) 60%,
+    transparent 70%
+  );
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.28);
+  animation: nb-agent-shimmer 1.4s linear 2;
+}
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__node[data-agent-shimmer] :is([data-media-card], [data-controls-card])::after {
+    background-image: none;
+    background-color: rgb(255 255 255 / 0.06);
+    animation: nb-agent-glow 2.4s ease-out forwards;
+  }
+}
+
