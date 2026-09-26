@@ -135,6 +135,12 @@ function renderPanel(props: Partial<Parameters<typeof AgentPanel>[0]> = {}) {
   return { ...utils, onClose };
 }
 
+/** Opens the header's harness and model menu (Radix opens it from the keyboard in jsdom). */
+function openHarnessMenu() {
+  fireEvent.keyDown(screen.getByRole("button", { name: /Change agent or model/ }), { key: "Enter" });
+  return screen.getByRole("menu");
+}
+
 async function waitForComposer() {
   return (await screen.findByRole("textbox", { name: "Message the agent" })) as HTMLTextAreaElement;
 }
@@ -181,8 +187,12 @@ describe("AgentPanel", () => {
     await waitForComposer();
     expect(screen.getByText("What should we build?")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Build a text-to-image workflow" })).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /Claude Code/ })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("combobox", { name: "Model" })).toHaveTextContent("Sonnet");
+    expect(screen.getByRole("button", { name: /Change agent or model/ })).toHaveAccessibleName(
+      "Claude Code, Sonnet. Change agent or model",
+    );
+    const menu = openHarnessMenu();
+    expect(within(menu).getByRole("menuitemradio", { name: /Claude Code/ })).toHaveAttribute("aria-checked", "true");
+    expect(within(menu).getByRole("menuitemradio", { name: /Sonnet/ })).toHaveAttribute("aria-checked", "true");
   });
 
   it("keeps the billing line in a fixed row, never inside the scrolling empty state (UX audit)", async () => {
@@ -293,8 +303,8 @@ describe("AgentPanel", () => {
     expect(await screen.findByText("No Claude Pro or Max plan found on this login")).toBeInTheDocument();
     expect(screen.queryByText(/API credits/)).not.toBeInTheDocument();
 
-    fireEvent.focus(screen.getByRole("radio", { name: /Claude Code/ }));
-    expect((await screen.findAllByText("Claude Code — Subscription not confirmed — won't run")).length).toBeGreaterThan(0);
+    const menu = openHarnessMenu();
+    expect(within(menu).getByRole("menuitemradio", { name: /Claude Code/ })).toHaveTextContent("Unconfirmed");
     expect(screen.queryByText(/API account/)).not.toBeInTheDocument();
   });
 
@@ -303,9 +313,10 @@ describe("AgentPanel", () => {
     renderPanel();
     await waitForComposer();
 
-    fireEvent.click(screen.getByRole("radio", { name: /Codex/ }));
-    expect(screen.getByRole("radio", { name: /Codex/ })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("combobox", { name: "Model" })).toHaveTextContent("GPT-5.6 Luna");
+    fireEvent.click(within(openHarnessMenu()).getByRole("menuitemradio", { name: /Codex/ }));
+    const menu = openHarnessMenu();
+    expect(within(menu).getByRole("menuitemradio", { name: /Codex/ })).toHaveAttribute("aria-checked", "true");
+    expect(within(menu).getByRole("menuitemradio", { name: /GPT-5.6 Luna/ })).toHaveAttribute("aria-checked", "true");
     await waitFor(() => expect(JSON.parse(localStorage.getItem(AGENT_SETTINGS_KEY)!).harness).toBe("codex"));
   });
 
@@ -489,10 +500,10 @@ describe("AgentPanel", () => {
     renderPanel();
     fireEvent.change(await waitForComposer(), { target: { value: "keep me" } });
 
-    fireEvent.click(screen.getByRole("radio", { name: /Codex/ }));
+    fireEvent.click(within(openHarnessMenu()).getByRole("menuitemradio", { name: /Codex/ }));
     await waitFor(() => expect(screen.queryByRole("textbox", { name: "Message the agent" })).not.toBeInTheDocument());
 
-    fireEvent.click(screen.getByRole("radio", { name: /Claude Code/ }));
+    fireEvent.click(within(openHarnessMenu()).getByRole("menuitemradio", { name: /Claude Code/ }));
     expect((await waitForComposer()).value).toBe("keep me");
   });
 

@@ -51,7 +51,7 @@ function AgentToolRow({ part }: { part: DynamicToolUIPart }) {
 /** Consecutive tool calls read as one ruled list, like a settings page's rows. */
 function ToolRows({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-col divide-y divide-white/[0.06] border-y border-white/[0.06]">{children}</div>
+    <div className="flex flex-col divide-y border-y fade-rule *:fade-rule">{children}</div>
   );
 }
 

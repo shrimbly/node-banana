@@ -9,9 +9,8 @@ export const AGENT_BUTTON_SIZE = 40;
 /** Space between the navigator, the agent button and the window. */
 export const AGENT_STACK_GAP = 8;
 export const AGENT_PANEL_WIDTH = 400;
-/** Keeps the window below the floating menu and workflow tabs. */
+/** The window's top edge: below the workflow tabs, level with the canvas chrome. */
 export const AGENT_PANEL_MIN_TOP = 56;
-export const AGENT_PANEL_MAX_HEIGHT = 680;
 /** The window never comes closer than this to the viewport's left edge (the navigator's margin). */
 export const AGENT_PANEL_EDGE = 16;
 /** Gap between the window's left edge and the canvas area treated as visible. */
@@ -26,7 +25,7 @@ export interface AgentPanelFrame {
   right: number;
   bottom: number;
   width: number;
-  /** CSS max-height keeping the top edge at or below AGENT_PANEL_MIN_TOP. */
+  /** CSS height running the window from AGENT_PANEL_MIN_TOP down to its bottom offset. */
   maxHeight: string;
 }
 

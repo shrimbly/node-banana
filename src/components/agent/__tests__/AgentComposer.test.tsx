@@ -6,14 +6,11 @@ import { AgentComposer, type AgentComposerProps } from "@/components/agent/Agent
 function renderComposer(props: Partial<AgentComposerProps> = {}) {
   const onSend = props.onSend ?? vi.fn(() => true);
   const onStop = props.onStop ?? vi.fn();
-  const onModelChange = props.onModelChange ?? vi.fn();
   const utils = render(
     <TooltipProvider>
       <AgentComposer
         status="ready"
         busy={false}
-        models={[]}
-        onModelChange={onModelChange}
         onSend={onSend}
         onStop={onStop}
         {...props}
@@ -21,7 +18,7 @@ function renderComposer(props: Partial<AgentComposerProps> = {}) {
     </TooltipProvider>,
   );
   const textarea = screen.getByRole("textbox", { name: "Message the agent" }) as HTMLTextAreaElement;
-  return { ...utils, textarea, onSend, onStop, onModelChange };
+  return { ...utils, textarea, onSend, onStop };
 }
 
 describe("AgentComposer", () => {
@@ -79,27 +76,7 @@ describe("AgentComposer", () => {
     expect(onStop).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the model picker only when the harness lists models", () => {
-    const { unmount } = renderComposer();
-    expect(screen.queryByRole("combobox", { name: "Model" })).not.toBeInTheDocument();
-    unmount();
-
-    renderComposer({
-      models: [
-        { id: "sonnet", label: "Sonnet", isDefault: true },
-        { id: "opus", label: "Opus" },
-      ],
-      model: "opus",
-    });
-    expect(screen.getByRole("combobox", { name: "Model" })).toHaveTextContent("Opus");
-  });
-
-  it("locks the model while a turn runs", () => {
-    renderComposer({ busy: true, status: "submitted", models: [{ id: "sonnet", label: "Sonnet" }], model: "sonnet" });
-    expect(screen.getByRole("combobox", { name: "Model" })).toBeDisabled();
-  });
-
-  it("shows context notes above the input", () => {
+  it("shows context notes beside send", () => {
     renderComposer({
       notes: [
         { key: "selection", kind: "selection", text: "3 nodes selected — the agent will focus on them" },
@@ -108,6 +85,17 @@ describe("AgentComposer", () => {
     });
     expect(screen.getByText("3 nodes selected — the agent will focus on them")).toBeInTheDocument();
     expect(screen.getByText("Codex picks up from here with the conversation so far")).toBeInTheDocument();
+    // Only a note that can be dismissed gets an ×.
+    expect(screen.queryByRole("button", { name: /Remove|Clear/ })).not.toBeInTheDocument();
+  });
+
+  it("dismisses a note from its ×", () => {
+    const onDismiss = vi.fn();
+    renderComposer({
+      notes: [{ key: "selection", kind: "selection", text: "2 selected", onDismiss, dismissLabel: "Clear the selection" }],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Clear the selection" }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
   // Safari ends the composition before the keydown of the Enter that commits it

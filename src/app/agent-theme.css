@@ -54,6 +54,12 @@
     @slot;
   }
 }
+/* A hairline that fades out toward its ends: the chat's horizontal rules. Set the
+   border width where it goes (border-b, border-y, divide-y + *:fade-rule). */
+@utility fade-rule {
+  border-image: linear-gradient(to right, rgb(255 255 255 / 0.015), rgb(255 255 255 / 0.09), rgb(255 255 255 / 0.015)) 1;
+}
+
 @utility no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;

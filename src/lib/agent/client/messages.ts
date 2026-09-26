@@ -142,9 +142,8 @@ export function latestTurnRejectedSignIn(messages: readonly AgentUIMessage[], ha
 
 export function selectionLabel(count: number): string | null {
   if (count <= 0) return null;
-  return count === 1
-    ? "1 node selected — the agent will focus on it"
-    : `${count} nodes selected — the agent will focus on them`;
+  // A chip beside send: the count alone; the agent focusing on it is the chip's whole meaning.
+  return `${count} selected`;
 }
 
 export function agentSuggestions(canvasHasNodes: boolean): string[] {

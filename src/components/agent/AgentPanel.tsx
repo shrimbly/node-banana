@@ -18,7 +18,6 @@ import {
   getAgentPanelFrame,
   getAgentPanelOcclusion,
   AGENT_PANEL_EDGE,
-  AGENT_PANEL_MAX_HEIGHT,
 } from "@/lib/agent/client/layout";
 import { isImeKeyEvent } from "@/lib/agent/client/keyboard";
 import { agentSuggestions, latestTurnRejectedSignIn, selectionLabel } from "@/lib/agent/client/messages";
@@ -168,11 +167,24 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
     return count;
   });
   const canvasHasNodes = useWorkflowStore((state) => state.nodes.length > 0);
+  const clearSelection = useCallback(() => {
+    const { nodes, onNodesChange } = useWorkflowStore.getState();
+    onNodesChange(nodes.filter((node) => node.selected).map((node) => ({ type: "select", id: node.id, selected: false })));
+  }, []);
 
   const notes = useMemo(() => {
     const list: NonNullable<AgentComposerProps["notes"]> = [];
     const selected = selectionLabel(selectionCount);
-    if (selected) list.push({ key: "selection", kind: "selection", text: selected });
+    if (selected) {
+      list.push({
+        key: "selection",
+        kind: "selection",
+        text: selected,
+        // The selection is what the agent focuses on: clearing it widens the turn to the whole canvas.
+        onDismiss: clearSelection,
+        dismissLabel: "Clear the selection",
+      });
+    }
     const lastSession = findLatestAgentSession(messages);
     if (lastSession && lastSession.harness !== harness) {
       list.push({
@@ -182,7 +194,7 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
       });
     }
     return list;
-  }, [selectionCount, messages, harness]);
+  }, [selectionCount, messages, harness, clearSelection]);
 
   // --- Focus and keyboard ----------------------------------------------------
   const panelRef = useRef<HTMLElement>(null);
@@ -330,8 +342,8 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
           right: frame.right,
           bottom: frame.bottom,
           width: frame.width,
-          height: AGENT_PANEL_MAX_HEIGHT,
-          maxHeight: frame.maxHeight,
+          // Full height: from under the tabs down to the navigator.
+          height: frame.maxHeight,
           // Guard only: the frame already fits the viewport it was computed for.
           maxWidth: `calc(100vw - ${frame.right + AGENT_PANEL_EDGE}px)`,
         }}
@@ -347,6 +359,9 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
           readiness={readiness}
           switchDisabled={busy}
           onHarnessChange={setHarness}
+          models={models}
+          model={model}
+          onModelChange={(next) => setModel(harness, next)}
           canStartNewChat={hasMessages}
           onNewChat={newChat}
           onClose={close}
@@ -370,9 +385,6 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
           <AgentComposer
             status={chat.status}
             busy={busy}
-            models={models}
-            model={model}
-            onModelChange={(next) => setModel(harness, next)}
             onSend={chat.send}
             onStop={chat.stop}
             notes={notes}

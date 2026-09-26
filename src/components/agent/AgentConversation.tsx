@@ -157,7 +157,7 @@ export function AgentEmptyState({ suggestions, onSuggestion }: AgentEmptyStatePr
         </p>
       </div>
       {/* Ruled on the page column, like the welcome screen's rows; the text sits just inside. */}
-      <div className="flex flex-col divide-y divide-white/[0.06] [@media(max-height:680px)]:[&>*:nth-child(n+3)]:hidden">
+      <div className="flex flex-col divide-y *:fade-rule [@media(max-height:680px)]:[&>*:nth-child(n+3)]:hidden">
         {suggestions.map((suggestion) => (
           <div key={suggestion} className="py-0.5 [@media(max-height:680px)]:py-0">
             <button

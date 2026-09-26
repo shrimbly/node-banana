@@ -17,7 +17,7 @@ export const AGENT_POPOVER_LAYER = "z-[95]";
 /** Lucide icons at the chrome's weight: 18px on the canvas, 16px inside the window. */
 export const AGENT_ICON = { strokeWidth: 1.75, "aria-hidden": true } as const;
 
-/** One of the window's icon buttons: the canvas chrome's own, with its hover label below. */
+/** One of the window's icon buttons: the canvas chrome's own at 28px, with its hover label below. */
 export function PanelIconButton({
   label,
   onClick,
@@ -38,6 +38,7 @@ export function PanelIconButton({
       disabled={disabled}
       tooltipPlacement="bottom"
       tooltipAlign={tooltipAlign}
+      size="sm"
       className="[&_svg]:size-4"
     >
       {children}

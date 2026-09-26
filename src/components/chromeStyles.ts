@@ -18,7 +18,7 @@ export const CHROME_ICON_BUTTON =
   "disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-neutral-300";
 
 /** md: navigator controls (32px). lg: the action bar (36px). */
-export const CHROME_ICON_BUTTON_SIZE = { md: "h-8 w-8", lg: "h-9 w-9" } as const;
+export const CHROME_ICON_BUTTON_SIZE = { sm: "h-7 w-7", md: "h-8 w-8", lg: "h-9 w-9" } as const;
 
 /** A button whose popover is up, or a stateful toggle that is on. */
 export const CHROME_ICON_BUTTON_OPEN = "bg-white/10 text-white";

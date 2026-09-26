@@ -157,8 +157,8 @@ describe("findHarnessSwitches", () => {
 describe("labels", () => {
   it("describes the selection", () => {
     expect(selectionLabel(0)).toBeNull();
-    expect(selectionLabel(1)).toBe("1 node selected — the agent will focus on it");
-    expect(selectionLabel(3)).toBe("3 nodes selected — the agent will focus on them");
+    expect(selectionLabel(1)).toBe("1 selected");
+    expect(selectionLabel(3)).toBe("3 selected");
   });
 
   it("suggests building on an empty canvas and editing a full one", () => {

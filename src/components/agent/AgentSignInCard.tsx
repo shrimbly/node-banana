@@ -104,7 +104,7 @@ export function AgentSignInCard({
   );
   // The fallback, ruled off from the primary path.
   const terminalFallback = (lead: string) => (
-    <div className={cn("space-y-2 border-t border-white/[0.06]", full ? "pt-4" : "pt-3.5")}>
+    <div className={cn("space-y-2 border-t fade-rule", full ? "pt-4" : "pt-3.5")}>
       <p className="text-xs leading-4 text-ink-3">{lead}</p>
       <CommandLine command={command} />
     </div>
@@ -256,7 +256,7 @@ export function AgentSignInCard({
         full
           ? "gap-5 px-4 pb-6 pt-5"
           : // Under a conversation: capped and scrolling on its own, so the transcript keeps some room.
-            "max-h-[65%] shrink-0 gap-3.5 overflow-y-auto border-t border-white/[0.06] p-4",
+            "max-h-[65%] shrink-0 gap-3.5 overflow-y-auto border-t fade-rule p-4",
       )}
     >
       {content}
