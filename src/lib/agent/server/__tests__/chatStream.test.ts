@@ -467,6 +467,23 @@ describe("createAgentChatStream: what the harness is given", () => {
 // ---------------------------------------------------------------------------
 
 describe("createAgentChatStream: tool calls", () => {
+  it("sends the conversation's name as a persisted summary part, with no tool card", async () => {
+    const { harness } = fakeHarness(async function* (params) {
+      const result = await params.tools.execute("name_conversation", { summary: "  Espresso hero film workflow. " });
+      expect(result.ok).toBe(true);
+      yield { type: "text-delta", id: "t1", delta: "Done." };
+      yield { type: "text-end", id: "t1" };
+    });
+    const { message } = await run({
+      harness,
+      createToolRuntime: (snapshot, options) => createAgentToolRuntime(snapshot, options),
+    });
+    expect(message.parts.filter((part) => part.type === "dynamic-tool")).toEqual([]);
+    expect(message.parts.find((part) => part.type === "data-agent-summary")).toMatchObject({
+      data: { summary: "Espresso hero film workflow" },
+    });
+  });
+
   it("turns a tool call into a dynamic-tool part and sends its ops as a transient graph-ops chunk", async () => {
     const { runtime, calls } = fakeRuntime({ edit_workflow: addPromptResult });
     const returned: AgentToolResult[] = [];

@@ -16,6 +16,7 @@ export const TOOL_NAMES = {
   editWorkflow: "edit_workflow",
   updateNode: "update_node",
   arrangeWorkflow: "arrange_workflow",
+  nameConversation: "name_conversation",
 } as const;
 
 export type AgentToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
@@ -167,6 +168,14 @@ export const arrangeWorkflowShape = {
   nodeIds: z.array(z.string()).optional().describe("Only tidy these nodes. Omit to tidy the whole canvas."),
 };
 
+export const nameConversationShape = {
+  summary: z
+    .string()
+    .min(1)
+    .max(80)
+    .describe('3-6 words naming what the conversation is about, sentence case, no final period, e.g. "Espresso hero film workflow".'),
+};
+
 export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   {
     name: TOOL_NAMES.getWorkflow,
@@ -223,5 +232,13 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     description:
       "Re-arrange nodes into tidy left-to-right columns following the connections (the whole canvas, or only nodeIds). Each group moves as one unit: its nodes are tidied inside its box, which is refit around them (naming one node of a group arranges the whole group), and nothing else is moved into a box. Use when the user asks to tidy or clean up the layout; new nodes are already placed well.",
     inputShape: arrangeWorkflowShape,
+  },
+  {
+    name: TOOL_NAMES.nameConversation,
+    title: "Name conversation",
+    readOnly: true,
+    description:
+      "Label this conversation in the user's chat history with a short summary. Call it once in your first reply, together with your other tool calls; call it again only if the conversation moves on to a clearly different task. It changes nothing on the canvas and is not shown in the chat.",
+    inputShape: nameConversationShape,
   },
 ];

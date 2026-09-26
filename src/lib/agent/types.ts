@@ -402,6 +402,8 @@ export type AgentDataParts = {
   "agent-status": { text: string };
   /** Persisted: a problem the panel renders inline (sign-in needed, usage limit, ...). */
   "agent-notice": { code: AgentErrorCode; message: string; harness: AgentHarnessId };
+  /** Persisted: the conversation's short label in the chat history (the agent's name_conversation call). */
+  "agent-summary": { summary: string };
 };
 
 export type AgentUIMessage = UIMessage<AgentMessageMetadata, AgentDataParts>;

@@ -13,7 +13,7 @@ describe("tool definitions", () => {
       expect(definition.title.length).toBeGreaterThan(0);
       expect(definition.description.length).toBeGreaterThan(80);
     }
-    expect(AGENT_TOOL_DEFINITIONS.filter((d) => d.readOnly).map((d) => d.name)).toEqual(["get_workflow", "describe_node_types", "search_models"]);
+    expect(AGENT_TOOL_DEFINITIONS.filter((d) => d.readOnly).map((d) => d.name)).toEqual(["get_workflow", "describe_node_types", "search_models", "name_conversation"]);
   });
 
   it.each(AGENT_TOOL_DEFINITIONS.map((d) => [d.name, d] as const))("%s converts to an object JSON Schema (Codex dynamic tools)", (_name, definition) => {

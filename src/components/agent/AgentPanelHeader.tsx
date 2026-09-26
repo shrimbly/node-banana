@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckIcon, ChevronDownIcon, SquarePenIcon, XIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, HistoryIcon, SquarePenIcon, XIcon } from "lucide-react";
 import { cn } from "@/components/agent/lib/utils";
 import {
   DropdownMenu,
@@ -26,6 +26,9 @@ export interface AgentPanelHeaderProps {
   onModelChange: (model: string) => void;
   canStartNewChat: boolean;
   onNewChat: () => void;
+  /** The history list is showing in place of the conversation. */
+  historyOpen: boolean;
+  onToggleHistory: () => void;
   onClose: () => void;
 }
 
@@ -86,6 +89,8 @@ export function AgentPanelHeader({
   onModelChange,
   canStartNewChat,
   onNewChat,
+  historyOpen,
+  onToggleHistory,
   onClose,
 }: AgentPanelHeaderProps) {
   const modelLabel = models.find((option) => option.id === model)?.label;
@@ -168,6 +173,9 @@ export function AgentPanelHeader({
       </DropdownMenu>
 
       <div className="ml-auto flex items-center gap-0.5">
+        <PanelIconButton label={historyOpen ? "Back to chat" : "History"} onClick={onToggleHistory} open={historyOpen}>
+          <HistoryIcon {...AGENT_ICON} />
+        </PanelIconButton>
         <PanelIconButton label="New chat" onClick={onNewChat} disabled={!canStartNewChat}>
           <SquarePenIcon {...AGENT_ICON} />
         </PanelIconButton>

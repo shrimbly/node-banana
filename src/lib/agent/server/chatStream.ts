@@ -26,6 +26,7 @@ import { z } from "zod";
 import { logger } from "@/utils/logger";
 import { buildAgentSystemPrompt, buildTurnPrompt } from "../prompt";
 import type { ProviderKeys } from "@/lib/providers/keys";
+import { TOOL_NAMES } from "../tools/definitions";
 import { createAgentToolRuntime, type AgentToolRuntimeOptions } from "../tools/runtime";
 import type {
   AgentChatRequestBody,
@@ -485,6 +486,13 @@ class TurnWriter {
     });
   }
 
+  summary(summary: string): void {
+    const text = summary.replace(/\s+/g, " ").trim().replace(/\.$/, "").slice(0, 80);
+    if (!text) return;
+    // Fixed id: a later rename in the same reply replaces the part.
+    this.writer.write({ type: "data-agent-summary", id: "summary", data: { summary: text } });
+  }
+
   notice(code: AgentErrorCode, message: string): void {
     this.noticeCount++;
     this.clearStatus();
@@ -591,6 +599,7 @@ function findToolDefinition(definitions: readonly AgentToolDefinition[], name: s
 function pendingToolStatus(definitions: readonly AgentToolDefinition[], toolName: string): string {
   const definition = findToolDefinition(definitions, toolName);
   if (!definition) return "Working…";
+  if (definition.name === TOOL_NAMES.nameConversation) return "Working…";
   return definition.readOnly ? "Reading the canvas…" : "Planning edits…";
 }
 
@@ -612,6 +621,15 @@ function wrapToolRuntime(runtime: AgentToolRuntime, turn: TurnWriter, context: {
 
       const definition = findToolDefinition(runtime.definitions, name);
       const toolName = definition?.name ?? name;
+
+      // Housekeeping, not an edit: the label goes to the history, with no card in the chat.
+      if (toolName === TOOL_NAMES.nameConversation) {
+        const result = await runtime.execute(toolName, args);
+        const summary = (args as { summary?: unknown } | null)?.summary;
+        if (result.ok && typeof summary === "string") turn.summary(summary);
+        return result;
+      }
+
       const toolCallId = `call_${generateId()}`;
       turn.toolStarted({ toolCallId, toolName, title: definition?.title ?? toolName, input: args });
 

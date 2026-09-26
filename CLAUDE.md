@@ -399,6 +399,7 @@ All routes in `src/app/api/`:
 - `node-banana-edge-appearance` - User default for connection line style and appearance (thickness, faded opacity, gradient, loading pulse)
 - `node-banana-comfy-apps` - Saved Comfy nodes (workflow + contract + settings)
 - `node-banana-agent-settings` - Agent harness, and model and thinking-effort choice per harness
+- `node-banana-agent-conversations` - Agent chat history (messages, the agent's summary, workflow name; newest 50, size-capped)
 
 ## Git Workflow
 

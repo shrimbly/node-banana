@@ -31,6 +31,8 @@ import { findLatestAgentSession } from "@/lib/agent/client/session";
 import { resolveAgentEffort, resolveAgentModel } from "@/lib/agent/client/settings";
 import { useAgentSettings } from "@/lib/agent/client/useAgentSettings";
 import { useAgentStatus } from "@/lib/agent/client/useAgentStatus";
+import { useAgentHistory } from "@/lib/agent/client/useAgentHistory";
+import type { AgentConversation as SavedConversation } from "@/lib/agent/client/history";
 import {
   AGENT_HARNESS_IDS,
   type AgentDataParts,
@@ -39,6 +41,7 @@ import {
   type AgentHarnessId,
 } from "@/lib/agent/types";
 import { AgentComposer, type AgentComposerProps } from "./AgentComposer";
+import { AgentHistory } from "./AgentHistory";
 import { AgentBillingNote, AgentConversation, AgentEmptyState } from "./AgentConversation";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { AgentAlreadySignedInHint, AgentSignInCard, type AgentBlockedReadiness } from "./AgentSignInCard";
@@ -163,6 +166,24 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
 
   useEffect(() => onBusyChange?.(busy), [busy, onBusyChange]);
 
+  // --- History ---------------------------------------------------------------
+  const history = useAgentHistory();
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const recordConversation = history.record;
+  const { chatId } = chat;
+  // Saved once each turn has finished (and on reopening, which changes nothing).
+  useEffect(() => {
+    if (busy || messages.length === 0) return;
+    recordConversation({
+      id: chatId,
+      messages,
+      workflowName: useWorkflowStore.getState().workflowName ?? undefined,
+      harness: findLatestAgentSession(messages)?.harness ?? harness,
+    });
+    // harness is read, not watched: switching harness is not a change to the conversation.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, messages, chatId, recordConversation]);
+
   // "Sign in" answered already_signed_in: say so, with the terminal command, instead of doing nothing.
   const [alreadySignedIn, setAlreadySignedIn] = useState<{ harness: AgentHarnessId; message?: string } | null>(null);
   // A new turn makes it moot.
@@ -282,8 +303,26 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
 
   const newChat = useCallback(() => {
     chat.newChat();
+    setHistoryOpen(false);
     focusInput();
   }, [chat, focusInput]);
+
+  const openConversation = useCallback(
+    (conversation: SavedConversation) => {
+      if (conversation.id !== chat.chatId) chat.openConversation(conversation);
+      setHistoryOpen(false);
+      focusInput();
+    },
+    [chat, focusInput],
+  );
+  const deleteConversation = useCallback(
+    (id: string) => {
+      history.remove(id);
+      // Deleting the open conversation leaves an empty chat, not a conversation that no longer exists.
+      if (id === chat.chatId) chat.newChat();
+    },
+    [history, chat],
+  );
 
   // The buttons below vanish once clicked (the empty state, the error box). Put
   // the cursor back in the message box: focus left on <body> would send the next
@@ -320,7 +359,17 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
     );
 
   let body;
-  if (hasMessages) {
+  if (historyOpen) {
+    body = (
+      <AgentHistory
+        conversations={history.conversations}
+        currentId={chat.chatId}
+        locked={busy}
+        onOpen={openConversation}
+        onDelete={deleteConversation}
+      />
+    );
+  } else if (hasMessages) {
     body = (
       <AgentConversation
         messages={messages}
@@ -393,10 +442,12 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
           onModelChange={chooseModel}
           canStartNewChat={hasMessages}
           onNewChat={newChat}
+          historyOpen={historyOpen}
+          onToggleHistory={() => setHistoryOpen((shown) => !shown)}
           onClose={close}
         />
         {body}
-        {!hasMessages && ready && <AgentBillingNote harness={harness} />}
+        {!historyOpen && !hasMessages && ready && <AgentBillingNote harness={harness} />}
         {alreadySignedIn?.harness === harness && (
           <div className="shrink-0 px-4 pb-3">
             <AgentAlreadySignedInHint
@@ -410,7 +461,7 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
             />
           </div>
         )}
-        {ready || busy ? (
+        {historyOpen ? null : ready || busy ? (
           <AgentComposer
             status={chat.status}
             busy={busy}

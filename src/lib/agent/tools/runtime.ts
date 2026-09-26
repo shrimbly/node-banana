@@ -72,6 +72,8 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
     [TOOL_NAMES.editWorkflow]: (args) => editWorkflow(draft, args as Args<typeof editWorkflowShape>),
     [TOOL_NAMES.updateNode]: (args) => updateNode(draft, args as Args<typeof updateNodeShape>),
     [TOOL_NAMES.arrangeWorkflow]: (args) => arrangeWorkflow(draft, args as Args<typeof arrangeWorkflowShape>),
+    // The label itself reaches the chat history through the stream (chatStream); the model only needs an ack.
+    [TOOL_NAMES.nameConversation]: () => ({ ok: true, text: "Saved.", summary: "Named the conversation", ops: [] }),
   };
   const schemas = new Map(AGENT_TOOL_DEFINITIONS.map((d) => [d.name, z.object(d.inputShape)]));
 

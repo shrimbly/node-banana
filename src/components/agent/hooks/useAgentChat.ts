@@ -50,6 +50,9 @@ export interface UseAgentChatResult {
   retry: () => void;
   clearError: () => void;
   newChat: () => void;
+  /** The current conversation's id (its key in the history). */
+  chatId: string;
+  openConversation: (saved: { id: string; messages: AgentUIMessage[] }) => void;
 }
 
 interface ChatCallbacks {
@@ -131,8 +134,9 @@ export function useAgentChat({
 
   // Callbacks of a chat replaced by "New chat" (e.g. its abort) are dropped.
   const activeChatRef = useRef<Chat<AgentUIMessage> | null>(null);
-  const createChat = useCallback(() => {
+  const createChat = useCallback((saved?: { id: string; messages: AgentUIMessage[] }) => {
     const instance: Chat<AgentUIMessage> = new Chat<AgentUIMessage>({
+      ...(saved ? { id: saved.id, messages: saved.messages } : {}),
       transport,
       onData: (part) => {
         if (activeChatRef.current === instance) callbacksRef.current?.onData(part);
@@ -146,7 +150,7 @@ export function useAgentChat({
     });
     return instance;
   }, [transport]);
-  const [chat, setChat] = useState(createChat);
+  const [chat, setChat] = useState(() => createChat());
   activeChatRef.current = chat;
   const { messages, status, error, sendMessage, stop, regenerate, clearError } = useChat<AgentUIMessage>({ chat });
 
@@ -253,6 +257,17 @@ export function useAgentChat({
     setChat(createChat());
   }, [busy, beginTurn, chat, createChat]);
 
+  /** Carry on a past conversation: its messages, and its chat id (the harness session resumes from them). */
+  const openConversation = useCallback(
+    (saved: { id: string; messages: AgentUIMessage[] }) => {
+      if (busy) return;
+      beginTurn();
+      setStoppedMessageIds(new Set());
+      setChat(createChat(saved));
+    },
+    [busy, beginTurn, createChat],
+  );
+
   // Leaving the canvas (unmount) must not leave a CLI turn running on the server.
   useEffect(() => () => void activeChatRef.current?.stop(), []);
 
@@ -268,5 +283,7 @@ export function useAgentChat({
     retry,
     clearError,
     newChat,
+    chatId: chat.id,
+    openConversation,
   };
 }

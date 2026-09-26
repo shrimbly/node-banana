@@ -367,6 +367,33 @@ describe("AgentPanel", () => {
     expect(chatBodies[1].sessionId).toBe("session-1");
   });
 
+  it("keeps finished chats in the history, labelled by the agent's summary, and reopens them", async () => {
+    const first = replyChunks({ text: "Built the hero film." });
+    first.splice(3, 0, { type: "data-agent-summary", id: "summary", data: { summary: "Espresso hero film" } });
+    chatChunks.push(first);
+    chatChunks.push(replyChunks({ text: "Changed the ratio." }));
+
+    renderPanel();
+    const textarea = await waitForComposer();
+    fireEvent.change(textarea, { target: { value: "Build a hero film" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(await screen.findByText("Built the hero film.")).toBeInTheDocument();
+
+    // A new chat, then back to the first one from the history.
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    const row = await screen.findByRole("button", { name: /^Espresso hero film/ });
+    fireEvent.click(row);
+    expect(await screen.findByText("Built the hero film.")).toBeInTheDocument();
+
+    // It carries on the same chat and harness session.
+    fireEvent.change(await waitForComposer(), { target: { value: "Make it 9:16" } });
+    fireEvent.keyDown(await waitForComposer(), { key: "Enter" });
+    expect(await screen.findByText("Changed the ratio.")).toBeInTheDocument();
+    expect(chatBodies[1].id).toBe(chatBodies[0].id);
+    expect(chatBodies[1].sessionId).toBe("session-1");
+  });
+
   it("renders a notice inline with a sign-in action", async () => {
     chatChunks.push([
       { type: "start", messageMetadata: { harness: "claude" } },

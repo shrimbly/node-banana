@@ -22,12 +22,15 @@ export function PanelIconButton({
   label,
   onClick,
   disabled,
+  open,
   tooltipAlign = "center",
   children,
 }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
+  /** A toggle that is on (the chrome's open state). */
+  open?: boolean;
   tooltipAlign?: TooltipAlign;
   children: ReactNode;
 }) {
@@ -36,6 +39,7 @@ export function PanelIconButton({
       label={label}
       onClick={onClick}
       disabled={disabled}
+      open={open}
       tooltipPlacement="bottom"
       tooltipAlign={tooltipAlign}
       size="sm"
