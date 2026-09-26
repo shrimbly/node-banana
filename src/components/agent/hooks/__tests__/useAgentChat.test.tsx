@@ -208,3 +208,32 @@ describe("useAgentChat: a turn only edits the canvas it was sent from", () => {
     expect(toastShow).not.toHaveBeenCalled();
   });
 });
+
+describe("useAgentChat: provider keys", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("sends the user's provider keys as headers, never in the body", async () => {
+    const previous = useWorkflowStore.getState();
+    const providerSettings = {
+      providers: {
+        ...previous.providerSettings.providers,
+        openai: { ...previous.providerSettings.providers.openai, apiKey: "sk-panel-openai" },
+        comfy: { ...previous.providerSettings.providers.comfy, apiKey: null },
+      },
+    } as typeof previous.providerSettings;
+    useWorkflowStore.setState({ providerSettings, comfyCloudApiKey: "comfyui-cloud-key" });
+    try {
+      const { stream } = await startTurn();
+      const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+      const headers = new Headers(init.headers);
+      expect(headers.get("X-OpenAI-API-Key")).toBe("sk-panel-openai");
+      expect(headers.get("X-Comfy-Router-Key")).toBe("comfyui-cloud-key");
+      expect(headers.get("Content-Type")).toBe("application/json");
+      expect(String(init.body)).not.toContain("sk-panel-openai");
+      expect(String(init.body)).not.toContain("comfyui-cloud-key");
+      stream.end();
+    } finally {
+      useWorkflowStore.setState({ providerSettings: previous.providerSettings, comfyCloudApiKey: previous.comfyCloudApiKey });
+    }
+  });
+});

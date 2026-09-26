@@ -7,7 +7,7 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { useToast } from "@/components/Toast";
 import { AGENT_CHAT_API } from "@/lib/agent/client/api";
 import { countRenderedParts } from "@/lib/agent/client/messages";
-import { buildAgentChatRequestBody } from "@/lib/agent/client/request";
+import { agentProviderHeaders, buildAgentChatRequestBody, whenProviderKeysReady } from "@/lib/agent/client/request";
 import type {
   AgentDataParts,
   AgentGraphOpBatch,
@@ -94,20 +94,27 @@ export function useAgentChat({
     () =>
       new DefaultChatTransport<AgentUIMessage>({
         api: AGENT_CHAT_API,
-        prepareSendMessagesRequest: ({ id, messages }) => {
+        prepareSendMessagesRequest: async ({ id, messages, headers }) => {
           const { harness: currentHarness, model: currentModel, getViewport: readViewport } = requestRef.current;
           const { nodes, edges, groups, workflowName, canvasGeneration } = useWorkflowStore.getState();
           // The snapshot below is this generation's canvas: the turn's edits only fit it.
           turnGenerationRef.current = canvasGeneration;
+          const body = buildAgentChatRequestBody({
+            chatId: id,
+            messages,
+            harness: currentHarness,
+            model: currentModel,
+            canvas: { nodes, edges, groups, workflowName },
+            viewport: readViewport(),
+          });
+          // The user's provider keys, so the agent can search and set models
+          // from every provider they have one for (read after any desktop
+          // keychain load, like the nodes).
+          await whenProviderKeysReady();
           return {
-            body: buildAgentChatRequestBody({
-              chatId: id,
-              messages,
-              harness: currentHarness,
-              model: currentModel,
-              canvas: { nodes, edges, groups, workflowName },
-              viewport: readViewport(),
-            }),
+            body,
+            // The transport has no headers of its own today (they arrive as a plain record); keep any.
+            headers: { ...(headers as Record<string, string> | undefined), ...agentProviderHeaders(useWorkflowStore.getState()) },
           };
         },
       }),

@@ -12,6 +12,11 @@ vi.mock("@/utils/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+import { logger } from "@/utils/logger";
+import type { ProviderKeys } from "@/lib/providers/keys";
+import type { ProviderModel } from "@/lib/providers/types";
+import { createAgentToolRuntime } from "../../tools/runtime";
+import type { ModelSource } from "../../tools/modelSearch";
 import {
   createAgentChatStream,
   harnessNotReady,
@@ -391,7 +396,68 @@ describe("createAgentChatStream: what the harness is given", () => {
 
     await run({ harness, body: requestBody({ workflow }), createToolRuntime });
 
-    expect(createToolRuntime).toHaveBeenCalledWith(workflow);
+    expect(createToolRuntime).toHaveBeenCalledWith(workflow, expect.objectContaining({ providerKeys: {} }));
+  });
+
+  it("keeps provider keys inside the tool runtime: none reaches the harness, the stream or a log", async () => {
+    const secrets = { openai: "sk-stream-secret-openai", fal: "fal-stream-secret" };
+    const flare: ProviderModel = {
+      id: "gpt-image-2.5-flare",
+      name: "GPT Image 2.5 Flare",
+      description: "OpenAI image generation.",
+      provider: "openai",
+      capabilities: ["text-to-image", "image-to-image"],
+    };
+    const keysSeen: ProviderKeys[] = [];
+    const modelSource: ModelSource = {
+      async listModels(query, keys) {
+        keysSeen.push(keys);
+        const models = !query.provider || query.provider === "openai" ? [flare] : [];
+        return { ok: true, models, providers: { [query.provider ?? "openai"]: { success: true, count: models.length } }, availableProviders: ["gemini", "openai"], cached: false };
+      },
+      async getModelSchema(_provider, _modelId, keys) {
+        keysSeen.push(keys);
+        return { ok: true, parameters: [{ name: "quality", type: "string", enum: ["auto", "high"], default: "auto" }], inputs: [{ name: "prompt", type: "text", required: true, label: "Prompt" }], cached: false };
+      },
+    };
+    const results: AgentToolResult[] = [];
+    const { harness, turns } = fakeHarness(async function* (params) {
+      results.push(await params.tools.execute("search_models", { nodeType: "nanoBanana", query: "flare" }));
+      results.push(await params.tools.execute("update_node", { node: "nanoBanana-1", settings: { model: "gpt-image-2.5-flare", modelParameters: { quality: "high" } } }));
+      yield { type: "text-delta", id: "t1", delta: "Switched it to GPT Image 2.5 Flare." };
+      yield { type: "text-end", id: "t1" };
+    });
+    const workflow: AgentWorkflowSnapshot = {
+      ...emptyWorkflow,
+      nodes: [{ id: "nanoBanana-1", type: "nanoBanana", position: { x: 0, y: 0 }, width: 300, height: 300, data: {} }],
+    };
+
+    const { chunks, message } = await run({
+      harness,
+      body: requestBody({ workflow }),
+      providerKeys: secrets,
+      createToolRuntime: (snapshot, options) => createAgentToolRuntime(snapshot, { ...options, modelSource }),
+      buildSystemPrompt: undefined,
+      buildTurnPrompt: undefined,
+    });
+
+    // The runtime had the keys and used them...
+    expect(keysSeen.length).toBeGreaterThan(0);
+    for (const keys of keysSeen) expect(keys).toEqual(secrets);
+    expect(results.map((r) => r.ok)).toEqual([true, true]);
+    expect(results[1].ops[0]).toMatchObject({ data: { selectedModel: { provider: "openai", modelId: "gpt-image-2.5-flare" }, parameters: { quality: "high" } } });
+    // ...and nothing else did.
+    const { tools, signal: _signal, ...params } = turns[0];
+    const everything = [
+      JSON.stringify(params),
+      JSON.stringify(tools.definitions),
+      JSON.stringify(results),
+      JSON.stringify(chunks),
+      JSON.stringify(message),
+      JSON.stringify([vi.mocked(logger.info).mock.calls, vi.mocked(logger.warn).mock.calls, vi.mocked(logger.error).mock.calls]),
+    ].join("\n");
+    for (const secret of Object.values(secrets)) expect(everything).not.toContain(secret);
+    expect(params.systemPrompt).toContain("search_models");
   });
 });
 

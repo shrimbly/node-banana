@@ -25,7 +25,8 @@ import { z } from "zod";
 
 import { logger } from "@/utils/logger";
 import { buildAgentSystemPrompt, buildTurnPrompt } from "../prompt";
-import { createAgentToolRuntime } from "../tools/runtime";
+import type { ProviderKeys } from "@/lib/providers/keys";
+import { createAgentToolRuntime, type AgentToolRuntimeOptions } from "../tools/runtime";
 import type {
   AgentChatRequestBody,
   AgentErrorCode,
@@ -692,8 +693,15 @@ export interface AgentChatStreamOptions {
   harness: AgentHarness;
   /** The request's signal: the browser stopping or leaving ends the turn. */
   signal: AbortSignal;
+  /**
+   * The user's provider API keys for this turn, read from the request
+   * headers by the route (else the server's .env). They go to the tool
+   * runtime only, for listing models and reading their schemas: never into
+   * the harness's turn (prompts, history, tool text) or a log.
+   */
+  providerKeys?: ProviderKeys;
   /** Defaults to the real tool runtime. */
-  createToolRuntime?: (snapshot: AgentWorkflowSnapshot) => AgentToolRuntime;
+  createToolRuntime?: (snapshot: AgentWorkflowSnapshot, options: AgentToolRuntimeOptions) => AgentToolRuntime;
   /** Defaults to the real system prompt. */
   buildSystemPrompt?: (opts: { harness: AgentHarnessId }) => string;
   /** Defaults to the real turn prompt (canvas context + the user's words). */
@@ -796,7 +804,10 @@ async function runClaimedTurn(
 
   let params: HarnessTurnParams;
   try {
-    const runtime = (options.createToolRuntime ?? createAgentToolRuntime)(body.workflow);
+    const runtime = (options.createToolRuntime ?? createAgentToolRuntime)(body.workflow, {
+      providerKeys: options.providerKeys ?? {},
+      signal,
+    });
     params = {
       history: conversation.history,
       prompt: (options.buildTurnPrompt ?? buildTurnPrompt)({

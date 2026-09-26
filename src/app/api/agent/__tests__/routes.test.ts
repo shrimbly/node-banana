@@ -19,16 +19,17 @@ import type {
   HarnessTurnParams,
 } from "@/lib/agent/types";
 
-const { getHarness } = vi.hoisted(() => ({ getHarness: vi.fn() }));
+const { getHarness, createAgentToolRuntime } = vi.hoisted(() => ({
+  getHarness: vi.fn(),
+  createAgentToolRuntime: vi.fn((..._args: unknown[]) => ({ definitions: [], execute: async () => ({ ok: true, text: "", summary: "", ops: [] }) })),
+}));
 
 vi.mock("@/lib/agent/server/harnesses", () => ({ getHarness }));
 vi.mock("@/lib/agent/prompt", () => ({
   buildAgentSystemPrompt: () => "SYSTEM",
   buildTurnPrompt: ({ userText }: { userText: string }) => `<user>${userText}</user>`,
 }));
-vi.mock("@/lib/agent/tools/runtime", () => ({
-  createAgentToolRuntime: () => ({ definitions: [], execute: vi.fn() }),
-}));
+vi.mock("@/lib/agent/tools/runtime", () => ({ createAgentToolRuntime }));
 vi.mock("@/utils/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
@@ -170,14 +171,20 @@ function postStream(path: string, stream: ReadableStream<Uint8Array>) {
   } as ConstructorParameters<typeof NextRequest>[1]);
 }
 
+/** Provider keys the server's own .env could supply; blanked so only the request's headers count. */
+const PROVIDER_ENV = ["OPENAI_API_KEY", "FAL_API_KEY", "REPLICATE_API_KEY", "KIE_API_KEY", "WAVESPEED_API_KEY", "GEMINI_API_KEY", "COMFY_API_KEY", "COMFY_CLOUD_API_KEY"];
+
 beforeEach(() => {
   getHarness.mockReset();
+  createAgentToolRuntime.mockClear();
+  for (const name of PROVIDER_ENV) vi.stubEnv(name, "");
   // server.js sets this at startup; the tests for a server that doesn't vouch delete it.
   process.env[AGENT_LOCAL_SECRET_ENV] = LOCAL_SECRET;
 });
 
 afterEach(() => {
   delete process.env[AGENT_LOCAL_SECRET_ENV];
+  vi.unstubAllEnvs();
 });
 
 describe("POST /api/agent/chat", () => {
@@ -240,12 +247,50 @@ describe("POST /api/agent/chat", () => {
     });
   });
 
+  it("hands the provider keys from the request's headers to the tool runtime, and to nothing the harness sees", async () => {
+    const { harness, turns } = fakeHarness("claude", [{ type: "text-delta", id: "t1", delta: "ok" }, { type: "text-end", id: "t1" }]);
+    getHarness.mockReturnValue(harness);
+    const body = chatBody();
+
+    const response = await chatPOST(
+      post("/api/agent/chat", body, {
+        ...SAME_ORIGIN,
+        "X-OpenAI-API-Key": "sk-route-openai",
+        "X-Fal-Key": "fal-route-key",
+        "X-Comfy-Router-Key": "comfyui-route-key",
+      })
+    );
+    const text = await response.text();
+
+    expect(createAgentToolRuntime).toHaveBeenCalledTimes(1);
+    const [snapshot, options] = createAgentToolRuntime.mock.calls[0] as [unknown, { providerKeys: Record<string, string>; signal: AbortSignal }];
+    expect(snapshot).toEqual(body.workflow);
+    expect(options.providerKeys).toEqual({ openai: "sk-route-openai", fal: "fal-route-key", comfy: "comfyui-route-key" });
+    expect(options.signal).toBeInstanceOf(AbortSignal);
+    const { tools: _tools, signal: _signal, ...seen } = turns[0];
+    for (const secret of ["sk-route-openai", "fal-route-key", "comfyui-route-key"]) {
+      expect(JSON.stringify(seen)).not.toContain(secret);
+      expect(text).not.toContain(secret);
+    }
+  });
+
+  it("falls back to the server's .env keys when the request has none", async () => {
+    vi.stubEnv("OPENAI_API_KEY", "sk-from-env");
+    const { harness } = fakeHarness("claude");
+    getHarness.mockReturnValue(harness);
+
+    await (await chatPOST(post("/api/agent/chat", chatBody()))).text();
+
+    expect(createAgentToolRuntime.mock.calls[0][1]).toMatchObject({ providerKeys: { openai: "sk-from-env" } });
+  });
+
   it("refuses a cross-site request before touching the harness", async () => {
-    const response = await chatPOST(post("/api/agent/chat", chatBody(), CROSS_SITE));
+    const response = await chatPOST(post("/api/agent/chat", chatBody(), { ...CROSS_SITE, "X-OpenAI-API-Key": "sk-cross-site" }));
 
     expect(response.status).toBe(403);
     expect(await response.text()).toContain("cross-site");
     expect(getHarness).not.toHaveBeenCalled();
+    expect(createAgentToolRuntime).not.toHaveBeenCalled();
   });
 
   it.each([

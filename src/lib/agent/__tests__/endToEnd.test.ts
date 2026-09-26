@@ -40,6 +40,12 @@ vi.stubGlobal("localStorage", {
 });
 
 import { useWorkflowStore } from "@/store/workflowStore";
+import { sameInputSchema } from "@/components/nodes/ui/schemaSockets";
+import type { ProviderKeys } from "@/lib/providers/keys";
+import type { ModelInputDef } from "@/types";
+import { getModelSchema } from "@/lib/providers/schema";
+import { createDefaultNodeData, defaultNodeDimensions } from "@/store/utils/nodeDefaults";
+import { applyGraphOps } from "../graph/applyOps";
 import { buildAgentChatRequestBody } from "../client/request";
 import { getInputHandles, getOutputHandles, isValidConnectionPort, type GraphNodeLike } from "../graph/handles";
 import { createAgentChatStream, parseAgentChatRequest, type AgentUIMessageChunk } from "../server/chatStream";
@@ -88,7 +94,7 @@ function scriptedHarness(script: (params: HarnessTurnParams) => AsyncGenerator<H
  * re-parsed as the route would), graph-ops applied to the store as they
  * arrive, the final message kept for the next turn's history.
  */
-async function runPanelTurn(harness: AgentHarness, messages: AgentUIMessage[]) {
+async function runPanelTurn(harness: AgentHarness, messages: AgentUIMessage[], providerKeys: ProviderKeys = {}) {
   const { nodes, edges, groups, workflowName } = useWorkflowStore.getState();
   const wire = JSON.parse(
     JSON.stringify(
@@ -104,7 +110,7 @@ async function runPanelTurn(harness: AgentHarness, messages: AgentUIMessage[]) {
   const parsed = parseAgentChatRequest(wire);
   if (!parsed.ok) throw new Error(parsed.message);
 
-  const stream = createAgentChatStream({ body: parsed.body, harness, signal: new AbortController().signal });
+  const stream = createAgentChatStream({ body: parsed.body, harness, signal: new AbortController().signal, providerKeys });
   const chunks: AgentUIMessageChunk[] = [];
   const batches: AgentGraphOpBatch[] = [];
   let revertPoint = true;
@@ -301,6 +307,71 @@ describe("agent end to end (scripted harness, real bridge, runtime, prompts and 
     ({ nodes, groups } = useWorkflowStore.getState());
     expect(groups["group-ag1"]).toMatchObject({ name: "Establishing shot", color: "green" });
     expect(nodes.filter((n) => n.groupId === "group-ag1")).toHaveLength(2);
+  });
+
+  it("switches a generator to an OpenAI model found by search, as the store and the next turn see it", async () => {
+    // The OpenAI and Gemini catalogs and schemas are fixed: no request goes out.
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      throw new Error("no network in this test");
+    });
+    try {
+      useWorkflowStore.setState({
+        nodes: [
+          { id: "prompt-1", type: "prompt", position: { x: 0, y: 0 }, data: { ...createDefaultNodeData("prompt"), prompt: "a lighthouse at dawn" } },
+          { id: "nanoBanana-2", type: "nanoBanana", position: { x: 400, y: 0 }, data: { ...createDefaultNodeData("nanoBanana") } },
+        ] as never,
+        edges: [{ id: "edge-prompt-1-nanoBanana-2-text-text", source: "prompt-1", sourceHandle: "text", target: "nanoBanana-2", targetHandle: "text" }],
+      });
+      const before = useWorkflowStore.getState();
+      const keys = { openai: "sk-e2e-openai-key" };
+      const first = scriptedHarness(async function* (params) {
+        const search = await params.tools.execute("mcp__node_banana__search_models", { nodeType: "nanoBanana", query: "gpt 2.5 flare" });
+        expect(search.text).toContain("- openai gpt-image-2.5-flare");
+        const result = await params.tools.execute("mcp__node_banana__update_node", {
+          node: "nanoBanana-2",
+          settings: { model: "gpt-image-2.5-flare", modelParameters: { quality: "high" } },
+        });
+        expect(result.ok, result.text).toBe(true);
+        yield { type: "text-delta", id: "t", delta: "Switched it to GPT Image 2.5 Flare." };
+        yield { type: "text-end", id: "t" };
+      });
+      const turn = await runPanelTurn(first.harness, [{ id: "u1", role: "user", parts: [{ type: "text", text: "Switch this generator to OpenAI GPT Image 2.5 Flare." }] }], keys);
+
+      // The store holds exactly what the node shows once rendered.
+      const schema = await getModelSchema("openai", "gpt-image-2.5-flare", {});
+      if (!schema.ok) throw new Error(schema.error);
+      const node = useWorkflowStore.getState().nodes.find((n) => n.id === "nanoBanana-2")!;
+      expect(node.data).toMatchObject({
+        selectedModel: { provider: "openai", modelId: "gpt-image-2.5-flare", displayName: "GPT Image 2.5 Flare" },
+        parameters: { size: "auto", quality: "high", background: "auto", output_format: "png", output_compression: 100 },
+      });
+      expect(sameInputSchema(node.data.inputSchema as ModelInputDef[], schema.inputs)).toBe(true);
+      expectValidEdges();
+
+      // The store's action and the pure replay agree.
+      const replayed = applyGraphOps({ nodes: before.nodes, edges: before.edges, groups: before.groups }, turn.batches.flatMap((b) => b.ops), {
+        createDefaultNodeData: (type) => createDefaultNodeData(type),
+        defaultNodeDimensions,
+        now: () => 1,
+      });
+      expect(replayed.nodes.find((n) => n.id === "nanoBanana-2")!.data).toEqual(node.data);
+
+      // Keys went to the tools only.
+      const { tools: _tools, signal: _signal, ...seen } = first.turns[0];
+      expect(JSON.stringify([seen, turn.chunks, turn.message])).not.toContain(keys.openai);
+
+      // The next turn's canvas names the model and its settings.
+      const second = scriptedHarness(async function* (params) {
+        expect(params.prompt).toContain('model "GPT Image 2.5 Flare" (openai gpt-image-2.5-flare), modelParameters size "auto", quality "high"');
+        yield { type: "text-delta", id: "t", delta: "It uses GPT Image 2.5 Flare." };
+        yield { type: "text-end", id: "t" };
+      });
+      await runPanelTurn(second.harness, [{ id: "u2", role: "user", parts: [{ type: "text", text: "Which model is it on?" }] }], keys);
+      expect(second.turns).toHaveLength(1);
+      expect(fetchSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 
   it("reports a rejected tool call as a tool error and leaves the canvas alone", async () => {

@@ -60,7 +60,9 @@ export type CatalogSettingKind =
   | "boolean"
   | "enum"
   | "list"
-  | "object";
+  | "object"
+  /** A model id string, or {provider, modelId}, from search_models. */
+  | "model";
 
 export interface CatalogSetting {
   field: string;
@@ -356,9 +358,15 @@ const isOptionalSetting: CatalogSetting = {
   default: "false",
 };
 
-const IMAGE_MODEL_IDS = IMAGE_MODELS.map((m) => m.id);
-const VIDEO_MODEL_IDS = VIDEO_MODELS.map((m) => m.id);
+const modelParametersSetting: CatalogSetting = {
+  field: "modelParameters",
+  kind: "object",
+  description:
+    "The chosen model's own settings (what the node's settings card shows), e.g. {\"size\": \"1536x1024\", \"quality\": \"high\"} on an OpenAI image model. Names and allowed values come from the model's schema: setting the model lists them, and a wrong name is rejected with the valid ones. Merged over the current values; null resets one to its default.",
+};
+
 const LLM_MODEL_IDS = LLM_PROVIDERS.flatMap((p) => p.models.map((m) => m.id));
+const IMAGE_MODEL_IDS = IMAGE_MODELS.map((m) => m.id);
 const title = (type: NodeType): string => NODE_TITLES[type] ?? type;
 
 export const NODE_CATALOG: Record<NodeType, NodeCatalogEntry> = {
@@ -487,23 +495,24 @@ export const NODE_CATALOG: Record<NodeType, NodeCatalogEntry> = {
     ],
     outputs: [img("image", "Image")],
     settings: [
-      { field: "model", kind: "enum", values: IMAGE_MODEL_IDS, description: "Gemini image model (see list_models). Other providers' models must be chosen by the user in the node.", default: "omit to use the user's saved default (nano-banana-pro if none)" },
+      { field: "model", kind: "model", description: `Any image model search_models finds for a provider the user has a key for: a Gemini id (${IMAGE_MODEL_IDS.join(", ")}) or another provider's (OpenAI, fal, Replicate, Kie, WaveSpeed, ComfyUI) as its exact id or {"provider": "...", "modelId": "..."}.`, default: "omit to use the user's saved default (nano-banana-pro if none)" },
       { field: "aspectRatio", kind: "enum", values: EXTENDED_ASPECT_RATIOS, description: "Output aspect ratio. 1:4, 1:8, 4:1 and 8:1 need nano-banana-2.", default: "omit to use the user's saved default (1:1 if none)" },
       { field: "resolution", kind: "enum", values: ALL_RESOLUTIONS, description: "nano-banana-pro: 1K|2K|4K; nano-banana-2: 512|1K|2K|4K; others have none.", default: "omit to use the user's saved default (1K if none)" },
       { field: "useGoogleSearch", kind: "boolean", description: "Ground the image in Google Search (nano-banana-pro, nano-banana-2).", default: "false" },
       { field: "useImageSearch", kind: "boolean", description: "Use image search (nano-banana-2 only).", default: "false" },
+      { ...modelParametersSetting, description: `Other providers' models only (Gemini image models use the fields above). ${modelParametersSetting.description}` },
     ],
     agentCreatable: true,
     notes: [
       "Always connect a text input (a Prompt or LLM). Images are optional; several may be connected.",
-      "Gemini models need the Gemini API key. For fal/Replicate/Kie/OpenAI/ComfyUI models, tell the user to pick the model in the node.",
+      "aspectRatio, resolution and the search options apply to Gemini models; other providers' models take modelParameters instead. Each provider needs its API key, which the user adds in Settings → Providers.",
     ],
     dataFields: ["model", "selectedModel", "aspectRatio", "resolution", "useGoogleSearch", "useImageSearch", "parameters", "inputSchema"],
   },
   generateVideo: {
     type: "generateVideo",
     displayName: title("generateVideo"),
-    purpose: "Generates a video. Veo text-to-video uses a prompt; image-to-video animates a connected image; Gemini Omni takes a prompt plus optional images, a video to edit and audio.",
+    purpose: "Generates a video from a prompt and, depending on the model, start or reference images, a video to edit, or audio.",
     inputs: [
       img("image", "Image", { multi: true, note: "before a model with inputs is chosen" }),
       vid("video", "Video"),
@@ -516,16 +525,17 @@ export const NODE_CATALOG: Record<NodeType, NodeCatalogEntry> = {
     ],
     outputs: [vid("video", "Video")],
     settings: [
-      { field: "model", kind: "enum", values: VIDEO_MODEL_IDS, description: "Gemini video model (Veo or Gemini Omni, see list_models). Changing it changes the input handles.", default: "omit to use the user's saved default (none if they have not saved one)" },
+      { field: "model", kind: "model", description: "Any video model search_models finds (Veo and Gemini Omni on the Gemini key, Kling, Seedance, Sora… on other providers' keys): its exact id or {\"provider\": \"...\", \"modelId\": \"...\"}. Changing it changes the input handles.", default: "omit to use the user's saved default (none if they have not saved one)" },
       { field: "aspectRatio", kind: "enum", values: videoParameterValues("aspectRatio"), description: "Veo and Omni.", default: "16:9" },
       { field: "durationSeconds", kind: "enum", values: videoParameterValues("durationSeconds"), description: "Veo only: clip length in seconds (Omni takes the duration from the prompt).", default: "8" },
       { field: "resolution", kind: "enum", values: videoParameterValues("resolution"), description: "Veo: 720p|1080p|4k; Omni: 360p|720p|1080p|4k.", default: "720p" },
       { field: "task", kind: "enum", values: videoParameterValues("task"), description: "Omni only: auto infers the task from the prompt; choose one only when the user asks for explicit control.", default: "auto" },
+      modelParametersSetting,
     ],
     agentCreatable: true,
     notes: [
-      "Set `model` to a Veo or Gemini Omni id (both need the Gemini API key) or tell the user to pick another provider's model in the node.",
-      "With a Veo model the handles are image-0 (I2V only), text-0 (prompt) and text-1 (negative prompt); use toHandle \"negative_prompt\" for the negative prompt. With Omni they are image-0 (reference images), video-0, audio-0 and text-0 (prompt).",
+      "Set `model` to an id from search_models (nodeType generateVideo). aspectRatio, durationSeconds, resolution and task are shortcuts for Gemini video models; any model's own settings go in modelParameters.",
+      "Handles follow the model's inputs, numbered per type (image-0, image-1, text-0, text-1…; the result of setting the model lists them); a schema input name such as \"negative_prompt\" also works as toHandle. With a Veo model they are image-0 (I2V only), text-0 (prompt) and text-1 (negative prompt). With Omni they are image-0 (reference images), video-0, audio-0 and text-0 (prompt).",
     ],
     dataFields: ["selectedModel", "parameters", "inputSchema"],
   },
@@ -535,10 +545,13 @@ export const NODE_CATALOG: Record<NodeType, NodeCatalogEntry> = {
     purpose: "Generates a 3D model (GLB) from an image and/or a prompt.",
     inputs: [img("image", "Image"), txt("text", "Prompt")],
     outputs: [{ id: "3d", type: "3d", label: "3D" }],
-    settings: [],
+    settings: [
+      { field: "model", kind: "model", description: "A 3D model from search_models (nodeType generate3d; fal, Replicate, Kie, WaveSpeed or ComfyUI): its exact id or {\"provider\": \"...\", \"modelId\": \"...\"}. The handles follow the model's inputs.", default: "omit to use the user's saved default (none if they have not saved one)" },
+      modelParametersSetting,
+    ],
     agentCreatable: true,
     notes: [
-      "There is no Gemini 3D model: the user must pick a model in the node (needs a fal, Replicate, Kie or ComfyUI key). You cannot set it.",
+      "There is no Gemini 3D model: set one from search_models, or when none is available tell the user which provider key to add in Settings → Providers.",
       "Connect its 3d output to a 3D Viewer to see the result.",
     ],
     dataFields: ["selectedModel", "parameters", "inputSchema"],
@@ -549,9 +562,12 @@ export const NODE_CATALOG: Record<NodeType, NodeCatalogEntry> = {
     purpose: "Generates speech, music or sound effects from text.",
     inputs: [txt("text", "Prompt", { note: "handles follow the chosen model's inputs once one is picked" })],
     outputs: [aud("audio", "Audio")],
-    settings: [],
+    settings: [
+      { field: "model", kind: "model", description: "A speech, music or sound model from search_models (nodeType generateAudio; Kie, fal, Replicate, WaveSpeed or ComfyUI): its exact id or {\"provider\": \"...\", \"modelId\": \"...\"}.", default: "omit to use the user's saved default (none if they have not saved one)" },
+      modelParametersSetting,
+    ],
     agentCreatable: true,
-    notes: ["Audio models come from Kie, fal, Replicate or ComfyUI: the user must pick one in the node. You cannot set it."],
+    notes: ["With a model chosen, the input handles are the model's input names (e.g. \"prompt\" or \"text\"), as the result of setting the model lists them. There is no Gemini audio model."],
     dataFields: ["selectedModel", "parameters", "inputSchema"],
   },
   llmGenerate: {
@@ -562,7 +578,7 @@ export const NODE_CATALOG: Record<NodeType, NodeCatalogEntry> = {
     outputs: [txt("text", "Text")],
     settings: [
       { field: "provider", kind: "enum", values: LLM_PROVIDERS.map((p) => p.id), description: "google needs a Gemini key; openai and anthropic need their own keys.", default: `${DEFAULT_LLM_PROVIDER} (or the user's saved default)` },
-      { field: "model", kind: "enum", values: LLM_MODEL_IDS, description: "Must belong to the provider (see list_models). Setting a model of another provider switches the provider.", default: `${DEFAULT_LLM_MODEL} (or the user's saved default)` },
+      { field: "model", kind: "enum", values: LLM_MODEL_IDS, description: "Must belong to the provider (see search_models with nodeType llmGenerate). Setting a model of another provider switches the provider.", default: `${DEFAULT_LLM_MODEL} (or the user's saved default)` },
       { field: "temperature", kind: "number", min: 0, max: 2, description: "0-2 (anthropic: 0-1).", default: "0.7" },
       { field: "maxTokens", kind: "integer", min: LLM_MAX_TOKENS.min, max: LLM_MAX_TOKENS.max, description: "Maximum output tokens.", default: "8192" },
     ],

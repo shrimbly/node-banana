@@ -2,10 +2,13 @@
  * Turning the agent's `settings` into a `node.data` patch.
  *
  * Settings are a whitelist per node type (catalog.ts). Friendly fields map to
- * the real data: `model` on Generate Image writes both `model` and
- * `selectedModel`; Veo settings land in `parameters`; `switches` and `rules`
- * keep the ids (= handle ids) of the entries they match. Every rejection names
- * the valid values so the model can fix its call in one step.
+ * the real data: a Gemini `model` on Generate Image writes both `model` and
+ * `selectedModel`; any other provider's model (looked up by the tool runtime
+ * beforehand, see ./models.ts) writes what the node ends up with once it has
+ * loaded the model's schema; `modelParameters` and the Veo settings land in
+ * `parameters`; `switches` and `rules` keep the ids (= handle ids) of the
+ * entries they match. Every rejection names the valid values so the model can
+ * fix its call in one step.
  */
 
 import type { LLMProvider, NodeType } from "@/types";
@@ -34,6 +37,22 @@ import {
 } from "./catalog";
 import type { GraphNodeLike } from "./handles";
 import {
+  describeParameters,
+  fitsNodeType,
+  MODEL_PROVIDER_LABELS,
+  NODE_TYPE_CAPABILITIES,
+  providerModelPatch,
+  normalizeProvider,
+  parseModelRef,
+  type AgentModelResolver,
+  type GenerateNodeType,
+  type ModelProvider,
+  type ModelSchemaLike,
+  type ResolvedModel,
+} from "./models";
+import { validateOpenAIImageParameters } from "@/lib/providers/openaiImages";
+import type { ModelParameter } from "@/lib/providers/types";
+import {
   cloneJson,
   containsMarker,
   containsOmitted,
@@ -55,11 +74,18 @@ export interface SettingsOutcome {
   changes: string[];
   /** The model changed in a way that can change the node's handles. */
   handlesMayChange: boolean;
+  /** Worth telling the agent, e.g. the settings a newly chosen model takes. */
+  notes: string[];
 }
 
 export interface SettingsContext {
   /** A fresh random id (7 base36 chars), for new switch outputs and rules. */
   newId: () => string;
+  /**
+   * Provider models looked up before the call (search, schemas). Without it
+   * only Gemini models can be set, from the built-in catalog.
+   */
+  models?: AgentModelResolver;
 }
 
 const MAX_STRING = 50_000;
@@ -86,7 +112,7 @@ export function resolveSettings(
   settings: Record<string, unknown> | undefined,
   context: SettingsContext,
 ): SettingsOutcome {
-  const out: SettingsOutcome = { patch: {}, errors: [], warnings: [], changes: [], handlesMayChange: false };
+  const out: SettingsOutcome = { patch: {}, errors: [], warnings: [], changes: [], handlesMayChange: false, notes: [] };
   if (!settings) return out;
   if (typeof settings !== "object" || Array.isArray(settings)) {
     out.errors.push("settings must be an object of field → value.");
@@ -154,11 +180,12 @@ function unknownFieldError(type: NodeType, label: string, key: string, allowed: 
   if (GENERATOR_TYPES.has(type) && PROMPT_LIKE_FIELDS.has(normalized)) {
     return `${label} has no "${key}" setting: its prompt comes from the node connected to its text input. Put the text in a Prompt node (settings.prompt) and connect it to this node's text input.`;
   }
-  if ((type === "generate3d" || type === "generateAudio") && (normalized === "model" || normalized === "provider" || normalized === "selectedmodel")) {
-    return `${label}: you cannot set this node's model. ${NODE_CATALOG[type].displayName} models come from fal, Replicate, Kie or ComfyUI; tell the user to pick one in the node.`;
+  if (isModelNodeType(type) && (normalized === "provider" || normalized === "modelid")) {
+    return `${label}: set "model" instead, to an id from search_models (a string, or {"provider": "...", "modelId": "..."}). Settable: ${valid || "none"}.`;
   }
   if (normalized === "parameters") {
-    return `${label}: "parameters" cannot be set directly.${type === "generateVideo" ? " For Gemini video models use aspectRatio, resolution, durationSeconds (Veo) and task (Omni)." : ""} Settable: ${valid || "none"}.`;
+    const own = isModelNodeType(type) ? ` Use modelParameters {name: value} for the model's own settings (names from the error or the result of setting the model).${type === "generateVideo" ? " For Gemini video models aspectRatio, resolution, durationSeconds (Veo) and task (Omni) also work." : ""}` : "";
+    return `${label}: "parameters" cannot be set directly.${own} Settable: ${valid || "none"}.`;
   }
   const reason = Object.entries(NEVER_SETTABLE).find(([field]) => normalizeKey(field) === normalized)?.[1];
   if (reason) {
@@ -270,6 +297,8 @@ function coerceField(run: FieldRun, field: string, value: unknown): Coerced {
 const CUSTOM_HANDLERS: Partial<Record<NodeType, Handler>> = {
   nanoBanana: handleGenerateImage,
   generateVideo: handleGenerateVideo,
+  generate3d: handleProviderModelNode,
+  generateAudio: handleProviderModelNode,
   llmGenerate: handleLLM,
   prompt: handlePrompt,
   promptConstructor: handlePromptConstructor,
@@ -342,29 +371,40 @@ function handleGenerateImage(run: FieldRun): void {
   const currentModelId = currentProvider === "gemini" ? selected?.modelId || (node.data.model as string | undefined) : undefined;
 
   const modelSetting = take(run, "model");
+  const modelParameters = take(run, "modelParameters");
   const aspect = take(run, "aspectRatio");
   const resolution = take(run, "resolution");
   const googleSearch = take(run, "useGoogleSearch");
   const imageSearch = take(run, "useImageSearch");
   let spec: ImageModelSpec | undefined = getImageModel(currentModelId);
   let modelChanged = false;
+  let chosen: ResolvedModel | undefined;
   if (modelSetting.present) {
-    const resolved = resolveImageModelId(modelSetting.value);
-    if (!resolved) {
-      out.errors.push(
-        `${label}: model ${formatValue(modelSetting.value)} is not a Gemini image model. Use one of: ${IMAGE_MODELS.map((m) => m.id).join(", ")}. Other providers' models (fal, Replicate, Kie, OpenAI, ComfyUI) must be picked by the user in the node.`,
-      );
+    const decision = decideModel(run, "nanoBanana", modelSetting.value);
+    if (decision.kind === "error") {
+      out.errors.push(`${label}: ${decision.error}`);
       return;
     }
-    spec = resolved;
-    modelChanged = resolved.id !== currentModelId || currentProvider !== "gemini";
-    set(out, "model", resolved.id, `model=${resolved.id}`);
-    out.patch.selectedModel = { provider: "gemini", modelId: resolved.id, displayName: resolved.label };
-    if (currentProvider !== "gemini") {
-      // The node's sockets are fixed (image, text), so its handles stay; only the old model's settings go.
-      out.patch.parameters = {};
-      out.patch.inputSchema = [];
-      out.warnings.push(`${node.id} switched from ${selected?.displayName || currentProvider} (${currentProvider}) to ${resolved.label}; that model's parameters were cleared.`);
+    if (decision.kind === "provider") {
+      // Another provider's model: what the browse dialog writes, completed as
+      // the node completes it once its schema loads. Gemini-only fields stay
+      // as they are, unused, exactly as when the user picks the model.
+      spec = undefined;
+      chosen = decision.resolved;
+      modelChanged = true;
+      applyProviderModel(run, "nanoBanana", decision.resolved);
+    } else if (decision.kind === "gemini-image") {
+      const resolved = decision.spec;
+      spec = resolved;
+      modelChanged = resolved.id !== currentModelId || currentProvider !== "gemini";
+      set(out, "model", resolved.id, `model=${resolved.id}`);
+      out.patch.selectedModel = { provider: "gemini", modelId: resolved.id, displayName: resolved.label };
+      if (currentProvider !== "gemini") {
+        // The node's sockets are fixed (image, text), so its handles stay; only the old model's settings go.
+        out.patch.parameters = {};
+        out.patch.inputSchema = [];
+        out.warnings.push(`${node.id} switched from ${selected?.displayName || currentProvider} (${currentProvider}) to ${resolved.label}; that model's parameters were cleared.`);
+      }
     }
   }
 
@@ -372,11 +412,16 @@ function handleGenerateImage(run: FieldRun): void {
 
   if (!spec) {
     if (touchesGeminiOptions) {
+      const name = chosen ? `${chosen.model.name} (${chosen.model.provider})` : `${selected?.displayName || "a non-Gemini model"} (${currentProvider})`;
       out.errors.push(
-        `${label} uses ${selected?.displayName || "a non-Gemini model"} (${currentProvider}); aspectRatio, resolution and the search options apply to Gemini models only. Set model to a Gemini model in the same call, or ask the user to change this model's parameters in the node.`,
+        `${label} uses ${name}; aspectRatio, resolution and the search options apply to Gemini models only. Set this model's own settings with modelParameters (e.g. {"modelParameters": {"size": "1536x1024"}}), or set model to a Gemini model in the same call.`,
       );
     }
+    applyModelParameters(run, "nanoBanana", modelParameters, chosen);
     return;
+  }
+  if (modelParameters.present) {
+    out.errors.push(`${label}: ${spec.label} (Gemini) has no modelParameters; its settings are aspectRatio, resolution, useGoogleSearch and useImageSearch.`);
   }
 
   if (aspect.present) {
@@ -464,50 +509,290 @@ function handleGenerateVideo(run: FieldRun): void {
   let parameters: Record<string, unknown> = isRecord(node.data.parameters) ? cloneJson(node.data.parameters) : {};
 
   const modelSetting = take(run, "model");
+  const modelParameters = take(run, "modelParameters");
   const provided = VIDEO_PARAMETER_FIELDS.map((field) => ({ field, ...take(run, field) })).filter((f) => f.present);
+  let chosen: ResolvedModel | undefined;
   if (modelSetting.present) {
-    const resolved = resolveVideoModelId(modelSetting.value);
-    if ("error" in resolved) {
-      out.errors.push(`${label}: ${resolved.error}`);
+    const decision = decideModel(run, "generateVideo", modelSetting.value);
+    if (decision.kind === "error") {
+      out.errors.push(`${label}: ${decision.error}`);
       return;
     }
-    spec = getVideoModel(resolved.id)!;
-    parameters = {};
-    // What picking the model in the node writes (modelSelectionData): the
-    // selection, cleared parameters and the schema that defines the handles.
-    set(out, "selectedModel", { provider: "gemini", modelId: spec.id, displayName: spec.label }, `model=${spec.id}`);
-    out.patch.parameters = parameters;
-    out.patch.inputSchema = cloneJson(spec.inputSchema);
-    out.handlesMayChange = true;
+    if (decision.kind === "provider" || (decision.kind === "gemini-video" && decision.resolved)) {
+      // What the node ends up with: the browse dialog's selection, then the
+      // schema's defaults and inputs (which define the handles).
+      chosen = decision.resolved!;
+      spec = decision.kind === "gemini-video" ? decision.spec : undefined;
+      applyProviderModel(run, "generateVideo", chosen);
+      parameters = cloneJson(out.patch.parameters as Record<string, unknown>);
+    } else if (decision.kind === "gemini-video") {
+      spec = decision.spec;
+      parameters = {};
+      // What picking the model in the node writes (modelSelectionData): the
+      // selection, cleared parameters and the schema that defines the handles.
+      set(out, "selectedModel", { provider: "gemini", modelId: spec.id, displayName: spec.label }, `model=${spec.id}`);
+      out.patch.parameters = parameters;
+      out.patch.inputSchema = cloneJson(spec.inputSchema);
+      out.handlesMayChange = true;
+    }
   }
 
-  if (provided.length === 0) return;
-  if (!spec) {
-    out.errors.push(
-      `${label}: ${provided.map((f) => f.field).join(", ")} can only be set for Gemini video models (Veo, Gemini Omni), and this node uses ${selected?.displayName || "no model yet"}. Set model to one in the same call, or ask the user to change the model's parameters in the node.`,
-    );
+  if (provided.length > 0) {
+    if (!spec) {
+      const name = chosen ? chosen.model.name : selected?.displayName || "no model yet";
+      out.errors.push(
+        `${label}: ${provided.map((f) => f.field).join(", ")} can only be set this way for Gemini video models (Veo, Gemini Omni), and this node uses ${name}. Use modelParameters for this model's own settings, or set model to a Gemini video model in the same call.`,
+      );
+      return;
+    }
+    if (!modelSetting.present && containsOmitted(parameters)) {
+      out.errors.push(`${label}: its current parameters are too large to edit safely here; ask the user to change them in the node.`);
+      return;
+    }
+    for (const { field, value } of provided) {
+      const values = spec.parameters[field];
+      if (!values) {
+        const own = Object.keys(spec.parameters);
+        out.errors.push(`${label}: ${spec.label} has no ${field} setting${field === "durationSeconds" && spec.family === "omni" ? " (Omni takes the duration, 3-10 seconds, from the prompt)" : ""}. Its settings: ${own.join(", ")}.`);
+        continue;
+      }
+      const match = matchEnum(values, typeof value === "number" ? String(value) : value);
+      if (match === undefined) {
+        out.errors.push(`${label}: ${field} must be one of: ${values.join(", ")} on ${spec.label} (got ${formatValue(value)}).`);
+        continue;
+      }
+      parameters[field] = match;
+      out.changes.push(`${field}=${match}`);
+    }
+    out.patch.parameters = parameters;
+  }
+  applyModelParameters(run, "generateVideo", modelParameters, chosen);
+}
+
+// --- Generate 3D / Generate Audio -------------------------------------------
+
+/** Nodes whose only settings are a provider model and its parameters. */
+function handleProviderModelNode(run: FieldRun): void {
+  const type = run.node.type as GenerateNodeType;
+  const modelSetting = take(run, "model");
+  const modelParameters = take(run, "modelParameters");
+  let chosen: ResolvedModel | undefined;
+  if (modelSetting.present) {
+    const decision = decideModel(run, type, modelSetting.value);
+    if (decision.kind === "error") {
+      run.out.errors.push(`${run.label}: ${decision.error}`);
+      return;
+    }
+    if (decision.kind !== "provider") {
+      run.out.errors.push(`${run.label}: Gemini has no ${NODE_CATALOG[type].displayName} models; call search_models with nodeType "${type}".`);
+      return;
+    }
+    chosen = decision.resolved;
+    applyProviderModel(run, type, chosen);
+  }
+  applyModelParameters(run, type, modelParameters, chosen);
+}
+
+// --- Provider models (all generation nodes) ---------------------------------
+
+export function isModelNodeType(type: NodeType): type is GenerateNodeType {
+  return type === "nanoBanana" || type === "generateVideo" || type === "generate3d" || type === "generateAudio";
+}
+
+type ModelDecision =
+  | { kind: "error"; error: string }
+  | { kind: "gemini-image"; spec: ImageModelSpec }
+  /** `resolved` is present when the model was looked up (its schema is then what the node loads). */
+  | { kind: "gemini-video"; spec: VideoModelSpec; resolved?: ResolvedModel }
+  | { kind: "provider"; resolved: ResolvedModel };
+
+/**
+ * What a `settings.model` value names. With the runtime's lookups, any
+ * provider's model (the runtime already checked keys, capability and
+ * ambiguity); without them, only the Gemini models of the built-in catalog.
+ */
+function decideModel(run: FieldRun, type: GenerateNodeType, value: unknown): ModelDecision {
+  const models = run.context.models;
+  if (!models) return decideGeminiOnly(type, value);
+  const lookup = models.resolve(type, value);
+  if (!lookup) return { kind: "error", error: `model ${formatValue(value)} was not looked up before this call ran; call the tool again.` };
+  if (!lookup.ok) return { kind: "error", error: lookup.error };
+  const { model } = lookup.resolved;
+  if (!fitsNodeType(model, type)) {
+    return { kind: "error", error: `${model.name} (${model.provider} ${model.id}) makes ${model.capabilities.join(", ") || "nothing this node can use"}, not ${NODE_TYPE_CAPABILITIES[type].join(" or ")}.` };
+  }
+  if (model.provider === "gemini") {
+    if (type === "nanoBanana") {
+      const spec = getImageModel(model.id);
+      if (spec) return { kind: "gemini-image", spec };
+    }
+    if (type === "generateVideo") {
+      const spec = getVideoModel(model.id);
+      if (spec) return { kind: "gemini-video", spec, resolved: lookup.resolved };
+    }
+  }
+  return { kind: "provider", resolved: lookup.resolved };
+}
+
+function decideGeminiOnly(type: GenerateNodeType, value: unknown): ModelDecision {
+  const parsed = parseModelRef(value);
+  if ("error" in parsed) return { kind: "error", error: parsed.error };
+  if (parsed.kind === "pair" && normalizeProvider(parsed.provider) !== "gemini") {
+    return { kind: "error", error: `${parsed.provider} models can only be set after search_models has found them; call search_models, then set the model again.` };
+  }
+  const id = parsed.kind === "pair" ? parsed.modelId : parsed.value;
+  if (type === "nanoBanana") {
+    const spec = resolveImageModelId(id);
+    if (spec) return { kind: "gemini-image", spec };
+    return { kind: "error", error: `model ${formatValue(value)} is not a Gemini image model. Use one of: ${IMAGE_MODELS.map((m) => m.id).join(", ")}, or find another provider's model with search_models.` };
+  }
+  if (type === "generateVideo") {
+    const resolved = resolveVideoModelId(id);
+    if ("error" in resolved) return { kind: "error", error: resolved.error };
+    return { kind: "gemini-video", spec: getVideoModel(resolved.id)! };
+  }
+  return { kind: "error", error: `${NODE_CATALOG[type].displayName} models come from other providers; find one with search_models (nodeType "${type}") and set it.` };
+}
+
+/**
+ * Writes a looked-up model as the node ends up with it once rendered
+ * (selection, schema defaults, schema inputs), and tells the agent the
+ * settings it now takes.
+ */
+function applyProviderModel(run: FieldRun, type: GenerateNodeType, resolved: ResolvedModel): void {
+  const { model, schema } = resolved;
+  Object.assign(run.out.patch, providerModelPatch(type, resolved));
+  run.out.changes.push(`model=${model.id}${model.provider === "gemini" ? "" : ` (${model.provider})`}`);
+  run.out.handlesMayChange = true;
+  const provider = MODEL_PROVIDER_LABELS[model.provider as ModelProvider] ?? model.provider;
+  const inputs = type === "nanoBanana"
+    ? ""
+    : ` Its inputs: ${schema.inputs.map((i) => `${i.name} (${i.type}${i.required ? ", required" : ""}${i.isArray ? ", accepts many" : ""})`).join(", ") || "none listed"}.`;
+  run.out.notes.push(`${run.node.id} now uses ${model.name} (${provider}, ${model.id}). Its modelParameters: ${describeParameters(schema.parameters)}.${inputs}`);
+}
+
+/**
+ * `modelParameters`: the model's own settings (what the node's settings card
+ * shows), checked against its schema. Merged over the defaults of a model set
+ * in the same call, else over the node's current parameters. null resets one
+ * to its default.
+ */
+function applyModelParameters(run: FieldRun, type: GenerateNodeType, setting: { present: boolean; value: unknown }, chosen: ResolvedModel | undefined): void {
+  if (!setting.present) return;
+  const { node, out, label } = run;
+  const values = typeof setting.value === "string" ? parseJsonObject(setting.value) : setting.value;
+  if (!isRecord(values)) {
+    out.errors.push(`${label}: modelParameters must be an object {parameterName: value}, e.g. {"quality": "high"}.`);
     return;
   }
-  if (!modelSetting.present && containsOmitted(parameters)) {
+  let schema: ModelSchemaLike;
+  let provider: string;
+  let modelId: string;
+  let name: string;
+  if (chosen) {
+    ({ schema } = chosen);
+    provider = chosen.model.provider;
+    modelId = chosen.model.id;
+    name = chosen.model.name;
+  } else {
+    const selected = node.data.selectedModel as { provider?: string; modelId?: string; displayName?: string } | undefined;
+    if (!selected?.provider || !selected.modelId) {
+      out.errors.push(`${label} has no model yet: set model (an id from search_models) in the same call as modelParameters.`);
+      return;
+    }
+    provider = selected.provider;
+    modelId = selected.modelId;
+    name = selected.displayName || selected.modelId;
+    const lookup = run.context.models?.schema(provider, modelId);
+    if (!lookup) {
+      out.errors.push(`${label}: the settings of ${name} were not looked up before this call ran; call the tool again.`);
+      return;
+    }
+    if (!lookup.ok) {
+      out.errors.push(`${label}: could not read the settings of ${name} (${lookup.error}); ask the user to change them in the node.`);
+      return;
+    }
+    schema = lookup.schema;
+  }
+  const base = isRecord(out.patch.parameters) ? out.patch.parameters : isRecord(node.data.parameters) ? node.data.parameters : {};
+  if (out.patch.parameters === undefined && containsOmitted(base)) {
     out.errors.push(`${label}: its current parameters are too large to edit safely here; ask the user to change them in the node.`);
     return;
   }
-  for (const { field, value } of provided) {
-    const values = spec.parameters[field];
-    if (!values) {
-      const own = Object.keys(spec.parameters);
-      out.errors.push(`${label}: ${spec.label} has no ${field} setting${field === "durationSeconds" && spec.family === "omni" ? " (Omni takes the duration, 3-10 seconds, from the prompt)" : ""}. Its settings: ${own.join(", ")}.`);
+  const next: Record<string, unknown> = cloneJson(base);
+  let failed = false;
+  for (const [key, value] of Object.entries(values)) {
+    const param = schema.parameters.find((p) => p.name === key) ?? schema.parameters.find((p) => normalizeKey(p.name) === normalizeKey(key));
+    if (!param) {
+      const input = schema.inputs.find((i) => i.name === key || normalizeKey(i.name) === normalizeKey(key));
+      out.errors.push(
+        input
+          ? `${label}: "${input.name}" is an input of ${name}, not a setting: connect a ${input.type} node to it${type === "nanoBanana" ? "" : ` (handle "${input.name}")`}.`
+          : `${label}: ${name} has no parameter "${key}". Its parameters: ${describeParameters(schema.parameters, 40)}.`,
+      );
+      failed = true;
       continue;
     }
-    const match = matchEnum(values, typeof value === "number" ? String(value) : value);
-    if (match === undefined) {
-      out.errors.push(`${label}: ${field} must be one of: ${values.join(", ")} on ${spec.label} (got ${formatValue(value)}).`);
+    if (value === null) {
+      if (param.default !== undefined) next[param.name] = cloneJson(param.default);
+      else delete next[param.name];
+      out.changes.push(`${param.name} reset`);
       continue;
     }
-    parameters[field] = match;
-    out.changes.push(`${field}=${match}`);
+    const coerced = coerceModelParameter(param, value);
+    if ("error" in coerced) {
+      out.errors.push(`${label}: ${coerced.error}`);
+      failed = true;
+      continue;
+    }
+    next[param.name] = coerced.value;
+    out.changes.push(`${param.name}=${formatValue(coerced.value)}`);
   }
-  out.patch.parameters = parameters;
+  if (failed) return;
+  if (provider === "openai") {
+    const problem = validateOpenAIImageParameters(modelId, next);
+    if (problem) {
+      out.errors.push(`${label}: ${problem}`);
+      return;
+    }
+  }
+  out.patch.parameters = next;
+}
+
+const MODEL_ENUM_LISTED = 30;
+
+function coerceModelParameter(param: ModelParameter, value: unknown): Coerced {
+  const name = param.name;
+  if (Array.isArray(param.enum) && param.enum.length > 0) {
+    const options = param.enum.filter((v): v is string | number => typeof v === "string" || typeof v === "number");
+    const match = matchEnum(options, value);
+    if (match !== undefined) return { value: match };
+    const listed = options.slice(0, MODEL_ENUM_LISTED).join(", ");
+    return { error: `${name} must be one of: ${listed}${options.length > MODEL_ENUM_LISTED ? `, … (${options.length} options)` : ""} (got ${formatValue(value)}).` };
+  }
+  switch (param.type) {
+    case "boolean":
+      return coerce({ field: name, kind: "boolean", description: "" }, value);
+    case "number":
+    case "integer":
+      return coerce({ field: name, kind: param.type, min: param.minimum, max: param.maximum, description: "" }, value);
+    case "array": {
+      const items = Array.isArray(value) ? value : [value];
+      const out: unknown[] = [];
+      for (const item of items) {
+        if (typeof item === "number" || typeof item === "boolean") {
+          out.push(item);
+          continue;
+        }
+        const text = coerce({ field: name, kind: "string", description: "" }, item);
+        if ("error" in text) return { error: `${name}: every item must be a plain value. ${text.error}` };
+        out.push(text.value);
+      }
+      return { value: out };
+    }
+    default:
+      return coerce({ field: name, kind: "string", description: "" }, value);
+  }
 }
 
 // --- LLM Generate ---------------------------------------------------------
@@ -1140,6 +1425,17 @@ function coerceComfyParam(param: ComfyParamLike, value: unknown): Coerced & { no
       return { error: `${name} is a curve; the user edits it in the node.` };
     default:
       return coerce({ field: name, kind: "string", description: "" }, value);
+  }
+}
+
+/** Models sometimes send an object setting as its JSON text. */
+function parseJsonObject(text: string): unknown {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{")) return text;
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return text;
   }
 }
 

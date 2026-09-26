@@ -9,7 +9,7 @@ describe("buildAgentSystemPrompt", () => {
 
   it("introduces the agent, its tools and every node type", () => {
     expect(prompt).toMatch(/^You are the workflow agent built into Node Banana/);
-    expect(prompt).toContain("get_workflow, describe_node_types, list_models, create_workflow, edit_workflow, update_node, arrange_workflow");
+    expect(prompt).toContain("get_workflow, describe_node_types, search_models, create_workflow, edit_workflow, update_node, arrange_workflow");
     expect(prompt).toContain("mcp__node_banana__");
     for (const type of NODE_TYPES) expect(prompt).toContain(`- ${type} (`);
   });
@@ -60,7 +60,8 @@ describe("buildAgentSystemPrompt", () => {
     const line = (type: string) => lines.find((l) => l.startsWith(`- ${type} (`))!;
     expect(line("videoTrim")).toContain("set{startTime(s), endTime(s; 0=end)}");
     expect(line("array")).toContain('delimiter(default "*"');
-    expect(prompt.length).toBeLessThan(13_000);
+    // Raised from 13k when every generator gained model + modelParameters and the model rule grew.
+    expect(prompt.length).toBeLessThan(13_500);
   });
 
   it("teaches what groups are and when to make them", () => {

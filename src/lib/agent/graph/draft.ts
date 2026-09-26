@@ -57,6 +57,7 @@ import {
 } from "./layout";
 import { pickAgentData } from "./nodeData";
 import { cloneJson, isTruncatedText } from "./scrub";
+import type { AgentModelResolver } from "./models";
 import { resolveSettings, type SettingsOutcome } from "./settings";
 
 type AddNodeOp = Extract<AgentGraphOp, { op: "addNode" }>;
@@ -99,6 +100,11 @@ export interface GraphDraftOptions {
   createDefaultNodeData?: (type: NodeType) => Record<string, unknown>;
   /** Random 7-char ids for switch outputs and rules. */
   randomId?: () => string;
+  /**
+   * Provider models the tool runtime looked up for the current call. Without
+   * it only Gemini models (and LLM models) can be set.
+   */
+  models?: AgentModelResolver;
 }
 
 export interface ConnectInput {
@@ -179,12 +185,13 @@ export class GraphDraft {
   nextGroupSuffix: number;
   /** Refs defined by earlier calls this turn, still resolvable in later ones. */
   refs = new Map<string, string>();
-  readonly options: Required<GraphDraftOptions>;
+  readonly options: Required<Omit<GraphDraftOptions, "models">> & Pick<GraphDraftOptions, "models">;
 
   constructor(snapshot: AgentWorkflowSnapshot, options: GraphDraftOptions = {}) {
     this.options = {
       createDefaultNodeData: options.createDefaultNodeData ?? browserDefaults(snapshot?.nodeDefaults),
       randomId: options.randomId ?? defaultRandomId,
+      ...(options.models ? { models: options.models } : {}),
     };
     // The snapshot comes from the browser: tolerate anything malformed.
     this.nodes = new Map();
@@ -1077,7 +1084,7 @@ export class DraftTransaction {
   private applyNodeChanges(node: DraftNode, title: unknown, settings: Record<string, unknown> | undefined, where: string): void {
     const combined: Record<string, unknown> = { ...(settings ?? {}) };
     if (title !== undefined) combined.title = title;
-    const outcome = resolveSettings(node, combined, { newId: this.draft.options.randomId });
+    const outcome = resolveSettings(node, combined, { newId: this.draft.options.randomId, models: this.draft.options.models });
     if (outcome.errors.length > 0) {
       for (const error of outcome.errors) this.fail(where, error);
       return;
@@ -1089,7 +1096,7 @@ export class DraftTransaction {
     this.emitUpdate(node.id, outcome.patch);
     this.recordChanges(node.id, outcome);
     this.touched.add(node.id);
-    if (outcome.handlesMayChange && (node.type === "generateVideo" || node.type === "generate3d")) {
+    if (outcome.handlesMayChange && (node.type === "generateVideo" || node.type === "generate3d" || node.type === "generateAudio")) {
       this.remapSchemaEdges(node, before);
     }
   }
@@ -1099,6 +1106,7 @@ export class DraftTransaction {
     list.push(...outcome.changes);
     this.log.changes.set(id, list);
     this.warnings.push(...outcome.warnings);
+    this.log.notes.push(...outcome.notes);
   }
 
   /** Shallow data patch for the browser; folded into the node's addNode op when it is new. */
@@ -1158,8 +1166,9 @@ export class DraftTransaction {
 
   /**
    * After a model change on a schema-driven node, move each incoming edge to
-   * the matching new handle (text → text-0, image → image-0, …) or drop it
-   * when the model takes no input of that type.
+   * the matching new handle (text → text-0, image → image-0, …; on Generate
+   * Audio, whose handles are the schema's input names, text → prompt) or drop
+   * it when the model takes no input of that type.
    */
   private remapSchemaEdges(node: DraftNode, before: DraftNode): void {
     const incoming = this.edges.filter((e) => e.target === node.id);
@@ -1446,7 +1455,7 @@ export class DraftTransaction {
           this.lintLLMInstruction(node, inputs);
           break;
         case "generateVideo":
-          if (!selected?.modelId) this.warnings.push(`${id} (Generate Video) has no model: set model to a Gemini video model (Veo or Gemini Omni), or tell the user to pick one in the node (their saved default may apply).`);
+          if (!selected?.modelId) this.warnings.push(`${id} (Generate Video) has no model: set model to one from search_models (nodeType generateVideo), or tell the user to pick one in the node (their saved default may apply).`);
           if (inputs.length === 0) this.warnings.push(`${id} (Generate Video) has no inputs yet; connect a prompt (and an image for image-to-video).`);
           else if (selected?.modelId?.includes("image-to-video") && !has((h) => h.startsWith("image"))) {
             this.warnings.push(`${id} uses an image-to-video model but has no image connected.`);
@@ -1454,7 +1463,7 @@ export class DraftTransaction {
           break;
         case "generate3d":
         case "generateAudio":
-          if (!selected?.modelId) this.warnings.push(`${id} (${NODE_CATALOG[node.type].displayName}) needs a model: tell the user to pick one in the node (needs a fal, Replicate, Kie or ComfyUI key).`);
+          if (!selected?.modelId) this.warnings.push(`${id} (${NODE_CATALOG[node.type].displayName}) needs a model: set model to one from search_models (nodeType ${node.type}); if none is available, tell the user which provider key to add in Settings → Providers.`);
           break;
         case "array":
           this.lintArray(node, inputs);

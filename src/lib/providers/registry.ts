@@ -1210,6 +1210,31 @@ async function fetchFalModels(
   return allModels;
 }
 
+// ============ Fixed catalogs ============
+
+/** Providers whose model list is fixed in this file (no discovery request). */
+export const STATIC_CATALOG_PROVIDERS = ["gemini", "kie", "openai", "comfy"] as const;
+export type StaticCatalogProvider = (typeof STATIC_CATALOG_PROVIDERS)[number];
+
+/**
+ * A fixed catalog as it stands, whether or not a key is set. `listModels`
+ * leaves a provider out when it has no key; this lets a caller still say
+ * which provider's key a model needs ("gpt-image-2.5-flare is an OpenAI
+ * model: add the OpenAI key"). No request is made.
+ */
+export function staticCatalogModels(provider: StaticCatalogProvider): ProviderModel[] {
+  switch (provider) {
+    case "gemini":
+      return [...GEMINI_IMAGE_MODELS, ...GEMINI_VIDEO_MODELS];
+    case "kie":
+      return [...KIE_MODELS];
+    case "openai":
+      return [...OPENAI_IMAGE_MODELS];
+    case "comfy":
+      return comfyRouterProviderModels();
+  }
+}
+
 // ============ Deadlines ============
 
 /** How long one fetched provider (all its pages and lookups) may take. */

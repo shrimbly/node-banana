@@ -6,7 +6,8 @@ const buildAgentSnapshotMock = vi.hoisted(() => vi.fn());
 vi.mock("../../graph/snapshot", () => ({ buildAgentSnapshot: buildAgentSnapshotMock }));
 
 import { createDefaultNodeData } from "@/store/utils/nodeDefaults";
-import { buildAgentChatRequestBody, safeExternalUrl } from "../request";
+import type { ProviderSettings } from "@/types";
+import { agentProviderHeaders, agentProviderKeys, buildAgentChatRequestBody, safeExternalUrl, whenProviderKeysReady } from "../request";
 
 const snapshot = { nodes: [], edges: [], groups: [], selectedNodeIds: [] };
 
@@ -66,6 +67,47 @@ describe("buildAgentChatRequestBody", () => {
     expect("model" in body).toBe(false);
     expect(body.sessionId).toBeUndefined();
     expect(buildAgentSnapshotMock.mock.calls[0][0].workflowName).toBeUndefined();
+  });
+});
+
+describe("agentProviderHeaders", () => {
+  const settings = (keys: Record<string, string | null>): ProviderSettings =>
+    ({
+      providers: Object.fromEntries(
+        Object.entries(keys).map(([id, apiKey]) => [id, { id, name: id, enabled: false, apiKey, apiKeyEnvVar: "" }]),
+      ),
+    }) as unknown as ProviderSettings;
+
+  it("sends every key the user has, named as the models routes read them, whether or not the provider is enabled", () => {
+    const headers = agentProviderHeaders({
+      providerSettings: settings({ gemini: "g-key", openai: "sk-openai", replicate: "r8-key", fal: "fal-key", kie: "kie-key", wavespeed: "ws-key", comfy: "comfyui-key", anthropic: "sk-ant" }),
+      comfyCloudApiKey: "comfyui-cloud",
+    });
+    expect(headers).toEqual({
+      "X-Gemini-API-Key": "g-key",
+      "X-OpenAI-API-Key": "sk-openai",
+      "X-Replicate-Key": "r8-key",
+      "X-Fal-Key": "fal-key",
+      "X-Kie-Key": "kie-key",
+      "X-WaveSpeed-Key": "ws-key",
+      "X-Comfy-Router-Key": "comfyui-key",
+    });
+  });
+
+  it("falls back to the Comfy Cloud key for Comfy Router, and leaves out empty keys", () => {
+    expect(agentProviderKeys({ providerSettings: settings({ openai: "", comfy: null }), comfyCloudApiKey: "comfyui-cloud" })).toMatchObject({ openai: null, comfy: "comfyui-cloud" });
+    expect(agentProviderHeaders({ providerSettings: settings({ openai: "", comfy: null }), comfyCloudApiKey: "comfyui-cloud" })).toEqual({ "X-Comfy-Router-Key": "comfyui-cloud" });
+    expect(agentProviderHeaders({ providerSettings: settings({}) })).toEqual({});
+  });
+
+  it("waits for the desktop keychain before reading keys, but not forever", async () => {
+    let ready = false;
+    setTimeout(() => (ready = true), 150);
+    const started = Date.now();
+    await whenProviderKeysReady(() => ready, 2_000);
+    expect(ready).toBe(true);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    await whenProviderKeysReady(() => false, 150);
   });
 });
 

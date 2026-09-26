@@ -11,12 +11,17 @@
  *
  * `request.signal` fires when the browser stops the chat or goes away; it is
  * handed to the harness, which kills the CLI turn.
+ *
+ * Provider API keys arrive as the models routes' headers (X-OpenAI-API-Key,
+ * X-Fal-Key, …; see buildModelsApiHeaders) and are read only after the
+ * same-origin check. They reach the tool runtime and nothing else.
  */
 
 import { NextRequest } from "next/server";
 import { createUIMessageStreamResponse } from "ai";
 
 import { createAgentChatStream, parseAgentChatRequest } from "@/lib/agent/server/chatStream";
+import { providerKeysFromHeaders } from "@/lib/providers/keys";
 import { getHarness } from "@/lib/agent/server/harnesses";
 import { checkSameOrigin } from "@/lib/agent/server/sameOrigin";
 import type { AgentHarness } from "@/lib/agent/types";
@@ -37,6 +42,10 @@ export async function POST(request: NextRequest) {
     logger.warn("api.llm", "Agent chat request blocked", { reason: origin.reason });
     return plainText(origin.reason, 403);
   }
+
+  // The panel sends the user's provider keys as the models routes' headers
+  // (falling back to the server's .env); only the tool runtime sees them.
+  const providerKeys = providerKeysFromHeaders(request.headers);
 
   const read = await readJsonBody(request, AGENT_CHAT_MAX_BODY_BYTES);
   if (!read.ok) {
@@ -71,6 +80,6 @@ export async function POST(request: NextRequest) {
     return plainText(`${AGENT_HARNESS_LABELS[parsed.body.harness]} is not available: ${reason}`, 500);
   }
 
-  const stream = createAgentChatStream({ body: parsed.body, harness, signal: request.signal });
+  const stream = createAgentChatStream({ body: parsed.body, harness, signal: request.signal, providerKeys });
   return createUIMessageStreamResponse({ stream });
 }

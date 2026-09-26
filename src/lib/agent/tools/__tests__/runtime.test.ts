@@ -499,16 +499,18 @@ describe("update_node", () => {
       settings: { model: "veo-3.1-fast/image-to-video", aspectRatio: "9:16", durationSeconds: 6 },
     });
     expect(i2v.ok, i2v.text).toBe(true);
+    // What the node ends up with once its schema loads: the schema's defaults
+    // (with the call's values over them) and the schema's own inputs.
     expect(i2v.ops[0]).toEqual({
       op: "updateNode",
       id: "generateVideo-3",
       data: {
         selectedModel: { provider: "gemini", modelId: "veo-3.1-fast/image-to-video", displayName: "Veo 3.1 Fast I2V" },
-        parameters: { aspectRatio: "9:16", durationSeconds: "6" },
+        parameters: { aspectRatio: "9:16", durationSeconds: "6", resolution: "720p" },
         inputSchema: [
-          { name: "image", type: "image", required: true, label: "Image" },
           { name: "prompt", type: "text", required: true, label: "Prompt" },
           { name: "negative_prompt", type: "text", required: false, label: "Neg. Prompt" },
+          { name: "image", type: "image", required: true, label: "Image" },
         ],
       },
     });
@@ -543,9 +545,11 @@ describe("update_node", () => {
     expect(ambiguous.ok).toBe(false);
     expect(ambiguous.text).toContain('"veo-3.1/text-to-video" (prompt only) or "veo-3.1/image-to-video"');
     const kling = await call(runtime, "update_node", { node: "generateVideo-1", settings: { model: "kling-2.1" } });
-    expect(kling.text).toContain("tell the user to pick one in the node");
+    expect(kling.text).toContain('no model "kling-2.1" among the Gemini models');
+    expect(kling.text).toContain("Call search_models");
+    expect(kling.text).toContain("Providers without a key (the user adds one in Settings → Providers): OpenAI, Kie.ai");
     const params = await call(runtime, "update_node", { node: "generateVideo-1", settings: { durationSeconds: "8" } });
-    expect(params.text).toContain("can only be set for Gemini video models (Veo, Gemini Omni)");
+    expect(params.text).toContain("can only be set this way for Gemini video models (Veo, Gemini Omni)");
   });
 
   it("sets Gemini Omni with its own inputs and settings, and wires every media type", async () => {

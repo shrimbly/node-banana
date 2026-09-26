@@ -11,7 +11,7 @@ import type { AgentToolDefinition } from "../types";
 export const TOOL_NAMES = {
   getWorkflow: "get_workflow",
   describeNodeTypes: "describe_node_types",
-  listModels: "list_models",
+  searchModels: "search_models",
   createWorkflow: "create_workflow",
   editWorkflow: "edit_workflow",
   updateNode: "update_node",
@@ -24,7 +24,7 @@ const settingsField = z
   .record(z.string(), z.unknown())
   .optional()
   .describe(
-    'Settings by field name, e.g. {"prompt": "a red fox in snow"} on a prompt node or {"model": "nano-banana-2", "aspectRatio": "16:9"} on nanoBanana. Only the fields describe_node_types lists are accepted. To change part of a long prompt without retyping it: {"promptEdit": {"find": "old words", "replace": "new words"}} (or {"append": "…"} / {"prepend": "…"}; templateEdit on a Prompt Constructor).',
+    'Settings by field name, e.g. {"prompt": "a red fox in snow"} on a prompt node, {"model": "nano-banana-2", "aspectRatio": "16:9"} on nanoBanana, or {"model": {"provider": "openai", "modelId": "gpt-image-2.5-flare"}, "modelParameters": {"quality": "high"}} for a model found with search_models. Only the fields describe_node_types lists are accepted. To change part of a long prompt without retyping it: {"promptEdit": {"find": "old words", "replace": "new words"}} (or {"append": "…"} / {"prepend": "…"}; templateEdit on a Prompt Constructor).',
   );
 
 const fromField = z.string().describe("Source node: an existing node id, or a ref defined earlier in this call.");
@@ -67,8 +67,21 @@ export const describeNodeTypesShape = {
   types: z.array(z.string()).optional().describe('Node types to describe, e.g. ["nanoBanana", "llmGenerate"]. Omit for all of them.'),
 };
 
-export const listModelsShape = {
-  kind: z.enum(["image", "video", "llm"]).optional().describe("Which models. Omit for all."),
+export const searchModelsShape = {
+  nodeType: z
+    .string()
+    .optional()
+    .describe('The node the model is for: nanoBanana (images), generateVideo, generate3d or generateAudio; llmGenerate returns its fixed LLM list. Filters by what the node accepts.'),
+  capability: z
+    .string()
+    .optional()
+    .describe("Narrower filter: text-to-image, image-to-image, text-to-video, image-to-video, audio-to-video, text-to-3d, image-to-3d or text-to-audio (or image, video, 3d, audio)."),
+  provider: z.string().optional().describe("Only this provider: gemini, openai, kie, fal, replicate, wavespeed or comfy. Omit to search every provider the user has a key for."),
+  query: z
+    .string()
+    .optional()
+    .describe('Words from the model\'s name or id, e.g. "flare", "kling 2.6", "seedance". Short distinctive words find more than a full phrase.'),
+  limit: z.number().optional().describe("How many models to show (default 15, max 50)."),
 };
 
 export const createWorkflowShape = {
@@ -172,12 +185,12 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     inputShape: describeNodeTypesShape,
   },
   {
-    name: TOOL_NAMES.listModels,
-    title: "List models",
+    name: TOOL_NAMES.searchModels,
+    title: "Search models",
     readOnly: true,
     description:
-      "List the models you can set: Gemini image models for Generate Image (with their aspect ratios and resolutions), Gemini video models (Veo, Gemini Omni) for Generate Video with their settings, and LLM providers/models for LLM Generate. Other providers' models cannot be set by you; the user picks them in the node.",
-    inputShape: listModelsShape,
+      "Search the image, video, 3D and audio models of every provider the user has an API key for (Gemini, OpenAI, Kie, fal, Replicate, WaveSpeed, ComfyUI), the same list the node's model browser shows. Returns each model's provider, exact id, name, capabilities, the node type it fits and its price, plus which providers were searched, which failed, and which have no key. Call it before setting any model you have not seen in this conversation: settings.model takes the exact id it returns (or {provider, modelId}); never guess an id. nodeType llmGenerate returns LLM Generate's fixed model list.",
+    inputShape: searchModelsShape,
   },
   {
     name: TOOL_NAMES.createWorkflow,
@@ -200,7 +213,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     title: "Update node",
     readOnly: false,
     description:
-      "Change one node's settings and/or title, e.g. {node:\"prompt-2\", settings:{prompt:\"...\"}} or {node:\"nanoBanana-4\", settings:{model:\"nano-banana-2\", aspectRatio:\"9:16\"}}. The canvas shows long prompts only in part: change part of one with settings.promptEdit {find, replace} (or {append}/{prepend}) instead of retyping it, or read it whole with get_workflow detail \"full\" first. Unlisted fields are rejected with the valid names; values out of range are rejected with the allowed ones.",
+      "Change one node's settings and/or title, e.g. {node:\"prompt-2\", settings:{prompt:\"...\"}}, {node:\"nanoBanana-4\", settings:{model:\"nano-banana-2\", aspectRatio:\"9:16\"}} or {node:\"nanoBanana-4\", settings:{model:{provider:\"openai\", modelId:\"gpt-image-2.5-flare\"}}} (a model id from search_models). The canvas shows long prompts only in part: change part of one with settings.promptEdit {find, replace} (or {append}/{prepend}) instead of retyping it, or read it whole with get_workflow detail \"full\" first. Unlisted fields are rejected with the valid names; values out of range are rejected with the allowed ones.",
     inputShape: updateNodeShape,
   },
   {

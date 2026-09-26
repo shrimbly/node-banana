@@ -104,8 +104,9 @@ describe("resolveSettings", () => {
       expect(resolveSettings(veo, { aspectRatio: "9:16" }, context).errors[0]).toContain("too large to edit safely");
     });
 
-    it("tells the agent it cannot set 3D or audio models", () => {
-      expect(resolveSettings(nodeOf("generate3d"), { model: "trellis" }, context).errors[0]).toContain("tell the user to pick one in the node");
+    it("sends 3D and audio models to search_models when nothing was looked up", () => {
+      expect(resolveSettings(nodeOf("generate3d"), { model: "trellis" }, context).errors[0]).toContain('find one with search_models (nodeType "generate3d")');
+      expect(resolveSettings(nodeOf("generateAudio"), { provider: "fal" }, context).errors[0]).toContain('set "model" instead');
     });
   });
 

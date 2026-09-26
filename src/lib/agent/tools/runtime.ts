@@ -10,10 +10,12 @@
 
 import { z } from "zod";
 import type { NodeType } from "@/types";
+import type { ProviderKeys } from "@/lib/providers/keys";
 import type { AgentToolDefinition, AgentToolResult, AgentToolRuntime, AgentWorkflowSnapshot } from "../types";
-import { findNodeType, NODE_CATALOG, NODE_TYPES } from "../graph/catalog";
-import { describeModels, describeNodeTypes, describeWorkflow, edgeLine, nodeLine } from "../graph/describe";
-import { GraphDraft, groupLabel, titleOf, type DraftTransaction, type GraphDraftOptions, type RemovedNode } from "../graph/draft";
+import { findNodeType, NODE_CATALOG, NODE_TYPES, normalizeKey } from "../graph/catalog";
+import { describeNodeTypes, describeWorkflow, edgeLine, nodeLine } from "../graph/describe";
+import { GraphDraft, groupLabel, titleOf, type DraftNode, type DraftTransaction, type GraphDraftOptions, type RemovedNode } from "../graph/draft";
+import { isModelNodeType } from "../graph/settings";
 import {
   AGENT_TOOL_DEFINITIONS,
   TOOL_NAMES,
@@ -22,9 +24,10 @@ import {
   describeNodeTypesShape,
   editWorkflowShape,
   getWorkflowShape,
-  listModelsShape,
+  searchModelsShape,
   updateNodeShape,
 } from "./definitions";
+import { AgentModels, type ModelRequest, type ModelSource } from "./modelSearch";
 
 const SUMMARY_MAX = 80;
 const GET_WORKFLOW_MAX_NODES = 150;
@@ -34,17 +37,37 @@ const UPLOAD_TYPES: ReadonlySet<NodeType> = new Set<NodeType>(["imageInput", "au
 
 type Args<Shape extends z.ZodRawShape> = z.infer<z.ZodObject<Shape>>;
 
+export interface AgentToolRuntimeOptions extends Omit<GraphDraftOptions, "models"> {
+  /**
+   * The user's provider keys for this turn (from the chat request's headers,
+   * else the server's .env). Used only to list models and read their
+   * schemas; never written into any tool text.
+   */
+  providerKeys?: ProviderKeys;
+  /** The turn's signal: model lookups stop when the turn is stopped. */
+  signal?: AbortSignal;
+  /** Where models come from; the provider registry by default. */
+  modelSource?: ModelSource;
+}
+
+/** Tools that change the canvas, and so may set models. */
+const MUTATING_TOOLS: ReadonlySet<string> = new Set([TOOL_NAMES.createWorkflow, TOOL_NAMES.editWorkflow, TOOL_NAMES.updateNode]);
+/** The tool search_models replaced; old sessions may still call it. */
+const LIST_MODELS_ALIAS = "list_models";
+
 /**
  * One runtime per turn. Tools read and edit a private draft seeded from the
  * snapshot, so later calls in the same turn see earlier edits.
  */
-export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options: GraphDraftOptions = {}): AgentToolRuntime {
-  const draft = new GraphDraft(snapshot ?? { nodes: [], edges: [], groups: [], selectedNodeIds: [] }, options);
+export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options: AgentToolRuntimeOptions = {}): AgentToolRuntime {
+  const { providerKeys, signal, modelSource, ...draftOptions } = options;
+  const models = new AgentModels(providerKeys ?? {}, { source: modelSource, signal });
+  const draft = new GraphDraft(snapshot ?? { nodes: [], edges: [], groups: [], selectedNodeIds: [] }, { ...draftOptions, models });
 
-  const handlers: Record<string, (args: unknown) => AgentToolResult> = {
+  const handlers: Record<string, (args: unknown) => AgentToolResult | Promise<AgentToolResult>> = {
     [TOOL_NAMES.getWorkflow]: (args) => getWorkflow(draft, args as Args<typeof getWorkflowShape>),
     [TOOL_NAMES.describeNodeTypes]: (args) => describeTypes(args as Args<typeof describeNodeTypesShape>),
-    [TOOL_NAMES.listModels]: (args) => listModels(args as Args<typeof listModelsShape>),
+    [TOOL_NAMES.searchModels]: (args) => searchModels(models, args as Args<typeof searchModelsShape>),
     [TOOL_NAMES.createWorkflow]: (args) => createWorkflow(draft, args as Args<typeof createWorkflowShape>),
     [TOOL_NAMES.editWorkflow]: (args) => editWorkflow(draft, args as Args<typeof editWorkflowShape>),
     [TOOL_NAMES.updateNode]: (args) => updateNode(draft, args as Args<typeof updateNodeShape>),
@@ -55,6 +78,10 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
   return {
     definitions: AGENT_TOOL_DEFINITIONS,
     async execute(name: string, args: unknown): Promise<AgentToolResult> {
+      if (bareToolName(name) === LIST_MODELS_ALIAS) {
+        name = TOOL_NAMES.searchModels;
+        args = listModelsArgs(normalizeArgs(args));
+      }
       const definition = findDefinition(name);
       if (!definition) {
         return failure(
@@ -67,7 +94,9 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
         if (!parsed.success) {
           return failure(formatZodError(definition, parsed.error), `Invalid arguments for ${definition.name}`);
         }
-        return handlers[definition.name](parsed.data);
+        // Settings resolve synchronously inside the batch: look up every model it names first.
+        if (MUTATING_TOOLS.has(definition.name)) await models.prepare(modelRequests(definition.name, parsed.data, draft));
+        return await handlers[definition.name](parsed.data);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return failure(`${definition.name} failed unexpectedly (${message}). No changes were made; try again, or with fewer operations.`, `${definition.title} failed`);
@@ -80,8 +109,78 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
 function findDefinition(name: string): AgentToolDefinition | undefined {
   const exact = AGENT_TOOL_DEFINITIONS.find((d) => d.name === name);
   if (exact) return exact;
-  const bare = typeof name === "string" ? name.split(/__|[./]/).pop() : undefined;
-  return AGENT_TOOL_DEFINITIONS.find((d) => d.name === bare);
+  return AGENT_TOOL_DEFINITIONS.find((d) => d.name === bareToolName(name));
+}
+
+function bareToolName(name: string): string | undefined {
+  return typeof name === "string" ? name.split(/__|[./]/).pop() : undefined;
+}
+
+/** list_models {kind} → search_models {nodeType}. */
+function listModelsArgs(args: unknown): Record<string, unknown> {
+  const kind = args && typeof args === "object" ? (args as { kind?: unknown }).kind : undefined;
+  const nodeType = kind === "image" ? "nanoBanana" : kind === "video" ? "generateVideo" : kind === "llm" ? "llmGenerate" : undefined;
+  return nodeType ? { nodeType } : {};
+}
+
+/**
+ * The models a mutating call names (settings.model on generation nodes), and
+ * the schemas of models a node already uses when only modelParameters
+ * change. A node's type comes from the draft, or from the add_node of the
+ * same call for a ref.
+ */
+function modelRequests(tool: string, args: unknown, draft: GraphDraft): ModelRequest[] {
+  const requests: ModelRequest[] = [];
+  const visit = (type: NodeType | undefined, settings: unknown, node?: DraftNode) => {
+    if (!type || !isModelNodeType(type) || !settings || typeof settings !== "object" || Array.isArray(settings)) return;
+    const model = settingValue(settings as Record<string, unknown>, "model");
+    if (model.present) {
+      requests.push({ kind: "model", nodeType: type, value: model.value });
+      return;
+    }
+    if (!settingValue(settings as Record<string, unknown>, "modelParameters").present) return;
+    const data = node?.data ?? draft.options.createDefaultNodeData(type);
+    const selected = data.selectedModel as { provider?: unknown; modelId?: unknown } | undefined;
+    if (typeof selected?.provider === "string" && typeof selected.modelId === "string" && selected.modelId) {
+      requests.push({ kind: "schema", provider: selected.provider, modelId: selected.modelId });
+    }
+  };
+  const existing = (key: unknown): DraftNode | undefined => {
+    if (typeof key !== "string") return undefined;
+    const name = key.trim();
+    return draft.nodes.get(name) ?? draft.nodes.get(draft.refs.get(name) ?? "");
+  };
+  const typeOf = (value: unknown) => (typeof value === "string" ? findNodeType(value) : undefined);
+
+  if (tool === TOOL_NAMES.updateNode) {
+    const { node, settings } = args as Args<typeof updateNodeShape>;
+    const target = existing(node);
+    visit(target?.type, settings, target);
+  } else if (tool === TOOL_NAMES.createWorkflow) {
+    for (const spec of (args as Args<typeof createWorkflowShape>).nodes ?? []) visit(typeOf(spec.type), spec.settings);
+  } else if (tool === TOOL_NAMES.editWorkflow) {
+    const operations = (args as Args<typeof editWorkflowShape>).operations ?? [];
+    const refTypes = new Map<string, NodeType>();
+    for (const op of operations) {
+      if (op.op !== "add_node") continue;
+      const type = typeOf(op.type);
+      if (type && op.ref) refTypes.set(op.ref.trim(), type);
+      visit(type, op.settings);
+    }
+    for (const op of operations) {
+      if (op.op !== "update_node") continue;
+      const target = existing(op.node);
+      visit(target?.type ?? (typeof op.node === "string" ? refTypes.get(op.node.trim()) : undefined), op.settings, target);
+    }
+  }
+  return requests;
+}
+
+/** A setting as the settings resolver finds it: exact name, else case- and separator-insensitive. */
+function settingValue(settings: Record<string, unknown>, field: string): { present: boolean; value: unknown } {
+  if (field in settings && settings[field] !== undefined) return { present: true, value: settings[field] };
+  const key = Object.keys(settings).find((k) => normalizeKey(k) === normalizeKey(field) && settings[k] !== undefined);
+  return key ? { present: true, value: settings[key] } : { present: false, value: undefined };
 }
 
 /**
@@ -176,8 +275,9 @@ function describeTypes(args: Args<typeof describeNodeTypesShape>): AgentToolResu
   return { ok: true, text: lines.join("\n\n"), summary: clip(`Looked up ${names}`), ops: [] };
 }
 
-function listModels(args: Args<typeof listModelsShape>): AgentToolResult {
-  return { ok: true, text: describeModels(args.kind), summary: `Listed ${args.kind ? `${args.kind} ` : ""}models`, ops: [] };
+async function searchModels(models: AgentModels, args: Args<typeof searchModelsShape>): Promise<AgentToolResult> {
+  const result = await models.search(args);
+  return { ok: result.ok, text: result.text, summary: clip(result.summary), ops: [] };
 }
 
 // ---------------------------------------------------------------------------
@@ -455,8 +555,12 @@ function nextSteps(draft: GraphDraft, createdIds: string[], removed: RemovedNode
     return !draft.edges.some((e) => e.target === id);
   });
   if (uploads.length > 0) hints.push(`Tell the user to upload media into ${uploads.join(", ")}.`);
-  if ([...types].some((t) => t === "generate3d" || t === "generateAudio")) {
-    hints.push("Tell the user to pick a model in the new 3D/audio node (needs a fal, Replicate, Kie or ComfyUI key).");
+  const modelless = createdIds.filter((id) => {
+    const node = draft.nodes.get(id);
+    return (node?.type === "generate3d" || node?.type === "generateAudio") && !(node.data.selectedModel as { modelId?: string } | undefined)?.modelId;
+  });
+  if (modelless.length > 0) {
+    hints.push(`${modelless.join(", ")} ha${modelless.length === 1 ? "s" : "ve"} no model: set one from search_models, or tell the user to pick one in the node (it needs a fal, Replicate, Kie, WaveSpeed or ComfyUI key).`);
   }
   if ([...types].some((t) => GENERATOR_TYPES.has(t))) {
     hints.push("Nothing has run yet: the user presses Run (Ctrl/Cmd+Enter) when ready.");

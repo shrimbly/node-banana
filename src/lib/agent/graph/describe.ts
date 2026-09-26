@@ -6,7 +6,6 @@
 import type { NodeType } from "@/types";
 import {
   getImageModel,
-  IMAGE_MODELS,
   LLM_PROVIDERS,
   NODE_CATALOG,
   NODE_TYPES,
@@ -209,7 +208,9 @@ function keySettings(node: DraftNode, textPreview: number): string {
       break;
     case "nanoBanana": {
       if (model && model.provider && model.provider !== "gemini") {
-        bits.push(`model ${model.displayName || model.modelId || "not chosen"} (${model.provider})`);
+        bits.push(model.modelId ? `model ${modelText(model)}` : "no model chosen");
+        const params = parameterText(d.parameters);
+        if (params) bits.push(params);
       } else {
         const id = model?.modelId || str(d.model);
         const spec = getImageModel(id);
@@ -224,12 +225,9 @@ function keySettings(node: DraftNode, textPreview: number): string {
     case "generateVideo":
     case "generate3d":
     case "generateAudio": {
-      bits.push(model?.modelId ? `model ${model.modelId}${model.provider ? ` (${model.provider})` : ""}` : "no model chosen");
-      const params = d.parameters as Record<string, unknown> | undefined;
-      if (params && typeof params === "object") {
-        const shown = Object.entries(params).filter(([, v]) => typeof v !== "object").slice(0, 6);
-        if (shown.length > 0) bits.push(shown.map(([k, v]) => `${k} ${String(v)}`).join(", "));
-      }
+      bits.push(model?.modelId ? `model ${modelText(model)}` : "no model chosen");
+      const params = parameterText(d.parameters);
+      if (params) bits.push(params);
       break;
     }
     case "llmGenerate":
@@ -313,6 +311,23 @@ function contentText(node: DraftNode): string {
   return bits.join(", ");
 }
 
+/** `"GPT Image 2.5 Flare" (openai gpt-image-2.5-flare)`: the name the node shows, then what settings.model takes. */
+function modelText(model: { provider?: string; modelId?: string; displayName?: string }): string {
+  const id = `${model.provider ?? "gemini"} ${model.modelId}`;
+  return model.displayName && model.displayName !== model.modelId ? `${JSON.stringify(model.displayName)} (${id})` : `(${id})`;
+}
+
+const PARAMETERS_SHOWN = 8;
+
+/** The model's parameters (modelParameters), scalars only, for the one-line view. */
+function parameterText(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const entries = Object.entries(value as Record<string, unknown>).filter(([, v]) => v === null || typeof v !== "object");
+  if (entries.length === 0) return "";
+  const shown = entries.slice(0, PARAMETERS_SHOWN).map(([k, v]) => `${k} ${typeof v === "string" ? quote(v, 40) : String(v)}`);
+  return `modelParameters ${shown.join(", ")}${entries.length > PARAMETERS_SHOWN ? `, … (${entries.length - PARAMETERS_SHOWN} more; get_workflow detail "full" shows all)` : ""}`;
+}
+
 function quote(text: string, max: number): string {
   return JSON.stringify(text.length > max ? `${text.slice(0, max)}…` : text);
 }
@@ -335,7 +350,8 @@ function portText(port: CatalogPort): string {
 
 function settingText(setting: CatalogSetting): string {
   let range = "";
-  if (setting.values) range = ` one of ${setting.values.length > 16 ? `${setting.values.slice(0, 16).join(" | ")} | … (${setting.values.length} total)` : setting.values.join(" | ")}`;
+  if (setting.kind === "model") range = " model id (string) or {provider, modelId}";
+  else if (setting.values) range = ` one of ${setting.values.length > 16 ? `${setting.values.slice(0, 16).join(" | ")} | … (${setting.values.length} total)` : setting.values.join(" | ")}`;
   else if (setting.min !== undefined || setting.max !== undefined) range = ` ${setting.kind} ${setting.min ?? "…"}-${setting.max ?? "…"}`;
   else range = ` ${setting.kind}`;
   return `${setting.field}:${range}. ${setting.description}${setting.default ? ` Default: ${setting.default}.` : ""}`;
@@ -372,37 +388,27 @@ export function compactCatalog(): string {
   }).join("\n");
 }
 
-/** Models the agent can set, per kind. */
-export function describeModels(kind?: "image" | "video" | "llm"): string {
-  const sections: string[] = [];
-  if (!kind || kind === "image") {
-    sections.push(
-      [
-        "Image models (Generate Image `model`; Gemini API key):",
-        ...IMAGE_MODELS.map((m) => `- ${m.id} (${m.label}): ${m.note} Aspect ratios: ${m.aspectRatios.join(", ")}.${m.resolutions.length ? ` Resolutions: ${m.resolutions.join(", ")}.` : ""}`),
-        "Models from fal, Replicate, Kie, OpenAI or ComfyUI cannot be set by you: add the node and tell the user to pick one in it.",
-      ].join("\n"),
-    );
+/** LLM Generate's models: a fixed list (the node's own menu), not searched. */
+export function describeLLMModels(): string {
+  return [
+    "LLM models (LLM Generate `provider` + `model`; a fixed list, not the provider search):",
+    ...LLM_PROVIDERS.map((p) => `- ${p.id} (needs ${p.requires}): ${p.models.map((m) => `${m.id} (${m.label})`).join(", ")}`),
+  ].join("\n");
+}
+
+/**
+ * What the built-in catalog adds to a Gemini model's listing: the settings
+ * the node offers for it (Gemini image models have their own fields rather
+ * than modelParameters).
+ */
+export function geminiModelDetails(modelId: string): string | undefined {
+  const image = getImageModel(modelId);
+  if (image) {
+    return `${image.note} Settings: aspectRatio ${image.aspectRatios.join("|")}${image.resolutions.length ? `, resolution ${image.resolutions.join("|")}` : ""}${image.googleSearch ? ", useGoogleSearch" : ""}${image.imageSearch ? ", useImageSearch" : ""}.`;
   }
-  if (!kind || kind === "video") {
-    sections.push(
-      [
-        "Video models (Generate Video `model`; Gemini API key):",
-        ...VIDEO_MODELS.map((m) => `- ${m.id} (${m.label}, ${m.mode === "any" ? "text, images, video and audio" : m.mode}): ${m.note} Settings: ${Object.entries(m.parameters).map(([field, values]) => `${field} ${values.join("|")}`).join(", ")}.`),
-        "Other providers' video models (Kling, Sora, Seedance…) must be picked by the user in the node.",
-      ].join("\n"),
-    );
+  const video = VIDEO_MODELS.find((m) => m.id === modelId);
+  if (video) {
+    return `${video.note} Settings: ${Object.entries(video.parameters).map(([field, values]) => `${field} ${values.join("|")}`).join(", ")}.`;
   }
-  if (!kind || kind === "llm") {
-    sections.push(
-      [
-        "LLM models (LLM Generate `provider` + `model`):",
-        ...LLM_PROVIDERS.map((p) => `- ${p.id} (needs ${p.requires}): ${p.models.map((m) => `${m.id} (${m.label})`).join(", ")}`),
-      ].join("\n"),
-    );
-  }
-  if (!kind) {
-    sections.push("3D and audio generation have no model you can set: the user picks one in the node (needs a fal, Replicate, Kie or ComfyUI key).");
-  }
-  return sections.join("\n\n");
+  return undefined;
 }
