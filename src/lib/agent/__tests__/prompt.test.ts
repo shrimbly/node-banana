@@ -39,6 +39,8 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toMatch(/replaced the canvas, say so, name any lost uploads or generated results, and mention that Ctrl\+Z \(one step per change\) brings them back/);
     // Reasoning streams into the panel: no "as per rule 4" or raw tool names there.
     expect(prompt).toMatch(/never cite these rules or their numbers/);
+    // Titles are left alone: only new nodes that need telling apart get one, and renames need asking.
+    expect(prompt).toContain("never change or clear an existing node's title unless the user asks");
     expect(prompt).toContain("build now with sensible placeholder content");
     expect(prompt).toContain("would destroy work");
     expect(prompt).toContain("say the prompt is an example for them to edit");

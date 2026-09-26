@@ -95,7 +95,7 @@ export const createWorkflowShape = {
       z.object({
         ref: z.string().describe('Your short name for the node, used in connections (e.g. "prompt", "gen").'),
         type: z.string().describe("Node type, e.g. prompt, nanoBanana, llmGenerate, output (see describe_node_types)."),
-        title: z.string().optional().describe("Optional header title for the node."),
+        title: z.string().optional().describe("Header title. Usually omit it (the node type names the node); set one only to tell apart several nodes of the same type."),
         settings: settingsField,
       }),
     )
@@ -135,7 +135,7 @@ export const editWorkflowShape = {
         ref: z.string().optional().describe("add_node: your name for the new node, usable as node/from/to in the other operations of this call."),
         type: z.string().optional().describe("add_node: node type."),
         node: z.string().optional().describe("update_node, remove_node, move_node: the node id (or a ref from this call)."),
-        title: z.string().optional().describe("add_node, update_node: header title (empty string clears it)."),
+        title: z.string().optional().describe("add_node: header title, only to tell apart several nodes of the same type. update_node: only when the user asked to rename the node (empty string clears it)."),
         settings: settingsField,
         from: fromField.optional(),
         fromHandle: fromHandleField,
@@ -160,7 +160,7 @@ export const editWorkflowShape = {
 
 export const updateNodeShape = {
   node: z.string().describe("The node id, e.g. prompt-3."),
-  title: z.string().optional().describe("New header title (empty string clears it)."),
+  title: z.string().optional().describe("New header title (empty string clears it). Only when the user asked to rename the node."),
   settings: settingsField,
 };
 
