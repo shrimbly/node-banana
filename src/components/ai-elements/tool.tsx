@@ -94,26 +94,28 @@ export const ToolHeader = ({
   return (
     <CollapsibleTrigger
       className={cn(
-        "flex w-full items-start gap-2 rounded-md squircle px-1.5 py-2 text-left transition-colors duration-[120ms] hover:bg-white/5",
+        // Text sits 8px in from the message column; the hover wash reaches 6px past it.
+        "-mx-1.5 flex w-[calc(100%+12px)] flex-col rounded-md squircle py-2 pr-1.5 pl-3.5 text-left transition-colors duration-[120ms] hover:bg-white/5",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
         className
       )}
       {...props}
     >
-      <ChevronRightIcon
-        aria-hidden="true"
-        strokeWidth={1.75}
-        className="mt-[3px] size-3.5 shrink-0 text-neutral-500 transition-transform duration-150 group-data-[state=open]/tool:rotate-90"
-      />
-      <span className="flex min-w-0 flex-1 flex-col">
-        <span className="flex items-center gap-3">
-          <span className="min-w-0 flex-1 truncate font-medium text-[13px] text-neutral-100 leading-5">
+      <span className="flex w-full items-center gap-3">
+        {/* The chevron follows the title: open/closed reads where the eye already is. */}
+        <span className="flex min-w-0 flex-1 items-center gap-1">
+          <span className="min-w-0 truncate font-medium text-[13px] text-neutral-100 leading-5">
             {title ?? derivedName}
           </span>
-          <ToolStatus state={state} />
+          <ChevronRightIcon
+            aria-hidden="true"
+            strokeWidth={1.75}
+            className="size-3.5 shrink-0 text-neutral-500 transition-transform duration-150 group-data-[state=open]/tool:rotate-90"
+          />
         </span>
-        {summary && <span className="text-neutral-400 text-xs leading-[18px]">{summary}</span>}
+        <ToolStatus state={state} />
       </span>
+      {summary && <span className="text-neutral-400 text-xs leading-[18px]">{summary}</span>}
     </CollapsibleTrigger>
   );
 };
@@ -123,7 +125,7 @@ export type ToolContentProps = ComponentProps<typeof CollapsibleContent>;
 export const ToolContent = ({ className, ...props }: ToolContentProps) => (
   <CollapsibleContent
     className={cn(
-      "space-y-3 pr-1.5 pb-3 pl-7 outline-none",
+      "space-y-3 pb-3 pl-2 outline-none",
       "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=open]:animate-in motion-reduce:animate-none",
       className
     )}
