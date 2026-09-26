@@ -15,7 +15,7 @@
  */
 
 import type { UIMessage } from "ai";
-import type { NodeType } from "@/types";
+import type { GroupColor, NodeType } from "@/types";
 
 // ---------------------------------------------------------------------------
 // Harnesses
@@ -206,8 +206,14 @@ export interface AgentToolRuntime {
  *
  * Agent-created node ids look like `${nodeType}-ag${base36}` so they never
  * collide with the store's `${type}-${counter}` scheme (loadWorkflow's
- * counter reset only reads an all-digit suffix).
+ * counter reset only reads an all-digit suffix); agent-created group ids
+ * likewise look like `group-ag${base36}` next to the store's `group-${counter}`.
  * Edge ids follow the store: `edge-${source}-${target}-${sourceHandle}-${targetHandle}`.
+ *
+ * Groups: a group is a named, coloured box (`state.groups`) and a node joins
+ * it through `node.groupId`. The canvas never resizes a box by itself, so the
+ * server sends every box it fits (addGroup, updateGroup) with the membership
+ * that goes with it.
  */
 export type AgentGraphOp =
   /**
@@ -250,7 +256,34 @@ export type AgentGraphOp =
       /** Edge data such as arrayItemIndex or isLoop; createdAt is added when applied. */
       data?: Record<string, unknown>;
     }
-  | { op: "removeEdge"; id: string };
+  | { op: "removeEdge"; id: string }
+  /** A new group box; `nodeIds` join it (their groupId is set). */
+  | {
+      op: "addGroup";
+      id: string;
+      name: string;
+      color: AgentGroupColor;
+      /** The box in flow coordinates. The title pill is drawn above it, outside the box. */
+      position: { x: number; y: number };
+      size: { width: number; height: number };
+      nodeIds: string[];
+    }
+  /** Rename, recolour, move or resize a group box; absent fields stay as they are. */
+  | {
+      op: "updateGroup";
+      id: string;
+      name?: string;
+      color?: AgentGroupColor;
+      position?: { x: number; y: number };
+      size?: { width: number; height: number };
+    }
+  /** Delete a group box. Its nodes stay where they are; their groupId clears. */
+  | { op: "removeGroup"; id: string }
+  /** Put a node into a group (`groupId`) or take it out of the one it is in (null). */
+  | { op: "setNodeGroup"; id: string; groupId: string | null };
+
+/** The colours a group can have (the canvas's GROUP_COLOR_ORDER). */
+export type AgentGroupColor = GroupColor;
 
 export interface AgentGraphOpBatch {
   /** Unique per batch. */

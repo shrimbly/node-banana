@@ -91,7 +91,7 @@ export function describeWorkflow(graph: DescribableGraph, options: DescribeOptio
       const box = group.position && group.size
         ? ` box (${Math.round(group.position.x)}, ${Math.round(group.position.y)}) ${Math.round(group.size.width)}×${Math.round(group.size.height)}`
         : "";
-      lines.push(`- ${group.name} [${group.id}]${group.locked ? " locked" : ""}${box}${members.length ? `: ${members.join(", ")}` : ": no nodes"}`);
+      lines.push(`- ${group.name} [${group.id}]${group.color ? ` ${group.color}` : ""}${group.locked ? " locked" : ""}${box}${members.length ? `: ${members.join(", ")}` : ": no nodes"}`);
     }
   }
   return lines.join("\n");

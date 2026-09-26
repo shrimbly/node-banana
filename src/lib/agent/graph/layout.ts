@@ -7,6 +7,14 @@
  * when it touches nothing — right of the existing canvas (or in the visible
  * area when the canvas is empty or being replaced). A cluster that would
  * overlap existing nodes slides down until it is clear.
+ *
+ * Groups: the columns are made of *units*, a lone node or a whole group. A
+ * group's members are first laid out as their own block (columns, separate
+ * chains stacked), which the group's box wraps with padding; the unit is that
+ * box plus the band above it where the canvas draws the group's title. Units
+ * are then laid out like nodes: groups that feed each other read left→right,
+ * groups that do not stack top to bottom, and nothing overlaps a box or the
+ * title above it.
  */
 
 export interface LayoutBox {
@@ -36,6 +44,14 @@ export const ROW_GAP = 40;
 const CLUSTER_GAP = 200;
 const COLLISION_MARGIN = 30;
 const CLUSTER_STACK_GAP = 80;
+/** Space between a group's box and the nodes inside it (the canvas's createGroup uses 20 around measured nodes). */
+export const GROUP_PADDING = 30;
+/**
+ * The group's title pill sits on top of its box, outside it, and is scaled
+ * by 1/zoom (about 24px tall at 100%): the band kept clear above every box
+ * covers it down to roughly 50% zoom.
+ */
+export const GROUP_HEADER_ROOM = 50;
 
 export interface PlaceRequest {
   /** Nodes to place, in creation order. */
@@ -59,49 +75,119 @@ interface ClusterShape {
   columnWidth: number[];
 }
 
+/** A block laid out as one piece: a lone node, or a group's box (with its title band) and its members. */
+interface Unit {
+  id: string;
+  width: number;
+  height: number;
+  /** Member nodes and their offsets from the unit's top-left. */
+  members: Map<string, { x: number; y: number }>;
+  /** Set for a group unit: its box is the unit minus the title band on top. */
+  groupId?: string;
+}
+
+export interface GroupedPlaceRequest extends PlaceRequest {
+  /**
+   * Groups whose members are all in `place`, in order: each is laid out as
+   * its own block and positioned as one unit. A node listed in several groups
+   * belongs to the first.
+   */
+  groups: Array<{ id: string; members: string[] }>;
+}
+
+export interface GroupedPlacement {
+  /** Node positions, keyed by id. */
+  positions: Map<string, { x: number; y: number }>;
+  /** Each group's box (without the title band above it), keyed by group id. */
+  groupBoxes: Map<string, LayoutBox>;
+}
+
 /** Positions for `place`, keyed by id. */
 export function placeNewNodes(request: PlaceRequest): Map<string, { x: number; y: number }> {
-  const result = new Map<string, { x: number; y: number }>();
-  if (request.place.length === 0) return result;
+  return placeNewNodesInGroups({ ...request, groups: [] }).positions;
+}
 
+/** As placeNewNodes, with each group in `groups` laid out as a block inside its box. */
+export function placeNewNodesInGroups(request: GroupedPlaceRequest): GroupedPlacement {
   const sizes = new Map(request.place.map((n) => [n.id, n]));
-  const fixedById = new Map(request.fixed.map((b) => [b.id, b]));
   const edges = request.edges.filter((e) => !e.isLoop);
-  const obstacles: LayoutBox[] = [...request.fixed];
-  const bbox = boundingBox(request.fixed);
+  const groupOf = new Map<string, { id: string; members: string[] }>();
+  for (const group of request.groups) {
+    for (const id of group.members) if (sizes.has(id) && !groupOf.has(id)) groupOf.set(id, group);
+  }
+  // Units in creation order: a group where its first member was created.
+  const units: Unit[] = [];
+  const built = new Set<string>();
+  for (const node of request.place) {
+    const group = groupOf.get(node.id);
+    if (!group) {
+      units.push(nodeUnit(node));
+    } else if (!built.has(group.id)) {
+      built.add(group.id);
+      units.push(groupUnit(group.id, group.members.filter((id) => groupOf.get(id) === group), sizes, edges));
+    }
+  }
+  return expandUnits(units, placeUnits(units, request.fixed, edges, request.viewport));
+}
 
-  for (const component of components(request.place.map((n) => n.id), edges)) {
-    const shape = shapeCluster(component, sizes, edges);
+function placeUnits(
+  units: Unit[],
+  fixed: LayoutBox[],
+  edges: LayoutEdge[],
+  viewport: LayoutViewport | undefined,
+): Map<string, { x: number; y: number }> {
+  const result = new Map<string, { x: number; y: number }>();
+  if (units.length === 0) return result;
 
-    const upstream = edges.filter((e) => fixedById.has(e.source) && shape.depth.has(e.target));
-    const downstream = edges.filter((e) => shape.depth.has(e.source) && fixedById.has(e.target));
+  const unitOf = unitIndex(units);
+  const sizes = new Map(units.map((u) => [u.id, u]));
+  const unitEdges = edgesBetweenUnits(edges, unitOf);
+  const fixedById = new Map(fixed.map((b) => [b.id, b]));
+  const obstacles: LayoutBox[] = [...fixed];
+  const bbox = boundingBox(fixed);
+
+  for (const component of components(units.map((u) => u.id), unitEdges)) {
+    const shape = shapeCluster(component, sizes, unitEdges);
+    const inShape = (nodeId: string) => {
+      const unit = unitOf.get(nodeId);
+      return !!unit && shape.depth.has(unit.id);
+    };
+    const column = (nodeId: string) => shape.depth.get(unitOf.get(nodeId)!.id)!;
+    // Where a member node sits relative to the cluster's top-left.
+    const offsetOf = (nodeId: string) => {
+      const unit = unitOf.get(nodeId)!;
+      const at = shape.offsets.get(unit.id)!;
+      const inside = unit.members.get(nodeId)!;
+      return { x: at.x + inside.x, y: at.y + inside.y };
+    };
+
+    const upstream = edges.filter((e) => fixedById.has(e.source) && inShape(e.target));
+    const downstream = edges.filter((e) => inShape(e.source) && fixedById.has(e.target));
 
     let origin: { x: number; y: number };
     if (upstream.length > 0) {
-      // Each node that an existing node feeds must sit right of that node.
+      // Each unit that an existing node feeds must sit right of that node.
       const x = Math.max(
         ...upstream.map((e) => {
           const from = fixedById.get(e.source)!;
-          return from.x + from.width + COLUMN_GAP - shape.columnX[shape.depth.get(e.target)!];
+          return from.x + from.width + COLUMN_GAP - shape.columnX[column(e.target)];
         }),
       );
       const first = fixedById.get(upstream[0].source)!;
-      const firstTarget = shape.offsets.get(upstream[0].target)!;
-      origin = { x, y: first.y - firstTarget.y };
+      origin = { x, y: first.y - offsetOf(upstream[0].target).y };
     } else if (downstream.length > 0) {
       // A new node feeding an existing one (e.g. a prompt): left of it.
       const x = Math.min(
         ...downstream.map((e) => {
           const to = fixedById.get(e.target)!;
-          const column = shape.depth.get(e.source)!;
-          return to.x - COLUMN_GAP - (shape.columnX[column] + shape.columnWidth[column]);
+          const c = column(e.source);
+          return to.x - COLUMN_GAP - (shape.columnX[c] + shape.columnWidth[c]);
         }),
       );
       const first = fixedById.get(downstream[0].target)!;
-      const firstSource = shape.offsets.get(downstream[0].source)!;
-      origin = { x, y: first.y - firstSource.y };
+      origin = { x, y: first.y - offsetOf(downstream[0].source).y };
     } else if (!bbox) {
-      origin = viewportOrigin(shape, request.viewport);
+      origin = viewportOrigin(shape, viewport);
     } else {
       origin = { x: bbox.maxX + CLUSTER_GAP, y: bbox.minY };
     }
@@ -124,25 +210,178 @@ export function arrangeNodes(
   edges: LayoutEdge[],
   others: LayoutBox[] = [],
 ): Map<string, { x: number; y: number }> {
-  const result = new Map<string, { x: number; y: number }>();
-  if (nodes.length === 0) return result;
-  const bbox = boundingBox(nodes)!;
-  const sizes = new Map(nodes.map((n) => [n.id, n]));
+  return arrangeWithGroups(nodes, edges, others, []).positions;
+}
+
+export interface ArrangeGroup {
+  id: string;
+  /** Its members among the nodes being arranged. */
+  members: string[];
+  /** Its box now, when it has one: the arrangement starts from where the group is. */
+  box?: LayoutBox;
+}
+
+/**
+ * As arrangeNodes, with each group tidied inside a box refit around its
+ * members and moved as one unit.
+ */
+export function arrangeWithGroups(
+  nodes: LayoutBox[],
+  edges: LayoutEdge[],
+  others: LayoutBox[],
+  groups: ArrangeGroup[],
+): GroupedPlacement {
+  if (nodes.length === 0) return { positions: new Map(), groupBoxes: new Map() };
+  const byId = new Map(nodes.map((n) => [n.id, n]));
   const live = edges.filter((e) => !e.isLoop);
+  const placed: Array<{ unit: Unit; x: number; y: number }> = [];
+  const grouped = new Set<string>();
+  for (const group of groups) {
+    const members = group.members.filter((id) => byId.has(id) && !grouped.has(id));
+    if (members.length === 0) continue;
+    for (const id of members) grouped.add(id);
+    const unit = groupUnit(group.id, members, byId, live);
+    const fitted = fitGroupBox(group.id, members.map((id) => byId.get(id)!));
+    const box = group.box ?? fitted;
+    placed.push({ unit, x: box.x, y: box.y - GROUP_HEADER_ROOM });
+  }
+  for (const node of nodes) if (!grouped.has(node.id)) placed.push({ unit: nodeUnit(node), x: node.x, y: node.y });
+
+  const units = placed.map((p) => p.unit);
+  const unitOf = unitIndex(units);
+  const sizes = new Map(units.map((u) => [u.id, u]));
+  const unitEdges = edgesBetweenUnits(live, unitOf);
   // Clusters keep their current top-to-bottom order.
-  const ordered = [...nodes].sort((a, b) => a.y - b.y || a.x - b.x).map((n) => n.id);
+  const ordered = [...placed].sort((a, b) => a.y - b.y || a.x - b.x).map((p) => p.unit.id);
+  const x = Math.min(...placed.map((p) => p.x));
+  let y = Math.min(...placed.map((p) => p.y));
   const obstacles: LayoutBox[] = [...others];
-  let y = bbox.minY;
-  for (const component of components(ordered, live)) {
-    const shape = shapeCluster(component, sizes, live);
-    const placed = slideClear(shape, { x: bbox.minX, y }, obstacles);
-    for (const box of placed) {
-      result.set(box.id, { x: box.x, y: box.y });
+  const positions = new Map<string, { x: number; y: number }>();
+  for (const component of components(ordered, unitEdges)) {
+    const shape = shapeCluster(component, sizes, unitEdges);
+    const boxes = slideClear(shape, { x, y }, obstacles);
+    for (const box of boxes) {
+      positions.set(box.id, { x: box.x, y: box.y });
       obstacles.push(box);
     }
-    y = Math.max(...placed.map((b) => b.y + b.height)) + CLUSTER_STACK_GAP;
+    y = Math.max(...boxes.map((b) => b.y + b.height)) + CLUSTER_STACK_GAP;
+  }
+  return expandUnits(units, positions);
+}
+
+/**
+ * One group's members laid out as a block inside a fitted box whose top-left
+ * is at `boxOrigin`, moved down until the box and its title band overlap none
+ * of `obstacles`.
+ */
+export function layoutGroupAt(
+  groupId: string,
+  members: LayoutBox[],
+  edges: LayoutEdge[],
+  boxOrigin: { x: number; y: number },
+  obstacles: LayoutBox[],
+): GroupedPlacement {
+  const sizes = new Map(members.map((m) => [m.id, m]));
+  const unit = groupUnit(groupId, members.map((m) => m.id), sizes, edges.filter((e) => !e.isLoop));
+  const shape = shapeCluster([unit.id], new Map([[unit.id, unit]]), []);
+  const [box] = slideClear(shape, { x: boxOrigin.x, y: boxOrigin.y - GROUP_HEADER_ROOM }, obstacles);
+  return expandUnits([unit], new Map([[unit.id, { x: box.x, y: box.y }]]));
+}
+
+/** The box the canvas would draw around these nodes: their bounding box plus the group padding. */
+export function fitGroupBox(groupId: string, members: readonly LayoutBox[]): LayoutBox {
+  const b = boundingBox(members)!;
+  return {
+    id: `group:${groupId}`,
+    x: Math.round(b.minX - GROUP_PADDING),
+    y: Math.round(b.minY - GROUP_PADDING),
+    width: Math.round(b.maxX - b.minX + 2 * GROUP_PADDING),
+    height: Math.round(b.maxY - b.minY + 2 * GROUP_PADDING),
+  };
+}
+
+/** A group's box with the title band above it: what must stay clear of other nodes and groups. */
+export function groupFootprint(box: LayoutBox): LayoutBox {
+  return { ...box, y: box.y - GROUP_HEADER_ROOM, height: box.height + GROUP_HEADER_ROOM };
+}
+
+/** Whether two boxes share any area (touching edges do not count). */
+export function boxesOverlap(a: LayoutBox, b: LayoutBox): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
+}
+
+function nodeUnit(node: { id: string; width: number; height: number }): Unit {
+  return { id: node.id, width: node.width, height: node.height, members: new Map([[node.id, { x: 0, y: 0 }]]) };
+}
+
+/** A group's members as their own block (columns; separate chains stacked), wrapped in its box and title band. */
+function groupUnit(
+  groupId: string,
+  memberIds: string[],
+  sizes: Map<string, { width: number; height: number }>,
+  edges: LayoutEdge[],
+): Unit {
+  const members = new Map<string, { x: number; y: number }>();
+  let y = 0;
+  let width = 0;
+  for (const component of components(memberIds, edges)) {
+    const shape = shapeCluster(component, sizes, edges);
+    for (const id of component) {
+      const offset = shape.offsets.get(id)!;
+      members.set(id, { x: GROUP_PADDING + offset.x, y: GROUP_HEADER_ROOM + GROUP_PADDING + y + offset.y });
+    }
+    width = Math.max(width, shape.width);
+    y += shape.height + CLUSTER_STACK_GAP;
+  }
+  const height = y - CLUSTER_STACK_GAP;
+  return {
+    id: `unit:${groupId}`,
+    width: width + 2 * GROUP_PADDING,
+    height: GROUP_HEADER_ROOM + height + 2 * GROUP_PADDING,
+    members,
+    groupId,
+  };
+}
+
+function unitIndex(units: Unit[]): Map<string, Unit> {
+  const unitOf = new Map<string, Unit>();
+  for (const unit of units) for (const id of unit.members.keys()) unitOf.set(id, unit);
+  return unitOf;
+}
+
+/** Node edges as edges between the units holding their ends (edges inside one unit dropped). */
+function edgesBetweenUnits(edges: LayoutEdge[], unitOf: Map<string, Unit>): LayoutEdge[] {
+  const result: LayoutEdge[] = [];
+  for (const edge of edges) {
+    if (edge.isLoop) continue;
+    const source = unitOf.get(edge.source);
+    const target = unitOf.get(edge.target);
+    if (source && target && source !== target) result.push({ source: source.id, target: target.id });
   }
   return result;
+}
+
+/** Member positions and group boxes from unit positions (unit top-lefts are already whole numbers). */
+function expandUnits(units: Unit[], at: Map<string, { x: number; y: number }>): GroupedPlacement {
+  const positions = new Map<string, { x: number; y: number }>();
+  const groupBoxes = new Map<string, LayoutBox>();
+  for (const unit of units) {
+    const origin = at.get(unit.id);
+    if (!origin) continue;
+    for (const [id, offset] of unit.members) {
+      positions.set(id, { x: Math.round(origin.x + offset.x), y: Math.round(origin.y + offset.y) });
+    }
+    if (unit.groupId) {
+      groupBoxes.set(unit.groupId, {
+        id: `group:${unit.groupId}`,
+        x: origin.x,
+        y: origin.y + GROUP_HEADER_ROOM,
+        width: unit.width,
+        height: unit.height - GROUP_HEADER_ROOM,
+      });
+    }
+  }
+  return { positions, groupBoxes };
 }
 
 function viewportOrigin(shape: ClusterShape, viewport: LayoutViewport | undefined): { x: number; y: number } {

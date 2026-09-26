@@ -13,8 +13,7 @@ import type { NodeType } from "@/types";
 import type { AgentToolDefinition, AgentToolResult, AgentToolRuntime, AgentWorkflowSnapshot } from "../types";
 import { findNodeType, NODE_CATALOG, NODE_TYPES } from "../graph/catalog";
 import { describeModels, describeNodeTypes, describeWorkflow, edgeLine, nodeLine } from "../graph/describe";
-import { GraphDraft, titleOf, type DraftTransaction, type GraphDraftOptions, type RemovedNode } from "../graph/draft";
-import { arrangeNodes } from "../graph/layout";
+import { GraphDraft, groupLabel, titleOf, type DraftTransaction, type GraphDraftOptions, type RemovedNode } from "../graph/draft";
 import {
   AGENT_TOOL_DEFINITIONS,
   TOOL_NAMES,
@@ -104,7 +103,7 @@ export function normalizeArgs(args: unknown): unknown {
   if (root === undefined || root === null) return {};
   if (typeof root !== "object" || Array.isArray(root)) return root;
   const out: Record<string, unknown> = { ...(root as Record<string, unknown>) };
-  for (const key of ["nodes", "connections", "operations", "nodeIds", "types", "settings"]) {
+  for (const key of ["nodes", "connections", "operations", "groups", "nodeIds", "types", "settings"]) {
     if (key in out) out[key] = decode(out[key]);
   }
   for (const key of ["nodes", "operations"]) {
@@ -202,6 +201,9 @@ function createWorkflow(draft: GraphDraft, args: Args<typeof createWorkflowShape
     connections.forEach((connection, index) => {
       tx.connect(connection, `connections[${index}] (${connection.from} → ${connection.to})`);
     });
+    (args.groups ?? []).forEach((group, index) => {
+      tx.createGroup(group, `groups[${index}]${group.name ? ` ("${group.name}")` : ""}`);
+    });
   }, { replacedCount });
 }
 
@@ -254,9 +256,30 @@ function editWorkflow(draft: GraphDraft, args: Args<typeof editWorkflowShape>): 
           }
           tx.moveNode(op.node, op.position, at);
           return;
+        case "group":
+          tx.createGroup({ nodes: nodeList(op), name: op.name ?? op.title ?? op.group, color: op.color }, at);
+          return;
+        case "ungroup":
+          tx.removeGroup(op.group, at);
+          return;
+        case "update_group":
+          tx.updateGroup(op.group, { name: op.name ?? op.title, color: op.color }, at);
+          return;
+        case "add_to_group":
+          tx.addToGroup(nodeList(op), op.group, at);
+          return;
+        case "remove_from_group":
+          tx.removeFromGroup(nodeList(op), at);
+          return;
       }
     });
   });
+}
+
+/** The nodes a group operation names: `nodes`, or a single `node`. */
+function nodeList(op: EditOperation): string[] | undefined {
+  if (op.nodes && op.nodes.length > 0) return op.nodes;
+  return op.node ? [op.node] : op.nodes;
 }
 
 function updateNode(draft: GraphDraft, args: Args<typeof updateNodeShape>): AgentToolResult {
@@ -274,32 +297,8 @@ function arrangeWorkflow(draft: GraphDraft, args: Args<typeof arrangeWorkflowSha
   if (draft.nodes.size === 0) {
     return { ok: true, text: "The canvas is empty; nothing to arrange.", summary: "Nothing to arrange", ops: [] };
   }
-  // Grouped nodes stay put: a group's box does not follow its members, so
-  // moving them one by one would pull them out of the (possibly locked) box.
-  const candidates = requested.length > 0 ? [...new Set(requested)] : [...draft.nodes.keys()];
-  const grouped = candidates.filter((id) => !!draft.getGroup(draft.nodes.get(id)!.groupId));
-  const ids = new Set(candidates.filter((id) => !grouped.includes(id)));
-  const groupNames = [...new Set(grouped.map((id) => draft.getGroup(draft.nodes.get(id)!.groupId)!.name))].map((name) => `"${name}"`);
-  const keptNote = grouped.length > 0
-    ? `Left ${grouped.length} grouped node${grouped.length === 1 ? "" : "s"} in place (group${groupNames.length === 1 ? "" : "s"} ${groupNames.join(", ")}): a group keeps its layout; the user moves it by dragging its box.`
-    : "";
-  if (ids.size === 0) {
-    return { ok: true, text: `Nothing was moved. ${keptNote}`, summary: "Nothing to arrange (grouped nodes stay put)", ops: [] };
-  }
-  return runBatch(draft, TOOL_NAMES.arrangeWorkflow, (tx) => {
-    const box = (id: string) => {
-      const node = tx.nodes.get(id)!;
-      return { id, x: node.position.x, y: node.position.y, width: node.width, height: node.height };
-    };
-    const positions = arrangeNodes(
-      [...ids].map(box),
-      tx.edges.filter((e) => ids.has(e.source) && ids.has(e.target)).map((e) => ({ source: e.source, target: e.target, isLoop: !!e.data?.isLoop })),
-      // Everything else, and every group box, is an obstacle.
-      [...[...tx.nodes.keys()].filter((id) => !ids.has(id)).map(box), ...draft.groupBoxes()],
-    );
-    for (const [id, position] of positions) tx.arrangeNode(id, position);
-    if (keptNote) tx.log.notes.push(keptNote);
-  });
+  // Groups move as units, their nodes tidied inside a refit box.
+  return runBatch(draft, TOOL_NAMES.arrangeWorkflow, (tx) => tx.arrange(requested));
 }
 
 // ---------------------------------------------------------------------------
@@ -358,6 +357,11 @@ function successResult(draft: GraphDraft, tx: DraftTransaction, replacedCount: n
     for (const r of disconnected) lines.push(`- ${edgeLine(r.edge)}${r.reason ? ` (${r.reason})` : ""}`);
   }
   if (log.moved.length > 0) lines.push(`Moved: ${[...new Set(log.moved)].join(", ")}.`);
+  const groupLines = describeGroupChanges(draft, tx);
+  if (groupLines.length > 0) {
+    lines.push("Groups:");
+    for (const line of groupLines) lines.push(`- ${line}`);
+  }
   if (log.notes.length > 0) lines.push(...log.notes.map((note) => `Note: ${note}`));
   if (tx.warnings.length > 0) {
     lines.push("Warnings:");
@@ -367,7 +371,12 @@ function successResult(draft: GraphDraft, tx: DraftTransaction, replacedCount: n
   if (hints.length > 0) lines.push(`Next: ${hints.join(" ")}`);
   if (tx.ops.length === 0) lines.unshift("No changes were needed.");
 
-  const focus = new Set<string>([...created.map((c) => c.id), ...updatedIds, ...log.moved.filter((id) => draft.nodes.has(id))]);
+  const focus = new Set<string>([
+    ...created.map((c) => c.id),
+    ...updatedIds,
+    ...log.moved.filter((id) => draft.nodes.has(id)),
+    ...log.groupedNodes.filter((id) => draft.nodes.has(id)),
+  ]);
   if (focus.size === 0) {
     for (const edge of log.addedEdges) {
       focus.add(edge.source);
@@ -400,10 +409,29 @@ function summarize(draft: GraphDraft, tx: DraftTransaction, created: number, upd
   if (!tx.cleared && log.removedNodes.length > 0) parts.push(`removed ${plural(log.removedNodes.length, "node")}`);
   if (log.addedEdges.length > 0) parts.push(`${plural(log.addedEdges.length, "connection")}`);
   if (disconnected > 0) parts.push(`${disconnected} disconnected`);
+  const newGroups = log.createdGroups.filter((id) => draft.getGroup(id));
+  const removedGroups = log.removedGroups.filter((id) => !log.createdGroups.includes(id));
+  if (newGroups.length > 0) parts.push(`${newGroups.length === 1 ? `grouped "${draft.getGroup(newGroups[0])!.name}"` : `${newGroups.length} groups`}`);
+  if (removedGroups.length > 0 && !tx.cleared) parts.push(`removed ${plural(removedGroups.length, "group")}`);
+  if (newGroups.length === 0 && removedGroups.length === 0 && log.groups.length > 0) parts.push("updated groups");
   if (log.moved.length > 0 && created === 0) parts.push(`moved ${plural(new Set(log.moved).size, "node")}`);
   let text = parts.join(", ") || "Updated the canvas";
   if (tx.cleared) text = `Replaced canvas (${replacedCount} removed): ${text}`;
   return clip(text.charAt(0).toUpperCase() + text.slice(1));
+}
+
+/** New groups with their nodes (as they ended up), then every other group change, in order. */
+function describeGroupChanges(draft: GraphDraft, tx: DraftTransaction): string[] {
+  const lines: string[] = [];
+  for (const id of tx.log.createdGroups) {
+    const group = draft.getGroup(id);
+    if (!group) continue;
+    const members = [...draft.nodes.values()].filter((n) => n.groupId === id).map((n) => n.id);
+    const box = group.position && group.size ? `, box (${group.position.x}, ${group.position.y}) ${group.size.width}×${group.size.height}` : "";
+    lines.push(`Created group ${groupLabel(group)} (${group.color ?? "neutral"}${box}): ${members.join(", ")}.`);
+  }
+  lines.push(...tx.log.groups);
+  return lines;
 }
 
 /**

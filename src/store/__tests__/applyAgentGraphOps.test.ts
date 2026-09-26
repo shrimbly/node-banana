@@ -8,9 +8,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import type { WorkflowEdge, WorkflowNode, WorkflowNodeData } from "@/types";
+import type { NodeGroup, WorkflowEdge, WorkflowNode, WorkflowNodeData } from "@/types";
 import type { AgentGraphOp, AgentGraphOpBatch } from "@/lib/agent/types";
-import type { ApplyGraphOpsDeps, ApplyGraphOpsResult } from "@/lib/agent/graph/applyOps";
+import type { ApplyGraphOpsDeps, ApplyGraphOpsResult, ApplyGraphOpsState } from "@/lib/agent/graph/applyOps";
 
 const applyGraphOpsMock = vi.hoisted(() => vi.fn());
 
@@ -47,12 +47,13 @@ import { useWorkflowStore } from "../workflowStore";
 
 /** Minimal applier with the real one's contract (see graph/applyOps.ts). */
 function fakeApplyGraphOps(
-  state: { nodes: WorkflowNode[]; edges: WorkflowEdge[] },
+  state: ApplyGraphOpsState,
   ops: AgentGraphOp[],
   deps: ApplyGraphOpsDeps,
 ): ApplyGraphOpsResult {
   let nodes = [...state.nodes];
   let edges = [...state.edges];
+  let groups: Record<string, NodeGroup> = state.groups ?? {};
   let clearedCanvas = false;
   let applied = 0;
   const skipped: string[] = [];
@@ -61,7 +62,29 @@ function fakeApplyGraphOps(
       case "clearCanvas":
         nodes = [];
         edges = [];
+        groups = {};
         clearedCanvas = true;
+        applied++;
+        break;
+      case "addGroup":
+        groups = { ...groups, [op.id]: { id: op.id, name: op.name, color: op.color, position: op.position, size: op.size } };
+        nodes = nodes.map((node) => (op.nodeIds.includes(node.id) ? { ...node, groupId: op.id } : node));
+        applied++;
+        break;
+      case "updateGroup":
+        groups = { ...groups, [op.id]: { ...groups[op.id], ...op } as NodeGroup };
+        delete (groups[op.id] as { op?: string }).op;
+        applied++;
+        break;
+      case "removeGroup": {
+        const { [op.id]: _removed, ...rest } = groups;
+        groups = rest;
+        nodes = nodes.map((node) => (node.groupId === op.id ? { ...node, groupId: undefined } : node));
+        applied++;
+        break;
+      }
+      case "setNodeGroup":
+        nodes = nodes.map((node) => (node.id === op.id ? { ...node, groupId: op.groupId ?? undefined } : node));
         applied++;
         break;
       case "addNode": {
@@ -120,7 +143,7 @@ function fakeApplyGraphOps(
         break;
     }
   }
-  return { nodes, edges, clearedCanvas, applied, skipped };
+  return { nodes, edges, groups, clearedCanvas, applied, skipped };
 }
 
 function batch(ops: AgentGraphOp[], extra: Partial<AgentGraphOpBatch> = {}): AgentGraphOpBatch {
@@ -305,6 +328,56 @@ describe("applyAgentGraphOps", () => {
     );
 
     expect(Object.keys(useWorkflowStore.getState().groups)).toEqual(["group-b"]);
+  });
+
+  it("passes the live groups to the applier and keeps the groups a batch creates with its nodes", () => {
+    const group = (id: string): NodeGroup => ({ id, name: id, color: "blue", position: { x: 0, y: 0 }, size: { width: 400, height: 300 } });
+    seed([promptNode("prompt-1", { groupId: "group-1" }), promptNode("prompt-2")], [], { "group-1": group("group-1") });
+
+    useWorkflowStore.getState().applyAgentGraphOps(
+      batch([
+        { op: "addNode", id: "prompt-ag1", nodeType: "prompt", position: { x: 0, y: 500 }, data: {} },
+        { op: "addGroup", id: "group-ag1", name: "Scene set", color: "purple", position: { x: -30, y: 470 }, size: { width: 380, height: 280 }, nodeIds: ["prompt-ag1", "prompt-2"] },
+        { op: "updateGroup", id: "group-1", name: "Hero film" },
+      ]),
+    );
+    expect(applyGraphOpsMock.mock.calls[0][0].groups).toEqual({ "group-1": group("group-1") });
+
+    let state = useWorkflowStore.getState();
+    expect(Object.keys(state.groups).sort()).toEqual(["group-1", "group-ag1"]);
+    expect(state.groups["group-1"].name).toBe("Hero film");
+    expect(state.groups["group-ag1"]).toMatchObject({ name: "Scene set", color: "purple", size: { width: 380, height: 280 } });
+    expect(state.nodes.map((n) => [n.id, n.groupId])).toEqual([
+      ["prompt-1", "group-1"],
+      ["prompt-2", "group-ag1"],
+      ["prompt-ag1", "group-ag1"],
+    ]);
+
+    // One undo step for the whole batch, groups included.
+    state.undo();
+    state = useWorkflowStore.getState();
+    expect(state.groups).toEqual({ "group-1": group("group-1") });
+    expect(state.nodes.map((n) => [n.id, n.groupId])).toEqual([
+      ["prompt-1", "group-1"],
+      ["prompt-2", undefined],
+    ]);
+  });
+
+  it("keeps a group created in a batch that replaced the canvas, and drops the old ones", () => {
+    const group = (id: string): NodeGroup => ({ id, name: id, color: "blue", position: { x: 0, y: 0 }, size: { width: 400, height: 300 } });
+    seed([promptNode("prompt-1", { groupId: "group-1" })], [], { "group-1": group("group-1") });
+
+    useWorkflowStore.getState().applyAgentGraphOps(
+      batch(
+        [
+          { op: "removeNode", id: "prompt-1" },
+          { op: "addNode", id: "prompt-ag1", nodeType: "prompt", position: { x: 0, y: 0 }, data: {} },
+          { op: "addGroup", id: "group-ag1", name: "New", color: "green", position: { x: -30, y: -30 }, size: { width: 380, height: 280 }, nodeIds: ["prompt-ag1"] },
+        ],
+        { replacedCanvas: true },
+      ),
+    );
+    expect(Object.keys(useWorkflowStore.getState().groups)).toEqual(["group-ag1"]);
   });
 
   it("returns skipped ops with their reasons", () => {

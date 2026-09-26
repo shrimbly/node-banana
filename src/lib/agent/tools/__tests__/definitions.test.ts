@@ -35,8 +35,37 @@ describe("tool definitions", () => {
     };
     expect(schema.required).toEqual(["operations"]);
     expect(schema.properties.operations.type).toBe("array");
-    expect(schema.properties.operations.items.properties.op.enum).toEqual(["add_node", "update_node", "remove_node", "connect", "disconnect", "move_node"]);
+    expect(schema.properties.operations.items.properties.op.enum).toEqual([
+      "add_node",
+      "update_node",
+      "remove_node",
+      "connect",
+      "disconnect",
+      "move_node",
+      "group",
+      "ungroup",
+      "update_group",
+      "add_to_group",
+      "remove_from_group",
+    ]);
     expect(schema.properties.operations.items.properties.settings.description).toContain("describe_node_types");
+    // Group fields stay flat (no unions): a list of node ids, a group key, a name and a colour.
+    for (const field of ["nodes", "group", "name", "color"]) {
+      expect(schema.properties.operations.items.properties[field]?.description, field).toBeTruthy();
+    }
+  });
+
+  it("gives create_workflow flat groups: {name, color?, nodes}", () => {
+    const create = AGENT_TOOL_DEFINITIONS.find((d) => d.name === "create_workflow")!;
+    const schema = z.toJSONSchema(z.object(create.inputShape)) as unknown as {
+      required?: string[];
+      properties: { groups: { type: string; items: { type: string; required: string[]; properties: Record<string, { type?: string }> } } };
+    };
+    expect(schema.required).toEqual(["nodes"]);
+    expect(schema.properties.groups.type).toBe("array");
+    expect(schema.properties.groups.items.type).toBe("object");
+    expect(schema.properties.groups.items.required).toEqual(["name", "nodes"]);
+    expect(Object.keys(schema.properties.groups.items.properties)).toEqual(["name", "color", "nodes"]);
   });
 
   it("are the runtime's definitions", () => {

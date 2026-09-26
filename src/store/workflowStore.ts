@@ -3946,7 +3946,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     if (batch.ops.length === 0) return { applied: 0, skipped: [] };
 
     const state = get();
-    const result = applyGraphOps({ nodes: state.nodes, edges: state.edges }, batch.ops, {
+    const result = applyGraphOps({ nodes: state.nodes, edges: state.edges, groups: state.groups }, batch.ops, {
       createDefaultNodeData,
       defaultNodeDimensions,
     });
@@ -3962,9 +3962,12 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     );
     const remainingEdgeIds = new Set(result.edges.map((edge) => edge.id));
     const removedEdges = state.edges.filter((edge) => !remainingEdgeIds.has(edge.id));
-    const groups = result.clearedCanvas
-      ? {}
-      : pruneEmptiedGroups(state.groups, state.nodes, removedNodeIds, result.nodes);
+    // The batch's own group changes (a clearCanvas drops them all), then the
+    // groups whose nodes it deleted, as a manual delete does. Only groups that
+    // had nodes before the batch can be pruned, so a group the batch created
+    // with its nodes stays.
+    const batchGroups = result.groups ?? (result.clearedCanvas ? {} : state.groups);
+    const groups = pruneEmptiedGroups(batchGroups, state.nodes, removedNodeIds, result.nodes);
 
     set({
       nodes: removedNodeIds.size > 0 ? healSplitGridRouterRefs(result.nodes, removedNodeIds) : result.nodes,

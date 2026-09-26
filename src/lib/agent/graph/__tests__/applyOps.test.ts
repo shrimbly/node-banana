@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { NodeGroup } from "@/types/workflow";
 import { createDefaultNodeData, defaultNodeDimensions, migrateNodeGeometry } from "@/store/utils/nodeDefaults";
 import type { AgentGraphOp } from "../../types";
 import { applyGraphOps } from "../applyOps";
@@ -115,6 +116,113 @@ describe("applyGraphOps", () => {
     expect("groupId" in result.nodes[0]).toBe(false);
   });
 
+  describe("groups", () => {
+    const box = { position: { x: -30, y: -30 }, size: { width: 780, height: 520 } };
+    const existing: NodeGroup = { id: "group-1", name: "Group 1", color: "blue", ...box, locked: true };
+    const grouped = () => {
+      const s = state();
+      s.nodes[0] = { ...s.nodes[0], groupId: "group-1" } as typeof s.nodes[0];
+      return { ...s, groups: { "group-1": existing } };
+    };
+
+    it("adds a group with its box and members, after nodes added in the same batch", () => {
+      const ops: AgentGraphOp[] = [
+        { op: "addNode", id: "output-ag1", nodeType: "output", position: { x: 800, y: 0 }, data: {} },
+        { op: "addGroup", id: "group-ag1", name: "Hero film", color: "purple", ...box, nodeIds: ["nanoBanana-2", "output-ag1"] },
+      ];
+      const result = applyGraphOps(state(), ops, deps());
+      expect(result.skipped).toEqual([]);
+      expect(result.applied).toBe(2);
+      expect(result.groups).toEqual({ "group-ag1": { id: "group-ag1", name: "Hero film", color: "purple", ...box } });
+      expect(result.nodes.map((n) => [n.id, n.groupId])).toEqual([
+        ["prompt-1", undefined],
+        ["nanoBanana-2", "group-ag1"],
+        ["output-ag1", "group-ag1"],
+      ]);
+    });
+
+    it("renames, recolours and refits a group, and leaves the rest of it alone", () => {
+      const result = applyGraphOps(
+        grouped(),
+        [
+          { op: "updateGroup", id: "group-1", name: "Scene set", color: "orange" },
+          { op: "updateGroup", id: "group-1", position: { x: 0, y: 10 }, size: { width: 500, height: 300 } },
+        ],
+        deps(),
+      );
+      expect(result.groups["group-1"]).toEqual({ id: "group-1", name: "Scene set", color: "orange", position: { x: 0, y: 10 }, size: { width: 500, height: 300 }, locked: true });
+      expect(result.applied).toBe(2);
+    });
+
+    it("removes a group and ungroups its nodes; sets and clears one node's group", () => {
+      const removed = applyGraphOps(grouped(), [{ op: "removeGroup", id: "group-1" }], deps());
+      expect(removed.groups).toEqual({});
+      expect(removed.nodes.every((n) => !("groupId" in n))).toBe(true);
+
+      const moved = applyGraphOps(
+        grouped(),
+        [
+          { op: "setNodeGroup", id: "nanoBanana-2", groupId: "group-1" },
+          { op: "setNodeGroup", id: "prompt-1", groupId: null },
+        ],
+        deps(),
+      );
+      expect(moved.nodes.map((n) => [n.id, n.groupId])).toEqual([
+        ["prompt-1", undefined],
+        ["nanoBanana-2", "group-1"],
+      ]);
+      expect("groupId" in moved.nodes[0]).toBe(false);
+      expect(moved.groups).toEqual({ "group-1": existing });
+    });
+
+    it("skips group ops the live canvas no longer fits, and reports why", () => {
+      const result = applyGraphOps(
+        state(),
+        [
+          { op: "updateGroup", id: "group-gone", name: "x" },
+          { op: "setNodeGroup", id: "prompt-1", groupId: "group-gone" },
+          { op: "setNodeGroup", id: "gone-1", groupId: null },
+          { op: "addGroup", id: "group-ag1", name: "Lost", color: "red", ...box, nodeIds: ["gone-1", "gone-2"] },
+          { op: "addGroup", id: "group-ag2", name: "Half", color: "red", ...box, nodeIds: ["prompt-1", "gone-1"] },
+          { op: "addGroup", id: "group-ag2", name: "Twice", color: "red", ...box, nodeIds: ["prompt-1"] },
+          { op: "removeGroup", id: "group-gone" },
+        ],
+        deps(),
+      );
+      expect(result.skipped).toEqual([
+        "updateGroup group-gone: the group is no longer on the canvas",
+        "setNodeGroup prompt-1: group group-gone is no longer on the canvas",
+        "setNodeGroup gone-1: the node is no longer on the canvas",
+        "addGroup group-ag1: none of its nodes are on the canvas any more",
+        "addGroup group-ag2: gone-1 is no longer on the canvas (grouped the rest)",
+        "addGroup group-ag2: a group with this id already exists",
+      ]);
+      expect(result.applied).toBe(1);
+      expect(Object.keys(result.groups)).toEqual(["group-ag2"]);
+      expect(result.nodes.find((n) => n.id === "prompt-1")!.groupId).toBe("group-ag2");
+    });
+
+    it("drops every group on clearCanvas, keeps groups the batch adds after it, and never mutates its input", () => {
+      const input = grouped();
+      const before = JSON.stringify(input);
+      const result = applyGraphOps(
+        input,
+        [
+          { op: "clearCanvas" },
+          { op: "addNode", id: "prompt-ag1", nodeType: "prompt", position: { x: 0, y: 0 }, data: {} },
+          { op: "addGroup", id: "group-ag1", name: "New", color: "green", ...box, nodeIds: ["prompt-ag1"] },
+        ],
+        deps(),
+      );
+      expect(result.clearedCanvas).toBe(true);
+      expect(Object.keys(result.groups)).toEqual(["group-ag1"]);
+      expect(JSON.stringify(input)).toBe(before);
+      // No group op: the same groups object back.
+      const untouched = grouped();
+      expect(applyGraphOps(untouched, [{ op: "moveNode", id: "prompt-1", position: { x: 1, y: 1 } }], deps()).groups).toBe(untouched.groups);
+    });
+  });
+
   it("removes only the listed nodes, so nodes added meanwhile keep their edges (review C39)", () => {
     const live = state();
     live.nodes.push(storeNode("imageInput-9", "imageInput", { x: 0, y: 900 }));
@@ -182,10 +290,88 @@ describe("draft ↔ browser consistency", () => {
     const toolView = await call(runtime, "get_workflow", { detail: "full" });
     const browserView = await call(createAgentToolRuntime(snapshotOf(store)), "get_workflow", { detail: "full" });
     expect(browserView.text).toBe(toolView.text);
+    expect(store.groups).toEqual({});
     // The replaced image edge moved to the Veo image slot and the stale one is gone.
     expect(store.edges.filter((e) => e.target === "generateVideo-2").map((e) => `${e.source}.${e.sourceHandle}->${e.targetHandle}`).sort()).toEqual([
       "nanoBanana-ag2.image->image-0",
       "prompt-ag7.text->text-1",
+    ]);
+  });
+});
+
+describe("draft ↔ browser consistency with groups", () => {
+  it("replaying grouped edits on store nodes and groups reproduces exactly what the tools saw", async () => {
+    let store: StoreState = {
+      nodes: [
+        storeNode("prompt-1", "prompt", { x: 0, y: 0 }, { prompt: "a lighthouse" }, { groupId: "group-1" }),
+        storeNode("nanoBanana-2", "nanoBanana", { x: 420, y: 0 }, {}, { groupId: "group-1" }),
+        storeNode("output-3", "output", { x: 1400, y: 0 }),
+      ],
+      edges: [storeEdge("prompt-1", "text", "nanoBanana-2", "text"), storeEdge("nanoBanana-2", "image", "output-3", "image")],
+      groups: { "group-1": { id: "group-1", name: "Group 1", color: "neutral", position: { x: -20, y: -20 }, size: { width: 760, height: 500 } } },
+    };
+    const runtime = createAgentToolRuntime(snapshotOf(store, { viewport: { x: 0, y: 0, width: 1600, height: 900, zoom: 1 } }), { randomId: sequentialIds() });
+    const calls: Array<[string, unknown]> = [
+      [
+        "create_workflow",
+        {
+          nodes: [
+            { ref: "sp", type: "prompt", settings: { prompt: "a misty harbour" } },
+            { ref: "sg", type: "nanoBanana" },
+            { ref: "fp", type: "prompt", settings: { prompt: "slow push in" } },
+            { ref: "fv", type: "generateVideo", settings: { model: "veo-3.1/image-to-video" } },
+            { ref: "fo", type: "output" },
+          ],
+          connections: [
+            { from: "sp", to: "sg" },
+            { from: "sg", to: "fv", toHandle: "image" },
+            { from: "fp", to: "fv" },
+            { from: "fv", to: "fo" },
+          ],
+          groups: [
+            { name: "Scene set", color: "blue", nodes: ["sp", "sg"] },
+            { name: "Hero film", color: "purple", nodes: ["fp", "fv", "fo"] },
+          ],
+        },
+      ],
+      [
+        "edit_workflow",
+        {
+          operations: [
+            { op: "update_group", group: "group-1", name: "Key art", color: "green" },
+            { op: "add_to_group", nodes: ["output-3"], group: "Key art" },
+            { op: "add_node", ref: "extra", type: "output" },
+            { op: "connect", from: "sg", to: "extra" },
+            { op: "add_to_group", nodes: ["extra"], group: "Scene set" },
+          ],
+        },
+      ],
+      ["edit_workflow", { operations: [{ op: "remove_from_group", nodes: ["prompt-ag3"] }, { op: "move_node", node: "output-ag5", position: { x: 5000, y: 5000 } }] }],
+      ["edit_workflow", { operations: [{ op: "group", nodes: ["prompt-ag3", "output-ag5"], name: "Loose ends", color: "red" }] }],
+      ["edit_workflow", { operations: [{ op: "remove_node", node: "prompt-1" }, { op: "remove_node", node: "nanoBanana-2" }, { op: "remove_node", node: "output-3" }] }],
+      ["arrange_workflow", {}],
+      ["edit_workflow", { operations: [{ op: "ungroup", group: "Loose ends" }] }],
+    ];
+    for (const [name, args] of calls) {
+      const result = await call(runtime, name, args);
+      expect(result.ok, `${name}: ${result.text}`).toBe(true);
+      const applied = applyResult(store, result);
+      expect(applied.skipped, name).toEqual([]);
+      store = applied;
+      const toolView = await call(runtime, "get_workflow", { detail: "full" });
+      const browserView = await call(createAgentToolRuntime(snapshotOf(store)), "get_workflow", { detail: "full" });
+      expect(browserView.text, `after ${name} ${JSON.stringify(args).slice(0, 60)}`).toBe(toolView.text);
+    }
+    // Key art lost all its nodes with the deletions; Loose ends was ungrouped.
+    expect(Object.values(store.groups ?? {}).map((g) => [g.id, g.name, g.color])).toEqual([
+      ["group-ag1", "Scene set", "blue"],
+      ["group-ag2", "Hero film", "purple"],
+    ]);
+    expect(store.nodes.filter((n) => n.groupId).map((n) => [n.id, n.groupId])).toEqual([
+      ["prompt-ag1", "group-ag1"],
+      ["nanoBanana-ag2", "group-ag1"],
+      ["generateVideo-ag4", "group-ag2"],
+      ["output-ag6", "group-ag1"],
     ]);
   });
 });

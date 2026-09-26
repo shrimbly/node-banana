@@ -63,6 +63,14 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt.length).toBeLessThan(13_000);
   });
 
+  it("teaches what groups are and when to make them", () => {
+    expect(prompt).toContain("A group is a named, coloured box (neutral, blue, green, purple, orange or red)");
+    expect(prompt).toContain("Boxes follow their nodes");
+    expect(prompt).toContain('Group a workflow with distinct stages or branches (e.g. "Scene set" feeding "Hero film"');
+    expect(prompt).toContain("each in a different colour");
+    expect(prompt).toContain("Do not group a workflow of 2-3 nodes");
+  });
+
   it("describes Split Grid without inventing a reassembly (review C35)", () => {
     const line = compactCatalog().split("\n").find((l) => l.startsWith("- splitGrid ("))!;
     expect(line).toMatch(/Image Input/);

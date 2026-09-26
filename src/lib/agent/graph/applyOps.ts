@@ -1,14 +1,16 @@
 /**
  * Browser side: replays the agent's resolved graph operations on the live
- * store's nodes and edges.
+ * store's nodes, edges and groups.
  *
- * Pure. Ids, handles and positions were decided on the server; this only has
- * to cope with the canvas having moved on since the snapshot (the user deleted
- * a node mid-turn, …): such ops are skipped and reported, never thrown.
+ * Pure. Ids, handles, positions and group boxes were decided on the server;
+ * this only has to cope with the canvas having moved on since the snapshot
+ * (the user deleted a node or a group mid-turn, …): such ops are skipped and
+ * reported, never thrown.
  */
 
 import type { NodeType, WorkflowNode, WorkflowNodeData } from "@/types";
-import type { WorkflowEdge } from "@/types/workflow";
+import type { GroupColor, NodeGroup, WorkflowEdge } from "@/types/workflow";
+import { GROUP_COLOR_ORDER } from "@/store/utils/nodeDefaults";
 import type { AgentGraphOp } from "../types";
 
 export interface ApplyGraphOpsDeps {
@@ -19,24 +21,43 @@ export interface ApplyGraphOpsDeps {
   now?: () => number;
 }
 
+export interface ApplyGraphOpsState {
+  nodes: WorkflowNode[];
+  edges: WorkflowEdge[];
+  /** The live groups. Omitted: none are known (group ops can only reach groups the batch creates). */
+  groups?: Record<string, NodeGroup>;
+}
+
 export interface ApplyGraphOpsResult {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
-  /** A clearCanvas op ran: the caller must also drop groups. */
+  /** The groups after the batch (the same object when no op touched them). */
+  groups: Record<string, NodeGroup>;
+  /** A clearCanvas op ran (it drops every group, as the canvas does). */
   clearedCanvas: boolean;
   applied: number;
   /** Ops that could not apply against the live canvas (e.g. the user deleted the node meanwhile), with reasons. */
   skipped: string[];
 }
 
-/** Pure: applies resolved agent ops to live store nodes/edges. */
+/** Pure: applies resolved agent ops to live store nodes, edges and groups. */
 export function applyGraphOps(
-  state: { nodes: WorkflowNode[]; edges: WorkflowEdge[] },
+  state: ApplyGraphOpsState,
   ops: AgentGraphOp[],
   deps: ApplyGraphOpsDeps,
 ): ApplyGraphOpsResult {
   let nodes = [...state.nodes];
   let edges = [...state.edges];
+  let groups: Record<string, NodeGroup> = state.groups ?? {};
+  let groupsCopied = false;
+  /** Copy-on-write: the input's groups are never mutated. */
+  const writableGroups = () => {
+    if (!groupsCopied) {
+      groups = { ...groups };
+      groupsCopied = true;
+    }
+    return groups;
+  };
   let clearedCanvas = false;
   let applied = 0;
   const skipped: string[] = [];
@@ -52,6 +73,8 @@ export function applyGraphOps(
       case "clearCanvas":
         nodes = [];
         edges = [];
+        groups = {};
+        groupsCopied = true;
         clearedCanvas = true;
         applied++;
         break;
@@ -150,10 +173,107 @@ export function applyGraphOps(
         break;
       }
 
+      case "addGroup": {
+        if (groups[op.id]) {
+          skipped.push(`addGroup ${op.id}: a group with this id already exists`);
+          break;
+        }
+        if (!validBox(op.position, op.size)) {
+          skipped.push(`addGroup ${op.id}: its box is not a valid position and size`);
+          break;
+        }
+        const wanted = new Set(Array.isArray(op.nodeIds) ? op.nodeIds : []);
+        const present = nodes.filter((n) => wanted.has(n.id)).map((n) => n.id);
+        if (present.length === 0) {
+          skipped.push(`addGroup ${op.id}: none of its nodes are on the canvas any more`);
+          break;
+        }
+        const gone = [...wanted].filter((id) => !present.includes(id));
+        if (gone.length > 0) {
+          skipped.push(`addGroup ${op.id}: ${gone.join(", ")} ${gone.length > 1 ? "are" : "is"} no longer on the canvas (grouped the rest)`);
+        }
+        writableGroups()[op.id] = {
+          id: op.id,
+          name: typeof op.name === "string" && op.name ? op.name : op.id,
+          color: groupColor(op.color) ?? "neutral",
+          position: { x: op.position.x, y: op.position.y },
+          size: { width: op.size.width, height: op.size.height },
+        };
+        const joining = new Set(present);
+        nodes = nodes.map((n) => (joining.has(n.id) ? { ...n, groupId: op.id } : n));
+        applied++;
+        break;
+      }
+
+      case "updateGroup": {
+        const group = groups[op.id];
+        if (!group) {
+          skipped.push(`updateGroup ${op.id}: the group is no longer on the canvas`);
+          break;
+        }
+        const next: NodeGroup = { ...group };
+        if (typeof op.name === "string" && op.name) next.name = op.name;
+        const color = groupColor(op.color);
+        if (color) next.color = color;
+        if (op.position && op.size && validBox(op.position, op.size)) {
+          next.position = { x: op.position.x, y: op.position.y };
+          next.size = { width: op.size.width, height: op.size.height };
+        } else if (op.position && validBox(op.position, group.size)) {
+          next.position = { x: op.position.x, y: op.position.y };
+        } else if (op.size && validBox(group.position, op.size)) {
+          next.size = { width: op.size.width, height: op.size.height };
+        }
+        writableGroups()[op.id] = next;
+        applied++;
+        break;
+      }
+
+      case "removeGroup": {
+        // Already gone: the end state is what the agent wanted.
+        if (!groups[op.id]) break;
+        delete writableGroups()[op.id];
+        nodes = nodes.map((n) => {
+          if (n.groupId !== op.id) return n;
+          const { groupId: _dropped, ...rest } = n;
+          return rest as WorkflowNode;
+        });
+        applied++;
+        break;
+      }
+
+      case "setNodeGroup": {
+        const index = indexOfNode(op.id);
+        if (index === -1) {
+          skipped.push(`setNodeGroup ${op.id}: the node is no longer on the canvas`);
+          break;
+        }
+        if (typeof op.groupId === "string" && op.groupId) {
+          if (!groups[op.groupId]) {
+            skipped.push(`setNodeGroup ${op.id}: group ${op.groupId} is no longer on the canvas`);
+            break;
+          }
+          nodes[index] = { ...nodes[index], groupId: op.groupId };
+        } else {
+          const { groupId: _dropped, ...rest } = nodes[index];
+          nodes[index] = rest as WorkflowNode;
+        }
+        applied++;
+        break;
+      }
+
       default:
         skipped.push(`unknown operation ${JSON.stringify((op as { op?: unknown })?.op)}`);
     }
   }
 
-  return { nodes, edges, clearedCanvas, applied, skipped };
+  return { nodes, edges, groups, clearedCanvas, applied, skipped };
+}
+
+function groupColor(value: unknown): GroupColor | undefined {
+  return GROUP_COLOR_ORDER.find((color) => color === value);
+}
+
+function validBox(position: { x: number; y: number } | undefined, size: { width: number; height: number } | undefined): boolean {
+  const finite = (v: unknown) => typeof v === "number" && Number.isFinite(v);
+  return !!position && !!size && finite(position.x) && finite(position.y) && finite(size.width) && finite(size.height) && size.width > 0 && size.height > 0;
 }

@@ -252,6 +252,57 @@ describe("agent end to end (scripted harness, real bridge, runtime, prompts and 
     expectValidEdges();
   });
 
+  it("builds a grouped workflow through the real bridge, then renames a group in the next turn", async () => {
+    const first = scriptedHarness(async function* (params) {
+      const result = await params.tools.execute("mcp__node_banana__create_workflow", {
+        nodes: [
+          { ref: "sp", type: "prompt", settings: { prompt: "A misty harbour at dawn, wide establishing shot" } },
+          { ref: "sg", type: "nanoBanana" },
+          { ref: "fp", type: "prompt", settings: { prompt: "Slow push in across the water" } },
+          { ref: "fv", type: "generateVideo" },
+          { ref: "fo", type: "output" },
+        ],
+        connections: [
+          { from: "sp", to: "sg" },
+          { from: "sg", to: "fv" },
+          { from: "fp", to: "fv" },
+          { from: "fv", to: "fo" },
+        ],
+        groups: [
+          { name: "Scene set", color: "blue", nodes: ["sp", "sg"] },
+          { name: "Hero film", color: "purple", nodes: ["fp", "fv", "fo"] },
+        ],
+      });
+      expect(result.ok, result.text).toBe(true);
+      yield { type: "text-delta", id: "t", delta: "Grouped into Scene set and Hero film." };
+      yield { type: "text-end", id: "t" };
+    });
+    const user1: AgentUIMessage = { id: "u1", role: "user", parts: [{ type: "text", text: "A harbour scene, then a hero film of it" }] };
+    const turn1 = await runPanelTurn(first.harness, [user1]);
+    expect(turn1.batches).toHaveLength(1);
+    let { nodes, groups } = useWorkflowStore.getState();
+    expect(Object.values(groups).map((g) => [g.id, g.name, g.color])).toEqual([
+      ["group-ag1", "Scene set", "blue"],
+      ["group-ag2", "Hero film", "purple"],
+    ]);
+    expect(nodes.map((n) => n.groupId)).toEqual(["group-ag1", "group-ag1", "group-ag2", "group-ag2", "group-ag2"]);
+    expectValidEdges();
+
+    // The next turn sees the groups in its canvas block and edits one by name.
+    const second = scriptedHarness(async function* (params) {
+      expect(params.prompt).toContain("- Scene set [group-ag1] blue box");
+      const result = await params.tools.execute("node_banana.edit_workflow", JSON.stringify({ operations: [{ op: "update_group", group: "Scene set", name: "Establishing shot", color: "green" }] }));
+      expect(result.ok, result.text).toBe(true);
+      yield { type: "text-delta", id: "t", delta: "Renamed." };
+      yield { type: "text-end", id: "t" };
+    });
+    const turn2 = await runPanelTurn(second.harness, [user1, turn1.message, { id: "u2", role: "user", parts: [{ type: "text", text: "Call the first one Establishing shot, in green" }] }]);
+    expect(turn2.batches.flatMap((b) => b.ops)).toEqual([{ op: "updateGroup", id: "group-ag1", name: "Establishing shot", color: "green" }]);
+    ({ nodes, groups } = useWorkflowStore.getState());
+    expect(groups["group-ag1"]).toMatchObject({ name: "Establishing shot", color: "green" });
+    expect(nodes.filter((n) => n.groupId === "group-ag1")).toHaveLength(2);
+  });
+
   it("reports a rejected tool call as a tool error and leaves the canvas alone", async () => {
     const { harness } = scriptedHarness(async function* (params) {
       const result = await params.tools.execute("update_node", { node: "nope-1", settings: { prompt: "x" } });

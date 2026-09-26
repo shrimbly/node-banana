@@ -4,7 +4,7 @@
  */
 
 import type { NodeType, WorkflowNode } from "@/types";
-import type { WorkflowEdge } from "@/types/workflow";
+import type { NodeGroup, WorkflowEdge } from "@/types/workflow";
 import { createDefaultNodeData, defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import type { AgentToolResult, AgentToolRuntime, AgentWorkflowSnapshot } from "../../types";
 import { applyGraphOps } from "../../graph/applyOps";
@@ -14,6 +14,8 @@ import { createAgentToolRuntime } from "../runtime";
 export interface StoreState {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
+  /** The store's groups; omitted means none. */
+  groups?: Record<string, NodeGroup>;
 }
 
 export function emptySnapshot(overrides: Partial<AgentWorkflowSnapshot> = {}): AgentWorkflowSnapshot {
@@ -62,22 +64,30 @@ export function storeEdge(source: string, sourceHandle: string, target: string, 
 }
 
 export function snapshotOf(state: StoreState, extra: { viewport?: AgentWorkflowSnapshot["viewport"]; workflowName?: string } = {}): AgentWorkflowSnapshot {
-  return buildAgentSnapshot({ nodes: state.nodes, edges: state.edges, groups: {}, ...extra });
+  return buildAgentSnapshot({ nodes: state.nodes, edges: state.edges, groups: state.groups ?? {}, ...extra });
 }
 
 export function runtimeFor(state: StoreState, extra: { viewport?: AgentWorkflowSnapshot["viewport"] } = {}): AgentToolRuntime {
   return createAgentToolRuntime(snapshotOf(state, extra), { randomId: sequentialIds() });
 }
 
-/** Applies a tool result's ops to store state like `applyAgentGraphOps` does. */
-export function applyResult(state: StoreState, result: AgentToolResult): StoreState & { skipped: string[] } {
+/**
+ * Applies a tool result's ops to store state like `applyAgentGraphOps` does,
+ * including removing a group whose nodes the batch deleted.
+ */
+export function applyResult(state: StoreState, result: AgentToolResult): Required<StoreState> & { skipped: string[] } {
   let clock = 1000;
-  const applied = applyGraphOps(state, result.ops, {
+  const applied = applyGraphOps({ ...state, groups: state.groups ?? {} }, result.ops, {
     createDefaultNodeData: (type) => createDefaultNodeData(type),
     defaultNodeDimensions,
     now: () => clock++,
   });
-  return { nodes: applied.nodes, edges: applied.edges, skipped: applied.skipped };
+  const remaining = new Set(applied.nodes.map((n) => n.id));
+  const groups = { ...applied.groups };
+  for (const node of state.nodes) {
+    if (node.groupId && !remaining.has(node.id) && !applied.nodes.some((n) => n.groupId === node.groupId)) delete groups[node.groupId];
+  }
+  return { nodes: applied.nodes, edges: applied.edges, groups, skipped: applied.skipped };
 }
 
 export async function call(runtime: AgentToolRuntime, name: string, args: unknown): Promise<AgentToolResult> {

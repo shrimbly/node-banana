@@ -49,6 +49,11 @@ const positionField = z
   .object({ x: z.number(), y: z.number() })
   .optional()
   .describe("Canvas position (top-left corner, canvas coordinates). Omit to place automatically next to what it connects to.");
+const groupNameField = z.string().describe('What the group\'s nodes do, shown as its title, e.g. "Scene set", "Hero film".');
+const groupColorField = z
+  .string()
+  .optional()
+  .describe("Group colour: neutral, blue, green, purple, orange or red. Omit to take the next colour no group uses; give related groups different colours.");
 
 export const getWorkflowShape = {
   nodeIds: z.array(z.string()).optional().describe("Only these nodes and their connections. Omit for the whole canvas."),
@@ -94,6 +99,16 @@ export const createWorkflowShape = {
     )
     .optional()
     .describe("Wires between nodes; from/to are refs from `nodes` or ids of nodes already on the canvas."),
+  groups: z
+    .array(
+      z.object({
+        name: groupNameField,
+        color: groupColorField,
+        nodes: z.array(z.string()).describe("Its nodes: refs from `nodes` (or ids of nodes already on the canvas that are in no group). A node belongs to one group."),
+      }),
+    )
+    .optional()
+    .describe("Named, coloured boxes around the workflow's stages or branches. Each group's nodes are laid out together inside its box; groups that feed each other read left to right, the others stack top to bottom. Omit for a small workflow."),
 };
 
 export const editWorkflowShape = {
@@ -101,7 +116,7 @@ export const editWorkflowShape = {
     .array(
       z.object({
         op: z
-          .enum(["add_node", "update_node", "remove_node", "connect", "disconnect", "move_node"])
+          .enum(["add_node", "update_node", "remove_node", "connect", "disconnect", "move_node", "group", "ungroup", "update_group", "add_to_group", "remove_from_group"])
           .describe("What to do. Each op uses only the fields listed for it."),
         ref: z.string().optional().describe("add_node: your name for the new node, usable as node/from/to in the other operations of this call."),
         type: z.string().optional().describe("add_node: node type."),
@@ -117,6 +132,13 @@ export const editWorkflowShape = {
         loopCount: z.number().optional().describe("connect with loop: how many times the loop runs (1-100, default 3)."),
         edgeId: z.string().optional().describe("disconnect: a connection id from get_workflow (alternative to from/to)."),
         position: positionField,
+        nodes: z
+          .array(z.string())
+          .optional()
+          .describe("group, add_to_group, remove_from_group: node ids (or refs from this call)."),
+        group: z.string().optional().describe("ungroup, update_group, add_to_group: the group's id (e.g. group-2) or its exact name."),
+        name: groupNameField.optional().describe("group: the new group's title (required). update_group: its new title."),
+        color: groupColorField,
       }),
     )
     .describe("Operations applied together: add_node ops run first (so refs can be used anywhere in the list), then the rest in order."),
@@ -138,7 +160,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     title: "Read workflow",
     readOnly: true,
     description:
-      "Read the current canvas: nodes (id, type, title, key settings, whether they hold an image/video/text), connections with handle ids, groups and the user's selection. Reflects every change you made earlier in this turn. Use detail \"full\" for all settings and each handle's type and connections before rewiring a node you are unsure about.",
+      "Read the current canvas: nodes (id, type, title, key settings, whether they hold an image/video/text), connections with handle ids, groups (id, name, colour, box and their nodes) and the user's selection. Reflects every change you made earlier in this turn. Use detail \"full\" for all settings and each handle's type and connections before rewiring a node you are unsure about.",
     inputShape: getWorkflowShape,
   },
   {
@@ -162,7 +184,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     title: "Create workflow",
     readOnly: false,
     description:
-      "Add a group of new nodes and their connections in one call, laid out left to right. Give each node a ref and wire them with connections (from/to = refs, or ids of nodes already on the canvas). Handles are picked by data type, so you rarely need fromHandle/toHandle. Example: nodes [{ref:\"p\",type:\"prompt\",settings:{prompt:\"a cozy cabin at dusk\"}}, {ref:\"g\",type:\"nanoBanana\",settings:{aspectRatio:\"16:9\"}}, {ref:\"o\",type:\"output\"}], connections [{from:\"p\",to:\"g\"},{from:\"g\",to:\"o\"}]. All-or-nothing: if anything is invalid nothing changes and every problem is returned with its fix. Returns the ref → node id map.",
+      "Add new nodes and their connections in one call, laid out left to right. Give each node a ref and wire them with connections (from/to = refs, or ids of nodes already on the canvas). Handles are picked by data type, so you rarely need fromHandle/toHandle. Example: nodes [{ref:\"p\",type:\"prompt\",settings:{prompt:\"a cozy cabin at dusk\"}}, {ref:\"g\",type:\"nanoBanana\",settings:{aspectRatio:\"16:9\"}}, {ref:\"o\",type:\"output\"}], connections [{from:\"p\",to:\"g\"},{from:\"g\",to:\"o\"}]. For a workflow with distinct stages or branches, add groups [{name:\"Scene set\", color:\"blue\", nodes:[\"p\",\"g\"]}, …] so each stage sits in its own named box. All-or-nothing: if anything is invalid nothing changes and every problem is returned with its fix. Returns the ref → node id map and each group's id.",
     inputShape: createWorkflowShape,
   },
   {
@@ -170,7 +192,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     title: "Edit workflow",
     readOnly: false,
     description:
-      "Change the canvas with a list of operations applied together: add_node {ref, type, title?, settings?, position?}, update_node {node, title?, settings?}, remove_node {node}, connect {from, to, fromHandle?, toHandle?, arrayItemIndex?}, disconnect {from?, to?, fromHandle?, toHandle?} or {edgeId}, move_node {node, position}. A text input takes one connection: connecting another text source to it replaces the old one (reported). An output can feed any number of inputs, so adding a viewer never needs an existing connection removed. Connections must join the same data type (image→image, text→text…); there is no conversion. A node moved into a group's box joins that group, and one moved out leaves it, as on the canvas. All-or-nothing: if any operation is invalid nothing changes and every error is returned with its fix.",
+      "Change the canvas with a list of operations applied together: add_node {ref, type, title?, settings?, position?}, update_node {node, title?, settings?}, remove_node {node}, connect {from, to, fromHandle?, toHandle?, arrayItemIndex?}, disconnect {from?, to?, fromHandle?, toHandle?} or {edgeId}, move_node {node, position}, group {nodes, name, color?} (a new named box around those nodes), ungroup {group} (removes the box; the nodes stay), update_group {group, name?, color?}, add_to_group {nodes, group}, remove_from_group {nodes}. A text input takes one connection: connecting another text source to it replaces the old one (reported). An output can feed any number of inputs, so adding a viewer never needs an existing connection removed. Connections must join the same data type (image→image, text→text…); there is no conversion. Group boxes follow their nodes: a new group's box is fitted around its nodes (moving them together if the box would cover other nodes), a group grows around nodes added to it, a node taken out moves clear of the box, and a group left with no nodes is removed. A node moved into a group's box joins that group, and one moved out leaves it, as on the canvas. All-or-nothing: if any operation is invalid nothing changes and every error is returned with its fix.",
     inputShape: editWorkflowShape,
   },
   {
@@ -186,7 +208,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     title: "Tidy layout",
     readOnly: false,
     description:
-      "Re-arrange nodes into tidy left-to-right columns following the connections (the whole canvas, or only nodeIds). Nodes in groups stay where they are, and nothing is moved into a group's box. Use when the user asks to tidy or clean up the layout; new nodes are already placed well.",
+      "Re-arrange nodes into tidy left-to-right columns following the connections (the whole canvas, or only nodeIds). Each group moves as one unit: its nodes are tidied inside its box, which is refit around them (naming one node of a group arranges the whole group), and nothing else is moved into a box. Use when the user asks to tidy or clean up the layout; new nodes are already placed well.",
     inputShape: arrangeWorkflowShape,
   },
 ];
