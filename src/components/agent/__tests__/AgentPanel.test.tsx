@@ -171,7 +171,8 @@ describe("AgentPanel", () => {
     expect(panel.className).toContain("nowheel");
     expect(panel.className).toContain("nokey");
     // The window takes the button's place (the button hides while it is open).
-    expect(panel).toHaveStyle({ right: "15px", bottom: "173px", width: "400px" });
+    // Gap to the navigator (173 - 8) equals the right margin.
+    expect(panel).toHaveStyle({ right: "15px", bottom: "180px", width: "400px" });
     await waitForComposer();
   });
 
