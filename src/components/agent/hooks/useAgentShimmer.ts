@@ -4,8 +4,8 @@ import { useCallback, useEffect, useRef } from "react";
 import { agentTouchedNodeIds } from "@/lib/agent/client/highlights";
 import type { AgentGraphOpBatch } from "@/lib/agent/types";
 
-/** Two passes of the sweep (agent-theme.css), then the mark comes off. */
-const SHIMMER_MS = 3000;
+/** One pass of the sweep (agent-theme.css, 1.4s, held at its faded end), then the mark comes off. */
+const SHIMMER_MS = 1600;
 const ATTRIBUTE = "data-agent-shimmer";
 
 /**
