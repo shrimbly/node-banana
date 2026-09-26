@@ -1,5 +1,6 @@
 // Runs in Electron's Node utility process, never in the renderer.
 const { createServer } = require('node:http');
+const { randomBytes } = require('node:crypto');
 const { existsSync } = require('node:fs');
 const path = require('node:path');
 const next = require('next');
@@ -13,6 +14,13 @@ const port = Number(process.env.NODE_BANANA_ELECTRON_PORT);
 const token = process.env.NODE_BANANA_ELECTRON_TOKEN;
 delete process.env.NODE_BANANA_ELECTRON_TOKEN;
 const origin = `http://${hostname}:${port}`;
+// The agent routes (/api/agent/*) run turns on the user's own Claude or ChatGPT
+// subscription and only answer requests this server vouches for (see
+// src/lib/agent/server/sameOrigin.ts). Every request that passes authorized()
+// comes from the desktop window, so it gets the stamp.
+const AGENT_LOCAL_HEADER = 'x-nb-agent-local';
+const agentLocalSecret = randomBytes(32).toString('hex');
+process.env.NB_AGENT_LOCAL_SECRET = agentLocalSecret;
 const directoryRequests = new Map();
 let requestId = 0;
 
@@ -42,6 +50,7 @@ async function start() {
       return;
     }
     delete req.headers['x-node-banana-desktop'];
+    req.headers[AGENT_LOCAL_HEADER] = agentLocalSecret;
     try {
       if (req.method === 'GET' && new URL(req.url, origin).pathname === '/api/browse-directory') {
         const id = ++requestId;

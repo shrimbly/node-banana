@@ -15,7 +15,7 @@ import { APP_VERSION } from "@/lib/appVersion";
 interface QuickstartInitialViewProps {
   onNewProject: () => void;
   onSelectTemplates: () => void;
-  onSelectVibe: () => void;
+  onStartWithAgent: () => void;
   onSelectLoad: () => void;
 }
 
@@ -27,7 +27,7 @@ interface QuickstartInitialViewProps {
 export function QuickstartInitialView({
   onNewProject,
   onSelectTemplates,
-  onSelectVibe,
+  onStartWithAgent,
   onSelectLoad,
 }: QuickstartInitialViewProps) {
   return (
@@ -69,10 +69,10 @@ export function QuickstartInitialView({
             description="Pre-built workflows"
           />
           <OptionRow
-            onClick={onSelectVibe}
-            title="Prompt a workflow"
-            description="Get Gemini to build it"
-            badge="Beta"
+            onClick={onStartWithAgent}
+            title="Start with Agent"
+            description="Describe it and the agent builds it"
+            badge={<DialogChip className="nb-new-badge">New</DialogChip>}
           />
         </div>
         <div className="shrink-0 flex flex-wrap gap-x-5 gap-y-2 px-8 pt-4 pb-5">
@@ -95,7 +95,7 @@ function OptionRow({
   onClick: () => void;
   title: string;
   description: string;
-  badge?: string;
+  badge?: ReactNode;
   first?: boolean;
 }) {
   return (
@@ -107,7 +107,7 @@ function OptionRow({
       <span className="flex flex-col gap-[3px] min-w-0">
         <span className="flex items-center gap-2.5 font-display text-[17px] leading-[22px] font-semibold tracking-[-0.015em] text-neutral-100">
           <span>{title}</span>
-          {badge && <DialogChip>{badge}</DialogChip>}
+          {badge}
         </span>
         <span className="text-[13px] leading-[18px] text-neutral-400">{description}</span>
       </span>

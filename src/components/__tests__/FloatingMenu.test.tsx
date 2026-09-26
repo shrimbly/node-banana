@@ -5,7 +5,6 @@ import { FloatingMenu } from "@/components/FloatingMenu";
 const mockSetWorkflowMetadata = vi.fn();
 const mockSaveToFile = vi.fn();
 const mockLoadWorkflow = vi.fn();
-const mockRevertToSnapshot = vi.fn();
 const mockSetShortcutsDialogOpen = vi.fn();
 const mockSetShowQuickstart = vi.fn();
 const mockGetNodesWithComments = vi.fn();
@@ -57,7 +56,6 @@ const createDefaultState = (overrides = {}) => ({
   hasUnsavedChanges: false,
   lastSavedAt: null,
   isSaving: false,
-  previousWorkflowSnapshot: null,
   shortcutsDialogOpen: false,
   isRunning: false,
   pendingMediaSaves: 0,
@@ -68,7 +66,6 @@ const createDefaultState = (overrides = {}) => ({
   setWorkflowMetadata: mockSetWorkflowMetadata,
   saveToFile: mockSaveToFile,
   loadWorkflow: mockLoadWorkflow,
-  revertToSnapshot: mockRevertToSnapshot,
   setShortcutsDialogOpen: mockSetShortcutsDialogOpen,
   setShowQuickstart: mockSetShowQuickstart,
   getNodesWithComments: mockGetNodesWithComments,
@@ -167,10 +164,9 @@ describe("FloatingMenu", () => {
       expect(screen.getByRole("button", { name: "Save project" }).querySelector(".bg-red-500")).toBeInTheDocument();
     });
 
-    it("hides comments and revert until they apply", () => {
+    it("hides comments until they apply", () => {
       render(<FloatingMenu />);
       expect(screen.queryByTitle(/unviewed comment/)).not.toBeInTheDocument();
-      expect(screen.queryByText("Revert AI changes")).not.toBeInTheDocument();
     });
   });
 
@@ -370,34 +366,6 @@ describe("FloatingMenu", () => {
       render(<FloatingMenu />);
       fireEvent.click(screen.getByRole("button", { name: "Open project" }));
       expect(screen.getByTestId("workflow-browser-modal")).toBeInTheDocument();
-    });
-  });
-
-  describe("revert AI changes", () => {
-    beforeEach(() => {
-      useState(configuredState({ previousWorkflowSnapshot: { nodes: [], edges: [] } }));
-    });
-
-    it("shows a pill button and a menu row while a snapshot exists", () => {
-      render(<FloatingMenu />);
-      expect(screen.getByRole("button", { name: "Revert AI changes" })).toBeInTheDocument();
-      openMenu();
-      expect(menuItem("Revert AI changes")).toBeInTheDocument();
-    });
-
-    it("reverts after the user confirms", () => {
-      vi.spyOn(window, "confirm").mockReturnValue(true);
-      render(<FloatingMenu />);
-      fireEvent.click(screen.getByRole("button", { name: "Revert AI changes" }));
-      expect(mockRevertToSnapshot).toHaveBeenCalledTimes(1);
-    });
-
-    it("does nothing when the user cancels", () => {
-      vi.spyOn(window, "confirm").mockReturnValue(false);
-      render(<FloatingMenu />);
-      openMenu();
-      fireEvent.click(menuItem("Revert AI changes"));
-      expect(mockRevertToSnapshot).not.toHaveBeenCalled();
     });
   });
 

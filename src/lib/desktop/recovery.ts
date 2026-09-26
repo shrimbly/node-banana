@@ -14,8 +14,7 @@ const interruption = 'Stopped after recovery. Remote jobs may still be running; 
 export function captureRecovery(state: WorkflowStore): RecoverySnapshot {
   return { version: 1, savedAt: Date.now(), activeTabId: state.activeTabId, tabs: state.tabs.map(tab => ({
     id: tab.id,
-    snapshot: { ...captureWorkflowTabSnapshot(tab.id === state.activeTabId ? state : tab.snapshot!),
-      previousWorkflowSnapshot: null, manualChangeCount: 0, pausedAtNodeId: null },
+    snapshot: { ...captureWorkflowTabSnapshot(tab.id === state.activeTabId ? state : tab.snapshot!), pausedAtNodeId: null },
   })) };
 }
 
@@ -28,7 +27,6 @@ export function decodeRecovery(raw: unknown): RecoverySnapshot {
     ids.add(tab.id);
     const snapshot = { ...emptyWorkflowTabSnapshot({ edgeStyle: 'curved', edgeAppearance: defaultEdgeAppearance, useExternalImageStorage: true }), ...tab.snapshot };
     for (const key of setFields) snapshot[key] = new Set(Array.isArray(snapshot[key]) ? snapshot[key] as unknown as string[] : []);
-    snapshot.previousWorkflowSnapshot = null;
     snapshot.pausedAtNodeId = null;
     snapshot.nodes = snapshot.nodes.map(node => {
       const data = { ...node.data } as Record<string, unknown>;

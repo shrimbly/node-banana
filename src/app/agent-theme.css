@@ -1,0 +1,292 @@
+/*
+ * Theme for the agent chat panel: shadcn/ui primitives (src/components/agent/ui)
+ * and Vercel AI Elements (src/components/ai-elements).
+ *
+ * Imported from globals.css right after `@import "tailwindcss"`. Everything
+ * here is additive — new CSS variables and new utilities the rest of the app
+ * does not use. Unlike `shadcn init` it does NOT:
+ *   - set body { bg-background text-foreground } (would flip the page to the light palette)
+ *   - add `* { border-color: var(--border) }` globally
+ *   - override --radius-sm/md/lg/xl or --font-sans (would restyle every rounded-lg in the app)
+ *   - define --color-card (the app already owns bg-card = node card #262626)
+ */
+@import "tw-animate-css";
+
+/* Streamdown (MessageResponse) ships Tailwind classes in its dist. */
+@source "../../node_modules/streamdown/dist/*.js";
+@source "../../node_modules/@streamdown/code/dist/*.js";
+
+/* The app is dark-only: <html class="dark"> switches on the components' dark: tweaks. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Vendored from shadcn/dist/tailwind.css (shadcn@4.21.0) — the variants the
+   radix-nova primitives use — so the 285-package `shadcn` CLI is not a runtime dep. */
+@custom-variant data-open {
+  &:where([data-state="open"]),
+  &:where([data-open]:not([data-open="false"])) {
+    @slot;
+  }
+}
+@custom-variant data-closed {
+  &:where([data-state="closed"]),
+  &:where([data-closed]:not([data-closed="false"])) {
+    @slot;
+  }
+}
+@custom-variant data-selected {
+  &:where([data-selected="true"]) {
+    @slot;
+  }
+}
+@custom-variant data-disabled {
+  &:where([data-disabled="true"]),
+  &:where([data-disabled]:not([data-disabled="false"])) {
+    @slot;
+  }
+}
+@custom-variant data-horizontal {
+  &:where([data-orientation="horizontal"]) {
+    @slot;
+  }
+}
+@custom-variant data-vertical {
+  &:where([data-orientation="vertical"]) {
+    @slot;
+  }
+}
+/* A hairline that fades out toward its ends: the chat's horizontal rules. Set the
+   border width where it goes (border-b, border-y, divide-y + *:fade-rule). */
+@utility fade-rule {
+  border-image: linear-gradient(to right, rgb(255 255 255 / 0.045), rgb(255 255 255 / 0.08), rgb(255 255 255 / 0.045)) 1;
+}
+
+@utility no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-border: var(--sidebar-border);
+}
+
+/* shadcn's tokens mapped onto the app's own (globals.css @theme), so any primitive
+   still in use sits on the same surfaces as the menus and dialogs: popovers are
+   cards, borders are the chrome border, primary is ink, hover fills are alpha
+   whites. Blue is the focus ring and nothing else. Only the agent's classes read
+   these names (nothing else in the app uses bg-popover, bg-primary, ...).
+   --background / --foreground are the app's existing #0a0a0a / #fafafa and are left alone. */
+:root {
+  --popover: #262626;                    /* card */
+  --popover-foreground: #e5e5e5;         /* neutral-200 */
+  --primary: #f5f5f5;                    /* ink */
+  --primary-foreground: #171717;
+  --secondary: #2a2a2a;                  /* panel */
+  --secondary-foreground: #e5e5e5;
+  --muted: rgb(255 255 255 / 0.07);      /* the chrome's hover fill */
+  --muted-foreground: #8a8a8a;           /* ink-3 */
+  --accent: rgb(255 255 255 / 0.07);
+  --accent-foreground: #f5f5f5;
+  --destructive: #ef4444;                /* error */
+  --border: #404040;                     /* chrome-border */
+  --input: rgb(64 64 64 / 0.6);          /* card-border */
+  --ring: #3b82f6;                       /* selection: focus rings only */
+  --sidebar: #1a1a1a;                    /* well */
+  --sidebar-border: #404040;
+}
+
+/* shadcn sizes some corners off --radius: give it the app's 10px controls radius.
+   The named steps (rounded-md/-lg/-xl) keep the app's scale, so the chrome
+   components reused inside the window look exactly as they do on the canvas. */
+.nb-agent {
+  --radius: 10px;
+}
+
+/*
+ * Markdown in agent replies (Streamdown). Its elements carry their own Tailwind
+ * classes; these rules are unlayered so they win, and scoped to the window so
+ * nothing else changes. 13px text, code in a well, no card-in-a-card.
+ */
+.nb-agent [data-streamdown^="heading-"] {
+  margin: 12px 0 4px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: #f5f5f5;
+}
+.nb-agent [data-streamdown="heading-1"] { font-size: 16px; line-height: 22px; }
+.nb-agent [data-streamdown="heading-2"] { font-size: 15px; line-height: 20px; }
+.nb-agent [data-streamdown="heading-3"],
+.nb-agent [data-streamdown="heading-4"],
+.nb-agent [data-streamdown="heading-5"],
+.nb-agent [data-streamdown="heading-6"] { font-size: 13px; line-height: 20px; }
+.nb-agent [data-streamdown="strong"] { color: #f5f5f5; }
+.nb-agent [data-streamdown="list-item"] { padding: 1px 0; }
+.nb-agent [data-streamdown="ordered-list"],
+.nb-agent [data-streamdown="unordered-list"] { padding-left: 2px; }
+.nb-agent [data-streamdown="link"] {
+  color: #f5f5f5;
+  font-weight: 500;
+  text-decoration-color: rgb(255 255 255 / 0.3);
+  text-underline-offset: 3px;
+}
+.nb-agent [data-streamdown="blockquote"] {
+  margin: 8px 0;
+  border-left: 2px solid rgb(255 255 255 / 0.12);
+  padding-left: 12px;
+  font-style: normal;
+  color: #a3a3a3;
+}
+.nb-agent [data-streamdown="horizontal-rule"] { margin: 12px 0; border-color: rgb(255 255 255 / 0.08); }
+.nb-agent [data-streamdown="inline-code"] {
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.07);
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: #e5e5e5;
+}
+.nb-agent [data-streamdown="code-block"] {
+  margin: 4px 0;
+  gap: 0;
+  border: 0;
+  border-radius: var(--radius-well);
+  background: var(--color-well);
+  box-shadow: var(--shadow-well);
+  padding: 0;
+}
+.nb-agent [data-streamdown="code-block-header"] {
+  height: 28px;
+  padding: 0 10px;
+}
+.nb-agent [data-streamdown="code-block-header"] > span {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--color-ink-3);
+}
+/* The copy button rides over the header's right end. */
+.nb-agent [data-streamdown="code-block"] > div:has(> [data-streamdown="code-block-actions"]) {
+  top: 0;
+  margin-top: -28px;
+  height: 28px;
+  padding-right: 4px;
+}
+.nb-agent [data-streamdown="code-block-actions"] {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  backdrop-filter: none;
+}
+.nb-agent [data-streamdown="code-block-copy-button"] {
+  display: flex;
+  width: 24px;
+  height: 24px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: #8a8a8a;
+}
+.nb-agent [data-streamdown="code-block-copy-button"]:hover { background: rgb(255 255 255 / 0.07); color: #f5f5f5; }
+.nb-agent [data-streamdown="code-block-body"] {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0 12px 10px;
+  font-size: 12px;
+}
+.nb-agent [data-streamdown="code-block-body"] pre,
+.nb-agent [data-streamdown="code-block-body"] code {
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 18px;
+}
+
+@layer base {
+  /* shadcn assumes `* { border-color: var(--border) }`. Scoped to the panel and to
+     portalled primitives (every shadcn primitive renders data-slot). */
+  :where(.nb-agent, .nb-agent *, [data-slot], [data-slot] *) {
+    border-color: var(--border);
+    outline-color: color-mix(in oklab, var(--ring) 50%, transparent);
+  }
+}
+
+/* The agent's edits: a light sweep across the cards of each node it just
+   changed (useAgentShimmer sets the attribute for one pass). */
+/* The band starts and ends fully off the card, and the whole overlay (rim
+   included) fades out over the last stretch, so nothing snaps at the end. */
+@keyframes nb-agent-shimmer {
+  from {
+    background-position: 160% 0;
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  to {
+    background-position: -60% 0;
+    opacity: 0;
+  }
+}
+@keyframes nb-agent-glow {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+/* The media card is positioned already; the controls card needs it for the sweep. */
+.react-flow__node[data-agent-shimmer] [data-controls-card] {
+  position: relative;
+}
+.react-flow__node[data-agent-shimmer] :is([data-media-card], [data-controls-card])::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 20;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgb(255 255 255 / 0.08) 40%,
+    rgb(255 255 255 / 0.24) 50%,
+    rgb(255 255 255 / 0.08) 60%,
+    transparent 70%
+  );
+  background-size: 250% 100%;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.28);
+  animation: nb-agent-shimmer 1.4s linear forwards;
+}
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__node[data-agent-shimmer] :is([data-media-card], [data-controls-card])::after {
+    background-image: none;
+    background-color: rgb(255 255 255 / 0.06);
+    animation: nb-agent-glow 2.4s ease-out forwards;
+  }
+}
+

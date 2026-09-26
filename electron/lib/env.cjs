@@ -7,6 +7,8 @@
 // SystemRoot/windir the bundled server fails to bind with `listen UNKNOWN`.
 const hostEnvironmentKeys = [
   'PATH', 'HOME', 'TMPDIR', 'LANG', 'LC_ALL',
+  // Where Claude Code and Codex keep the user's own sign-in, for the agent.
+  'CLAUDE_CONFIG_DIR', 'CODEX_HOME',
   ...(process.platform === 'win32' ? [
     'SystemRoot', 'windir', 'SystemDrive', 'TEMP', 'TMP', 'APPDATA', 'LOCALAPPDATA', 'USERPROFILE', 'USERNAME',
     'HOMEDRIVE', 'HOMEPATH', 'COMSPEC', 'PATHEXT', 'NUMBER_OF_PROCESSORS', 'PROCESSOR_ARCHITECTURE', 'OS',

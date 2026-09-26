@@ -57,6 +57,7 @@ describe("WelcomeModal", () => {
   const mockOnWorkflowGenerated = vi.fn();
   const mockOnClose = vi.fn();
   const mockOnNewProject = vi.fn();
+  const mockOnStartWithAgent = vi.fn();
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -86,13 +87,14 @@ describe("WelcomeModal", () => {
           onWorkflowGenerated={mockOnWorkflowGenerated}
           onClose={mockOnClose}
           onNewProject={mockOnNewProject}
+          onStartWithAgent={mockOnStartWithAgent}
         />
       );
 
       expect(screen.getByText("Node Banana")).toBeInTheDocument();
       expect(screen.getByText("New project")).toBeInTheDocument();
       expect(screen.getByText("Templates")).toBeInTheDocument();
-      expect(screen.getByText("Prompt a workflow")).toBeInTheDocument();
+      expect(screen.getByText("Start with Agent")).toBeInTheDocument();
     });
 
     it("should render modal overlay with backdrop", () => {
@@ -101,6 +103,7 @@ describe("WelcomeModal", () => {
           onWorkflowGenerated={mockOnWorkflowGenerated}
           onClose={mockOnClose}
           onNewProject={mockOnNewProject}
+          onStartWithAgent={mockOnStartWithAgent}
         />
       );
 
@@ -116,6 +119,7 @@ describe("WelcomeModal", () => {
           onWorkflowGenerated={mockOnWorkflowGenerated}
           onClose={mockOnClose}
           onNewProject={mockOnNewProject}
+          onStartWithAgent={mockOnStartWithAgent}
         />
       );
 
@@ -130,6 +134,7 @@ describe("WelcomeModal", () => {
           onWorkflowGenerated={mockOnWorkflowGenerated}
           onClose={mockOnClose}
           onNewProject={mockOnNewProject}
+          onStartWithAgent={mockOnStartWithAgent}
         />
       );
 
@@ -143,19 +148,19 @@ describe("WelcomeModal", () => {
       });
     });
 
-    it("should navigate to vibe view when 'Prompt a workflow' is clicked", () => {
+    it("should hand 'Start with Agent' to the canvas", () => {
       render(
         <WelcomeModal
           onWorkflowGenerated={mockOnWorkflowGenerated}
           onClose={mockOnClose}
           onNewProject={mockOnNewProject}
+          onStartWithAgent={mockOnStartWithAgent}
         />
       );
 
-      fireEvent.click(screen.getByText("Prompt a workflow"));
+      fireEvent.click(screen.getByText("Start with Agent"));
 
-      expect(screen.getByText("Prompt a Workflow")).toBeInTheDocument();
-      expect(screen.getByText("Describe your workflow")).toBeInTheDocument();
+      expect(mockOnStartWithAgent).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -166,6 +171,7 @@ describe("WelcomeModal", () => {
           onWorkflowGenerated={mockOnWorkflowGenerated}
           onClose={mockOnClose}
           onNewProject={mockOnNewProject}
+          onStartWithAgent={mockOnStartWithAgent}
         />
       );
 
@@ -187,24 +193,6 @@ describe("WelcomeModal", () => {
       expect(screen.getByText("New project")).toBeInTheDocument();
     });
 
-    it("should navigate back to initial view from prompt view", () => {
-      render(
-        <WelcomeModal
-          onWorkflowGenerated={mockOnWorkflowGenerated}
-          onClose={mockOnClose}
-          onNewProject={mockOnNewProject}
-        />
-      );
-
-      // Navigate to prompt view
-      fireEvent.click(screen.getByText("Prompt a workflow"));
-      expect(screen.getByText("Prompt a Workflow")).toBeInTheDocument();
-
-      // Click back
-      fireEvent.click(screen.getByText("Back"));
-
-      expect(screen.getByText("Node Banana")).toBeInTheDocument();
-    });
   });
 
   describe("Load Workflow via Browser View", () => {
@@ -214,6 +202,7 @@ describe("WelcomeModal", () => {
           onWorkflowGenerated={mockOnWorkflowGenerated}
           onClose={mockOnClose}
           onNewProject={mockOnNewProject}
+          onStartWithAgent={mockOnStartWithAgent}
         />
       );
 
@@ -228,6 +217,7 @@ describe("WelcomeModal", () => {
           onWorkflowGenerated={mockOnWorkflowGenerated}
           onClose={mockOnClose}
           onNewProject={mockOnNewProject}
+          onStartWithAgent={mockOnStartWithAgent}
         />
       );
 
@@ -244,6 +234,7 @@ describe("WelcomeModal", () => {
           onWorkflowGenerated={mockOnWorkflowGenerated}
           onClose={mockOnClose}
           onNewProject={mockOnNewProject}
+          onStartWithAgent={mockOnStartWithAgent}
         />
       );
 
@@ -264,6 +255,7 @@ describe("WelcomeModal", () => {
           onWorkflowGenerated={mockOnWorkflowGenerated}
           onClose={mockOnClose}
           onNewProject={mockOnNewProject}
+          onStartWithAgent={mockOnStartWithAgent}
         />
       );
 
@@ -280,20 +272,5 @@ describe("WelcomeModal", () => {
       expect(screen.getByText("Quick Start")).toBeInTheDocument();
     });
 
-    it("should show prompt view when navigating to vibe", () => {
-      render(
-        <WelcomeModal
-          onWorkflowGenerated={mockOnWorkflowGenerated}
-          onClose={mockOnClose}
-          onNewProject={mockOnNewProject}
-        />
-      );
-
-      // Navigate to vibe/prompt view
-      fireEvent.click(screen.getByText("Prompt a workflow"));
-
-      expect(screen.getByText("Prompt a Workflow")).toBeInTheDocument();
-      expect(screen.getByText("Generate workflow")).toBeInTheDocument();
-    });
   });
 });

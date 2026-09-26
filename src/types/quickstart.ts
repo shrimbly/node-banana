@@ -1,6 +1,6 @@
 import type { NodeType } from "./nodes";
 
-export type QuickstartView = "initial" | "templates" | "vibe" | "browse";
+export type QuickstartView = "initial" | "templates" | "browse";
 
 export type TemplateCategory = "simple" | "advanced" | "community";
 

@@ -6,6 +6,7 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { ImageHistoryItem } from "@/types";
 import { ChromeIconButton } from "./ChromeIconButton";
 import { CHROME_SURFACE } from "./chromeStyles";
+import { HISTORY_RIGHT_VAR } from "./Toast";
 
 /** Inset of the history button from the canvas edges (matches the navigator). */
 export const HISTORY_MARGIN = 16;
@@ -259,7 +260,12 @@ function HistorySidebar({
 }
 
 // Memoised: rendered by the canvas, which re-renders on every drag frame
-export const GlobalImageHistory = memo(function GlobalImageHistory() {
+interface GlobalImageHistoryProps {
+  /** Distance from the canvas's right edge; larger while the agent window covers the corner. */
+  rightInset?: number;
+}
+
+export const GlobalImageHistory = memo(function GlobalImageHistory({ rightInset = HISTORY_MARGIN }: GlobalImageHistoryProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -267,6 +273,16 @@ export const GlobalImageHistory = memo(function GlobalImageHistory() {
 
   const history = useWorkflowStore((state) => state.globalImageHistory);
   const clearGlobalHistory = useWorkflowStore((state) => state.clearGlobalHistory);
+
+  // Notifications hang beneath this button (Toast.tsx); tell them where it went.
+  useEffect(() => {
+    const root = document.documentElement;
+    if (rightInset === HISTORY_MARGIN) root.style.removeProperty(HISTORY_RIGHT_VAR);
+    else root.style.setProperty(HISTORY_RIGHT_VAR, `${rightInset}px`);
+    return () => {
+      root.style.removeProperty(HISTORY_RIGHT_VAR);
+    };
+  }, [rightInset]);
 
   const recent = history.slice(0, RECENT_COUNT);
   const hasOverflow = history.length > RECENT_COUNT;
@@ -336,7 +352,7 @@ export const GlobalImageHistory = memo(function GlobalImageHistory() {
     <div
       ref={rootRef}
       className="absolute z-10 flex flex-col items-end"
-      style={{ top: HISTORY_MARGIN, right: HISTORY_MARGIN }}
+      style={{ top: HISTORY_MARGIN, right: rightInset }}
       data-testid="image-history"
     >
       {/* Trigger */}

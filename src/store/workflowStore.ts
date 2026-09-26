@@ -42,6 +42,8 @@ import type { ProviderModel } from "@/lib/providers/types";
 import { isGenerateNodeType, modelSelectionData } from "./utils/modelSelection";
 import { externalizeWorkflowMedia, hydrateWorkflowMedia } from "@/utils/mediaStorage";
 import { EditOperation, applyEditOperations as executeEditOps } from "@/lib/chat/editOperations";
+import { applyGraphOps } from "@/lib/agent/graph/applyOps";
+import type { AgentGraphOpBatch } from "@/lib/agent/types";
 import { findNearestFreePosition } from "@/utils/spatialLayout";
 import { getNodeSize } from "@/utils/nodeDimensions";
 import { hookHandles, insertHookHandle, withHookHandles } from "@/lib/edges/hook";
@@ -365,7 +367,8 @@ export interface WorkflowStore {
    */
   materializeSplitGridCells: (
     nodeId: string,
-    options?: { force?: boolean; template?: SplitGridTemplate }
+    /** skipCheckpoint: the caller already pushed this change's undo step. */
+    options?: { force?: boolean; template?: SplitGridTemplate; skipCheckpoint?: boolean }
   ) => boolean;
 
   // UI State
@@ -410,7 +413,7 @@ export interface WorkflowStore {
 
   // Save/Load
   saveWorkflow: (name?: string) => void;
-  loadWorkflow: (workflow: WorkflowFile, workflowPath?: string, options?: { preserveSnapshot?: boolean }) => Promise<void>;
+  loadWorkflow: (workflow: WorkflowFile, workflowPath?: string) => Promise<void>;
   /** Drop carousel entries whose files are no longer in the generations folder. */
   pruneMissingHistory: () => Promise<void>;
   clearWorkflow: () => void;
@@ -524,22 +527,19 @@ export interface WorkflowStore {
   setFocusedCommentNodeId: (nodeId: string | null) => void;
   resetViewedComments: () => void;
 
-  // AI change snapshot state
-  previousWorkflowSnapshot: {
-    nodes: WorkflowNode[];
-    edges: WorkflowEdge[];
-    groups: Record<string, NodeGroup>;
-    edgeStyle: EdgeStyle;
-    edgeAppearance: EdgeAppearance;
-  } | null;
-  manualChangeCount: number;
-
-  // AI change snapshot actions
-  captureSnapshot: () => void;
-  revertToSnapshot: () => void;
-  clearSnapshot: () => void;
-  incrementManualChangeCount: () => void;
   applyEditOperations: (operations: EditOperation[]) => { applied: number; skipped: string[] };
+  /**
+   * Applies one batch of resolved canvas changes from the agent as a single
+   * undo step. Ops that no longer fit the live canvas are skipped and
+   * returned with reasons.
+   */
+  applyAgentGraphOps: (batch: AgentGraphOpBatch) => { applied: number; skipped: string[] };
+  /**
+   * Bumped whenever a different canvas replaces the live one (loadWorkflow,
+   * clearWorkflow, a tab switch). An agent turn remembers the generation it
+   * was sent from and drops edits that arrive after its canvas was replaced.
+   */
+  canvasGeneration: number;
 
   // Canvas navigation settings state
   canvasNavigationSettings: CanvasNavigationSettings;
@@ -698,6 +698,16 @@ function captureUndoSnapshot(state: WorkflowStore): UndoSnapshot {
 }
 
 /** Flush pending debounced data snapshot, capture current state, push to undoManager */
+/** Split Grids an agent batch gave cells or a new size. */
+function splitGridsToBuild(ops: AgentGraphOpBatch["ops"]): string[] {
+  const ids = new Set<string>();
+  for (const op of ops) {
+    if (op.op === "addNode" && op.nodeType === "splitGrid" && op.data.template) ids.add(op.id);
+    if (op.op === "updateNode" && ("template" in op.data || "gridRows" in op.data || "gridCols" in op.data)) ids.add(op.id);
+  }
+  return [...ids];
+}
+
 function pushUndoCheckpoint(
   get: () => WorkflowStore,
   set: (partial: Partial<WorkflowStore>) => void,
@@ -778,6 +788,8 @@ function applyTabSnapshot(
     _abortController: null,
     workflowLoadCount: get().workflowLoadCount + 1,
     showQuickstart: false,
+    // A different canvas: a running agent turn must not edit it
+    canvasGeneration: get().canvasGeneration + 1,
   });
   // Undo history belongs to the outgoing graph; a switch starts fresh
   pendingDataSnapshot = null;
@@ -902,9 +914,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   navigationTarget: null,
   focusedCommentNodeId: null,
 
-  // AI change snapshot initial state
-  previousWorkflowSnapshot: null,
-  manualChangeCount: 0,
+  canvasGeneration: 0,
 
   // Canvas navigation settings initial state
   canvasNavigationSettings: getCanvasNavigationSettings(),
@@ -1039,8 +1049,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       hasUnsavedChanges: true,
     }));
 
-    get().incrementManualChangeCount();
-
     return id;
   },
 
@@ -1115,7 +1123,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         hasUnsavedChanges: true,
       };
     });
-    get().incrementManualChangeCount();
   },
 
   onNodesChange: (changes: NodeChange<WorkflowNode>[]) => {
@@ -1178,10 +1185,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         ...(hasMeaningfulChange ? { hasUnsavedChanges: true } : {}),
       };
     });
-
-    if (hasRemoveChange) {
-      get().incrementManualChangeCount();
-    }
   },
 
   onEdgesChange: (changes: EdgeChange<WorkflowEdge>[]) => {
@@ -1218,7 +1221,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
 
     if (hasRemoveChange) {
       clearStaleInputImages(removedEdges, get);
-      get().incrementManualChangeCount();
     }
 
     // Recompute dimming when edges are added or removed
@@ -1242,7 +1244,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         hasUnsavedChanges: true,
       };
     });
-    get().incrementManualChangeCount();
     get().recomputeDimmedNodes();
   },
 
@@ -1278,7 +1279,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         deleteCheckpointActive = false;
       }
     }
-    get().incrementManualChangeCount();
   },
 
   reconnectEdge: (edgeId: string, connection: Connection) => {
@@ -1332,7 +1332,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       deleteCheckpointActive = false;
     }
     get().recomputeDimmedNodes();
-    get().incrementManualChangeCount();
     return true;
   },
 
@@ -1364,7 +1363,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       deleteCheckpointActive = false;
     }
     get().recomputeDimmedNodes();
-    get().incrementManualChangeCount();
   },
 
   setEdgesPause: (edgeIds: string[], hasPause: boolean) => {
@@ -1849,7 +1847,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     }));
   },
 
-  materializeSplitGridCells: (nodeId: string, options?: { force?: boolean; template?: SplitGridTemplate }) => {
+  materializeSplitGridCells: (nodeId: string, options?: { force?: boolean; template?: SplitGridTemplate; skipCheckpoint?: boolean }) => {
     const state = get();
     const splitNode = state.nodes.find((n) => n.id === nodeId && n.type === "splitGrid");
     if (!splitNode) return false;
@@ -1891,7 +1889,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     const removedRouterId = !hasRouter ? existingRouterId : null;
 
     // Single checkpoint: one undo restores replaced cells and removes new ones
-    pushUndoCheckpoint(get, set);
+    // (skipped when the caller's own change already took it, e.g. an agent batch)
+    if (!options?.skipCheckpoint) pushUndoCheckpoint(get, set);
 
     // Previously materialized cells are system-created — replace them
     const staleCells = getSplitGridCells(data);
@@ -3037,7 +3036,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     URL.revokeObjectURL(url);
   },
 
-  loadWorkflow: async (workflow: WorkflowFile, workflowPath?: string, options?: { preserveSnapshot?: boolean }) => {
+  loadWorkflow: async (workflow: WorkflowFile, workflowPath?: string) => {
     // Abort any in-flight workflow run before swapping the graph. Otherwise old
     // executors keep polling/spending and stamp stale results (by node id) onto
     // the freshly loaded nodes — especially when ids are reused across reloads.
@@ -3175,6 +3174,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       workflowId: workflow.id || null,
       workflowName: workflow.name,
       workflowLoadCount: get().workflowLoadCount + 1,
+      // A different canvas: a running agent turn must not edit it
+      canvasGeneration: get().canvasGeneration + 1,
       saveDirectoryPath: directoryPath || null,
       generationsPath,
       lastSavedAt: savedConfig?.lastSavedAt || null,
@@ -3192,11 +3193,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       // Dismiss welcome modal after loading a workflow
       showQuickstart: false,
     });
-
-    // Clear snapshot unless explicitly preserving (e.g., AI workflow generation)
-    if (!options?.preserveSnapshot) {
-      get().clearSnapshot();
-    }
 
     // Clear undo history — loading a workflow is a fresh start
     // Cancel any pending debounced snapshot so it doesn't fire into the new workflow
@@ -3368,8 +3364,9 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       dimmedNodeIds: new Set<string>(),
       // Reset skipped nodes
       skippedNodeIds: new Set<string>(),
+      // A different canvas: a running agent turn must not edit it
+      canvasGeneration: get().canvasGeneration + 1,
     });
-    get().clearSnapshot();
     // Clear undo history and cancel any pending debounced snapshot
     pendingDataSnapshot = null;
     if (dataChangeTimer) {
@@ -3844,61 +3841,6 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     set({ viewedCommentNodeIds: new Set<string>() });
   },
 
-  // AI change snapshot actions
-  captureSnapshot: () => {
-    const state = get();
-    // Deep copy the current workflow state to avoid reference sharing
-    const snapshot = clonePreservingStrings({
-      nodes: state.nodes,
-      edges: state.edges,
-      groups: state.groups,
-      edgeStyle: state.edgeStyle,
-      edgeAppearance: state.edgeAppearance,
-    });
-    set({
-      previousWorkflowSnapshot: snapshot,
-      manualChangeCount: 0,
-    });
-  },
-
-  revertToSnapshot: () => {
-    const state = get();
-    if (state.previousWorkflowSnapshot) {
-      set({
-        nodes: state.previousWorkflowSnapshot.nodes,
-        edges: state.previousWorkflowSnapshot.edges,
-        groups: state.previousWorkflowSnapshot.groups,
-        edgeStyle: state.previousWorkflowSnapshot.edgeStyle,
-        edgeAppearance: state.previousWorkflowSnapshot.edgeAppearance,
-        previousWorkflowSnapshot: null,
-        manualChangeCount: 0,
-        hasUnsavedChanges: true,
-      });
-    }
-  },
-
-  clearSnapshot: () => {
-    set({
-      previousWorkflowSnapshot: null,
-      manualChangeCount: 0,
-    });
-  },
-
-  incrementManualChangeCount: () => {
-    const state = get();
-    const newCount = state.manualChangeCount + 1;
-
-    // Automatically clear snapshot after 3 manual changes
-    if (newCount >= 3) {
-      set({
-        previousWorkflowSnapshot: null,
-        manualChangeCount: 0,
-      });
-    } else {
-      set({ manualChangeCount: newCount });
-    }
-  },
-
   applyEditOperations: (operations) => {
     const state = get();
     const result = executeEditOps(operations, {
@@ -3911,6 +3853,60 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       edges: result.edges,
       hasUnsavedChanges: true,
     });
+
+    return { applied: result.applied, skipped: result.skipped };
+  },
+
+  applyAgentGraphOps: (batch) => {
+    if (batch.ops.length === 0) return { applied: 0, skipped: [] };
+
+    const state = get();
+    const result = applyGraphOps({ nodes: state.nodes, edges: state.edges, groups: state.groups }, batch.ops, {
+      createDefaultNodeData,
+      defaultNodeDimensions,
+    });
+    // Nothing landed (every op was stale): leave undo history alone.
+    if (result.applied === 0) return { applied: 0, skipped: result.skipped };
+
+    pushUndoCheckpoint(get, set);
+
+    const remainingNodeIds = new Set(result.nodes.map((node) => node.id));
+    const removedNodeIds = new Set(
+      state.nodes.filter((node) => !remainingNodeIds.has(node.id)).map((node) => node.id)
+    );
+    const remainingEdgeIds = new Set(result.edges.map((edge) => edge.id));
+    const removedEdges = state.edges.filter((edge) => !remainingEdgeIds.has(edge.id));
+    // The batch's own group changes (a clearCanvas drops them all), then the
+    // groups whose nodes it deleted, as a manual delete does. Only groups that
+    // had nodes before the batch can be pruned, so a group the batch created
+    // with its nodes stays.
+    const batchGroups = result.groups ?? (result.clearedCanvas ? {} : state.groups);
+    const groups = pruneEmptiedGroups(batchGroups, state.nodes, removedNodeIds, result.nodes);
+
+    set({
+      nodes: removedNodeIds.size > 0 ? healSplitGridRouterRefs(result.nodes, removedNodeIds) : result.nodes,
+      edges: result.edges,
+      groups,
+      hasUnsavedChanges: true,
+    });
+
+    // Same follow-up as a manual disconnect, folded into this batch's undo step.
+    if (removedEdges.length > 0) {
+      deleteCheckpointActive = true;
+      try {
+        clearStaleInputImages(removedEdges, get);
+    } finally {
+        deleteCheckpointActive = false;
+      }
+    }
+    // A grid whose cells or size the agent set is built now, inside this undo
+    // step, so its cells and shared Router show before Run (Run would build it anyway).
+    for (const id of splitGridsToBuild(batch.ops)) {
+      if (get().nodes.some((node) => node.id === id && node.type === "splitGrid")) {
+        get().materializeSplitGridCells(id, { skipCheckpoint: true });
+      }
+    }
+    get().recomputeDimmedNodes();
 
     return { applied: result.applied, skipped: result.skipped };
   },

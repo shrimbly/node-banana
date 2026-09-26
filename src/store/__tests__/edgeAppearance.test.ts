@@ -129,11 +129,4 @@ describe("edge appearance", () => {
     expect(state.edgeAppearance).toEqual({ ...defaultEdgeAppearance, gradient: false });
   });
 
-  it("captures and reverts the appearance with the AI change snapshot", () => {
-    useWorkflowStore.getState().captureSnapshot();
-    useWorkflowStore.getState().setEdgeAppearance({ loadingPulse: false });
-    expect(useWorkflowStore.getState().edgeAppearance.loadingPulse).toBe(false);
-    useWorkflowStore.getState().revertToSnapshot();
-    expect(useWorkflowStore.getState().edgeAppearance.loadingPulse).toBe(true);
-  });
 });
