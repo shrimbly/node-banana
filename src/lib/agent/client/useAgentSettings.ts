@@ -8,6 +8,7 @@ export interface UseAgentSettingsResult {
   settings: AgentClientSettings;
   setHarness: (harness: AgentHarnessId) => void;
   setModel: (harness: AgentHarnessId, model: string) => void;
+  setEffort: (harness: AgentHarnessId, effort: string) => void;
 }
 
 /** The persisted harness and per-harness model choice. Client-only (reads localStorage on mount). */
@@ -36,5 +37,13 @@ export function useAgentSettings(): UseAgentSettingsResult {
     );
   }, []);
 
-  return { settings, setHarness, setModel };
+  const setEffort = useCallback((harness: AgentHarnessId, effort: string) => {
+    setSettings((previous) =>
+      previous.efforts[harness] === effort
+        ? previous
+        : { ...previous, efforts: { ...previous.efforts, [harness]: effort } },
+    );
+  }, []);
+
+  return { settings, setHarness, setModel, setEffort };
 }

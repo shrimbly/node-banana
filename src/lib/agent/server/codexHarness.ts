@@ -473,7 +473,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
       cursor = response.nextCursor ?? null;
       if (!cursor) break;
     }
-    const options = codexModelOptions(listed);
+    const options = codexModelOptions(listed, deps.effort);
     state.models = { server, generation: server.generation, at: deps.now(), options };
     return options;
   }
@@ -852,7 +852,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
             threadId: thread.id,
             input: [{ type: "text", text: prompt, text_elements: [] }],
             ...(params.model ? { model: params.model } : {}),
-            effort: deps.effort,
+            effort: params.effort ?? deps.effort,
             summary: "auto",
           },
           60_000,

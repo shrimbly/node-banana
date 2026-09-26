@@ -247,6 +247,25 @@ interface ListedModel {
   displayName?: unknown;
   hidden?: unknown;
   isDefault?: unknown;
+  supportedReasoningEfforts?: unknown;
+  defaultReasoningEffort?: unknown;
+}
+
+/** A model's reasoning levels from `model/list`, and the one a turn runs at by default. */
+function codexEfforts(model: ListedModel, preferred: string | undefined): Pick<AgentModelOption, "efforts" | "defaultEffort"> {
+  const efforts: string[] = [];
+  if (Array.isArray(model.supportedReasoningEfforts)) {
+    for (const entry of model.supportedReasoningEfforts) {
+      const level =
+        typeof entry === "string" ? entry : (entry as { reasoningEffort?: unknown } | null)?.reasoningEffort;
+      if (typeof level === "string" && level && !efforts.includes(level)) efforts.push(level);
+    }
+  }
+  if (efforts.length === 0) return {};
+  // Node Banana runs Codex at its own level (NB_CODEX_EFFORT, else medium) unless the user picks one.
+  const serverDefault = typeof model.defaultReasoningEffort === "string" ? model.defaultReasoningEffort : undefined;
+  const defaultEffort = [preferred, serverDefault].find((level) => level && efforts.includes(level)) ?? efforts[0];
+  return { efforts, defaultEffort };
 }
 
 /**
@@ -254,7 +273,7 @@ interface ListedModel {
  * display name. Default: {@link CODEX_PREFERRED_MODEL} when listed, else the
  * server's default, else the first.
  */
-export function codexModelOptions(models: unknown[]): AgentModelOption[] {
+export function codexModelOptions(models: unknown[], preferredEffort?: string): AgentModelOption[] {
   const options: Array<AgentModelOption & { serverDefault: boolean }> = [];
   for (const entry of models) {
     if (!entry || typeof entry !== "object") continue;
@@ -265,11 +284,14 @@ export function codexModelOptions(models: unknown[]): AgentModelOption[] {
       id,
       label: typeof model.displayName === "string" && model.displayName ? model.displayName : id,
       serverDefault: model.isDefault === true,
+      ...codexEfforts(model, preferredEffort),
     });
   }
   const defaultId =
     options.find((option) => option.id === CODEX_PREFERRED_MODEL)?.id ??
     options.find((option) => option.serverDefault)?.id ??
     options[0]?.id;
-  return options.map(({ id, label }) => (id === defaultId ? { id, label, isDefault: true } : { id, label }));
+  return options.map(({ serverDefault: _serverDefault, ...option }) =>
+    option.id === defaultId ? { ...option, isDefault: true } : option,
+  );
 }

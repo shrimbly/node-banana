@@ -22,6 +22,7 @@ import {
   harnessNotReady,
   MAX_ACTIVE_TURNS,
   parseAgentChatRequest,
+  pickTurnEffort,
   pickTurnModel,
   readConversation,
   type AgentChatStreamOptions,
@@ -1225,5 +1226,16 @@ describe("readConversation", () => {
     ]);
 
     expect(conversation).toEqual({ history: [{ role: "user", text: "one\n\ntwo" }], userText: "three" });
+  });
+});
+
+describe("pickTurnEffort", () => {
+  const opus = { id: "opus", label: "Opus", efforts: ["low", "high", "max"], defaultEffort: "high" };
+
+  it("passes only a level the model lists", () => {
+    expect(pickTurnEffort("max", opus)).toBe("max");
+    expect(pickTurnEffort("xhigh", opus)).toBeUndefined();
+    expect(pickTurnEffort("max", { id: "haiku", label: "Haiku" })).toBeUndefined();
+    expect(pickTurnEffort(undefined, opus)).toBeUndefined();
   });
 });

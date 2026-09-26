@@ -28,7 +28,7 @@ import {
   type AgentReadiness,
 } from "@/lib/agent/client/readiness";
 import { findLatestAgentSession } from "@/lib/agent/client/session";
-import { resolveAgentModel } from "@/lib/agent/client/settings";
+import { resolveAgentEffort, resolveAgentModel } from "@/lib/agent/client/settings";
 import { useAgentSettings } from "@/lib/agent/client/useAgentSettings";
 import { useAgentStatus } from "@/lib/agent/client/useAgentStatus";
 import {
@@ -73,7 +73,7 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
   const occludedRight = open ? getAgentPanelOcclusion(frame) : 0;
 
   // --- Harness, model, status and sign-in ---------------------------------
-  const { settings, setHarness, setModel } = useAgentSettings();
+  const { settings, setHarness, setModel, setEffort } = useAgentSettings();
   const harness = settings.harness;
   const signIn = useAgentSignIn();
   const [pollHarness, setPollHarness] = useState<AgentHarnessId | null>(null);
@@ -111,6 +111,22 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
 
   const models = status.statuses[harness]?.models ?? [];
   const model = resolveAgentModel(models, settings.models[harness]);
+  const modelOption = models.find((option) => option.id === model);
+  const effort = resolveAgentEffort(modelOption, settings.efforts[harness]);
+  // Saved only when this harness offers it: a pick stays until the user changes it,
+  // and a stray value (another harness's id) can never replace it.
+  const chooseModel = useCallback(
+    (next: string) => {
+      if (models.some((option) => option.id === next)) setModel(harness, next);
+    },
+    [models, harness, setModel],
+  );
+  const chooseEffort = useCallback(
+    (next: string) => {
+      if (modelOption?.efforts?.includes(next)) setEffort(harness, next);
+    },
+    [modelOption, harness, setEffort],
+  );
 
   // --- Conversation ----------------------------------------------------------
   const canvasView = useAgentCanvasView(occludedRight);
@@ -123,6 +139,7 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
   const chat = useAgentChat({
     harness,
     model,
+    effort,
     getViewport: canvasView.getViewport,
     onBatchApplied: canvasView.focusBatch,
     onNotice: handleNotice,
@@ -361,7 +378,7 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
           onHarnessChange={setHarness}
           models={models}
           model={model}
-          onModelChange={(next) => setModel(harness, next)}
+          onModelChange={chooseModel}
           canStartNewChat={hasMessages}
           onNewChat={newChat}
           onClose={close}
@@ -385,6 +402,10 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
           <AgentComposer
             status={chat.status}
             busy={busy}
+            efforts={modelOption?.efforts ?? []}
+            effort={effort}
+            defaultEffort={modelOption?.defaultEffort}
+            onEffortChange={chooseEffort}
             onSend={chat.send}
             onStop={chat.stop}
             notes={notes}

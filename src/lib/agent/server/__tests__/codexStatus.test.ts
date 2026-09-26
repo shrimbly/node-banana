@@ -224,3 +224,29 @@ describe("classifyCodexUsage", () => {
     expect(classifyCodexUsage(byId({ codex: snapshot({ spendControlReached: true }) })).allowed).toBe(false);
   });
 });
+
+describe("codexModelOptions efforts", () => {
+  const listed = [
+    {
+      id: "gpt-6-sol",
+      model: "gpt-6-sol",
+      displayName: "GPT-6-Sol",
+      isDefault: true,
+      defaultReasoningEffort: "high",
+      supportedReasoningEfforts: [
+        { reasoningEffort: "low", description: "Fast" },
+        { reasoningEffort: "medium", description: "Balanced" },
+        { reasoningEffort: "high", description: "Deep" },
+      ],
+    },
+  ];
+
+  it("lists the reasoning levels, defaulting to Node Banana's own level when offered", () => {
+    expect(codexModelOptions(listed, "medium")[0]).toMatchObject({
+      efforts: ["low", "medium", "high"],
+      defaultEffort: "medium",
+    });
+    expect(codexModelOptions(listed, "xhigh")[0].defaultEffort).toBe("high");
+    expect(codexModelOptions(listed)[0].defaultEffort).toBe("high");
+  });
+});

@@ -133,6 +133,8 @@ const chatRequestSchema = z.object({
   harness: harnessIdSchema,
   // Checked against the harness's own list before the turn (pickTurnModel).
   model: optionalText.refine((value) => value === undefined || value.length <= 200, "too long"),
+  // Checked against the model's own levels before the turn (pickTurnEffort).
+  effort: optionalText.refine((value) => value === undefined || value.length <= 40, "too long"),
   sessionId: sessionIdSchema,
   workflow: workflowSchema,
 });
@@ -151,7 +153,7 @@ export function parseAgentChatRequest(raw: unknown): ParseAgentChatRequestResult
   if (!parsed.success) {
     return { ok: false, message: `Invalid agent request: ${describeIssues(parsed.error)}` };
   }
-  const { id, messages, harness, model, sessionId, workflow } = parsed.data;
+  const { id, messages, harness, model, effort, sessionId, workflow } = parsed.data;
   const body: AgentChatRequestBody = {
     id,
     // Checked for what this module reads (role, text parts); the rest of each
@@ -160,6 +162,7 @@ export function parseAgentChatRequest(raw: unknown): ParseAgentChatRequestResult
     harness,
     workflow: workflow as unknown as AgentWorkflowSnapshot,
     ...(model ? { model } : {}),
+    ...(effort ? { effort } : {}),
     ...(sessionId ? { sessionId } : {}),
   };
   if (!readConversation(body.messages)) {
@@ -273,6 +276,19 @@ export function harnessNotReady(status: AgentHarnessStatus): { code: AgentErrorC
  * list (a stale saved pick, or any string a caller sends) never reaches the
  * CLI's command line or JSON-RPC.
  */
+/**
+ * The effort to hand the harness: the panel's pick when the model lists it,
+ * otherwise none (the harness's own level). Like the model, an unlisted value
+ * never reaches the CLI.
+ */
+export function pickTurnEffort(
+  requested: string | undefined,
+  option: AgentModelOption | undefined,
+): string | undefined {
+  if (!requested || !option?.efforts) return undefined;
+  return option.efforts.includes(requested) ? requested : undefined;
+}
+
 /**
  * Tells the model which model it is. Our system prompt replaces the CLI's own,
  * which is where Claude Code normally says so; without it a model asked
@@ -801,6 +817,7 @@ async function runClaimedTurn(
   const model = requestedModel ?? status.models.find((option) => option.isDefault)?.id;
   const modelOption = status.models.find((option) => option.id === model);
   turn.setModel(model, modelOption?.label);
+  const effort = pickTurnEffort(body.effort, modelOption);
 
   let params: HarnessTurnParams;
   try {
@@ -822,6 +839,7 @@ async function runClaimedTurn(
       // Left out when the panel picked none, or one the harness does not offer,
       // so the harness uses its own default.
       ...(requestedModel ? { model: requestedModel } : {}),
+      ...(effort ? { effort } : {}),
     };
   } catch (error) {
     logger.error("api.error", "Agent turn setup failed", logContext, asError(error));

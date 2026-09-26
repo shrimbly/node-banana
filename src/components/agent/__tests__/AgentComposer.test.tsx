@@ -162,4 +162,27 @@ describe("AgentComposer", () => {
     await waitFor(() => expect(onSend).toHaveBeenCalledWith("kept by the panel"));
     expect(onDraftChange).toHaveBeenLastCalledWith("");
   });
+
+  it("offers the model's thinking efforts beside send, locked during a turn", () => {
+    const onEffortChange = vi.fn();
+    const { unmount } = renderComposer({
+      efforts: ["low", "medium", "high", "max"],
+      effort: "high",
+      defaultEffort: "high",
+      onEffortChange,
+    });
+    const trigger = screen.getByRole("button", { name: "Thinking effort: High" });
+    fireEvent.keyDown(trigger, { key: "Enter" });
+    fireEvent.click(screen.getByRole("menuitemradio", { name: /Max/ }));
+    expect(onEffortChange).toHaveBeenCalledWith("max");
+    unmount();
+
+    renderComposer({ busy: true, status: "submitted", efforts: ["low", "high"], effort: "low", onEffortChange });
+    expect(screen.getByRole("button", { name: "Thinking effort: Low" })).toBeDisabled();
+  });
+
+  it("hides the effort control for a model without levels", () => {
+    renderComposer({ efforts: [], onEffortChange: vi.fn() });
+    expect(screen.queryByRole("button", { name: /Thinking effort/ })).not.toBeInTheDocument();
+  });
 });

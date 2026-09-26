@@ -49,7 +49,12 @@ export interface ClaudeModelInfo {
   displayName?: string;
   description?: string;
   resolvedModel?: string;
+  supportsEffort?: boolean;
+  supportedEffortLevels?: string[];
 }
+
+/** Claude Code's own default effort ("high"), when the model offers it. */
+const CLAUDE_DEFAULT_EFFORT = "high";
 
 /**
  * The picker's models from Claude Code's own list (initializationResult().models):
@@ -72,10 +77,20 @@ export function claudeModelOptions(models: readonly ClaudeModelInfo[] | undefine
       label,
       ...(row.description ? { description: row.description } : {}),
       ...(row.resolvedModel ? { resolvedModel: row.resolvedModel } : {}),
+      ...effortFields(row),
     };
   });
   const defaultId = options.some((option) => option.id === CLAUDE_DEFAULT_MODEL) ? CLAUDE_DEFAULT_MODEL : options[0].id;
   return options.map((option) => (option.id === defaultId ? { ...option, isDefault: true } : option));
+}
+
+function effortFields(row: ClaudeModelInfo): Pick<AgentModelOption, "efforts" | "defaultEffort"> {
+  const efforts = (row.supportedEffortLevels ?? []).filter((level) => typeof level === "string" && level);
+  if (row.supportsEffort === false || efforts.length === 0) return {};
+  return {
+    efforts,
+    defaultEffort: efforts.includes(CLAUDE_DEFAULT_EFFORT) ? CLAUDE_DEFAULT_EFFORT : efforts[efforts.length - 1],
+  };
 }
 
 export const CLAUDE_SIGN_IN_COMMAND = "claude auth login";

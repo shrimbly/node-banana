@@ -245,6 +245,8 @@ export function buildClaudeOptions(input: {
     systemPrompt: params.systemPrompt,
     model,
     thinking: { type: "adaptive", display: "summarized" },
+    // Checked against the model's own levels before the turn (pickTurnEffort).
+    ...(params.effort ? { effort: params.effort as NonNullable<Options["effort"]> } : {}),
     includePartialMessages: true,
     maxTurns: MAX_TURNS,
     resume: input.resume,

@@ -320,6 +320,23 @@ describe("AgentPanel", () => {
     await waitFor(() => expect(JSON.parse(localStorage.getItem(AGENT_SETTINGS_KEY)!).harness).toBe("codex"));
   });
 
+  it("keeps each harness's model pick across switches and turns", async () => {
+    statuses.codex = harnessStatus("codex");
+    renderPanel();
+    await waitForComposer();
+
+    fireEvent.click(within(openHarnessMenu()).getByRole("menuitemradio", { name: /Opus/ }));
+    fireEvent.click(within(openHarnessMenu()).getByRole("menuitemradio", { name: /Codex/ }));
+    fireEvent.click(within(openHarnessMenu()).getByRole("menuitemradio", { name: /Claude Code/ }));
+
+    expect(screen.getByRole("button", { name: /Change agent or model/ })).toHaveAccessibleName(
+      "Claude Code, Opus. Change agent or model",
+    );
+    await waitFor(() =>
+      expect(JSON.parse(localStorage.getItem(AGENT_SETTINGS_KEY)!).models).toEqual({ claude: "opus" }),
+    );
+  });
+
   it("sends the live canvas, applies streamed edits and resumes the session next turn", async () => {
     const batch: AgentGraphOpBatch = {
       batchId: "b1",

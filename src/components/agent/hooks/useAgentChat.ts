@@ -27,6 +27,7 @@ export interface AgentStatusLine {
 export interface UseAgentChatOptions {
   harness: AgentHarnessId;
   model?: string;
+  effort?: string;
   /** The visible canvas area in flow coordinates, read at send time. */
   getViewport: () => AgentWorkflowSnapshot["viewport"];
   /** Called after a batch of canvas changes landed, to bring it into view. */
@@ -71,13 +72,14 @@ interface ChatCallbacks {
 export function useAgentChat({
   harness,
   model,
+  effort,
   getViewport,
   onBatchApplied,
   onNotice,
 }: UseAgentChatOptions): UseAgentChatResult {
   // Read at request time, so the transport can stay the same object across renders.
-  const requestRef = useRef({ harness, model, getViewport });
-  requestRef.current = { harness, model, getViewport };
+  const requestRef = useRef({ harness, model, effort, getViewport });
+  requestRef.current = { harness, model, effort, getViewport };
   const handlersRef = useRef({ onBatchApplied, onNotice });
   handlersRef.current = { onBatchApplied, onNotice };
 
@@ -95,7 +97,12 @@ export function useAgentChat({
       new DefaultChatTransport<AgentUIMessage>({
         api: AGENT_CHAT_API,
         prepareSendMessagesRequest: async ({ id, messages, headers }) => {
-          const { harness: currentHarness, model: currentModel, getViewport: readViewport } = requestRef.current;
+          const {
+            harness: currentHarness,
+            model: currentModel,
+            effort: currentEffort,
+            getViewport: readViewport,
+          } = requestRef.current;
           const { nodes, edges, groups, workflowName, canvasGeneration } = useWorkflowStore.getState();
           // The snapshot below is this generation's canvas: the turn's edits only fit it.
           turnGenerationRef.current = canvasGeneration;
@@ -104,6 +111,7 @@ export function useAgentChat({
             messages,
             harness: currentHarness,
             model: currentModel,
+            effort: currentEffort,
             canvas: { nodes, edges, groups, workflowName },
             viewport: readViewport(),
           });

@@ -265,3 +265,14 @@ describe("claudeModelOptions", () => {
     expect(claudeModelOptions([])).toBe(CLAUDE_MODELS);
   });
 });
+
+describe("claudeModelOptions efforts", () => {
+  it("carries each model's effort levels, defaulting to high", () => {
+    const [opus, haiku] = claudeModelOptions([
+      { value: "opus", displayName: "Opus 5.5", supportsEffort: true, supportedEffortLevels: ["low", "medium", "high", "xhigh", "max"] },
+      { value: "haiku", displayName: "Haiku 4.5", supportsEffort: false },
+    ]);
+    expect(opus).toMatchObject({ efforts: ["low", "medium", "high", "xhigh", "max"], defaultEffort: "high" });
+    expect(haiku.efforts).toBeUndefined();
+  });
+});

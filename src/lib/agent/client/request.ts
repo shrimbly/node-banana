@@ -25,6 +25,7 @@ export interface BuildAgentChatRequestInput {
   messages: AgentUIMessage[];
   harness: AgentHarnessId;
   model?: string;
+  effort?: string;
   canvas: AgentCanvasState;
   viewport?: AgentWorkflowSnapshot["viewport"];
 }
@@ -34,6 +35,7 @@ export function buildAgentChatRequestBody({
   messages,
   harness,
   model,
+  effort,
   canvas,
   viewport,
 }: BuildAgentChatRequestInput): AgentChatRequestBody {
@@ -42,6 +44,7 @@ export function buildAgentChatRequestBody({
     messages,
     harness,
     ...(model ? { model } : {}),
+    ...(effort ? { effort } : {}),
     sessionId: sessionIdForHarness(messages, harness),
     workflow: buildAgentSnapshot({
       nodes: canvas.nodes,

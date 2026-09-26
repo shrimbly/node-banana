@@ -36,6 +36,10 @@ export interface AgentModelOption {
   description?: string;
   /** The exact model an alias runs today (`opus` → `claude-opus-5-5`), when the CLI says. */
   resolvedModel?: string;
+  /** Thinking effort levels the model accepts, lowest first (`low` … `max`). Absent: no effort control. */
+  efforts?: string[];
+  /** The level a turn runs at when the user has picked none. */
+  defaultEffort?: string;
 }
 
 export interface AgentSignInState {
@@ -140,6 +144,8 @@ export interface HarnessTurnParams {
   systemPrompt: string;
   tools: AgentToolRuntime;
   model?: string;
+  /** Thinking effort, already checked against the model's own levels. */
+  effort?: string;
   signal: AbortSignal;
 }
 
@@ -406,6 +412,7 @@ export interface AgentChatRequestBody {
   messages: AgentUIMessage[];
   harness: AgentHarnessId;
   model?: string;
+  effort?: string;
   sessionId?: string;
   workflow: AgentWorkflowSnapshot;
 }
