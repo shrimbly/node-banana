@@ -2,7 +2,7 @@
 
 import { useCallback, useState, type KeyboardEvent, type Ref } from "react";
 import type { ChatStatus } from "ai";
-import { ArrowLeftRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, SquareDashedMousePointerIcon, XIcon } from "lucide-react";
+import { ArrowLeftRightIcon, CheckIcon, ChevronDownIcon, SquareDashedMousePointerIcon, XIcon } from "lucide-react";
 import {
   PromptInput,
   PromptInputBody,
@@ -93,7 +93,6 @@ function EffortPicker({
           "focus-visible:ring-2 focus-visible:ring-selection disabled:opacity-40 disabled:hover:bg-transparent",
         )}
       >
-        <BrainIcon className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
         {effortLabel(effort)}
         <ChevronDownIcon className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
       </DropdownMenuTrigger>
