@@ -66,7 +66,8 @@ import { MultiSelectToolbar } from "./MultiSelectToolbar";
 import { GlobalImageHistory } from "./GlobalImageHistory";
 import { CanvasMinimap, MINIMAP_GEOMETRY, getNavigatorHeight } from "./CanvasMinimap";
 import { AgentButton } from "./agent/AgentButton";
-import { getAgentButtonBottom } from "@/lib/agent/client/layout";
+import { getAgentButtonBottom, getAgentPanelFrame, getAgentPanelOcclusion } from "@/lib/agent/client/layout";
+import { useViewportWidth } from "./agent/hooks/useViewportWidth";
 import { GroupBackgroundsPortal, GroupControlsOverlay } from "./GroupsOverlay";
 import { NodeType, NanoBananaNodeData, HandleType, PromptNodeData, LLMGenerateNodeData, PromptConstructorNodeData, AvailableVariable, WorkflowNodeData } from "@/types";
 import { isComfyWorkflow, isNodeBananaWorkflow } from "@/lib/comfy/detect";
@@ -358,6 +359,13 @@ export function WorkflowCanvas() {
     setIsAgentOpen((open) => !open);
   }, []);
   const closeAgent = useCallback(() => setIsAgentOpen(false), []);
+  // The generations icon sits in the corner the open agent window covers: move it left of the window.
+  const viewportWidth = useViewportWidth();
+  const historyRightInset = isAgentOpen
+    ? getAgentPanelOcclusion(
+        getAgentPanelFrame({ buttonRight: MINIMAP_GEOMETRY.margin, buttonBottom: agentButtonBottom, viewportWidth }),
+      )
+    : undefined;
   const [isBuildingWorkflow, setIsBuildingWorkflow] = useState(false);
   const [showNewProjectSetup, setShowNewProjectSetup] = useState(false);
   const [expandingNode, setExpandingNode] = useState<{ id: string; type: string } | null>(null);
@@ -2524,6 +2532,7 @@ export function WorkflowCanvas() {
           disabled={tutorialActive && lockedFeatures}
           dimmed={tutorialActive && lockedFeatures}
           onClick={toggleAgent}
+          hidden={isAgentOpen}
           style={{ right: MINIMAP_GEOMETRY.margin, bottom: agentButtonBottom }}
         />
         <FloatingNodeHeaders
@@ -2571,7 +2580,7 @@ export function WorkflowCanvas() {
       {/* Edge toolbar */}
 
       {/* Global image history */}
-      <GlobalImageHistory />
+      <GlobalImageHistory rightInset={historyRightInset} />
 
       {/* Chat toggle button - hidden for now */}
 

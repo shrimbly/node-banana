@@ -16,13 +16,13 @@ describe("agent button and window placement", () => {
     expect(getAgentButtonBottom({ margin: 16, navigatorHeight: 42 })).toBe(66);
   });
 
-  it("puts the window 8px above the button, right-aligned with it", () => {
+  it("puts the window in the button's place (8px above the navigator), right-aligned with it", () => {
     const frame = getAgentPanelFrame({ buttonRight: 16, buttonBottom: 222, viewportWidth: 1280 });
     expect(frame).toEqual({
       right: 16,
-      bottom: 270,
+      bottom: 222,
       width: AGENT_PANEL_WIDTH,
-      maxHeight: "calc(100vh - 326px)",
+      maxHeight: "calc(100vh - 278px)",
     });
   });
 

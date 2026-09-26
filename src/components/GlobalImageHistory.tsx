@@ -259,7 +259,12 @@ function HistorySidebar({
 }
 
 // Memoised: rendered by the canvas, which re-renders on every drag frame
-export const GlobalImageHistory = memo(function GlobalImageHistory() {
+interface GlobalImageHistoryProps {
+  /** Distance from the canvas's right edge; larger while the agent window covers the corner. */
+  rightInset?: number;
+}
+
+export const GlobalImageHistory = memo(function GlobalImageHistory({ rightInset = HISTORY_MARGIN }: GlobalImageHistoryProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -336,7 +341,7 @@ export const GlobalImageHistory = memo(function GlobalImageHistory() {
     <div
       ref={rootRef}
       className="absolute z-10 flex flex-col items-end"
-      style={{ top: HISTORY_MARGIN, right: HISTORY_MARGIN }}
+      style={{ top: HISTORY_MARGIN, right: rightInset }}
       data-testid="image-history"
     >
       {/* Trigger */}

@@ -13,6 +13,8 @@ export interface AgentButtonProps {
   disabled?: boolean;
   /** Dimmed like the other canvas chrome while the tutorial locks features. */
   dimmed?: boolean;
+  /** Hidden (not unmounted, so focus can return to it) while the window takes its place. */
+  hidden?: boolean;
   style?: CSSProperties;
   onClick: () => void;
 }
@@ -21,15 +23,17 @@ export interface AgentButtonProps {
  * Opens the agent window. Sits directly above the navigator as one slot of its
  * control row: the same glass card, the same 32px icon button and hover label.
  */
-export function AgentButton({ open, busy = false, disabled = false, dimmed = false, style, onClick }: AgentButtonProps) {
+export function AgentButton({ open, busy = false, disabled = false, dimmed = false, hidden = false, style, onClick }: AgentButtonProps) {
   return (
     <div
       data-testid="agent-button"
       style={style}
+      aria-hidden={hidden || undefined}
       className={cn(
         CHROME_SURFACE,
         "nodrag nopan nowheel absolute z-[5] flex h-10 w-10 items-center justify-center rounded-xl",
         dimmed && "pointer-events-none opacity-30",
+        hidden && "hidden",
       )}
     >
       <ChromeIconButton

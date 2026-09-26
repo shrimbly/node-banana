@@ -170,7 +170,8 @@ describe("AgentPanel", () => {
     expect(panel.className).toContain("nb-agent");
     expect(panel.className).toContain("nowheel");
     expect(panel.className).toContain("nokey");
-    expect(panel).toHaveStyle({ right: "15px", bottom: "221px", width: "400px" });
+    // The window takes the button's place (the button hides while it is open).
+    expect(panel).toHaveStyle({ right: "15px", bottom: "173px", width: "400px" });
     await waitForComposer();
   });
 

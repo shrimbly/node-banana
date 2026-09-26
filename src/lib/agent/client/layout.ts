@@ -31,9 +31,11 @@ export interface AgentPanelFrame {
 }
 
 /**
- * The window's box: right-aligned with the button and stacked above it,
- * narrowing on a small viewport rather than running off the left edge.
- * Numeric (not a CSS clamp) so the occlusion maths stays right.
+ * The window's box: right-aligned with the button and taking its place (the
+ * button hides while the window is open), so the window's bottom edge sits
+ * the stack gap above the navigator. Narrows on a small viewport rather than
+ * running off the left edge. Numeric (not a CSS clamp) so the occlusion
+ * maths stays right.
  */
 export function getAgentPanelFrame({
   buttonRight,
@@ -45,7 +47,7 @@ export function getAgentPanelFrame({
   /** window.innerWidth */
   viewportWidth: number;
 }): AgentPanelFrame {
-  const bottom = buttonBottom + AGENT_BUTTON_SIZE + AGENT_STACK_GAP;
+  const bottom = buttonBottom;
   const maxHeight = `calc(100vh - ${bottom + AGENT_PANEL_MIN_TOP}px)`;
   const width = Math.max(0, Math.min(AGENT_PANEL_WIDTH, viewportWidth - buttonRight - AGENT_PANEL_EDGE));
   return { right: buttonRight, bottom, width, maxHeight };

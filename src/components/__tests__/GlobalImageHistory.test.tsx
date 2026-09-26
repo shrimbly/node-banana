@@ -98,6 +98,19 @@ describe("GlobalImageHistory", () => {
       expect(button).toBeInTheDocument();
     });
 
+    it("sits in the corner, or further left while the agent window covers it", () => {
+      const history = [createHistoryItem()];
+      mockUseWorkflowStore.mockImplementation((selector) => {
+        return selector(createDefaultState({ globalImageHistory: history }));
+      });
+
+      const { rerender } = render(<GlobalImageHistory />);
+      expect(screen.getByTestId("image-history")).toHaveStyle({ top: "16px", right: "16px" });
+
+      rerender(<GlobalImageHistory rightInset={432} />);
+      expect(screen.getByTestId("image-history")).toHaveStyle({ top: "16px", right: "432px" });
+    });
+
     it("should show history count badge", () => {
       const history = [createHistoryItem(), createHistoryItem(), createHistoryItem()];
       mockUseWorkflowStore.mockImplementation((selector) => {

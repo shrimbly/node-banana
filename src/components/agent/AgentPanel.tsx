@@ -213,7 +213,10 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
   const close = useCallback(() => {
     onClose();
     const target = returnFocusRef.current;
-    if (target?.isConnected) target.focus();
+    // After the next frame: the agent button is hidden while the window is open.
+    requestAnimationFrame(() => {
+      if (target?.isConnected) target.focus();
+    });
   }, [onClose]);
 
   const handleKeyDown = useCallback(

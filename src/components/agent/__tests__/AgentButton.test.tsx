@@ -46,3 +46,12 @@ describe("AgentButton", () => {
     expect(container.querySelector(".animate-ping")).toBeNull();
   });
 });
+
+describe("AgentButton while the window is open", () => {
+  it("hides (display none) but stays mounted, so focus can return to it", () => {
+    render(<AgentButton open hidden onClick={() => {}} />);
+    const card = screen.getByTestId("agent-button");
+    expect(card.className).toMatch(/(^|\s)hidden(\s|$)/);
+    expect(card).toHaveAttribute("aria-hidden", "true");
+  });
+});
