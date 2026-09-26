@@ -36,6 +36,8 @@ import {
   type VideoModelSpec,
 } from "./catalog";
 import type { GraphNodeLike } from "./handles";
+import { buildCellTemplate } from "./splitGridCells";
+import { createDefaultSplitGridTemplate } from "@/store/utils/nodeDefaults";
 import {
   describeParameters,
   fitsNodeType,
@@ -86,6 +88,11 @@ export interface SettingsContext {
    * only Gemini models can be set, from the built-in catalog.
    */
   models?: AgentModelResolver;
+  /**
+   * New-node data per type (the user's saved defaults), for nodes that exist
+   * only inside another node's settings: a Split Grid's cells.
+   */
+  createDefaultNodeData?: (type: NodeType) => Record<string, unknown>;
 }
 
 const MAX_STRING = 50_000;
@@ -1104,6 +1111,20 @@ function handleArray(run: FieldRun): void {
 // --- Split Grid -----------------------------------------------------------
 
 function handleSplitGrid(run: FieldRun): void {
+  const cells = take(run, "cells");
+  if (cells.present) {
+    if (cells.value === null) {
+      // Back to the bare slice: no per-cell nodes, no shared Router.
+      set(run.out, "template", createDefaultSplitGridTemplate(), "cells cleared (each cell is just its image slice)");
+    } else {
+      const result = buildCellTemplate(cells.value, run.context, resolveSettings, run.label);
+      if (!result.ok) run.out.errors.push(...result.errors);
+      else {
+        set(run.out, "template", result.built.template, `cells: ${result.built.summary}`);
+        run.out.warnings.push(...result.built.warnings);
+      }
+    }
+  }
   for (const [field, offsets] of [["gridRows", "rowOffsets"], ["gridCols", "colOffsets"]] as const) {
     const setting = take(run, field);
     if (!setting.present) continue;

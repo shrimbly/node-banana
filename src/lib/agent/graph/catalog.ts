@@ -592,19 +592,28 @@ export const NODE_CATALOG: Record<NodeType, NodeCatalogEntry> = {
   splitGrid: {
     type: "splitGrid",
     displayName: title("splitGrid"),
-    purpose: "Cuts an image into rows x cols cells. Each run puts every cell's slice into that cell's own Image Input, inside a group per cell, feeding a copy of the per-cell template the user builds in the node. It has no data output: results stay on the per-cell nodes, or are collected into one shared Router when the template wires them to it. It never stitches the cells back into one image.",
+    purpose: "Cuts an image into rows x cols cells and runs the same small pipeline on every cell (its `cells` setting). Each cell becomes a group of real nodes on the canvas, starting from an Image Input that receives the cell's slice; outputs listed in cells.collect from every cell go into one shared Router, which you connect onward (e.g. to an Output Gallery). It never stitches the cells back into one image.",
     inputs: [img("image", "Image")],
     outputs: [{ id: "reference", type: "reference", label: "Ref", note: "internal; never connect it" }],
     settings: [
       { field: "gridRows", kind: "integer", min: MIN_GRID_DIMENSION, max: MAX_GRID_DIMENSION, description: "Rows.", default: "2" },
       { field: "gridCols", kind: "integer", min: MIN_GRID_DIMENSION, max: MAX_GRID_DIMENSION, description: "Columns.", default: "3" },
+      {
+        field: "cells",
+        kind: "object",
+        description:
+          "The pipeline every cell runs, like create_workflow: {nodes:[{ref, type, settings?}], connections:[{from, to, fromHandle?, toHandle?}], collect:[{from, fromHandle?}], into?}. \"cell\" is the ref of each cell's image slice (an Image Input). collect lists outputs gathered from every cell into the grid's shared Router; into (a ref or node id, e.g. an Output Gallery) is where that Router connects. Replaces the whole pipeline; null clears it.",
+        default: "just the slice",
+      },
     ],
     agentCreatable: true,
     notes: [
-      "The per-cell template (what each cell feeds) is edited by the user in the node's cell editor; you can only set rows and columns.",
-      "To show every cell's result, the user wires the cell's last node to the Router rail in the cell editor, then connects that Router to an Output Gallery. You cannot edit the template or the per-cell nodes' wiring for them.",
+      'Set cells in the same call that adds the grid. Example, upscale every cell and show them all: settings {"gridRows":3, "gridCols":3, "cells":{"nodes":[{"ref":"ask","type":"prompt","settings":{"prompt":"Upscale this image: keep it identical, sharper and more detailed"}},{"ref":"up","type":"nanoBanana","settings":{"resolution":"4K"}}],"connections":[{"from":"cell","to":"up"},{"from":"ask","to":"up"}],"collect":[{"from":"up"}],"into":"gallery"}} with an outputGallery ref "gallery" in the same call.',
+      "When cells.collect is set, a shared Router is created next to the grid (the result gives its id) and connected to cells.into; connect that Router onward, never the per-cell nodes.",
+      "The per-cell nodes and groups on the canvas are copies rebuilt from cells whenever the grid or its cells change: change them through cells, never by editing or wiring the copies.",
+      "\"Upscale\" per cell means a Generate Image with an upscale prompt and a higher resolution (costs one generation per cell); Image Resize only resamples. Say which you used.",
     ],
-    dataFields: ["gridRows", "gridCols"],
+    dataFields: ["gridRows", "gridCols", "template", "routerNodeId"],
   },
   output: {
     type: "output",

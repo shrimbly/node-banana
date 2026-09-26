@@ -134,7 +134,19 @@ function listModelsArgs(args: unknown): Record<string, unknown> {
 function modelRequests(tool: string, args: unknown, draft: GraphDraft): ModelRequest[] {
   const requests: ModelRequest[] = [];
   const visit = (type: NodeType | undefined, settings: unknown, node?: DraftNode) => {
-    if (!type || !isModelNodeType(type) || !settings || typeof settings !== "object" || Array.isArray(settings)) return;
+    if (!type || !settings || typeof settings !== "object" || Array.isArray(settings)) return;
+    // A Split Grid's cells hold nodes of their own.
+    if (type === "splitGrid") {
+      const cells = settingValue(settings as Record<string, unknown>, "cells").value as { nodes?: unknown } | undefined;
+      if (cells && Array.isArray(cells.nodes)) {
+        for (const spec of cells.nodes) {
+          const entry = spec as { type?: unknown; settings?: unknown } | null;
+          visit(typeOf(entry?.type), entry?.settings);
+        }
+      }
+      return;
+    }
+    if (!isModelNodeType(type)) return;
     const model = settingValue(settings as Record<string, unknown>, "model");
     if (model.present) {
       requests.push({ kind: "model", nodeType: type, value: model.value });

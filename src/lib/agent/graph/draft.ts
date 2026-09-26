@@ -25,7 +25,7 @@
  * removes one whose nodes were deleted.
  */
 
-import type { GroupColor, NodeType } from "@/types";
+import type { GroupColor, NodeType, SplitGridTemplate } from "@/types";
 import { createDefaultNodeData, defaultNodeDimensions, GROUP_COLOR_ORDER } from "@/store/utils/nodeDefaults";
 import { parseTextToArray } from "@/utils/arrayParser";
 import { parseVarTags } from "@/utils/parseVarTags";
@@ -312,7 +312,8 @@ export class DraftTransaction {
     this.groups = draft.groups.map(cloneGroup);
     this.nextSuffix = draft.nextSuffix;
     this.nextGroupSuffix = draft.nextGroupSuffix;
-    const states = new Map(this.edges.map((e) => [e.id, edgeState(e, this.nodes, this.edges)]));
+    const handleEdges = withGridRouterFeeds(this.nodes, this.edges);
+    const states = new Map(this.edges.map((e) => [e.id, edgeState(e, this.nodes, handleEdges)]));
     this.preexistingBroken = new Set([...states].filter(([, state]) => state === "missing" || state === "mistyped").map(([id]) => id));
     this.preexistingDormant = new Set([...states].filter(([, state]) => state === "dormant").map(([id]) => id));
   }
@@ -896,7 +897,7 @@ export class DraftTransaction {
       fromHandle: input.fromHandle,
       toHandle: input.toHandle,
       nodes: this.nodes,
-      edges: this.edges,
+      edges: withGridRouterFeeds(this.nodes, this.edges),
     });
     if (!plan.ok) {
       if (plan.awaitingInput && allowDefer) {
@@ -1006,7 +1007,8 @@ export class DraftTransaction {
       if (handleId === wanted || getHandleType(handleId) === wanted) return true;
       const node = this.nodes.get(nodeId);
       if (!node) return false;
-      const handles = side === "in" ? getInputHandles(node, this.edges) : getOutputHandles(node, this.edges);
+      const handleEdges = withGridRouterFeeds(this.nodes, this.edges);
+      const handles = side === "in" ? getInputHandles(node, handleEdges) : getOutputHandles(node, handleEdges);
       const handle = handles.find((h) => h.id === handleId);
       const key = wanted.toLowerCase();
       return !!handle && (handle.label.toLowerCase() === key || handle.schemaName?.toLowerCase() === key || handle.type === wanted);
@@ -1084,7 +1086,11 @@ export class DraftTransaction {
   private applyNodeChanges(node: DraftNode, title: unknown, settings: Record<string, unknown> | undefined, where: string): void {
     const combined: Record<string, unknown> = { ...(settings ?? {}) };
     if (title !== undefined) combined.title = title;
-    const outcome = resolveSettings(node, combined, { newId: this.draft.options.randomId, models: this.draft.options.models });
+    const outcome = resolveSettings(node, combined, {
+      newId: this.draft.options.randomId,
+      models: this.draft.options.models,
+      createDefaultNodeData: this.draft.options.createDefaultNodeData,
+    });
     if (outcome.errors.length > 0) {
       for (const error of outcome.errors) this.fail(where, error);
       return;
@@ -1096,10 +1102,40 @@ export class DraftTransaction {
     this.emitUpdate(node.id, outcome.patch);
     this.recordChanges(node.id, outcome);
     this.touched.add(node.id);
+    if (node.type === "splitGrid" && "template" in outcome.patch) this.ensureGridRouter(node, cellsInto(settings), where);
     if (outcome.handlesMayChange && (node.type === "generateVideo" || node.type === "generate3d" || node.type === "generateAudio")) {
       this.remapSchemaEdges(node, before);
     }
   }
+
+  /**
+   * A grid whose cells collect outputs needs its shared Router on the canvas
+   * now, so this call can connect it onward. The browser's materialization
+   * reuses it (data.routerNodeId) and wires every cell's copy into it.
+   */
+  private ensureGridRouter(grid: DraftNode, into: string | undefined, where: string): void {
+    const template = grid.data.template as SplitGridTemplate | undefined;
+    if (!template?.router?.length) {
+      if (into) this.fail(where, `cells.into needs cells.collect: list the outputs to gather from every cell.`);
+      return;
+    }
+    let router = typeof grid.data.routerNodeId === "string" ? this.nodes.get(grid.data.routerNodeId) : undefined;
+    if (router?.type !== "router") {
+      router = this.addNode({ type: "router", title: "Collected cells" }, where);
+      if (!router) return;
+      grid.data = agentView(grid.type, { ...grid.data, routerNodeId: router.id });
+      this.emitUpdate(grid.id, { routerNodeId: router.id });
+    }
+    this.gridRouters.set(grid.id, router.id);
+    // After every node of the call exists: `into` may be a ref added later in it.
+    if (into) {
+      const routerId = router.id;
+      this.deferred.push(() => this.connect({ from: routerId, to: into }, `${where} (cells.into)`, false));
+    }
+  }
+
+  /** Grids given a shared Router in this call, for the tool result. */
+  readonly gridRouters = new Map<string, string>();
 
   private recordChanges(id: string, outcome: SettingsOutcome): void {
     const list = this.log.changes.get(id) ?? [];
@@ -1243,9 +1279,10 @@ export class DraftTransaction {
    */
   private sweepDanglingEdges(): void {
     const newlyDormant = new Map<string, DraftEdge[]>();
+    const handleEdges = withGridRouterFeeds(this.nodes, this.edges);
     for (const edge of [...this.edges]) {
       if (this.preexistingBroken.has(edge.id)) continue;
-      const state = edgeState(edge, this.nodes, this.edges);
+      const state = edgeState(edge, this.nodes, handleEdges);
       if (state === "live") continue;
       if (state === "dormant") {
         if (!this.preexistingDormant.has(edge.id)) newlyDormant.set(edge.source, [...(newlyDormant.get(edge.source) ?? []), edge]);
@@ -1442,7 +1479,8 @@ export class DraftTransaction {
     for (const id of ids) {
       const node = this.nodes.get(id)!;
       // Loop edges and Router/Switch outputs with no input deliver nothing.
-      const inputs = this.edges.filter((e) => e.target === id && !e.data?.isLoop && edgeState(e, this.nodes, this.edges) !== "dormant");
+      const handleEdges = withGridRouterFeeds(this.nodes, this.edges);
+      const inputs = handleEdges.filter((e) => e.target === id && !e.data?.isLoop && edgeState(e, this.nodes, handleEdges) !== "dormant");
       const has = (predicate: (handle: string) => boolean) => inputs.some((e) => predicate(e.targetHandle ?? ""));
       const isText = (h: string) => h === "text" || h.startsWith("text-");
       const selected = node.data.selectedModel as { modelId?: string; displayName?: string } | undefined;
@@ -1881,4 +1919,38 @@ function nextAgentSuffix(ids: string[]): number {
 
 function defaultRandomId(): string {
   return Math.random().toString(36).slice(2, 9).padEnd(7, "0");
+}
+
+/** `cells.into` from raw settings: where the grid's shared Router connects to. */
+function cellsInto(settings: Record<string, unknown> | undefined): string | undefined {
+  if (!settings) return undefined;
+  const key = Object.keys(settings).find((k) => k.toLowerCase() === "cells");
+  const cells = key ? settings[key] : undefined;
+  const into = cells && typeof cells === "object" ? (cells as { into?: unknown }).into : undefined;
+  return typeof into === "string" && into.trim() ? into.trim() : undefined;
+}
+
+/**
+ * A Split Grid's shared Router gets its inputs only when the browser builds
+ * the cells, but it is already fed by them in every way that matters here:
+ * stand-in edges (grid → router, one per collected type) let its outputs be
+ * connected and keep those connections from counting as dormant. Only for
+ * handle and edge-state checks; never stored or emitted.
+ */
+export function withGridRouterFeeds<E extends GraphEdgeLike>(
+  nodes: ReadonlyMap<string, GraphNodeLike>,
+  edges: readonly E[],
+): Array<E | GraphEdgeLike> {
+  const feeds: GraphEdgeLike[] = [];
+  for (const node of nodes.values()) {
+    if (node.type !== "splitGrid") continue;
+    const routerId = node.data.routerNodeId;
+    const template = node.data.template as SplitGridTemplate | undefined;
+    if (typeof routerId !== "string" || nodes.get(routerId)?.type !== "router" || !template?.router?.length) continue;
+    for (const type of new Set(template.router.map((r) => r.targetHandle))) {
+      if (edges.some((e) => e.target === routerId && e.targetHandle === type)) continue;
+      feeds.push({ id: `grid-feed-${node.id}-${type}`, source: node.id, sourceHandle: "reference", target: routerId, targetHandle: type });
+    }
+  }
+  return feeds.length ? [...edges, ...feeds] : [...edges];
 }

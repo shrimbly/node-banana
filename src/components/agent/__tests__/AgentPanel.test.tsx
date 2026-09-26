@@ -369,7 +369,7 @@ describe("AgentPanel", () => {
 
   it("keeps finished chats in the history, labelled by the agent's summary, and reopens them", async () => {
     const first = replyChunks({ text: "Built the hero film." });
-    first.splice(3, 0, { type: "data-agent-summary", id: "summary", data: { summary: "Espresso hero film" } });
+    first.splice(3, 0, { type: "data-agent-summary", id: "summary", data: { summary: "Espresso hero film" } } as never);
     chatChunks.push(first);
     chatChunks.push(replyChunks({ text: "Changed the ratio." }));
 

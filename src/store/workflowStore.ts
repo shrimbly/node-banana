@@ -367,7 +367,8 @@ export interface WorkflowStore {
    */
   materializeSplitGridCells: (
     nodeId: string,
-    options?: { force?: boolean; template?: SplitGridTemplate }
+    /** skipCheckpoint: the caller already pushed this change's undo step. */
+    options?: { force?: boolean; template?: SplitGridTemplate; skipCheckpoint?: boolean }
   ) => boolean;
 
   // UI State
@@ -697,6 +698,16 @@ function captureUndoSnapshot(state: WorkflowStore): UndoSnapshot {
 }
 
 /** Flush pending debounced data snapshot, capture current state, push to undoManager */
+/** Split Grids an agent batch gave cells or a new size. */
+function splitGridsToBuild(ops: AgentGraphOpBatch["ops"]): string[] {
+  const ids = new Set<string>();
+  for (const op of ops) {
+    if (op.op === "addNode" && op.nodeType === "splitGrid" && op.data.template) ids.add(op.id);
+    if (op.op === "updateNode" && ("template" in op.data || "gridRows" in op.data || "gridCols" in op.data)) ids.add(op.id);
+  }
+  return [...ids];
+}
+
 function pushUndoCheckpoint(
   get: () => WorkflowStore,
   set: (partial: Partial<WorkflowStore>) => void,
@@ -1836,7 +1847,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     }));
   },
 
-  materializeSplitGridCells: (nodeId: string, options?: { force?: boolean; template?: SplitGridTemplate }) => {
+  materializeSplitGridCells: (nodeId: string, options?: { force?: boolean; template?: SplitGridTemplate; skipCheckpoint?: boolean }) => {
     const state = get();
     const splitNode = state.nodes.find((n) => n.id === nodeId && n.type === "splitGrid");
     if (!splitNode) return false;
@@ -1878,7 +1889,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     const removedRouterId = !hasRouter ? existingRouterId : null;
 
     // Single checkpoint: one undo restores replaced cells and removes new ones
-    pushUndoCheckpoint(get, set);
+    // (skipped when the caller's own change already took it, e.g. an agent batch)
+    if (!options?.skipCheckpoint) pushUndoCheckpoint(get, set);
 
     // Previously materialized cells are system-created — replace them
     const staleCells = getSplitGridCells(data);
@@ -3885,6 +3897,13 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         clearStaleInputImages(removedEdges, get);
     } finally {
         deleteCheckpointActive = false;
+      }
+    }
+    // A grid whose cells or size the agent set is built now, inside this undo
+    // step, so its cells and shared Router show before Run (Run would build it anyway).
+    for (const id of splitGridsToBuild(batch.ops)) {
+      if (get().nodes.some((node) => node.id === id && node.type === "splitGrid")) {
+        get().materializeSplitGridCells(id, { skipCheckpoint: true });
       }
     }
     get().recomputeDimmedNodes();

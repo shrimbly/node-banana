@@ -3,6 +3,8 @@
  * enough for every turn, precise enough to act on (ids, handle ids, types).
  */
 
+import { describeCellTemplate } from "./splitGridCells";
+import type { SplitGridTemplate } from "@/types";
 import type { NodeType } from "@/types";
 import {
   getImageModel,
@@ -236,6 +238,8 @@ function keySettings(node: DraftNode, textPreview: number): string {
       break;
     case "splitGrid":
       bits.push(`${d.gridRows ?? 2}×${d.gridCols ?? 3} grid`);
+      bits.push(describeCellTemplate(d.template as SplitGridTemplate | undefined));
+      if (str(d.routerNodeId)) bits.push(`shared Router ${d.routerNodeId}`);
       break;
     case "output":
       if (str(d.outputFilename)) bits.push(`filename ${JSON.stringify(d.outputFilename)}`);
