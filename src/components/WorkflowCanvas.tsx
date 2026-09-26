@@ -358,6 +358,15 @@ export function WorkflowCanvas() {
     setIsAgentOpen((open) => !open);
   }, []);
   const closeAgent = useCallback(() => setIsAgentOpen(false), []);
+  // The welcome dialog's "Start with Agent": an empty canvas with the agent
+  // window open. A canvas that already has nodes keeps them in its own tab.
+  const startWithAgent = useCallback(() => {
+    const store = useWorkflowStore.getState();
+    if (store.nodes.length > 0) store.newTab();
+    setShowQuickstart(false);
+    setIsAgentMounted(true);
+    setIsAgentOpen(true);
+  }, [setShowQuickstart]);
   // The generations icon sits in the corner the open agent window covers: move it left of the window.
   const viewportWidth = useViewportWidth();
   const historyRightInset = isAgentOpen
@@ -2417,6 +2426,7 @@ export function WorkflowCanvas() {
             setShowQuickstart(false);
             setShowNewProjectSetup(true);
           }}
+          onStartWithAgent={startWithAgent}
         />
       )}
 

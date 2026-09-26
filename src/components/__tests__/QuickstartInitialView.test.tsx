@@ -5,7 +5,7 @@ import { QuickstartInitialView } from "@/components/quickstart/QuickstartInitial
 describe("QuickstartInitialView", () => {
   const mockOnNewProject = vi.fn();
   const mockOnSelectTemplates = vi.fn();
-  const mockOnSelectVibe = vi.fn();
+  const mockOnStartWithAgent = vi.fn();
   const mockOnSelectLoad = vi.fn();
 
   beforeEach(() => {
@@ -22,7 +22,7 @@ describe("QuickstartInitialView", () => {
         <QuickstartInitialView
           onNewProject={mockOnNewProject}
           onSelectTemplates={mockOnSelectTemplates}
-          onSelectVibe={mockOnSelectVibe}
+          onStartWithAgent={mockOnStartWithAgent}
           onSelectLoad={mockOnSelectLoad}
         />
       );
@@ -36,7 +36,7 @@ describe("QuickstartInitialView", () => {
         <QuickstartInitialView
           onNewProject={mockOnNewProject}
           onSelectTemplates={mockOnSelectTemplates}
-          onSelectVibe={mockOnSelectVibe}
+          onStartWithAgent={mockOnStartWithAgent}
           onSelectLoad={mockOnSelectLoad}
         />
       );
@@ -49,7 +49,7 @@ describe("QuickstartInitialView", () => {
         <QuickstartInitialView
           onNewProject={mockOnNewProject}
           onSelectTemplates={mockOnSelectTemplates}
-          onSelectVibe={mockOnSelectVibe}
+          onStartWithAgent={mockOnStartWithAgent}
           onSelectLoad={mockOnSelectLoad}
         />
       );
@@ -57,7 +57,7 @@ describe("QuickstartInitialView", () => {
       expect(screen.getByText("New project")).toBeInTheDocument();
       expect(screen.getByText("Load workflow")).toBeInTheDocument();
       expect(screen.getByText("Templates")).toBeInTheDocument();
-      expect(screen.getByText("Prompt a workflow")).toBeInTheDocument();
+      expect(screen.getByText("Start with Agent")).toBeInTheDocument();
     });
 
     it("should render option descriptions", () => {
@@ -65,7 +65,7 @@ describe("QuickstartInitialView", () => {
         <QuickstartInitialView
           onNewProject={mockOnNewProject}
           onSelectTemplates={mockOnSelectTemplates}
-          onSelectVibe={mockOnSelectVibe}
+          onStartWithAgent={mockOnStartWithAgent}
           onSelectLoad={mockOnSelectLoad}
         />
       );
@@ -73,7 +73,7 @@ describe("QuickstartInitialView", () => {
       expect(screen.getByText("Start a new workflow")).toBeInTheDocument();
       expect(screen.getByText("Open existing file")).toBeInTheDocument();
       expect(screen.getByText("Pre-built workflows")).toBeInTheDocument();
-      expect(screen.getByText("Prompt a workflow")).toBeInTheDocument();
+      expect(screen.getByText("Start with Agent")).toBeInTheDocument();
     });
   });
 
@@ -83,7 +83,7 @@ describe("QuickstartInitialView", () => {
         <QuickstartInitialView
           onNewProject={mockOnNewProject}
           onSelectTemplates={mockOnSelectTemplates}
-          onSelectVibe={mockOnSelectVibe}
+          onStartWithAgent={mockOnStartWithAgent}
           onSelectLoad={mockOnSelectLoad}
         />
       );
@@ -98,7 +98,7 @@ describe("QuickstartInitialView", () => {
         <QuickstartInitialView
           onNewProject={mockOnNewProject}
           onSelectTemplates={mockOnSelectTemplates}
-          onSelectVibe={mockOnSelectVibe}
+          onStartWithAgent={mockOnStartWithAgent}
           onSelectLoad={mockOnSelectLoad}
         />
       );
@@ -113,7 +113,7 @@ describe("QuickstartInitialView", () => {
         <QuickstartInitialView
           onNewProject={mockOnNewProject}
           onSelectTemplates={mockOnSelectTemplates}
-          onSelectVibe={mockOnSelectVibe}
+          onStartWithAgent={mockOnStartWithAgent}
           onSelectLoad={mockOnSelectLoad}
         />
       );
@@ -130,7 +130,7 @@ describe("QuickstartInitialView", () => {
         <QuickstartInitialView
           onNewProject={mockOnNewProject}
           onSelectTemplates={mockOnSelectTemplates}
-          onSelectVibe={mockOnSelectVibe}
+          onStartWithAgent={mockOnStartWithAgent}
           onSelectLoad={mockOnSelectLoad}
         />
       );
@@ -141,33 +141,33 @@ describe("QuickstartInitialView", () => {
     });
   });
 
-  describe("Prompt a Workflow Option", () => {
-    it("should call onSelectVibe when clicked", () => {
+  describe("Start with Agent Option", () => {
+    it("should call onStartWithAgent when clicked", () => {
       render(
         <QuickstartInitialView
           onNewProject={mockOnNewProject}
           onSelectTemplates={mockOnSelectTemplates}
-          onSelectVibe={mockOnSelectVibe}
+          onStartWithAgent={mockOnStartWithAgent}
           onSelectLoad={mockOnSelectLoad}
         />
       );
 
-      fireEvent.click(screen.getByText("Prompt a workflow"));
+      fireEvent.click(screen.getByText("Start with Agent"));
 
-      expect(mockOnSelectVibe).toHaveBeenCalledTimes(1);
+      expect(mockOnStartWithAgent).toHaveBeenCalledTimes(1);
     });
 
-    it("should display Beta badge on prompt option", () => {
+    it("should display the shimmering New badge on the agent option", () => {
       render(
         <QuickstartInitialView
           onNewProject={mockOnNewProject}
           onSelectTemplates={mockOnSelectTemplates}
-          onSelectVibe={mockOnSelectVibe}
+          onStartWithAgent={mockOnStartWithAgent}
           onSelectLoad={mockOnSelectLoad}
         />
       );
 
-      expect(screen.getByText("Beta")).toBeInTheDocument();
+      expect(screen.getByText("New")).toHaveClass("nb-new-badge");
     });
   });
 
@@ -177,7 +177,7 @@ describe("QuickstartInitialView", () => {
         <QuickstartInitialView
           onNewProject={mockOnNewProject}
           onSelectTemplates={mockOnSelectTemplates}
-          onSelectVibe={mockOnSelectVibe}
+          onStartWithAgent={mockOnStartWithAgent}
           onSelectLoad={mockOnSelectLoad}
         />
       );
@@ -196,7 +196,7 @@ describe("QuickstartInitialView", () => {
         <QuickstartInitialView
           onNewProject={mockOnNewProject}
           onSelectTemplates={mockOnSelectTemplates}
-          onSelectVibe={mockOnSelectVibe}
+          onStartWithAgent={mockOnStartWithAgent}
           onSelectLoad={mockOnSelectLoad}
         />
       );
@@ -212,7 +212,7 @@ describe("QuickstartInitialView", () => {
         <QuickstartInitialView
           onNewProject={mockOnNewProject}
           onSelectTemplates={mockOnSelectTemplates}
-          onSelectVibe={mockOnSelectVibe}
+          onStartWithAgent={mockOnStartWithAgent}
           onSelectLoad={mockOnSelectLoad}
         />
       );
@@ -230,7 +230,7 @@ describe("QuickstartInitialView", () => {
         <QuickstartInitialView
           onNewProject={mockOnNewProject}
           onSelectTemplates={mockOnSelectTemplates}
-          onSelectVibe={mockOnSelectVibe}
+          onStartWithAgent={mockOnStartWithAgent}
           onSelectLoad={mockOnSelectLoad}
         />
       );

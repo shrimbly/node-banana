@@ -641,3 +641,36 @@ html {
     animation: none;
   }
 }
+
+/* The welcome dialog's "New" chip: a light band sweeps across the text and
+   rim, then rests before the next pass. */
+@keyframes nbNewBadgeShimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  50%,
+  100% {
+    background-position: 0% 0;
+  }
+}
+
+.nb-new-badge {
+  border-color: rgb(255 255 255 / 0.22);
+  color: transparent;
+  background-image:
+    linear-gradient(100deg, transparent 40%, #fff 50%, transparent 60%),
+    linear-gradient(var(--color-neutral-400), var(--color-neutral-400));
+  background-size: 300% 100%, auto;
+  background-repeat: no-repeat;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: nbNewBadgeShimmer 2.8s ease-in-out infinite;
+  box-shadow: inset 0 0 8px rgb(255 255 255 / 0.06);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nb-new-badge {
+    animation: none;
+    background-position: 0% 0;
+  }
+}
