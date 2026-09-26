@@ -294,7 +294,7 @@ describe("AgentPanel", () => {
     expect(screen.queryByText(/API credits/)).not.toBeInTheDocument();
 
     fireEvent.focus(screen.getByRole("radio", { name: /Claude Code/ }));
-    expect((await screen.findAllByText("Subscription not confirmed — won't run")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Claude Code — Subscription not confirmed — won't run")).length).toBeGreaterThan(0);
     expect(screen.queryByText(/API account/)).not.toBeInTheDocument();
   });
 

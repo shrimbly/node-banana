@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/agent/ui/t
 import { HARNESS_LABELS, readinessTone, type AgentReadiness } from "@/lib/agent/client/readiness";
 import { AGENT_HARNESS_IDS, type AgentHarnessId } from "@/lib/agent/types";
 import { AGENT_ICON, AGENT_POPOVER_LAYER, PanelIconButton, StatusDot } from "./AgentChrome";
+import { HarnessIcon } from "./HarnessIcon";
 
 export interface AgentPanelHeaderProps {
   harness: AgentHarnessId;
@@ -74,7 +75,7 @@ export function AgentPanelHeader({
         Agent
       </h2>
 
-      {/* The dialogs' ink segmented control, at the compact size, with a status dot per harness. */}
+      {/* The dialogs' ink segmented control, at the compact size: each harness by its logo, with a status dot. */}
       <div
         role="radiogroup"
         aria-label="Run the agent with"
@@ -91,6 +92,7 @@ export function AgentPanelHeader({
                   type="button"
                   role="radio"
                   aria-checked={selected}
+                  aria-label={HARNESS_LABELS[id]}
                   // aria-disabled rather than disabled, so the tooltip still explains why.
                   aria-disabled={locked || undefined}
                   tabIndex={selected ? 0 : -1}
@@ -98,20 +100,26 @@ export function AgentPanelHeader({
                     if (!locked && !selected) onHarnessChange(id);
                   }}
                   className={cn(
-                    "flex h-6 items-center gap-1.5 whitespace-nowrap rounded-md px-2 font-display text-xs tracking-[-0.01em] transition-colors",
+                    "relative flex h-6 w-9 items-center justify-center rounded-md transition-[background-color,opacity]",
                     "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
-                    "aria-disabled:cursor-not-allowed aria-disabled:opacity-50",
+                    "aria-disabled:cursor-not-allowed",
                     selected
-                      ? "bg-neutral-200 font-semibold text-neutral-900"
-                      : "font-medium text-neutral-400 hover:text-neutral-200 aria-disabled:hover:text-neutral-400",
+                      ? "bg-neutral-200"
+                      : "opacity-55 hover:bg-white/[0.06] hover:opacity-100 aria-disabled:opacity-30 aria-disabled:hover:bg-transparent aria-disabled:hover:opacity-30",
                   )}
                 >
-                  <StatusDot tone={readinessTone(readiness[id])} />
-                  {HARNESS_LABELS[id]}
+                  <HarnessIcon harness={id} />
+                  {/* Readiness, as a badge on the logo's corner. */}
+                  <StatusDot
+                    tone={readinessTone(readiness[id])}
+                    className={cn("absolute right-0.5 top-0.5 ring-2", selected ? "ring-neutral-200" : "ring-neutral-800")}
+                  />
                 </button>
               </TooltipTrigger>
               <TooltipContent className={AGENT_POPOVER_LAYER} side="bottom">
-                {switchDisabled && !selected ? "Stop the current reply to switch" : describeReadiness(readiness[id])}
+                {`${HARNESS_LABELS[id]} — ${
+                  switchDisabled && !selected ? "stop the current reply to switch" : describeReadiness(readiness[id])
+                }`}
               </TooltipContent>
             </Tooltip>
           );
