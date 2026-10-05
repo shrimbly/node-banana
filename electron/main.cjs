@@ -10,7 +10,7 @@ const { createCredentialStore } = require('./lib/credentials.cjs');
 const { provisionRuntime } = require('./lib/runtime.cjs');
 const { createDiagnostics, createRedactor } = require('./lib/diagnostics.cjs');
 const { createBackend } = require('./lib/backend.cjs');
-const { atomicWrite } = require('./lib/files.cjs');
+const { atomicWrite, atomicWriteAsync } = require('./lib/files.cjs');
 const { visibleBounds } = require('./lib/window-state.cjs');
 const { pickHostEnvironment } = require('./lib/env.cjs');
 const { libraryEnv } = require('./lib/library.cjs');
@@ -135,12 +135,24 @@ async function createWindow() {
   });
   const current = window;
   let saveTimer;
+  const boundsRecord = () => JSON.stringify({ version: 1, bounds: current.getNormalBounds(), maximized: current.isMaximized() });
+  // While the window is being moved or resized the record is written off the
+  // main thread and without fsync: losing it costs a window position, and a
+  // synchronous write at every pause stalled the window on Windows. The one
+  // on close is synchronous so it lands before the process quits.
+  const saveBoundsSoon = () => {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      if (current.isDestroyed() || current.isFullScreen()) return;
+      atomicWriteAsync(stateFile, boundsRecord(), { durable: false }).catch(log);
+    }, 300);
+  };
   const saveBounds = () => {
     clearTimeout(saveTimer);
     if (current.isDestroyed() || current.isFullScreen()) return;
-    try { atomicWrite(stateFile, JSON.stringify({ version: 1, bounds: current.getNormalBounds(), maximized: current.isMaximized() })); } catch (error) { log(error); }
+    try { atomicWrite(stateFile, boundsRecord()); } catch (error) { log(error); }
   };
-  for (const event of ['resize', 'move', 'maximize', 'unmaximize']) current.on(event, () => { clearTimeout(saveTimer); saveTimer = setTimeout(saveBounds, 300); });
+  for (const event of ['resize', 'move', 'maximize', 'unmaximize']) current.on(event, saveBoundsSoon);
   current.on('close', saveBounds);
   if (saved?.maximized) current.maximize();
   // The renderer's maximise button swaps to a restore glyph from this state.
@@ -190,9 +202,9 @@ function registerBridge() {
   for (const [category, operations, getStore] of [
     ['recovery', ['read', 'write', 'assetChunk', 'readAsset', 'hydrate', 'discard'], () => recoveryStore],
     ['credentials', ['read', 'write', 'delete', 'reset'], () => credentialStore],
-  ]) for (const operation of operations) ipcMain.handle(`desktop:${category}:${operation}`, (event, value) => {
+  ]) for (const operation of operations) ipcMain.handle(`desktop:${category}:${operation}`, async (event, value) => {
     if (!validCaller(event)) throw new Error('Unauthorized desktop request');
-    try { return { ok: true, value: getStore()[operation](value) }; }
+    try { return { ok: true, value: await getStore()[operation](value) }; }
     catch (error) {
       log(error);
       return category === 'credentials'
