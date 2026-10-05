@@ -197,7 +197,12 @@ html[data-desktop-platform="darwin"] .desktop-window-controls {
    window (double-click maximises) and the app draws the caption buttons at the
    top right, dim at rest and lit on hover like the macOS dots. */
 html[data-desktop-platform="win32"] .workflow-tabs {
-  padding-right: var(--desktop-windows-controls-inset);
+  /* As on macOS: keep the native drag rectangle entirely outside the controls'
+     gutter. Padding would still make that area draggable beneath the fixed
+     controls, and Windows then hit-tests their clicks as the caption, so they
+     never reach the buttons (the 2.0.0 Windows build shipped like that). */
+  margin-right: var(--desktop-windows-controls-inset);
+  padding-right: 0;
   -webkit-app-region: drag;
   user-select: none;
 }

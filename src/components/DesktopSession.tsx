@@ -78,10 +78,12 @@ export function DesktopSession({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return <>
-    <DesktopWindowControls />
     {(!ready || error) && <DesktopStartupDragRegion />}
     {ready ? <DesktopRecovery>{children}</DesktopRecovery> : <div className="h-screen bg-[#0f0f0f] flex items-center justify-center text-xs text-neutral-500">Opening Node Banana…</div>}
     {ready && <DisconnectedBanner />}
+    {/* Last, after every drag region: Electron applies app-regions in DOM order, and
+        the controls' no-drag must be subtracted after the strips' drag is added. */}
+    <DesktopWindowControls />
     <Dialog open={!!error} size="sm" label="Credential storage" overlayClassName="z-[10000]">
       <DialogHeader>
         <DialogTitle>Keys could not be saved securely</DialogTitle>
