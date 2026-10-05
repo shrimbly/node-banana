@@ -127,15 +127,20 @@ export async function hydrateRecovery(raw: unknown): Promise<RecoverySnapshot> {
 }
 
 // One writer; pending edits coalesce to the latest graph. The maximum timer is
-// never reset by another edit, so continuous dragging/typing still checkpoints.
-export function checkpointScheduler(capture: () => RecoverySnapshot, save: (snapshot: RecoverySnapshot) => Promise<void>, onError: (error: unknown) => void) {
+// never reset by another edit, so continuous typing still checkpoints. While
+// the canvas is busy (a node drag, a pan) a due checkpoint waits, retrying
+// every second, because capturing and encoding the graph costs frames the
+// interaction needs; a busy spell longer than the ceiling checkpoints anyway.
+const SETTLE_MS = 1000, MAXIMUM_MS = 5000, BUSY_CEILING_MS = 30000;
+export function checkpointScheduler(capture: () => RecoverySnapshot, save: (snapshot: RecoverySnapshot) => Promise<void>, onError: (error: unknown) => void, options: { busy?: () => boolean } = {}) {
   let debounce: ReturnType<typeof setTimeout> | undefined;
   let maximum: ReturnType<typeof setTimeout> | undefined;
-  let running = false, dirty = false, stopped = false;
+  let running = false, dirty = false, stopped = false, dirtySince = 0;
   const clear = () => { clearTimeout(debounce); clearTimeout(maximum); debounce = maximum = undefined; };
-  const flush = async () => {
+  const flush = async (force = false) => {
     clear();
     if (running || stopped || !dirty) return;
+    if (!force && options.busy?.() && Date.now() - dirtySince < BUSY_CEILING_MS) { debounce = setTimeout(() => void flush(), SETTLE_MS); return; }
     running = true;
     dirty = false;
     try { await save(capture()); } catch (error) { onError(error); }
@@ -144,12 +149,13 @@ export function checkpointScheduler(capture: () => RecoverySnapshot, save: (snap
   return {
     changed() {
       if (stopped) return;
+      if (!dirty) dirtySince = Date.now();
       dirty = true;
       clearTimeout(debounce);
-      debounce = setTimeout(() => void flush(), 1000);
-      maximum ??= setTimeout(() => void flush(), 5000);
+      debounce = setTimeout(() => void flush(), SETTLE_MS);
+      maximum ??= setTimeout(() => void flush(), MAXIMUM_MS);
     },
-    flush,
+    flush: () => flush(true),
     stop() { stopped = true; clear(); },
   };
 }

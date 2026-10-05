@@ -35,7 +35,9 @@ export function DesktopRecovery({ children }: { children: ReactNode }) {
       const encoded = await encodeRecovery(snapshot);
       const result = await window.nodeBananaDesktop!.recovery.write(encoded);
       if (!result.ok) throw new Error(result.error);
-    }, error => setNotice('Recovery checkpoint failed. Save your workflows to disk.', error instanceof Error ? error.message : undefined));
+    }, error => setNotice('Recovery checkpoint failed. Save your workflows to disk.', error instanceof Error ? error.message : undefined),
+    // The canvas holds this class for the length of a node drag or a pan.
+    { busy: () => document.documentElement.classList.contains('canvas-interacting') });
     const unsubscribe = useWorkflowStore.subscribe((state, previous) => {
       const snapshot = captureWorkflowTabSnapshot(state);
       if (state.tabs !== previous.tabs || state.activeTabId !== previous.activeTabId || Object.keys(snapshot).some(key => state[key as keyof typeof state] !== previous[key as keyof typeof previous])) writer.changed();

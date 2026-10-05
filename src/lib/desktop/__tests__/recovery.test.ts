@@ -28,6 +28,29 @@ it('debounces for one second and checkpoints continuous edits at five seconds', 
   expect(save).toHaveBeenCalledTimes(2);
   writer.stop();
 });
+it('waits for the canvas to settle before checkpointing, up to a ceiling', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(0);
+  let busy = true;
+  const save = vi.fn(async () => {});
+  const writer = checkpointScheduler(snapshot, save, vi.fn(), { busy: () => busy });
+  writer.changed();
+  await vi.advanceTimersByTimeAsync(6000);
+  expect(save).not.toHaveBeenCalled();
+  busy = false;
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(save).toHaveBeenCalledTimes(1);
+  busy = true;
+  writer.changed();
+  await vi.advanceTimersByTimeAsync(29000);
+  expect(save).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(2000);
+  expect(save).toHaveBeenCalledTimes(2);
+  writer.changed();
+  await writer.flush();
+  expect(save).toHaveBeenCalledTimes(3);
+  writer.stop();
+});
 it('serializes slow writes and coalesces later changes', async () => {
   vi.useFakeTimers();
   let finish!: () => void;
