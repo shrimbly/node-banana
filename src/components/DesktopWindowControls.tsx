@@ -82,7 +82,14 @@ function WindowsWindowControls() {
     { action: "toggleMaximize", label: maximized ? "Restore window" : "Maximise window", className: "desktop-window-maximize", glyph: glyph(maximized ? windowsGlyphs.restore : windowsGlyphs.maximize) },
     { action: "close", label: "Close window", className: "desktop-window-close", glyph: glyph(windowsGlyphs.close) },
   ];
-  return <WindowControlButtons className="desktop-window-controls-windows" controls={controls} />;
+  return <>
+    <WindowControlButtons className="desktop-window-controls-windows" controls={controls} />
+    {/* Windows resizes a frameless window from its top edge only where nothing
+        drags it, and the strips drag right up to the edge: a thin no-drag
+        sliver gives that resize back. A maximised window has no edge to
+        resize, and its top pixels should drag and restore as usual. */}
+    {!maximized && <div className="desktop-windows-resize-edge" aria-hidden="true" />}
+  </>;
 }
 
 /** Window actions for the platforms whose chrome the renderer draws, exposed by Electron's isolated preload. */

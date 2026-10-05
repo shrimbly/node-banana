@@ -223,6 +223,20 @@ html[data-desktop-platform="win32"] .desktop-startup-drag-region {
   -webkit-app-region: drag;
 }
 
+/* Only the hit test sees the sliver: it takes no clicks and draws nothing. */
+.desktop-windows-resize-edge { display: none; }
+html[data-desktop-platform="win32"] .desktop-windows-resize-edge {
+  display: block;
+  position: fixed;
+  z-index: var(--desktop-window-controls-layer);
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  -webkit-app-region: no-drag;
+  pointer-events: none;
+}
+
 html[data-desktop-platform="win32"] .desktop-window-controls-windows {
   position: fixed;
   z-index: var(--desktop-window-controls-layer);
