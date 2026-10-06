@@ -1,4 +1,5 @@
 ---
+import Analytics from "@vercel/analytics/astro";
 import "../styles/global.css";
 import { version } from "../lib/release";
 
@@ -88,5 +89,11 @@ const structuredData = {
   <script>
     import "../scripts/site.js";
   </script>
+  {/* Vercel Web Analytics: page views, and the download clicks site.js sends
+      as events. Cookieless, and nothing identifies a visitor. In production
+      the script and its beacon come from this site's own /_vercel/insights/
+      path, so the CSP's 'self' already allows them; the debug script from
+      va.vercel-scripts.com is loaded only by `astro dev`. */}
+  <Analytics />
 </body>
 </html>

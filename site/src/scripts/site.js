@@ -49,6 +49,16 @@
     }
   });
 
+  /* Count the download clicks. Vercel Web Analytics counts page views by
+     itself, but /download/* answers with a redirect, not a page, so each
+     click is sent as an event (the queue the analytics script installs). */
+  document.addEventListener("click", function (event) {
+    var link = event.target.closest && event.target.closest('a[href^="/download"]');
+    if (!link || !window.va) return;
+    var platform = (link.getAttribute("href").split("/")[2] || "latest").split("?")[0];
+    window.va("event", { name: "Download", data: { platform: platform } });
+  });
+
   /* 3. Menu. <details> works on its own; this just closes it politely. */
   var more = document.querySelector("[data-download-more]");
   if (more) {

@@ -68,7 +68,19 @@ Check:
 - `curl -sI https://nodebanana.app | grep -i strict-transport` prints the header.
 - The page's link preview shows the image: paste the address into the [opengraph.xyz](https://www.opengraph.xyz/) checker or a Slack message.
 
-## 5. A release becomes a download
+## 5. Analytics
+
+The page carries Vercel Web Analytics (`@vercel/analytics/astro`, mounted in `site/src/layouts/Base.astro`): page views, and a `Download` event with the platform for every click on a `/download/*` link, which `site/src/scripts/site.js` sends because those paths answer with a redirect rather than a page. It sets no cookies and stores nothing that identifies a visitor. In production the script and its beacon are served from the site's own `/_vercel/insights/` path, so the Content-Security-Policy in `site/vercel.json` needs no extra host.
+
+1. In the project, open the **Analytics** tab and select **Enable**. Until then the script answers 404 and nothing is counted; the page itself is unaffected.
+2. Redeploy once after enabling if the deployment predates it.
+
+Check:
+
+- `curl -sI https://nodebanana.app/_vercel/insights/script.js` returns `HTTP/2 200`.
+- Open the page, then the **Analytics** tab: the visit appears within a minute. Click a download button; the `Download` event appears under **Events** (custom events need a plan that includes them; on Hobby only the page views show).
+
+## 6. A release becomes a download
 
 1. Push the tag `v<version>` (see [desktop-preview.md](desktop-preview.md#releases-and-updates)). The Release workflow uploads the versioned installers, the updater manifests, and the two versionless copies into a **draft** release.
 2. Check the draft has `Node-Banana-mac-arm64.dmg` and `Node-Banana-windows-x64.exe` beside the versioned files.
@@ -98,7 +110,7 @@ cp "/tmp/nb/Node-Banana-$v-x64.exe" /tmp/nb/Node-Banana-windows-x64.exe
 gh release upload "v$v" /tmp/nb/Node-Banana-mac-arm64.dmg /tmp/nb/Node-Banana-windows-x64.exe --repo shrimbly/node-banana --clobber
 ```
 
-## 6. Roll back
+## 7. Roll back
 
 **The site.** In **Deployments**, open the last good production deployment, then select **Instant Rollback** (or **Promote to Production** on an older deployment). The domain points at it within seconds. After a rollback, Vercel stops moving the domain to new production deployments. When the fix is on `master`, promote the new deployment to turn that back on. Check with `curl -sI https://nodebanana.app` and the deployment id in the dashboard.
 
