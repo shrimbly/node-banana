@@ -18,6 +18,7 @@ export const TOOL_NAMES = {
   arrangeWorkflow: "arrange_workflow",
   nameConversation: "name_conversation",
   getPromptGuide: "get_prompt_guide",
+  runWorkflow: "run_workflow",
 } as const;
 
 export type AgentToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
@@ -198,6 +199,15 @@ export const getPromptGuideShape = {
     .describe("llmGenerate prompt-writer only: the node type the LLM's prompt is for, e.g. nanoBanana."),
 };
 
+export const runWorkflowShape = {
+  scope: z
+    .enum(["nodes", "all", "from"])
+    .describe('"nodes": only nodeIds, fed by the outputs the nodes before them already hold. "all": the whole workflow, as the Run button does. "from": node and everything after it, fed by the outputs the nodes before it hold.'),
+  nodeIds: z.array(z.string()).optional().describe('scope "nodes": the nodes to run (ids, or refs from this turn).'),
+  node: z.string().optional().describe('scope "from": the node to start from (an id, or a ref from this turn).'),
+  runs: z.number().optional().describe("How many runs, one after another (1-50, default 1). Only when the user asked for several."),
+};
+
 export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   {
     name: TOOL_NAMES.getWorkflow,
@@ -262,6 +272,14 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     description:
       "How to write a strong prompt for one node: the parts it needs in order, the length, rules, a weak and a strong example, notes from the chosen model's own listing, and prompting notes the user saved for that model. Call it before you write or rewrite the prompt that feeds a generator or LLM Generate, once per node type and model in this conversation; pass the node when it exists.",
     inputShape: getPromptGuideShape,
+  },
+  {
+    name: TOOL_NAMES.runWorkflow,
+    title: "Run workflow",
+    readOnly: false,
+    description:
+      "Start a run on the user's canvas, as their Run button does: generators call their models and spend the user's credits. Only when the user asks to run, try or generate. Call it last, after this turn's edits, and once per turn. scope \"nodes\" with the nodes you added or changed when every node feeding them holds its output; \"all\" for the whole workflow; \"from\" a node the user names. Refused while a run is going, and for nodes whose inputs have no output yet (the error says which to include). The run happens after this call: you do not see its results in this turn. The next message's canvas shows each node's status, error and output.",
+    inputShape: runWorkflowShape,
   },
   {
     name: TOOL_NAMES.nameConversation,

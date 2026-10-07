@@ -623,6 +623,7 @@ function pendingToolStatus(definitions: readonly AgentToolDefinition[], toolName
   if (!definition) return "Working…";
   if (definition.name === TOOL_NAMES.nameConversation) return "Working…";
   if (definition.name === SAVE_PROMPT_NOTES) return "Saving the tips…";
+  if (definition.name === TOOL_NAMES.runWorkflow) return "Starting the run…";
   return definition.readOnly ? "Reading the canvas…" : "Planning edits…";
 }
 

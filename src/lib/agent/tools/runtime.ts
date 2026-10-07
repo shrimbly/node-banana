@@ -9,12 +9,14 @@
  */
 
 import { z } from "zod";
-import type { NodeType } from "@/types";
+import type { NodeType, WorkflowEdge, WorkflowNode } from "@/types";
 import type { ProviderKeys } from "@/lib/providers/keys";
+import { groupNodesByLevel } from "@/store/utils/executionUtils";
+import { clampRunCount, type RunScope } from "@/store/utils/runBatch";
 import type { AgentToolDefinition, AgentToolResult, AgentToolRuntime, AgentWorkflowSnapshot } from "../types";
 import { findNodeType, NODE_CATALOG, NODE_TYPES, normalizeKey } from "../graph/catalog";
 import { describeNodeTypes, describeWorkflow, edgeLine, nodeLine } from "../graph/describe";
-import { GraphDraft, groupLabel, titleOf, type DraftNode, type DraftTransaction, type GraphDraftOptions, type RemovedNode } from "../graph/draft";
+import { GraphDraft, groupLabel, titleOf, type DraftEdge, type DraftNode, type DraftTransaction, type GraphDraftOptions, type RemovedNode } from "../graph/draft";
 import { isModelNodeType } from "../graph/settings";
 import {
   AGENT_TOOL_DEFINITIONS,
@@ -25,6 +27,7 @@ import {
   editWorkflowShape,
   getPromptGuideShape,
   getWorkflowShape,
+  runWorkflowShape,
   searchModelsShape,
   updateNodeShape,
 } from "./definitions";
@@ -69,6 +72,11 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
   const { providerKeys, signal, modelSource, promptNotes, ...draftOptions } = options;
   const models = new AgentModels(providerKeys ?? {}, { source: modelSource, signal });
   const draft = new GraphDraft(snapshot ?? { nodes: [], edges: [], groups: [], selectedNodeIds: [] }, { ...draftOptions, models });
+  // A run started (or is being started) this turn: the canvas must stay as the run found it.
+  let runStarted = false;
+  let runStarting = false;
+  // Canvas edits still being resolved; a run waits for them, so its op follows theirs.
+  let editsInFlight: Promise<unknown> = Promise.resolve();
 
   const handlers: Record<string, (args: unknown) => AgentToolResult | Promise<AgentToolResult>> = {
     [TOOL_NAMES.getWorkflow]: (args) => getWorkflow(draft, args as Args<typeof getWorkflowShape>),
@@ -80,6 +88,17 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
     [TOOL_NAMES.editWorkflow]: (args) => editWorkflow(draft, args as Args<typeof editWorkflowShape>),
     [TOOL_NAMES.updateNode]: (args) => updateNode(draft, args as Args<typeof updateNodeShape>),
     [TOOL_NAMES.arrangeWorkflow]: (args) => arrangeWorkflow(draft, args as Args<typeof arrangeWorkflowShape>),
+    [TOOL_NAMES.runWorkflow]: async (args) => {
+      runStarting = true;
+      try {
+        await editsInFlight;
+        const result = runWorkflow(draft, args as Args<typeof runWorkflowShape>, runStarted);
+        if (result.ok) runStarted = true;
+        return result;
+      } finally {
+        runStarting = false;
+      }
+    },
     // The label itself reaches the chat history through the stream (chatStream); the model only needs an ack.
     [TOOL_NAMES.nameConversation]: () => ({ ok: true, text: "Saved.", summary: "Named the conversation", ops: [] }),
   };
@@ -104,8 +123,18 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
         if (!parsed.success) {
           return failure(formatZodError(definition, parsed.error), `Invalid arguments for ${definition.name}`);
         }
-        // Settings resolve synchronously inside the batch: look up every model it names first.
-        if (MUTATING_TOOLS.has(definition.name)) await models.prepare(modelRequests(definition.name, parsed.data, draft));
+        if (MUTATING_TOOLS.has(definition.name)) {
+          if (runStarted || runStarting) {
+            return failure(
+              `Nothing was changed: you started a run earlier in this turn, and ${definition.name} would change the canvas under it. Tell the user what you started; make this change in a later message, once the run has finished.`,
+              "Not changed: a run started this turn",
+            );
+          }
+          // Settings resolve synchronously inside the batch: look up every model it names first.
+          const edit = models.prepare(modelRequests(definition.name, parsed.data, draft)).then(() => handlers[definition.name](parsed.data));
+          editsInFlight = Promise.all([editsInFlight, edit.catch(() => undefined)]);
+          return await edit;
+        }
         return await handlers[definition.name](parsed.data);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -499,6 +528,227 @@ function arrangeWorkflow(draft: GraphDraft, args: Args<typeof arrangeWorkflowSha
   }
   // Groups move as units, their nodes tidied inside a refit box.
   return runBatch(draft, TOOL_NAMES.arrangeWorkflow, (tx) => tx.arrange(requested));
+}
+
+// ---------------------------------------------------------------------------
+// Running
+// ---------------------------------------------------------------------------
+
+/**
+ * Starts a run through the browser's runBatch (the `run` op). Validated here
+ * against the draft, which already holds this turn's edits: a scope that
+ * would find an input empty is refused with the nodes to include instead.
+ */
+function runWorkflow(draft: GraphDraft, args: Args<typeof runWorkflowShape>, alreadyStarted: boolean): AgentToolResult {
+  if (alreadyStarted) {
+    return failure("You already started a run in this turn; nothing more was started. Its results show on the canvas of the user's next message.", "Already started a run");
+  }
+  if (draft.running) {
+    return failure(
+      "A run is already going on the canvas, so nothing was started. Tell the user; the next message's canvas shows how it went, and you can start another run then if they ask.",
+      "A run is already going",
+    );
+  }
+  if (draft.nodes.size === 0) return failure("The canvas is empty: there is nothing to run.", "Nothing to run");
+  const runs = clampRunCount(args.runs ?? 1);
+  const times = runs > 1 ? ` ×${runs}` : "";
+  const find = (key: string) => draft.getNode(key.trim()) ?? draft.getNode(draft.refs.get(key.trim()) ?? "");
+
+  let scope: RunScope;
+  let what: string;
+  let summary: string;
+  let ran: Set<string>;
+  /** The nodes whose inputs must hold something: the scope, or what a "from" run leads to. */
+  let checked: string[];
+  // A whole-workflow run skips a locked group's nodes.
+  const unlocked = (id: string) => !draft.getGroup(draft.getNode(id)?.groupId)?.locked;
+  switch (args.scope) {
+    case "all":
+      scope = { kind: "all" };
+      what = `the whole workflow (${draft.nodes.size} node${draft.nodes.size === 1 ? "" : "s"})`;
+      summary = `Running the workflow${times}`;
+      ran = new Set(draft.nodes.keys());
+      checked = [...ran].filter(unlocked);
+      break;
+    case "nodes": {
+      // A lone `node` is the same request.
+      const keys = args.nodeIds ?? (args.node ? [args.node] : []);
+      if (keys.length === 0) return failure('scope "nodes" needs nodeIds: the ids of the nodes to run. Nothing was started.', "No nodes to run");
+      const missing = keys.filter((key) => !find(key));
+      if (missing.length > 0) return failure(`Not on the canvas: ${missing.join(", ")}. Nothing was started.`, "Unknown nodes");
+      const ids = [...new Set(keys.map((key) => find(key)!.id))];
+      scope = { kind: "nodes", nodeIds: ids };
+      what = ids.join(", ");
+      summary = `Running ${ids.length === 1 ? nodeName(draft.getNode(ids[0])!) : `${ids.length} nodes`}${times}`;
+      ran = new Set(ids);
+      checked = ids;
+      break;
+    }
+    case "from": {
+      const key = args.node ?? (args.nodeIds?.length === 1 ? args.nodeIds[0] : undefined);
+      if (!key) return failure('scope "from" needs node: the id of the node to start from. Nothing was started.', "No node to start from");
+      const start = find(key);
+      if (!start) return failure(`Not on the canvas: ${key}. Nothing was started.`, "Unknown node");
+      scope = { kind: "from", nodeId: start.id };
+      what = `from ${start.id} on`;
+      summary = `Running from ${nodeName(start)}${times}`;
+      ran = runsFrom(draft, start.id);
+      checked = [...downstreamOf(draft, start.id)].filter((id) => ran.has(id) && unlocked(id));
+      break;
+    }
+  }
+
+  const problems = emptyInputs(draft, checked, ran);
+  if (problems.length > 0) {
+    return failure(
+      [`Nothing was started: these inputs of the run would be empty.`, ...problems.map((problem) => `- ${problem}`)].join("\n"),
+      "Inputs not ready",
+    );
+  }
+  const text = [
+    `Started a run of ${what}${runs > 1 ? `, ${runs} times one after another` : ""}. It runs on the user's canvas after your edits; you do not see its results in this turn.`,
+    "Tell the user briefly what you started. The canvas in their next message shows each node's status, error and output: report how it went from that, never before.",
+  ].join("\n");
+  return { ok: true, text, summary: clip(summary), ops: [{ op: "run", scope, runs }] };
+}
+
+function nodeName(node: DraftNode): string {
+  return titleOf(node) ?? NODE_CATALOG[node.type].displayName;
+}
+
+/**
+ * What a run from `nodeId` runs: its dependency level and every later one,
+ * as executeWorkflow orders the whole graph (loop edges left out).
+ */
+function runsFrom(draft: GraphDraft, nodeId: string): Set<string> {
+  const nodes = [...draft.nodes.values()] as unknown as WorkflowNode[];
+  const edges = draft.edges.filter((edge) => !edge.data?.isLoop) as unknown as WorkflowEdge[];
+  const levels = groupNodesByLevel(nodes, edges);
+  const start = levels.findIndex((level) => level.nodeIds.includes(nodeId));
+  return new Set(levels.slice(Math.max(start, 0)).flatMap((level) => level.nodeIds));
+}
+
+/** The node and everything its outputs reach (loop edges left out). */
+function downstreamOf(draft: GraphDraft, nodeId: string): Set<string> {
+  const reached = new Set([nodeId]);
+  const queue = [nodeId];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    for (const edge of draft.edges) {
+      if (edge.source !== id || edge.data?.isLoop || reached.has(edge.target)) continue;
+      reached.add(edge.target);
+      queue.push(edge.target);
+    }
+  }
+  return reached;
+}
+
+/**
+ * What would leave the run's nodes reading nothing, each with its fix, read
+ * as getConnectedInputs reads inputs: through a Router or Switch to what
+ * feeds it, by the handle that carries the data.
+ *
+ * A node the run does not run must hold its output already; an upload or a
+ * prompt must be filled whether or not it is in the run, since running it
+ * fills nothing. A "nodes" run orders its nodes only by the wires between
+ * them, so a Router, Switch or connected input left out between two of them
+ * would let both start at once: it has to be in the run too.
+ */
+function emptyInputs(draft: GraphDraft, checked: readonly string[], ran: ReadonlySet<string>): string[] {
+  const problems = new Map<string, string>();
+  const ids = (nodes: DraftNode[]) => nodes.map((node) => node.id).join(", ");
+  const visit = (edge: DraftEdge, target: string, via: DraftNode[], seen: Set<string>) => {
+    const source = draft.getNode(edge.source);
+    if (!source || problems.has(source.id) || seen.has(source.id)) return;
+    seen.add(source.id);
+    const feeds = `${source.id} (${nodeName(source)}) feeds ${target} but`;
+    if ((source.type === "router" || source.type === "switch") && !ran.has(source.id)) {
+      for (const next of inputEdges(draft, source, edge.sourceHandle)) visit(next, target, [...via, source], seen);
+      return;
+    }
+    if (isFilledByUpstream(draft, source)) {
+      // A connected input holds what its source hands it (a Split Grid cell's slice), once that has run.
+      const fillers = inputEdges(draft, source).map((e) => draft.getNode(e.source)).filter((node): node is DraftNode => !!node);
+      const idle = fillers.filter((node) => !ran.has(node.id));
+      if (idle.length > 0) {
+        problems.set(source.id, `${feeds} holds nothing until ${ids(idle)} runs: run from ${idle[0].id}, or run the whole workflow.`);
+      } else if (!ran.has(source.id)) {
+        problems.set(source.id, `${feeds} holds nothing until ${ids(fillers)} runs: include ${source.id} in the run too, so ${target} waits for it.`);
+      }
+      return;
+    }
+    const lack = missingOutput(source);
+    if (lack === "upload") {
+      problems.set(source.id, `${feeds} holds no upload: ask the user to upload one, or disconnect it if the run does not need it.`);
+    } else if (lack === "text") {
+      problems.set(source.id, `${feeds} has no text: write it first.`);
+    } else if (!ran.has(source.id)) {
+      if (lack) problems.set(source.id, `${feeds} has no output yet: include ${source.id} in the run (in nodeIds, or start from it), or run the whole workflow.`);
+    } else if (via.length > 0) {
+      const between = ids(via);
+      problems.set(between, `${between} pass${via.length === 1 ? "es" : ""} ${source.id}'s output on to ${target}: include ${between} in the run too, so ${target} waits for ${source.id}.`);
+    }
+  };
+  for (const id of checked) {
+    const node = draft.getNode(id);
+    // A viewer that gets nothing shows nothing and spends nothing.
+    if (!node || NODE_CATALOG[node.type].outputs.length === 0) continue;
+    for (const edge of inputEdges(draft, node)) visit(edge, id, [], new Set());
+  }
+  return [...problems.values()];
+}
+
+/**
+ * The wires that bring `node` data: not loop edges (empty on the first pass),
+ * not an Ease Curve's settings link. Through a Router, only the input of the
+ * type that leaves on `routerType`.
+ */
+function inputEdges(draft: GraphDraft, node: DraftNode, routerType?: string | null): DraftEdge[] {
+  return draft.edges.filter(
+    (edge) =>
+      edge.target === node.id &&
+      !edge.data?.isLoop &&
+      edge.targetHandle !== "easeCurve" &&
+      !(node.type === "router" && routerType && edge.targetHandle !== routerType),
+  );
+}
+
+/** An empty Image, Audio or Video Input wired to a source: it takes its media from there. */
+function isFilledByUpstream(draft: GraphDraft, node: DraftNode): boolean {
+  if (node.type !== "imageInput" && node.type !== "audioInput" && node.type !== "videoInput") return false;
+  const content = node.content ?? {};
+  return !(content.image || content.audio || content.video) && inputEdges(draft, node).length > 0;
+}
+
+/**
+ * Why a node would hand its consumers nothing: an empty upload or prompt, or
+ * no output because it has not run. Null when it holds something, when it is
+ * an optional input left empty on purpose (the run skips what it feeds), or
+ * when it passes nothing on by design (a Conditional Switch is a gate; a
+ * Split Grid fills its cells' inputs instead).
+ */
+function missingOutput(node: DraftNode): "upload" | "text" | "output" | null {
+  const filled = (value: unknown) => (typeof value === "string" ? value.trim().length > 0 : Array.isArray(value) && value.length > 0);
+  const content = node.content ?? {};
+  const holds = !!(content.image || content.video || content.audio || content.model3d || content.text);
+  const optional = node.data.isOptional === true;
+  switch (node.type) {
+    case "imageInput":
+    case "audioInput":
+    case "videoInput":
+      return holds || optional ? null : "upload";
+    case "prompt":
+      return filled(node.data.prompt) || optional ? null : "text";
+    case "promptConstructor":
+      return filled(node.data.template) || holds ? null : "text";
+    case "array":
+      return filled(node.data.outputItems) ? null : "output";
+    case "conditionalSwitch":
+    case "splitGrid":
+      return null;
+    default:
+      return NODE_CATALOG[node.type].outputs.length === 0 || holds ? null : "output";
+  }
 }
 
 // ---------------------------------------------------------------------------

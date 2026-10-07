@@ -89,6 +89,7 @@ async function* emit(...events: HarnessEvent[]): AsyncGenerator<HarnessEvent> {
 const definitions: AgentToolDefinition[] = [
   { name: "get_workflow", title: "Read workflow", description: "Read the canvas.", inputShape: {}, readOnly: true },
   { name: "edit_workflow", title: "Edit workflow", description: "Change the canvas.", inputShape: {}, readOnly: false },
+  { name: "run_workflow", title: "Run workflow", description: "Start a run.", inputShape: {}, readOnly: false },
 ];
 
 function fakeRuntime(results: Record<string, AgentToolResult | Error>) {
@@ -616,6 +617,29 @@ describe("createAgentChatStream: tool calls", () => {
     });
     expect(types(chunks)).not.toContain("data-graph-ops");
     expect(statusLines(chunks)).toContain("Reading the canvas…");
+  });
+
+  it("sends a run as an ops batch, saying the run is starting while the call is written", async () => {
+    const started: AgentToolResult = {
+      ok: true,
+      text: "Started a run of the whole workflow (2 nodes).",
+      summary: "Running the workflow",
+      ops: [{ op: "run", scope: { kind: "all" }, runs: 1 }],
+    };
+    const { runtime } = fakeRuntime({ run_workflow: started });
+    const { harness } = fakeHarness(async function* (params) {
+      yield { type: "tool-pending", toolName: "mcp__node_banana__run_workflow" };
+      await params.tools.execute("mcp__node_banana__run_workflow", { scope: "all" });
+      yield* emit();
+    });
+
+    const { chunks, message } = await run({ harness, createToolRuntime: () => runtime });
+
+    expect(statusLines(chunks)).toContain("Starting the run…");
+    const batch = chunks.find((chunk) => chunk.type === "data-graph-ops") as { data: AgentGraphOpBatch } | undefined;
+    expect(batch?.data).toMatchObject({ ops: started.ops, summary: "Running the workflow" });
+    expect(batch?.data).not.toHaveProperty("focusNodeIds");
+    expect(partsOfType(message, "dynamic-tool")[0]).toMatchObject({ title: "Run workflow", output: { ok: true, summary: "Running the workflow" } });
   });
 
   it("writes text the harness queued before a tool call ahead of the tool card", async () => {

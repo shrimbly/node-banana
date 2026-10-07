@@ -68,6 +68,24 @@ describe("tool definitions", () => {
     expect(Object.keys(schema.properties.groups.items.properties)).toEqual(["name", "color", "nodes"]);
   });
 
+  it("gives run_workflow a flat scope with its node fields and a run count", () => {
+    const run = AGENT_TOOL_DEFINITIONS.find((d) => d.name === "run_workflow")!;
+    expect(run.readOnly).toBe(false);
+    const schema = z.toJSONSchema(z.object(run.inputShape)) as unknown as {
+      required?: string[];
+      properties: Record<string, { type?: string; enum?: string[]; description?: string }>;
+    };
+    expect(schema.required).toEqual(["scope"]);
+    expect(schema.properties.scope.enum).toEqual(["nodes", "all", "from"]);
+    expect(Object.keys(schema.properties)).toEqual(["scope", "nodeIds", "node", "runs"]);
+    expect(schema.properties.runs.description).toContain("default 1");
+    // When to run, and that results arrive only with the next message.
+    expect(run.description).toContain("Only when the user asks to run");
+    expect(run.description).toContain("Call it last, after this turn's edits, and once per turn");
+    expect(run.description).toContain("Refused while a run is going");
+    expect(run.description).toContain("you do not see its results in this turn");
+  });
+
   it("are the runtime's definitions", () => {
     expect(createAgentToolRuntime(emptySnapshot()).definitions).toBe(AGENT_TOOL_DEFINITIONS);
   });

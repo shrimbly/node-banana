@@ -3,6 +3,7 @@ import type { NodeType, WorkflowNode } from "@/types";
 import { getConnectedInputsPure, validateWorkflowPure } from "@/store/utils/connectedInputs";
 import { parseTextToArray } from "@/utils/arrayParser";
 import type { AgentGraphOp } from "../../types";
+import { NODE_CATALOG } from "../../graph/catalog";
 import { isValidConnectionPort } from "../../graph/handles";
 import { createAgentToolRuntime } from "../runtime";
 import {
@@ -1483,5 +1484,267 @@ describe("long prompts end to end (review C7)", () => {
     });
     expect(result.ok).toBe(false);
     expect(result.text).toContain("marker");
+  });
+});
+
+describe("run_workflow", () => {
+  const LLM = NODE_CATALOG.llmGenerate.displayName;
+  /** prompt-1 → llmGenerate-2 → nanoBanana-3 → output-4: the LLM has answered unless `llmOutput` is false. */
+  const chain = (llmOutput = true): StoreState => ({
+    nodes: [
+      storeNode("prompt-1", "prompt", { x: 0, y: 0 }, { prompt: "write an image prompt about a fox" }),
+      storeNode("llmGenerate-2", "llmGenerate", { x: 400, y: 0 }, llmOutput ? { outputText: "a red fox in snow, dusk light" } : {}),
+      storeNode("nanoBanana-3", "nanoBanana", { x: 800, y: 0 }),
+      storeNode("output-4", "output", { x: 1200, y: 0 }),
+    ],
+    edges: [
+      storeEdge("prompt-1", "text", "llmGenerate-2", "text"),
+      storeEdge("llmGenerate-2", "text", "nanoBanana-3", "text"),
+      storeEdge("nanoBanana-3", "image", "output-4", "image"),
+    ],
+  });
+
+  it("starts the whole workflow as one run op, once unless asked for more", async () => {
+    const result = await call(runtimeFor(chain(false)), "run_workflow", { scope: "all" });
+    expect(result.ok, result.text).toBe(true);
+    expect(result.ops).toEqual([{ op: "run", scope: { kind: "all" }, runs: 1 }]);
+    expect(result.summary).toBe("Running the workflow");
+    expect(result.text).toContain("Started a run of the whole workflow (4 nodes)");
+    expect(result.text).toContain("you do not see its results in this turn");
+    expect(result.text).toContain("report how it went from that, never before");
+
+    const three = await call(runtimeFor(chain()), "run_workflow", { scope: "all", runs: 3 });
+    expect(three.ops).toEqual([{ op: "run", scope: { kind: "all" }, runs: 3 }]);
+    expect(three.summary).toBe("Running the workflow ×3");
+    expect(three.text).toContain("3 times one after another");
+    // Clamped like the Run menu.
+    expect((await call(runtimeFor(chain()), "run_workflow", { scope: "all", runs: 500 })).ops).toEqual([{ op: "run", scope: { kind: "all" }, runs: 50 }]);
+    expect((await call(runtimeFor(chain()), "run_workflow", { scope: "all", runs: 0 })).ops).toEqual([{ op: "run", scope: { kind: "all" }, runs: 1 }]);
+  });
+
+  it("runs only the named nodes when everything feeding them holds its output", async () => {
+    const result = await call(runtimeFor(chain()), "run_workflow", { scope: "nodes", nodeIds: ["nanoBanana-3"] });
+    expect(result.ok, result.text).toBe(true);
+    expect(result.ops).toEqual([{ op: "run", scope: { kind: "nodes", nodeIds: ["nanoBanana-3"] }, runs: 1 }]);
+    expect(result.summary).toBe(`Running ${NODE_CATALOG.nanoBanana.displayName}`);
+    const two = await call(runtimeFor(chain()), "run_workflow", { scope: "nodes", nodeIds: ["llmGenerate-2", "nanoBanana-3", "llmGenerate-2"] });
+    expect(two.ops).toEqual([{ op: "run", scope: { kind: "nodes", nodeIds: ["llmGenerate-2", "nanoBanana-3"] }, runs: 1 }]);
+    expect(two.summary).toBe("Running 2 nodes");
+    // The node fields mixed up still say which node is meant.
+    const lone = await call(runtimeFor(chain()), "run_workflow", { scope: "nodes", node: "nanoBanana-3" });
+    expect(lone.ops).toEqual([{ op: "run", scope: { kind: "nodes", nodeIds: ["nanoBanana-3"] }, runs: 1 }]);
+    const from = await call(runtimeFor(chain()), "run_workflow", { scope: "from", nodeIds: ["llmGenerate-2"] });
+    expect(from.ops).toEqual([{ op: "run", scope: { kind: "from", nodeId: "llmGenerate-2" }, runs: 1 }]);
+  });
+
+  it("refuses nodes fed by a node with no output yet, and names the node to include", async () => {
+    const runtime = runtimeFor(chain(false));
+    const refused = await call(runtime, "run_workflow", { scope: "nodes", nodeIds: ["nanoBanana-3"] });
+    expect(refused.ok).toBe(false);
+    expect(refused.ops).toEqual([]);
+    expect(refused.summary).toBe("Inputs not ready");
+    expect(refused.text).toContain(`llmGenerate-2 (${LLM}) feeds nanoBanana-3 but has no output yet: include llmGenerate-2 in the run`);
+    // Including it is the fix: it runs first, and its own input holds text.
+    const fixed = await call(runtime, "run_workflow", { scope: "nodes", nodeIds: ["llmGenerate-2", "nanoBanana-3"] });
+    expect(fixed.ok, fixed.text).toBe(true);
+  });
+
+  it("says when an upload or a prompt feeding the run is empty", async () => {
+    const state: StoreState = {
+      nodes: [
+        storeNode("imageInput-1", "imageInput", { x: 0, y: 0 }),
+        storeNode("prompt-2", "prompt", { x: 0, y: 400 }, { prompt: "  " }),
+        storeNode("nanoBanana-3", "nanoBanana", { x: 400, y: 0 }),
+      ],
+      edges: [storeEdge("imageInput-1", "image", "nanoBanana-3", "image"), storeEdge("prompt-2", "text", "nanoBanana-3", "text")],
+    };
+    const result = await call(runtimeFor(state), "run_workflow", { scope: "nodes", nodeIds: ["nanoBanana-3"] });
+    expect(result.ok).toBe(false);
+    expect(result.text).toContain(
+      "imageInput-1 (Image Input) feeds nanoBanana-3 but holds no upload: ask the user to upload one, or disconnect it if the run does not need it.",
+    );
+    expect(result.text).toContain("prompt-2 (Prompt) feeds nanoBanana-3 but has no text: write it first.");
+    // Running them fills nothing, so neither a wider scope nor the whole workflow gets past it.
+    const all = ["imageInput-1", "prompt-2", "nanoBanana-3"];
+    expect((await call(runtimeFor(state), "run_workflow", { scope: "nodes", nodeIds: all })).ok).toBe(false);
+    expect((await call(runtimeFor(state), "run_workflow", { scope: "all" })).ok).toBe(false);
+  });
+
+  it("lets an optional input stay empty, and a locked group's nodes wait", async () => {
+    const state = (extra: Partial<WorkflowNode> = {}, data: Record<string, unknown> = {}): StoreState => ({
+      nodes: [
+        storeNode("imageInput-1", "imageInput", { x: 0, y: 0 }, data),
+        storeNode("prompt-2", "prompt", { x: 0, y: 400 }, { prompt: "a fox" }),
+        storeNode("nanoBanana-3", "nanoBanana", { x: 400, y: 0 }, {}, extra),
+      ],
+      edges: [storeEdge("imageInput-1", "image", "nanoBanana-3", "image"), storeEdge("prompt-2", "text", "nanoBanana-3", "text")],
+      groups: { g1: { id: "g1", name: "Edit", color: "neutral", locked: true } },
+    });
+    expect((await call(runtimeFor(state({}, { isOptional: true })), "run_workflow", { scope: "all" })).ok).toBe(true);
+    expect((await call(runtimeFor(state({ groupId: "g1" })), "run_workflow", { scope: "all" })).ok).toBe(true);
+    expect((await call(runtimeFor(state()), "run_workflow", { scope: "all" })).ok).toBe(false);
+  });
+
+  it("looks through a Router to the node behind it", async () => {
+    const state = chain(false);
+    state.nodes.push(storeNode("router-5", "router", { x: 600, y: 300 }));
+    state.edges = [
+      storeEdge("prompt-1", "text", "llmGenerate-2", "text"),
+      storeEdge("llmGenerate-2", "text", "router-5", "text"),
+      storeEdge("router-5", "text", "nanoBanana-3", "text"),
+    ];
+    const result = await call(runtimeFor(state), "run_workflow", { scope: "nodes", nodeIds: ["nanoBanana-3"] });
+    expect(result.ok).toBe(false);
+    expect(result.text).toContain("llmGenerate-2");
+    expect(result.text).not.toContain("router-5 (");
+    // With the LLM in the run but not the Router, nothing would make the generator wait for it.
+    const unordered = await call(runtimeFor(state), "run_workflow", { scope: "nodes", nodeIds: ["llmGenerate-2", "nanoBanana-3"] });
+    expect(unordered.ok).toBe(false);
+    expect(unordered.text).toContain("router-5 passes llmGenerate-2's output on to nanoBanana-3: include router-5 in the run too");
+    const ordered = await call(runtimeFor(state), "run_workflow", { scope: "nodes", nodeIds: ["llmGenerate-2", "router-5", "nanoBanana-3"] });
+    expect(ordered.ok, ordered.text).toBe(true);
+    expect((await call(runtimeFor(state), "run_workflow", { scope: "all" })).ok).toBe(true);
+  });
+
+  it("reads through a Router only the input of the type it hands on", async () => {
+    const state: StoreState = {
+      nodes: [
+        storeNode("prompt-1", "prompt", { x: 0, y: 0 }, { prompt: "a fox" }),
+        storeNode("imageInput-2", "imageInput", { x: 0, y: 400 }),
+        storeNode("router-3", "router", { x: 400, y: 0 }),
+        storeNode("nanoBanana-4", "nanoBanana", { x: 800, y: 0 }),
+      ],
+      edges: [
+        storeEdge("prompt-1", "text", "router-3", "text"),
+        storeEdge("imageInput-2", "image", "router-3", "image"),
+        storeEdge("router-3", "text", "nanoBanana-4", "text"),
+      ],
+    };
+    const result = await call(runtimeFor(state), "run_workflow", { scope: "nodes", nodeIds: ["nanoBanana-4"] });
+    expect(result.ok, result.text).toBe(true);
+  });
+
+  it("does not count an Ease Curve's settings link as an input", async () => {
+    const state: StoreState = {
+      nodes: [
+        storeNode("videoInput-1", "videoInput", { x: 0, y: 0 }, { video: "data:video/mp4;base64,AAAA" }),
+        storeNode("easeCurve-2", "easeCurve", { x: 400, y: 400 }),
+        storeNode("easeCurve-3", "easeCurve", { x: 800, y: 0 }),
+      ],
+      edges: [storeEdge("videoInput-1", "video", "easeCurve-3", "video"), storeEdge("easeCurve-2", "easeCurve", "easeCurve-3", "easeCurve")],
+    };
+    const result = await call(runtimeFor(state), "run_workflow", { scope: "nodes", nodeIds: ["easeCurve-3"] });
+    expect(result.ok, result.text).toBe(true);
+  });
+
+  it("points a Split Grid cell's empty input at the grid that fills it", async () => {
+    const state: StoreState = {
+      nodes: [
+        storeNode("splitGrid-1", "splitGrid", { x: 0, y: 0 }),
+        storeNode("imageInput-2", "imageInput", { x: 400, y: 0 }),
+        storeNode("prompt-3", "prompt", { x: 400, y: 400 }, { prompt: "restyle this tile" }),
+        storeNode("nanoBanana-4", "nanoBanana", { x: 800, y: 0 }),
+      ],
+      edges: [
+        storeEdge("splitGrid-1", "reference", "imageInput-2", "reference"),
+        storeEdge("imageInput-2", "image", "nanoBanana-4", "image"),
+        storeEdge("prompt-3", "text", "nanoBanana-4", "text"),
+      ],
+    };
+    const cell = await call(runtimeFor(state), "run_workflow", { scope: "nodes", nodeIds: ["imageInput-2", "nanoBanana-4"] });
+    expect(cell.ok).toBe(false);
+    expect(cell.text).toContain("imageInput-2 (Image Input) feeds nanoBanana-4 but holds nothing until splitGrid-1 runs: run from splitGrid-1");
+    const skipped = await call(runtimeFor(state), "run_workflow", { scope: "nodes", nodeIds: ["splitGrid-1", "nanoBanana-4"] });
+    expect(skipped.text).toContain("include imageInput-2 in the run too, so nanoBanana-4 waits for it");
+    expect((await call(runtimeFor(state), "run_workflow", { scope: "from", node: "splitGrid-1" })).ok).toBe(true);
+  });
+
+  it("runs from a node, checking what the run leads to", async () => {
+    const started = await call(runtimeFor(chain(false)), "run_workflow", { scope: "from", node: "llmGenerate-2", runs: 2 });
+    expect(started.ok, started.text).toBe(true);
+    expect(started.ops).toEqual([{ op: "run", scope: { kind: "from", nodeId: "llmGenerate-2" }, runs: 2 }]);
+    expect(started.summary).toBe(`Running from ${LLM} ×2`);
+    // Starting after the LLM would read its empty output.
+    const refused = await call(runtimeFor(chain(false)), "run_workflow", { scope: "from", node: "nanoBanana-3" });
+    expect(refused.ok).toBe(false);
+    expect(refused.text).toContain("llmGenerate-2");
+  });
+
+  it("runs what this turn just built, by ref, after the edits", async () => {
+    const runtime = runtimeFor(EMPTY);
+    const built = await call(runtime, "create_workflow", {
+      nodes: [
+        { ref: "p", type: "prompt", settings: { prompt: "a haiku about rain" } },
+        { ref: "l", type: "llmGenerate" },
+      ],
+      connections: [{ from: "p", to: "l" }],
+    });
+    expect(built.ok, built.text).toBe(true);
+    const result = await call(runtime, "run_workflow", { scope: "nodes", nodeIds: ["l"] });
+    expect(result.ok, result.text).toBe(true);
+    expect(result.ops).toEqual([{ op: "run", scope: { kind: "nodes", nodeIds: ["llmGenerate-ag2"] }, runs: 1 }]);
+  });
+
+  it("refuses unknown nodes, a scope without its nodes, and an empty canvas", async () => {
+    const unknown = await call(runtimeFor(chain()), "run_workflow", { scope: "nodes", nodeIds: ["nanoBanana-3", "ghost-9"] });
+    expect(unknown.ok).toBe(false);
+    expect(unknown.text).toContain("Not on the canvas: ghost-9. Nothing was started.");
+    expect((await call(runtimeFor(chain()), "run_workflow", { scope: "nodes" })).text).toContain('scope "nodes" needs nodeIds');
+    expect((await call(runtimeFor(chain()), "run_workflow", { scope: "from" })).text).toContain('scope "from" needs node');
+    expect((await call(runtimeFor(chain()), "run_workflow", { scope: "from", node: "ghost-9" })).ok).toBe(false);
+    expect((await call(runtimeFor(EMPTY), "run_workflow", { scope: "all" })).summary).toBe("Nothing to run");
+    expect((await call(runtimeFor(chain()), "run_workflow", { scope: "everything" })).ok).toBe(false);
+  });
+
+  it("refuses while a run is already going", async () => {
+    const result = await call(runtimeFor(chain(), { running: true }), "run_workflow", { scope: "all" });
+    expect(result.ok).toBe(false);
+    expect(result.ops).toEqual([]);
+    expect(result.summary).toBe("A run is already going");
+  });
+
+  it("starts one run per turn, and changes nothing on the canvas after it", async () => {
+    const runtime = runtimeFor(chain());
+    expect((await call(runtime, "run_workflow", { scope: "all" })).ok).toBe(true);
+    const again = await call(runtime, "run_workflow", { scope: "all" });
+    expect(again.ok).toBe(false);
+    expect(again.summary).toBe("Already started a run");
+    const edit = await call(runtime, "update_node", { node: "prompt-1", settings: { prompt: "a wolf" } });
+    expect(edit.ok).toBe(false);
+    expect(edit.ops).toEqual([]);
+    expect(edit.text).toContain("you started a run earlier in this turn");
+    // Reading and tidying the layout leave the run alone.
+    expect((await call(runtime, "get_workflow", {})).ok).toBe(true);
+    expect((await call(runtime, "arrange_workflow", {})).ok).toBe(true);
+  });
+
+  it("waits for an edit still being resolved, so the run's op follows the edit's", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const slowSource = {
+      listModels: async () => {
+        await gate;
+        return { ok: false as const, error: "offline", status: 503 };
+      },
+      getModelSchema: async () => {
+        await gate;
+        return { ok: false as const, error: "offline", status: 503 };
+      },
+    };
+    const runtime = createAgentToolRuntime(snapshotOf(chain()), { randomId: sequentialIds(), providerKeys: { fal: "fal-key" }, modelSource: slowSource });
+    const finished: string[] = [];
+    const edit = runtime
+      .execute("update_node", { node: "nanoBanana-3", settings: { model: { provider: "fal", modelId: "fal-ai/flux" } } })
+      .then(() => finished.push("edit"));
+    const run = runtime.execute("run_workflow", { scope: "all" }).then(() => finished.push("run"));
+    // An edit sent while the run waits would land under it.
+    const late = await runtime.execute("update_node", { node: "prompt-1", settings: { prompt: "a wolf" } });
+    expect(late.ok).toBe(false);
+    expect(late.ops).toEqual([]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(finished).toEqual([]);
+    release();
+    await Promise.all([edit, run]);
+    expect(finished).toEqual(["edit", "run"]);
   });
 });
