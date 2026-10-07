@@ -409,8 +409,8 @@ export interface WorkflowStore {
   setRunCount: (count: number) => void;
   /** The batch in progress, or null (a single run, or nothing running). */
   batch: RunBatch | null;
-  /** Run `scope` runCount times, one run after another. */
-  runBatch: (scope: RunScope) => Promise<void>;
+  /** Run `scope` runCount times (or `count` times, leaving runCount alone), one run after another. */
+  runBatch: (scope: RunScope, count?: number) => Promise<void>;
   /** The Run button's Stop: mid-batch the first press lets this run finish, the second stops now. */
   requestStop: () => void;
   mockTutorialExecution: () => Promise<void>;
@@ -2782,7 +2782,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     set({ runCount, hasUnsavedChanges: true });
   },
 
-  runBatch: async (scope: RunScope) => {
+  runBatch: async (scope: RunScope, countOverride?: number) => {
     if (get().isRunning || get().batch) return;
     const runOnce = async (): Promise<RunOutcome> => {
       const serial = lastRun.serial;
@@ -2791,7 +2791,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       else await get().executeSelectedNodes(scope.nodeIds);
       return { started: lastRun.serial !== serial, failed: lastRun.failed };
     };
-    const count = clampRunCount(get().runCount);
+    const count = clampRunCount(countOverride ?? get().runCount);
     if (count === 1) {
       await runOnce();
       return;
