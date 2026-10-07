@@ -93,6 +93,15 @@ describe("buildAgentSnapshot", () => {
     expect(snapshot.nodes[0].data.outputItems).toEqual(["a", "b"]);
   });
 
+  it("says a run is going only when one is", () => {
+    const nodes = [storeNode("llm-1", "llmGenerate", { x: 0, y: 0 }, { status: "loading" })];
+    const running = buildAgentSnapshot({ nodes, edges: [], groups: {}, running: true });
+    expect(running.running).toBe(true);
+    expect(running.nodes[0].status).toBe("loading");
+    expect("running" in buildAgentSnapshot({ nodes, edges: [], groups: {}, running: false })).toBe(false);
+    expect("running" in buildAgentSnapshot({ nodes, edges: [], groups: {} })).toBe(false);
+  });
+
   it("sends each group's box and lock state (review C8)", () => {
     const snapshot = buildAgentSnapshot({
       nodes: [storeNode("prompt-1", "prompt", { x: 0, y: 0 }, {}, { groupId: "g1" })],

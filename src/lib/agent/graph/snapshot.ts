@@ -25,6 +25,8 @@ export interface BuildAgentSnapshotInput {
   /** Visible area in flow coordinates. */
   viewport?: AgentWorkflowSnapshot["viewport"];
   workflowName?: string;
+  /** A run (or a batch of runs) is going on the canvas. */
+  running?: boolean;
   /**
    * The store's createDefaultNodeData, which applies the user's saved model
    * and settings. When given, the snapshot carries those defaults for the
@@ -97,6 +99,7 @@ export function buildAgentSnapshot(input: BuildAgentSnapshotInput): AgentWorkflo
     selectedNodeIds,
     ...(validViewport(input.viewport) ? { viewport: roundViewport(input.viewport!) } : {}),
     ...(input.workflowName ? { workflowName: input.workflowName } : {}),
+    ...(input.running ? { running: true as const } : {}),
   };
   const nodeDefaults = stickyDefaults(input.createDefaultNodeData);
   if (nodeDefaults) snapshot.nodeDefaults = nodeDefaults;

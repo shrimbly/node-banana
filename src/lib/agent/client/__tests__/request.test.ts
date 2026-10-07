@@ -68,6 +68,16 @@ describe("buildAgentChatRequestBody", () => {
     expect(body.sessionId).toBeUndefined();
     expect(buildAgentSnapshotMock.mock.calls[0][0].workflowName).toBeUndefined();
   });
+
+  it("says when a run is going", () => {
+    buildAgentChatRequestBody({
+      chatId: "chat-1",
+      messages,
+      harness: "claude",
+      canvas: { nodes: [], edges: [], groups: {}, workflowName: null, running: true },
+    });
+    expect(buildAgentSnapshotMock.mock.calls[0][0].running).toBe(true);
+  });
 });
 
 describe("agentProviderHeaders", () => {

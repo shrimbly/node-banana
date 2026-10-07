@@ -26,6 +26,8 @@ export interface DescribableGraph {
   groups: ReadonlyArray<DraftGroup>;
   selectedNodeIds: readonly string[];
   workflowName?: string;
+  /** A run was going on the canvas when the turn began. */
+  running?: boolean;
 }
 
 export interface DescribeOptions {
@@ -62,6 +64,7 @@ export function describeWorkflow(graph: DescribableGraph, options: DescribeOptio
   const lines: string[] = [];
   const heading = `${graph.workflowName ? `Workflow "${graph.workflowName}": ` : ""}${all.length} node${all.length === 1 ? "" : "s"}, ${graph.edges.length} connection${graph.edges.length === 1 ? "" : "s"}.`;
   lines.push(heading);
+  if (graph.running) lines.push("A run is in progress: nodes with status loading are running now, and results may still change.");
   if (graph.selectedNodeIds.length > 0) lines.push(`Selected by the user: ${graph.selectedNodeIds.join(", ")}.`);
   if (missing.length > 0) lines.push(`Not on the canvas: ${missing.join(", ")}.`);
 

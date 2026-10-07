@@ -18,6 +18,8 @@ export interface AgentCanvasState {
   edges: WorkflowEdge[];
   groups: Record<string, NodeGroup>;
   workflowName: string | null;
+  /** A run (or a batch of runs) is going. */
+  running?: boolean;
 }
 
 export interface BuildAgentChatRequestInput {
@@ -52,6 +54,7 @@ export function buildAgentChatRequestBody({
       groups: canvas.groups,
       viewport,
       workflowName: canvas.workflowName ?? undefined,
+      running: canvas.running,
       // The user's saved models and settings, so the agent's new nodes are described as they will appear.
       createDefaultNodeData,
     }),

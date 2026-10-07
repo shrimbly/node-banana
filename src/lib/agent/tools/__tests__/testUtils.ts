@@ -63,11 +63,14 @@ export function storeEdge(source: string, sourceHandle: string, target: string, 
   };
 }
 
-export function snapshotOf(state: StoreState, extra: { viewport?: AgentWorkflowSnapshot["viewport"]; workflowName?: string } = {}): AgentWorkflowSnapshot {
+export function snapshotOf(
+  state: StoreState,
+  extra: { viewport?: AgentWorkflowSnapshot["viewport"]; workflowName?: string; running?: boolean } = {},
+): AgentWorkflowSnapshot {
   return buildAgentSnapshot({ nodes: state.nodes, edges: state.edges, groups: state.groups ?? {}, ...extra });
 }
 
-export function runtimeFor(state: StoreState, extra: { viewport?: AgentWorkflowSnapshot["viewport"] } = {}): AgentToolRuntime {
+export function runtimeFor(state: StoreState, extra: { viewport?: AgentWorkflowSnapshot["viewport"]; running?: boolean } = {}): AgentToolRuntime {
   return createAgentToolRuntime(snapshotOf(state, extra), { randomId: sequentialIds() });
 }
 

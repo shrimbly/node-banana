@@ -140,7 +140,7 @@ export function useAgentChat({
             effort: currentEffort,
             getViewport: readViewport,
           } = requestRef.current;
-          const { nodes, edges, groups, workflowName, canvasGeneration } = useWorkflowStore.getState();
+          const { nodes, edges, groups, workflowName, canvasGeneration, isRunning, batch } = useWorkflowStore.getState();
           // The snapshot below is this generation's canvas: the turn's edits only fit it.
           turnGenerationRef.current = canvasGeneration;
           const body = buildAgentChatRequestBody({
@@ -149,7 +149,8 @@ export function useAgentChat({
             harness: currentHarness,
             model: currentModel,
             effort: currentEffort,
-            canvas: { nodes, edges, groups, workflowName },
+            // Between the runs of a batch isRunning is briefly false; the batch is still going.
+            canvas: { nodes, edges, groups, workflowName, running: isRunning || batch !== null },
             viewport: readViewport(),
           });
           // The user's provider keys, so the agent can search and set models

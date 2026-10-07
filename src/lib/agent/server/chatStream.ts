@@ -116,6 +116,7 @@ const workflowSchema = z.looseObject({
     .object({ x: z.number(), y: z.number(), width: z.number(), height: z.number(), zoom: z.number() })
     .optional(),
   workflowName: z.string().optional(),
+  running: z.literal(true).optional().catch(undefined),
   // The user's saved defaults for new nodes; malformed entries are dropped, never a reason to refuse the turn.
   nodeDefaults: z.record(z.string(), z.record(z.string(), z.unknown())).optional().catch(undefined),
 });

@@ -1133,6 +1133,14 @@ describe("parseAgentChatRequest", () => {
     expect(bad.ok).toBe(true);
     expect(bad.ok && bad.body.workflow.nodeDefaults).toBeUndefined();
   });
+
+  it("passes the running flag through and drops anything but true", () => {
+    const running = parseAgentChatRequest({ ...valid(), workflow: { ...emptyWorkflow, running: true } });
+    expect(running.ok && running.body.workflow.running).toBe(true);
+    const odd = parseAgentChatRequest({ ...valid(), workflow: { ...emptyWorkflow, running: "yes" } });
+    expect(odd.ok).toBe(true);
+    expect(odd.ok && odd.body.workflow.running).toBeUndefined();
+  });
   it("accepts the panel's request and normalises optional fields", () => {
     const result = parseAgentChatRequest({ ...valid(), model: "", sessionId: null, trigger: "submit-message" });
 

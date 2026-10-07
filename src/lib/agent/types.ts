@@ -386,6 +386,11 @@ export interface AgentWorkflowSnapshot {
   viewport?: { x: number; y: number; width: number; height: number; zoom: number };
   workflowName?: string;
   /**
+   * A run (or a batch of runs) was going on the canvas when the message was
+   * sent; nodes' `status` shows how far it got. Set only when true.
+   */
+  running?: true;
+  /**
    * What a new node of these types starts with in this browser: the user's
    * saved model and settings (sticky defaults), whitelisted like node data.
    * The server draft starts new nodes from these so what the agent reports

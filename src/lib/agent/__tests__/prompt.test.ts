@@ -153,6 +153,14 @@ describe("buildTurnPrompt", () => {
     expect(text).toContain(`prompt (${long.length} characters; only the first 300 shown)`);
   });
 
+  it("says when a run is going, so statuses read as progress", () => {
+    const state = { nodes: [storeNode("llmGenerate-1", "llmGenerate", { x: 0, y: 0 }, { status: "loading" })], edges: [] };
+    const running = describeCanvas(snapshotOf(state, { running: true }));
+    expect(running.split("\n")[1]).toBe("A run is in progress: nodes with status loading are running now, and results may still change.");
+    expect(running).toContain("status loading");
+    expect(describeCanvas(snapshotOf(state))).not.toContain("A run is in progress");
+  });
+
   it("says when the canvas is empty", () => {
     expect(buildTurnPrompt({ userText: "hi", snapshot: emptySnapshot() })).toContain("<canvas>\nThe canvas is empty.\n</canvas>");
   });
