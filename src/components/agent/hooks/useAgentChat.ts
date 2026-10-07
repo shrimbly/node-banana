@@ -126,6 +126,8 @@ export function useAgentChat({
   const queueIdRef = useRef(0);
   // The store's canvasGeneration the current turn was sent from.
   const turnGenerationRef = useRef(useWorkflowStore.getState().canvasGeneration);
+  // The user pressed stop on the current turn: a run it asked for must not start after that.
+  const turnStoppedRef = useRef(false);
 
   const callbacksRef = useRef<ChatCallbacks | null>(null);
 
@@ -193,9 +195,11 @@ export function useAgentChat({
     // Planned against a canvas that has since been replaced (checked per batch:
     // chunks already buffered still arrive after the turn is stopped).
     if (useWorkflowStore.getState().canvasGeneration !== turnGenerationRef.current) return;
-    let result: { applied: number; skipped: string[] };
+    // Edits buffered before a stop still land; a run would spend the user's credits after they said stop.
+    const applying = turnStoppedRef.current ? { ...batch, ops: batch.ops.filter((op) => op.op !== "run") } : batch;
+    let result: { applied: number; skipped: string[]; runRefused?: string };
     try {
-      result = useWorkflowStore.getState().applyAgentGraphOps(batch);
+      result = useWorkflowStore.getState().applyAgentGraphOps(applying);
     } catch (applyError) {
       const detail = applyError instanceof Error ? applyError.message : String(applyError);
       console.error("[agent] applying canvas changes failed", applyError);
@@ -213,6 +217,7 @@ export function useAgentChat({
           result.skipped.join("\n"),
         );
     }
+    if (result.runRefused) useToast.getState().show(`The agent's run didn't start: ${result.runRefused}`, "warning");
     if (result.applied > 0) handlersRef.current.onBatchApplied?.(batch);
   }, []);
 
@@ -258,6 +263,7 @@ export function useAgentChat({
     // Also stamped when the request is built; set now so the check below never
     // compares a new turn against the previous turn's canvas.
     turnGenerationRef.current = useWorkflowStore.getState().canvasGeneration;
+    turnStoppedRef.current = false;
     setStatusLine(null);
   }, []);
 
@@ -413,7 +419,10 @@ export function useAgentChat({
     removeQueued,
     takeQueued,
     sendQueuedNow,
-    stop: () => void stop(),
+    stop: () => {
+      turnStoppedRef.current = true;
+      void stop();
+    },
     retry,
     clearError,
     newChat,

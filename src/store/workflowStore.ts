@@ -49,7 +49,7 @@ import type { ProviderModel } from "@/lib/providers/types";
 import { isGenerateNodeType, modelSelectionData } from "./utils/modelSelection";
 import { externalizeWorkflowMedia, hydrateWorkflowMedia } from "@/utils/mediaStorage";
 import { EditOperation, applyEditOperations as executeEditOps } from "@/lib/chat/editOperations";
-import { applyGraphOps } from "@/lib/agent/graph/applyOps";
+import { applyGraphOps, type ApplyGraphOpsResult } from "@/lib/agent/graph/applyOps";
 import type { AgentGraphOpBatch } from "@/lib/agent/types";
 import { findNearestFreePosition } from "@/utils/spatialLayout";
 import { getNodeSize } from "@/utils/nodeDimensions";
@@ -546,9 +546,10 @@ export interface WorkflowStore {
   /**
    * Applies one batch of resolved canvas changes from the agent as a single
    * undo step. Ops that no longer fit the live canvas are skipped and
-   * returned with reasons.
+   * returned with reasons. A run the batch asks for starts after its edits,
+   * outside the undo step; `runRefused` says why it did not.
    */
-  applyAgentGraphOps: (batch: AgentGraphOpBatch) => { applied: number; skipped: string[] };
+  applyAgentGraphOps: (batch: AgentGraphOpBatch) => { applied: number; skipped: string[]; runRefused?: string };
   /**
    * Bumped whenever a different canvas replaces the live one (loadWorkflow,
    * clearWorkflow, a tab switch). An agent turn remembers the generation it
@@ -858,6 +859,19 @@ function splitGridsToBuild(ops: AgentGraphOpBatch["ops"]): string[] {
     if (op.op === "updateNode" && ("template" in op.data || "gridRows" in op.data || "gridCols" in op.data)) ids.add(op.id);
   }
   return [...ids];
+}
+
+/**
+ * Starts the run an agent batch asked for, through runBatch like every Run
+ * entry point. Not awaited: the batch's edits are already in, and the run
+ * goes on after the agent's turn.
+ */
+function startAgentRun(get: () => WorkflowStore, run: ApplyGraphOpsResult["run"]): { runRefused?: string } {
+  if (!run) return {};
+  // The turn saw an idle canvas; a run started since then (the user pressed Run) wins.
+  if (get().isRunning || get().batch) return { runRefused: "a run is already going" };
+  void get().runBatch(run.scope, run.runs);
+  return {};
 }
 
 function pushUndoCheckpoint(
@@ -4313,8 +4327,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       createDefaultNodeData,
       defaultNodeDimensions,
     });
-    // Nothing landed (every op was stale): leave undo history alone.
-    if (result.applied === 0) return { applied: 0, skipped: result.skipped };
+    // Nothing landed (every op was stale, or the batch only runs): leave undo history alone.
+    if (result.applied === 0) return { applied: 0, skipped: result.skipped, ...startAgentRun(get, result.run) };
 
     pushUndoCheckpoint(get, set);
 
@@ -4356,7 +4370,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     }
     get().recomputeDimmedNodes();
 
-    return { applied: result.applied, skipped: result.skipped };
+    return { applied: result.applied, skipped: result.skipped, ...startAgentRun(get, result.run) };
   },
 
   // Canvas navigation settings actions

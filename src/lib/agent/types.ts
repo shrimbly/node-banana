@@ -16,6 +16,7 @@
 
 import type { UIMessage } from "ai";
 import type { GroupColor, NodeType } from "@/types";
+import type { RunScope } from "@/store/utils/runBatch";
 
 // ---------------------------------------------------------------------------
 // Harnesses
@@ -301,7 +302,12 @@ export type AgentGraphOp =
   /** Delete a group box. Its nodes stay where they are; their groupId clears. */
   | { op: "removeGroup"; id: string }
   /** Put a node into a group (`groupId`) or take it out of the one it is in (null). */
-  | { op: "setNodeGroup"; id: string; groupId: string | null };
+  | { op: "setNodeGroup"; id: string; groupId: string | null }
+  /**
+   * Start a run through the store's runBatch, `runs` times (1–50), after the
+   * batch's other ops. Not part of the undo step; ignored while a run is going.
+   */
+  | { op: "run"; scope: RunScope; runs: number };
 
 /** The colours a group can have (the canvas's GROUP_COLOR_ORDER). */
 export type AgentGroupColor = GroupColor;

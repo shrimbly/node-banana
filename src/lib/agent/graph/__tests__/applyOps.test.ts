@@ -233,6 +233,41 @@ describe("applyGraphOps", () => {
     expect(result.clearedCanvas).toBe(false);
   });
 
+  it("hands back the run for the store to start, checked against the canvas after the batch's edits", () => {
+    const ops: AgentGraphOp[] = [
+      { op: "addNode", id: "output-ag1", nodeType: "output", position: { x: 800, y: 0 }, data: {} },
+      { op: "run", scope: { kind: "nodes", nodeIds: ["nanoBanana-2", "output-ag1"] }, runs: 2 },
+    ];
+    const result = applyGraphOps(state(), ops, deps());
+    // The run is not an edit: it neither counts as applied nor changes nodes.
+    expect(result.applied).toBe(1);
+    expect(result.skipped).toEqual([]);
+    expect(result.run).toEqual({ scope: { kind: "nodes", nodeIds: ["nanoBanana-2", "output-ag1"] }, runs: 2 });
+
+    const all = applyGraphOps(state(), [{ op: "run", scope: { kind: "all" }, runs: 900 }], deps());
+    expect(all).toMatchObject({ applied: 0, skipped: [], run: { scope: { kind: "all" }, runs: 50 } });
+    expect(all.nodes).toEqual(state().nodes);
+    expect(applyGraphOps(state(), [{ op: "run", scope: { kind: "from", nodeId: "prompt-1" }, runs: 1 }], deps()).run).toEqual({
+      scope: { kind: "from", nodeId: "prompt-1" },
+      runs: 1,
+    });
+  });
+
+  it("leaves out of the run nodes the user deleted meanwhile, and says so", () => {
+    const some = applyGraphOps(state(), [{ op: "run", scope: { kind: "nodes", nodeIds: ["nanoBanana-2", "llmGenerate-7"] }, runs: 1 }], deps());
+    expect(some.run).toEqual({ scope: { kind: "nodes", nodeIds: ["nanoBanana-2"] }, runs: 1 });
+    expect(some.skipped).toEqual(["run: llmGenerate-7 is no longer on the canvas"]);
+
+    const none = applyGraphOps(state(), [{ op: "run", scope: { kind: "nodes", nodeIds: ["llmGenerate-7"] }, runs: 1 }], deps());
+    expect(none.run).toBeUndefined();
+    const gone = applyGraphOps(state(), [{ op: "removeNode", id: "prompt-1" }, { op: "run", scope: { kind: "from", nodeId: "prompt-1" }, runs: 1 }], deps());
+    expect(gone.run).toBeUndefined();
+    expect(gone.skipped).toEqual(["run from prompt-1: the node is no longer on the canvas"]);
+    const empty = applyGraphOps({ nodes: [], edges: [] }, [{ op: "run", scope: { kind: "all" }, runs: 1 }], deps());
+    expect(empty.run).toBeUndefined();
+    expect(empty.skipped).toEqual(["run: the canvas is empty"]);
+  });
+
   it("does not mutate its input", () => {
     const input = state();
     const before = JSON.stringify(input);
