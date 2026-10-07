@@ -392,6 +392,12 @@ server-side draft and emit resolved graph ops → the browser applies them with
 dropped if the canvas is replaced mid-turn (`canvasGeneration`: load, clear,
 tab switch).
 
+Runs: when the user asks, `run_workflow` starts one (scope `nodes`, `all` or
+`from`, and a run count), checked against the draft: refused while the
+snapshot says `running`, or when a node the run reads from holds nothing. Its
+`run` op starts through `runBatch` after the call's edits, outside undo; the
+model reports the outcome from the next message's node `status` and `error`.
+
 | Purpose | Location |
 |---------|----------|
 | Shared contracts | `src/lib/agent/types.ts` |

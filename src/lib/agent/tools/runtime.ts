@@ -913,7 +913,7 @@ function nextSteps(draft: GraphDraft, createdIds: string[], removed: RemovedNode
     hints.push(`${modelless.join(", ")} ha${modelless.length === 1 ? "s" : "ve"} no model: set one from search_models, or tell the user to pick one in the node (it needs a fal, Replicate, Kie, WaveSpeed or ComfyUI key).`);
   }
   if ([...types].some((t) => GENERATOR_TYPES.has(t))) {
-    hints.push("Nothing has run yet: the user presses Run (Ctrl/Cmd+Enter) when ready.");
+    hints.push("Nothing has run yet: the user presses Run (Ctrl/Cmd+Enter), or asks you to run it.");
   }
   return hints;
 }

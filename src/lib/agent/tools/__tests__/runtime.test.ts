@@ -1680,6 +1680,7 @@ describe("run_workflow", () => {
       connections: [{ from: "p", to: "l" }],
     });
     expect(built.ok, built.text).toBe(true);
+    expect(built.text).toContain("Nothing has run yet: the user presses Run (Ctrl/Cmd+Enter), or asks you to run it.");
     const result = await call(runtime, "run_workflow", { scope: "nodes", nodeIds: ["l"] });
     expect(result.ok, result.text).toBe(true);
     expect(result.ops).toEqual([{ op: "run", scope: { kind: "nodes", nodeIds: ["llmGenerate-ag2"] }, runs: 1 }]);

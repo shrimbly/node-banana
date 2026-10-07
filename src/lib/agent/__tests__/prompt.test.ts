@@ -19,7 +19,7 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("<canvas> block");
     expect(prompt).toContain("authoritative and fresh");
     expect(prompt).toContain("replaceCanvas deletes every node");
-    expect(prompt).toContain("You never run or generate anything yourself");
+    expect(prompt).toContain("Nothing runs until the user presses Run or asks you to run it.");
     expect(prompt).toContain("Keep replies short");
   });
 
@@ -65,8 +65,17 @@ describe("buildAgentSystemPrompt", () => {
     expect(line("array")).toContain('delimiter(default "*"');
     // Raised from 13k when every generator gained model + modelParameters and the model rule grew,
     // then from 13.5k for the rule that keeps the user's stated preferences standing,
-    // then from 14k for the rule that makes "this style" mean the selection.
-    expect(prompt.length).toBeLessThan(14_250);
+    // then from 14k for the rule that makes "this style" mean the selection,
+    // then from 14.25k for what to run when the user asks for a run.
+    expect(prompt.length).toBeLessThan(14_500);
+  });
+
+  it("runs only when asked, picks what to run from the conversation, and reports from the canvas", () => {
+    expect(prompt).toContain("run_workflow");
+    expect(prompt).toContain("Then run the nodes you added or changed in this conversation if what feeds them holds its output");
+    expect(prompt).toContain("run everything if they ask, you built it all in this conversation, or inputs are missing");
+    expect(prompt).toContain("or from the node they name");
+    expect(prompt).toContain("Results arrive with their next message: report them from its canvas only.");
   });
 
   it("teaches what groups are and when to make them", () => {
