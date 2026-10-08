@@ -255,6 +255,20 @@ export interface TrackRunInput {
   plannedNodeIds: string[];
 }
 
+/**
+ * What a record is called: the action, as the Run card's options name it
+ * ("Run workflow", "Run Generate Image", "Run from Prompt"), which reads
+ * right while it runs and after. The agent's tool summary is progressive
+ * ("Running the workflow ×3"); the card's meta counts the runs.
+ */
+function runActionLabel(label: string): string {
+  if (!label.startsWith("Running ")) return label;
+  return label
+    .replace(/^Running the workflow\b/, "Run workflow")
+    .replace(/^Running /, "Run ")
+    .replace(/ ×\d+$/, "");
+}
+
 /** Records a run that has just started on the live tab, and follows it until it ends. */
 export function trackStartedRun(input: TrackRunInput): AgentRunRecord {
   const state = useWorkflowStore.getState();
@@ -265,7 +279,7 @@ export function trackStartedRun(input: TrackRunInput): AgentRunRecord {
     anchor: input.anchor,
     tabId: input.tabId,
     ...(state.workflowName ? { workflowName: state.workflowName } : {}),
-    label: input.label,
+    label: runActionLabel(input.label),
     scope: input.scope,
     runs,
     startedAt: Date.now(),

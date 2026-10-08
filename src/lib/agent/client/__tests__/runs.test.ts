@@ -328,6 +328,18 @@ describe("chat run records", () => {
     expect(record(started.id).outputs[0]).toMatchObject({ assetId: "a-clip", hasPoster: true });
   });
 
+  it("names a run the agent started as the action, which reads right once it has ended too", () => {
+    // run_workflow's summaries are progressive; the card's meta counts the runs.
+    const labels = ["Running the workflow", "Running Generate Image ×3", "Running 2 nodes", "Running from Hero prompt ×2", "Run 2 changed nodes"];
+    expect(labels.map((label) => track({ label }).label)).toEqual([
+      "Run workflow",
+      "Run Generate Image",
+      "Run 2 nodes",
+      "Run from Hero prompt",
+      "Run 2 changed nodes",
+    ]);
+  });
+
   it("finds the latest record for an anchor", () => {
     const first = track({ anchor: { offerId: "offer-1" } });
     const second = track({ anchor: { offerId: "offer-1" } });
