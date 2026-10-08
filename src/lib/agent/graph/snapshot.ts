@@ -19,6 +19,8 @@ import { pickAgentData } from "./nodeData";
 import { capText, stripMedia } from "./scrub";
 
 export interface BuildAgentSnapshotInput {
+  /** The workflow tab this canvas belongs to. */
+  tabId?: string;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   groups: Record<string, NodeGroup>;
@@ -93,6 +95,7 @@ export function buildAgentSnapshot(input: BuildAgentSnapshotInput): AgentWorkflo
   const selectedNodeIds = (input.nodes ?? []).filter((n) => n?.selected && ids.has(n.id)).map((n) => n.id);
 
   const snapshot: AgentWorkflowSnapshot = {
+    ...(input.tabId ? { tabId: input.tabId } : {}),
     nodes,
     edges,
     groups,

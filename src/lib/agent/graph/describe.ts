@@ -6,6 +6,7 @@
 import { describeCellTemplate } from "./splitGridCells";
 import type { SplitGridTemplate } from "@/types";
 import type { NodeType } from "@/types";
+import type { AgentTabSummary } from "../types";
 import {
   getImageModel,
   LLM_PROVIDERS,
@@ -99,6 +100,21 @@ export function describeWorkflow(graph: DescribableGraph, options: DescribeOptio
     }
   }
   return lines.join("\n");
+}
+
+/** The open workflow tabs, in strip order, the live one marked. */
+export function describeTabs(tabs: readonly AgentTabSummary[]): string {
+  const lines = ["Open workflows (tabs, in order; your tool calls work in the live one):"];
+  for (const tab of tabs) {
+    const state = tab.saved ? (tab.unsaved ? "saved, with unsaved changes" : "saved") : "never saved";
+    lines.push(`- ${tab.id} ${tabName(tab)}${tab.active ? " (live)" : ""}: ${tab.nodeCount} node${tab.nodeCount === 1 ? "" : "s"}, ${state}`);
+  }
+  return lines.join("\n");
+}
+
+/** A tab's workflow name as the model reads it: quoted, or "untitled". */
+export function tabName(tab: Pick<AgentTabSummary, "name">): string {
+  return tab.name ? `"${tab.name}"` : "untitled";
 }
 
 function prioritize(nodes: DraftNode[], graph: DescribableGraph): DraftNode[] {

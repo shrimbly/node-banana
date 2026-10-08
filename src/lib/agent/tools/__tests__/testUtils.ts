@@ -65,7 +65,7 @@ export function storeEdge(source: string, sourceHandle: string, target: string, 
 
 export function snapshotOf(
   state: StoreState,
-  extra: { viewport?: AgentWorkflowSnapshot["viewport"]; workflowName?: string; running?: boolean } = {},
+  extra: { tabId?: string; viewport?: AgentWorkflowSnapshot["viewport"]; workflowName?: string; running?: boolean } = {},
 ): AgentWorkflowSnapshot {
   return buildAgentSnapshot({ nodes: state.nodes, edges: state.edges, groups: state.groups ?? {}, ...extra });
 }

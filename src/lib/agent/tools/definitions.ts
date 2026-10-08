@@ -19,6 +19,9 @@ export const TOOL_NAMES = {
   nameConversation: "name_conversation",
   getPromptGuide: "get_prompt_guide",
   runWorkflow: "run_workflow",
+  switchWorkflow: "switch_workflow",
+  newWorkflow: "new_workflow",
+  saveWorkflow: "save_workflow",
 } as const;
 
 export type AgentToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
@@ -208,6 +211,21 @@ export const runWorkflowShape = {
   runs: z.number().optional().describe("How many runs, one after another (1-50, default 1). Only when the user asked for several."),
 };
 
+export const switchWorkflowShape = {
+  tab: z.string().describe("The open workflow to work in: its tab id from the canvas block's list of open workflows, or its exact name."),
+};
+
+export const newWorkflowShape = {
+  name: z.string().optional().describe('A short name for the new workflow, e.g. "Fox portraits". Omit to leave it untitled.'),
+};
+
+export const saveWorkflowShape = {
+  name: z
+    .string()
+    .optional()
+    .describe("The project name for a workflow never saved before (required when it has no name). Ignored once it has been saved: a save never renames."),
+};
+
 export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
   {
     name: TOOL_NAMES.getWorkflow,
@@ -280,6 +298,30 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     description:
       "Start a run on the user's canvas, as their Run button does: generators call their models and spend the user's credits. Only when the user asks to run, try or generate. Call it last, after this turn's edits, and once per turn. scope \"nodes\" with the nodes you added or changed when every node feeding them holds its output; \"all\" for the whole workflow; \"from\" a node the user names. Refused while a run is going, and for nodes whose inputs have no output yet (the error says which to include). The run happens after this call: you do not see its results in this turn. The next message's canvas shows each node's status, error and output.",
     inputShape: runWorkflowShape,
+  },
+  {
+    name: TOOL_NAMES.switchWorkflow,
+    title: "Switch workflow",
+    readOnly: false,
+    description:
+      "Make another open workflow (tab) the live one, as clicking its tab does: the user's canvas shows it, and your later tool calls this turn read and edit it. Returns its nodes. Refused while a run is going and after you started one.",
+    inputShape: switchWorkflowShape,
+  },
+  {
+    name: TOOL_NAMES.newWorkflow,
+    title: "New workflow",
+    readOnly: false,
+    description:
+      "Open an empty workflow in a new tab and make it the live one; the current workflow stays open in its own tab. Your later tool calls this turn build in the new one. Refused while a run is going and after you started one.",
+    inputShape: newWorkflowShape,
+  },
+  {
+    name: TOOL_NAMES.saveWorkflow,
+    title: "Save workflow",
+    readOnly: false,
+    description:
+      "Save the live workflow as the user's Save does: into its project folder, or, the first time, as a new project named `name` (else its current name) in the Node Banana folder. Only when the user asks to save. The save happens in the user's browser after this call, following your edits before it.",
+    inputShape: saveWorkflowShape,
   },
   {
     name: TOOL_NAMES.nameConversation,

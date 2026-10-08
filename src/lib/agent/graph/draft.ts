@@ -190,6 +190,10 @@ export class GraphDraft {
   nextGroupSuffix: number;
   /** Refs defined by earlier calls this turn, still resolvable in later ones. */
   refs = new Map<string, string>();
+  /** Nodes this turn's calls created or changed (settings, wiring), without the ones removed since. */
+  readonly changedNodeIds = new Set<string>();
+  /** A call this turn replaced the whole canvas. */
+  canvasReplaced = false;
   readonly options: Required<Omit<GraphDraftOptions, "models">> & Pick<GraphDraftOptions, "models">;
 
   constructor(snapshot: AgentWorkflowSnapshot, options: GraphDraftOptions = {}) {
@@ -260,9 +264,14 @@ export class GraphDraft {
     this.groups = tx.groups;
     this.nextSuffix = tx.nextSuffix;
     this.nextGroupSuffix = tx.nextGroupSuffix;
-    if (tx.cleared) this.refs.clear();
+    if (tx.cleared) {
+      this.refs.clear();
+      this.canvasReplaced = true;
+    }
     for (const [ref, id] of tx.refs) this.refs.set(ref, id);
     this.selectedNodeIds = this.selectedNodeIds.filter((id) => this.nodes.has(id));
+    for (const id of [...tx.createdIds, ...tx.touchedIds]) this.changedNodeIds.add(id);
+    for (const id of this.changedNodeIds) if (!this.nodes.has(id)) this.changedNodeIds.delete(id);
   }
 }
 

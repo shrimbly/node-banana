@@ -3,19 +3,31 @@
  *
  * Tools read and edit a private draft seeded from the browser's snapshot, so
  * results are immediate and later calls in the same turn see earlier edits.
- * Mutating tools return the resolved graph ops the browser replays. Nothing
- * here throws: bad arguments, invalid edits and internal failures all come
- * back as `ok: false` with text the model can act on.
+ * Mutating tools return the resolved graph ops the browser replays. Each open
+ * tab the turn works in has a draft of its own; switching, opening and saving
+ * tabs are steps the browser takes in order with the edits around them. At the
+ * end of the turn, runOffer says what the chat's Run button should run.
+ * Nothing here throws: bad arguments, invalid edits and internal failures all
+ * come back as `ok: false` with text the model can act on.
  */
 
+import { generateId } from "ai";
 import { z } from "zod";
 import type { NodeType, WorkflowEdge, WorkflowNode } from "@/types";
 import type { ProviderKeys } from "@/lib/providers/keys";
 import { groupNodesByLevel } from "@/store/utils/executionUtils";
 import { clampRunCount, type RunScope } from "@/store/utils/runBatch";
-import type { AgentToolDefinition, AgentToolResult, AgentToolRuntime, AgentWorkflowSnapshot } from "../types";
+import type {
+  AgentRunOffer,
+  AgentRunOption,
+  AgentTabSummary,
+  AgentToolDefinition,
+  AgentToolResult,
+  AgentToolRuntime,
+  AgentWorkflowSnapshot,
+} from "../types";
 import { findNodeType, NODE_CATALOG, NODE_TYPES, normalizeKey } from "../graph/catalog";
-import { describeNodeTypes, describeWorkflow, edgeLine, nodeLine } from "../graph/describe";
+import { describeNodeTypes, describeWorkflow, edgeLine, nodeLine, tabName } from "../graph/describe";
 import { GraphDraft, groupLabel, titleOf, type DraftEdge, type DraftNode, type DraftTransaction, type GraphDraftOptions, type RemovedNode } from "../graph/draft";
 import { isModelNodeType } from "../graph/settings";
 import {
@@ -27,8 +39,11 @@ import {
   editWorkflowShape,
   getPromptGuideShape,
   getWorkflowShape,
+  newWorkflowShape,
   runWorkflowShape,
+  saveWorkflowShape,
   searchModelsShape,
+  switchWorkflowShape,
   updateNodeShape,
 } from "./definitions";
 import { AgentModels, type ModelRequest, type ModelSource } from "./modelSearch";
@@ -57,52 +72,69 @@ export interface AgentToolRuntimeOptions extends Omit<GraphDraftOptions, "models
   modelSource?: ModelSource;
   /** Prompting notes the user saved per model; ~/.node-banana/prompt-notes by default. */
   promptNotes?: PromptNotesStore;
+  /** Every open workflow tab, in strip order (the request's `tabs`). Without it the tab tools are refused. */
+  tabs?: AgentTabSummary[];
+  /** Media-free snapshots of the parked tabs, by tab id: a tab's draft is built from its snapshot when the turn first switches to it. */
+  parkedWorkflows?: Record<string, AgentWorkflowSnapshot>;
 }
 
 /** Tools that change the canvas, and so may set models. */
 const MUTATING_TOOLS: ReadonlySet<string> = new Set([TOOL_NAMES.createWorkflow, TOOL_NAMES.editWorkflow, TOOL_NAMES.updateNode]);
+/** Tools that change the draft: a tab step waits for them, and they wait for one. */
+const EDIT_TOOLS: ReadonlySet<string> = new Set([...MUTATING_TOOLS, TOOL_NAMES.arrangeWorkflow]);
+/** Tools that change the open workflows (`workspace` results), one after another with the edits around them. */
+const WORKSPACE_TOOLS: ReadonlySet<string> = new Set([TOOL_NAMES.switchWorkflow, TOOL_NAMES.newWorkflow, TOOL_NAMES.saveWorkflow]);
 /** The tool search_models replaced; old sessions may still call it. */
 const LIST_MODELS_ALIAS = "list_models";
+const ignore = () => undefined;
+/**
+ * A macrotask after `promises` settle: by then each of their results has been
+ * written to the stream (chatStream writes a result as soon as it resolves),
+ * so what waited on them reaches the browser after them.
+ */
+const settled = (...promises: Promise<unknown>[]) =>
+  Promise.all(promises.map((promise) => promise.catch(ignore))).then(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
 
 /**
  * One runtime per turn. Tools read and edit a private draft seeded from the
- * snapshot, so later calls in the same turn see earlier edits.
+ * snapshot, so later calls in the same turn see earlier edits; with the open
+ * tabs given, each tab the turn works in gets its own draft.
  */
 export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options: AgentToolRuntimeOptions = {}): AgentToolRuntime {
-  const { providerKeys, signal, modelSource, promptNotes, ...draftOptions } = options;
+  const { providerKeys, signal, modelSource, promptNotes, tabs, parkedWorkflows, ...draftOptions } = options;
   const models = new AgentModels(providerKeys ?? {}, { source: modelSource, signal });
-  const draft = new GraphDraft(snapshot ?? { nodes: [], edges: [], groups: [], selectedNodeIds: [] }, { ...draftOptions, models });
+  const live = snapshot ?? { nodes: [], edges: [], groups: [], selectedNodeIds: [] };
+  const workspace = new TurnWorkspace(live, { tabs, parkedWorkflows }, (seed) => new GraphDraft(seed, { ...draftOptions, models }));
   // A run started (or is being started) this turn: the canvas must stay as the run found it.
   let runStarted = false;
-  let runStarting = false;
-  // Canvas edits still being resolved; a run waits for them, so its op follows theirs.
+  let runsStarting = 0;
+  // Draft edits still being resolved; a run or a tab step waits for them, so its result follows theirs.
   let editsInFlight: Promise<unknown> = Promise.resolve();
+  // The last tab step; edits and reads wait for it, so none lands on the tab it is leaving.
+  let workspaceStep: Promise<unknown> = Promise.resolve();
 
-  const handlers: Record<string, (args: unknown) => AgentToolResult | Promise<AgentToolResult>> = {
-    [TOOL_NAMES.getWorkflow]: (args) => getWorkflow(draft, args as Args<typeof getWorkflowShape>),
+  const handlers: Record<string, (args: unknown, draft: GraphDraft) => AgentToolResult | Promise<AgentToolResult>> = {
+    [TOOL_NAMES.getWorkflow]: (args, draft) => getWorkflow(draft, args as Args<typeof getWorkflowShape>),
     [TOOL_NAMES.describeNodeTypes]: (args) => describeTypes(args as Args<typeof describeNodeTypesShape>),
     [TOOL_NAMES.searchModels]: (args) => searchModels(models, args as Args<typeof searchModelsShape>),
-    [TOOL_NAMES.getPromptGuide]: (args) =>
+    [TOOL_NAMES.getPromptGuide]: (args, draft) =>
       getPromptGuide(draft, models, promptNotes ?? filePromptNotesStore(), args as Args<typeof getPromptGuideShape>),
-    [TOOL_NAMES.createWorkflow]: (args) => createWorkflow(draft, args as Args<typeof createWorkflowShape>),
-    [TOOL_NAMES.editWorkflow]: (args) => editWorkflow(draft, args as Args<typeof editWorkflowShape>),
-    [TOOL_NAMES.updateNode]: (args) => updateNode(draft, args as Args<typeof updateNodeShape>),
-    [TOOL_NAMES.arrangeWorkflow]: (args) => arrangeWorkflow(draft, args as Args<typeof arrangeWorkflowShape>),
-    [TOOL_NAMES.runWorkflow]: async (args) => {
-      runStarting = true;
-      try {
-        await editsInFlight;
-        const result = runWorkflow(draft, args as Args<typeof runWorkflowShape>, runStarted);
-        if (result.ok) runStarted = true;
-        return result;
-      } finally {
-        runStarting = false;
-      }
-    },
+    [TOOL_NAMES.createWorkflow]: (args, draft) => createWorkflow(draft, args as Args<typeof createWorkflowShape>),
+    [TOOL_NAMES.editWorkflow]: (args, draft) => editWorkflow(draft, args as Args<typeof editWorkflowShape>),
+    [TOOL_NAMES.updateNode]: (args, draft) => updateNode(draft, args as Args<typeof updateNodeShape>),
+    [TOOL_NAMES.arrangeWorkflow]: (args, draft) => arrangeWorkflow(draft, args as Args<typeof arrangeWorkflowShape>),
+    [TOOL_NAMES.switchWorkflow]: (args) => workspace.switchTo((args as Args<typeof switchWorkflowShape>).tab),
+    [TOOL_NAMES.newWorkflow]: (args) => workspace.open((args as Args<typeof newWorkflowShape>).name),
+    [TOOL_NAMES.saveWorkflow]: (args) => workspace.save((args as Args<typeof saveWorkflowShape>).name),
     // The label itself reaches the chat history through the stream (chatStream); the model only needs an ack.
     [TOOL_NAMES.nameConversation]: () => ({ ok: true, text: "Saved.", summary: "Named the conversation", ops: [] }),
   };
   const schemas = new Map(AGENT_TOOL_DEFINITIONS.map((d) => [d.name, z.object(d.inputShape)]));
+  /** Runs a handler on the live tab's draft, its result stamped with that tab. */
+  const onLiveTab = async (tool: string, args: unknown) => {
+    const tabId = workspace.currentId;
+    return workspace.stamp(await handlers[tool](args, workspace.draft), tabId);
+  };
 
   return {
     definitions: AGENT_TOOL_DEFINITIONS,
@@ -113,35 +145,260 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
       }
       const definition = findDefinition(name);
       if (!definition) {
-        return failure(
+        return workspace.stamp(failure(
           `Unknown tool "${name}". Available tools: ${AGENT_TOOL_DEFINITIONS.map((d) => d.name).join(", ")}.`,
           `Unknown tool ${name}`,
-        );
+        ));
       }
+      const tool = definition.name;
       try {
-        const parsed = schemas.get(definition.name)!.safeParse(normalizeArgs(args));
+        const parsed = schemas.get(tool)!.safeParse(normalizeArgs(args));
         if (!parsed.success) {
-          return failure(formatZodError(definition, parsed.error), `Invalid arguments for ${definition.name}`);
+          return workspace.stamp(failure(formatZodError(definition, parsed.error), `Invalid arguments for ${tool}`));
         }
-        if (MUTATING_TOOLS.has(definition.name)) {
-          if (runStarted || runStarting) {
-            return failure(
-              `Nothing was changed: you started a run earlier in this turn, and ${definition.name} would change the canvas under it. Tell the user what you started; make this change in a later message, once the run has finished.`,
-              "Not changed: a run started this turn",
-            );
-          }
-          // Settings resolve synchronously inside the batch: look up every model it names first.
-          const edit = models.prepare(modelRequests(definition.name, parsed.data, draft)).then(() => handlers[definition.name](parsed.data));
-          editsInFlight = Promise.all([editsInFlight, edit.catch(() => undefined)]);
+        if (MUTATING_TOOLS.has(tool) && (runStarted || runsStarting > 0)) {
+          return workspace.stamp(failure(
+            `Nothing was changed: you started a run earlier in this turn, and ${tool} would change the canvas under it. Tell the user what you started; make this change in a later message, once the run has finished.`,
+            "Not changed: a run started this turn",
+          ));
+        }
+        if (WORKSPACE_TOOLS.has(tool)) {
+          const refused = tool === TOOL_NAMES.saveWorkflow ? null : tabChangeRefusal(live.running === true, runStarted || runsStarting > 0);
+          if (refused) return workspace.stamp(refused);
+          // Stamped with the tab the step leaves live.
+          const step = settled(editsInFlight, workspaceStep).then(async () => workspace.stamp(await handlers[tool](parsed.data, workspace.draft)));
+          workspaceStep = settled(step);
+          return await step;
+        }
+        if (EDIT_TOOLS.has(tool)) {
+          const edit = workspaceStep.then(async () => {
+            // Settings resolve synchronously inside the batch: look up every model it names first.
+            if (MUTATING_TOOLS.has(tool)) await models.prepare(modelRequests(tool, parsed.data, workspace.draft));
+            return onLiveTab(tool, parsed.data);
+          });
+          editsInFlight = Promise.all([editsInFlight, edit.catch(ignore)]);
           return await edit;
         }
-        return await handlers[definition.name](parsed.data);
+        if (tool === TOOL_NAMES.runWorkflow) {
+          runsStarting++;
+          try {
+            await settled(editsInFlight, workspaceStep);
+            const result = runWorkflow(workspace.draft, parsed.data as Args<typeof runWorkflowShape>, runStarted);
+            if (result.ok) runStarted = true;
+            return workspace.stamp(result);
+          } finally {
+            runsStarting--;
+          }
+        }
+        if (tool !== TOOL_NAMES.nameConversation) await workspaceStep;
+        return await onLiveTab(tool, parsed.data);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        return failure(`${definition.name} failed unexpectedly (${message}). No changes were made; try again, or with fewer operations.`, `${definition.title} failed`);
+        return workspace.stamp(failure(`${tool} failed unexpectedly (${message}). No changes were made; try again, or with fewer operations.`, `${definition.title} failed`));
       }
     },
+    runOffer() {
+      if (runStarted || runsStarting > 0 || live.running === true) return null;
+      return buildRunOffer(workspace.draft, workspace.currentId);
+    },
   };
+}
+
+/** Why the open workflows can't change now (a run is going, or this turn started one), or null. */
+function tabChangeRefusal(running: boolean, startedThisTurn: boolean): AgentToolResult | null {
+  if (running) {
+    return failure(
+      "Nothing was changed: a run is going on the canvas, and the open workflows can't change until it finishes. Keep working in the live workflow, or tell the user to try again once the run is done.",
+      "Not changed: a run is going",
+    );
+  }
+  if (startedThisTurn) {
+    return failure(
+      "Nothing was changed: you started a run earlier in this turn, and the open workflows can't change while it goes. Tell the user what you started; do this in a later message, once the run has finished.",
+      "Not changed: a run started this turn",
+    );
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Open workflows
+// ---------------------------------------------------------------------------
+
+/**
+ * The open workflow tabs as one turn sees them: a draft per tab it has worked
+ * in (built from the tab's parked snapshot the first time), and the live one,
+ * which every other tool works on.
+ */
+class TurnWorkspace {
+  /** The id of the tab live in the canvas; undefined when the snapshot named none. */
+  currentId: string | undefined;
+  private readonly tabs: AgentTabSummary[] | undefined;
+  private readonly drafts = new Map<string | undefined, GraphDraft>();
+
+  constructor(
+    private readonly live: AgentWorkflowSnapshot,
+    private readonly request: Pick<AgentToolRuntimeOptions, "tabs" | "parkedWorkflows">,
+    private readonly makeDraft: (snapshot: AgentWorkflowSnapshot) => GraphDraft,
+  ) {
+    this.tabs = request.tabs?.map((tab) => ({ ...tab }));
+    this.currentId = live.tabId ?? this.tabs?.find((tab) => tab.active)?.id;
+    this.drafts.set(this.currentId, makeDraft(live));
+  }
+
+  get draft(): GraphDraft {
+    return this.drafts.get(this.currentId)!;
+  }
+
+  /** The result as the tab it worked in reports it. */
+  stamp(result: AgentToolResult, tabId = this.currentId): AgentToolResult {
+    return tabId ? { ...result, tabId } : result;
+  }
+
+  switchTo(key: string): AgentToolResult {
+    if (!this.tabs || !this.currentId) return tabsUnavailable();
+    const found = this.find(key);
+    if ("error" in found) return failure(found.error, "No such workflow");
+    const tab = found.tab;
+    const label = `${tabName(this.summaryOf(tab))} (${tab.id})`;
+    if (tab.id === this.currentId) {
+      return { ok: true, text: `${label} is already the live workflow; nothing changed.`, summary: clip(`Already in ${this.summaryOf(tab).name ?? "this workflow"}`), ops: [] };
+    }
+    const draft = this.draftFor(tab);
+    if (!draft) {
+      return failure(
+        `Nothing was switched: the browser sent no picture of ${label}'s ${tab.nodeCount} nodes, so you can't work in it this turn. Ask the user to open that tab and send the message again.`,
+        "Could not read that workflow",
+      );
+    }
+    this.currentId = tab.id;
+    const text = [
+      `Switched to ${label}: the user's canvas shows it now, and your next tool calls read and edit it.`,
+      describeWorkflow(draft, { detail: "summary", maxNodes: GET_WORKFLOW_MAX_NODES }),
+    ].join("\n");
+    return { ok: true, text, summary: clip(`Switched to ${draft.workflowName ?? "an untitled workflow"}`), ops: [], workspace: { op: "switchTab", tabId: tab.id } };
+  }
+
+  open(requestedName: string | undefined): AgentToolResult {
+    if (!this.tabs || !this.currentId) return tabsUnavailable();
+    const name = requestedName?.trim().slice(0, TAB_NAME_MAX) || undefined;
+    const id = this.newTabId();
+    const left = this.currentId;
+    this.tabs.push({ id, ...(name ? { name } : {}), nodeCount: 0 });
+    this.drafts.set(
+      id,
+      this.makeDraft({
+        nodes: [],
+        edges: [],
+        groups: [],
+        selectedNodeIds: [],
+        ...(this.live.viewport ? { viewport: this.live.viewport } : {}),
+        ...(this.live.nodeDefaults ? { nodeDefaults: this.live.nodeDefaults } : {}),
+        ...(name ? { workflowName: name } : {}),
+      }),
+    );
+    this.currentId = id;
+    return {
+      ok: true,
+      text: `Opened a new, empty workflow${name ? ` "${name}"` : ""} in tab ${id}. It is the live one now: your next tool calls build in it. The workflow you were in stays open in tab ${left}.`,
+      summary: clip(name ? `Opened ${name}` : "Opened a new workflow"),
+      ops: [],
+      workspace: { op: "newTab", tabId: id, ...(name ? { name } : {}) },
+    };
+  }
+
+  save(requestedName: string | undefined): AgentToolResult {
+    if (!this.tabs || !this.currentId) return tabsUnavailable();
+    const tab = this.tabs.find((entry) => entry.id === this.currentId);
+    const draft = this.draft;
+    const given = requestedName?.trim().slice(0, TAB_NAME_MAX) || undefined;
+    const current = draft.workflowName ?? tab?.name;
+    const after = "It saves in the user's browser, after your earlier edits; the next message's list of open workflows shows whether it is saved.";
+    if (tab?.saved) {
+      const kept = given && given !== current ? " It keeps its name: saving never renames a workflow." : "";
+      return {
+        ok: true,
+        text: `Saving ${tabName({ name: current })} into its project folder.${kept} ${after}`,
+        summary: clip(`Saving ${current ?? "the workflow"}`),
+        ops: [],
+        workspace: { op: "save" },
+      };
+    }
+    const name = given ?? current;
+    if (!name) {
+      return failure(
+        "Nothing was saved: this workflow has never been saved and has no name. Call save_workflow again with name, a short project name for what it makes.",
+        "Needs a name to save",
+      );
+    }
+    // The browser names the workflow on its first save; later calls this turn see it as saved.
+    draft.workflowName = name;
+    if (tab) Object.assign(tab, { name, saved: true });
+    return {
+      ok: true,
+      text: `Saving "${name}" as a new project. ${after}`,
+      summary: clip(`Saving ${name}`),
+      ops: [],
+      workspace: { op: "save", ...(given ? { name: given } : {}) },
+    };
+  }
+
+  /** A tab by id, else by a name that only one tab has (any case). */
+  private find(key: string): { tab: AgentTabSummary } | { error: string } {
+    const tabs = this.tabs ?? [];
+    const wanted = key.trim();
+    const byId = tabs.find((tab) => tab.id === wanted);
+    if (byId) return { tab: byId };
+    const named = tabs.filter((tab) => this.summaryOf(tab).name?.trim().toLowerCase() === wanted.toLowerCase());
+    if (named.length === 1) return { tab: named[0] };
+    const list = tabs.map((tab) => `${tab.id} ${tabName(this.summaryOf(tab))}`).join(", ");
+    if (named.length > 1) return { error: `${named.length} open workflows are named "${wanted}": ${named.map((tab) => tab.id).join(", ")}. Pass the id of the one you mean.` };
+    return { error: `No open workflow "${wanted}". Open workflows: ${list}. Pass one of those ids, or new_workflow for a new one.` };
+  }
+
+  /** A tab's summary with the name its draft has now (a first save names it). */
+  private summaryOf(tab: AgentTabSummary): AgentTabSummary {
+    const name = this.drafts.get(tab.id)?.workflowName ?? tab.name;
+    return { ...tab, ...(name ? { name } : {}) };
+  }
+
+  /** The tab's draft, built from its parked snapshot the first time; null when it has nodes the browser did not describe. */
+  private draftFor(tab: AgentTabSummary): GraphDraft | null {
+    const existing = this.drafts.get(tab.id);
+    if (existing) return existing;
+    const parked = this.request.parkedWorkflows?.[tab.id];
+    if (!parked && tab.nodeCount > 0) return null;
+    const seed = parked ?? { nodes: [], edges: [], groups: [], selectedNodeIds: [] };
+    const draft = this.makeDraft({
+      ...seed,
+      tabId: tab.id,
+      viewport: seed.viewport ?? this.live.viewport,
+      nodeDefaults: seed.nodeDefaults ?? this.live.nodeDefaults,
+      workflowName: seed.workflowName ?? tab.name,
+      // Only the live tab can be running.
+      running: undefined,
+    });
+    this.drafts.set(tab.id, draft);
+    return draft;
+  }
+
+  private newTabId(): string {
+    const taken = (id: string) => this.drafts.has(id) || !!this.tabs?.some((tab) => tab.id === id);
+    let id: string;
+    do {
+      id = `tab-ag${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
+    } while (taken(id));
+    return id;
+  }
+}
+
+const TAB_NAME_MAX = 120;
+
+function tabsUnavailable(): AgentToolResult {
+  return failure(
+    "Nothing was changed: this message came without the list of open workflows, so you can't switch, open or save workflows in it. Keep working on the live canvas.",
+    "Open workflows unavailable",
+  );
 }
 
 /** Tool names may arrive prefixed by the harness (`mcp__node_banana__x`, `node_banana.x`). */
@@ -610,6 +867,70 @@ function runWorkflow(draft: GraphDraft, args: Args<typeof runWorkflowShape>, alr
     "Tell the user briefly what you started. The canvas in their next message shows each node's status, error and output: report how it went from that, never before.",
   ].join("\n");
   return { ok: true, text, summary: clip(summary), ops: [{ op: "run", scope, runs }] };
+}
+
+/**
+ * The Run button for what this turn built or changed in `draft`: the changed
+ * nodes and everything they feed (outside locked groups), widened to their
+ * group when they all sit in one, or the whole workflow when the turn built
+ * it from empty or the narrower run would find an input empty. Null when no
+ * generator would run, or when even the whole workflow can't run yet.
+ */
+function buildRunOffer(draft: GraphDraft, tabId: string | undefined): AgentRunOffer | null {
+  const changed = [...draft.changedNodeIds].filter((id) => draft.nodes.has(id));
+  if (changed.length === 0) return null;
+  const unlocked = (id: string) => !draft.getGroup(draft.getNode(id)?.groupId)?.locked;
+  const affected = new Set<string>();
+  for (const id of changed) for (const reached of downstreamOf(draft, id)) if (unlocked(reached)) affected.add(reached);
+  if (![...affected].some((id) => GENERATOR_TYPES.has(draft.getNode(id)!.type))) return null;
+
+  const order = levelOrder(draft);
+  const runnable = order.filter(unlocked);
+  const whole = (label: string): AgentRunOption => ({ scope: { kind: "all" }, label, nodeIds: runnable });
+  const wholeReady = emptyInputs(draft, runnable, new Set(draft.nodes.keys())).length === 0;
+  const offer = (primary: AgentRunOption, alternatives: AgentRunOption[]): AgentRunOffer => ({
+    offerId: `offer_${generateId()}`,
+    ...(tabId ? { tabId } : {}),
+    ...(draft.workflowName ? { workflowName: draft.workflowName } : {}),
+    primary,
+    alternatives,
+  });
+
+  const builtFromEmpty = draft.initialNodeIds.size === 0 || draft.canvasReplaced;
+  const narrower = builtFromEmpty ? null : changedScope(draft, affected, order, runnable.length);
+  if (narrower && emptyInputs(draft, narrower.nodeIds, new Set(narrower.nodeIds)).length === 0) {
+    return offer(narrower, wholeReady ? [whole("Run whole workflow")] : []);
+  }
+  return wholeReady ? offer(whole("Run workflow"), []) : null;
+}
+
+/**
+ * The affected nodes as a "nodes" run: their group's when they all sit in
+ * one, else themselves. Null when that is every node the whole workflow runs.
+ */
+function changedScope(draft: GraphDraft, affected: ReadonlySet<string>, order: string[], runnableCount: number): AgentRunOption | null {
+  const groupIds = new Set([...affected].map((id) => draft.getNode(id)?.groupId));
+  const group = groupIds.size === 1 ? draft.getGroup([...groupIds][0]) : undefined;
+  const members = group ? new Set([...draft.nodes.values()].filter((node) => node.groupId === group.id).map((node) => node.id)) : affected;
+  const nodeIds = order.filter((id) => members.has(id));
+  if (nodeIds.length >= runnableCount) return null;
+  // Viewers run but make nothing: the label names what does the work.
+  const working = nodeIds.map((id) => draft.getNode(id)!).filter((node) => NODE_CATALOG[node.type].outputs.length > 0);
+  const label = group
+    ? `Run ${group.name}`
+    : working.length === 1
+      ? `Run ${nodeName(working[0])}`
+      : `Run ${working.length || nodeIds.length} changed nodes`;
+  return { scope: { kind: "nodes", nodeIds }, label: clip(label), nodeIds };
+}
+
+/** Every node in run order: by dependency level, as executeWorkflow orders the graph (loop edges left out). */
+function levelOrder(draft: GraphDraft): string[] {
+  const nodes = [...draft.nodes.values()] as unknown as WorkflowNode[];
+  const edges = draft.edges.filter((edge) => !edge.data?.isLoop) as unknown as WorkflowEdge[];
+  const order = groupNodesByLevel(nodes, edges).flatMap((level) => level.nodeIds);
+  const placed = new Set(order);
+  return [...order, ...[...draft.nodes.keys()].filter((id) => !placed.has(id))];
 }
 
 function nodeName(node: DraftNode): string {
