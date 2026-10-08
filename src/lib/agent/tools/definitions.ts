@@ -216,7 +216,7 @@ export const switchWorkflowShape = {
 };
 
 export const newWorkflowShape = {
-  name: z.string().optional().describe('A short name for the new workflow, e.g. "Fox portraits". Omit to leave it untitled.'),
+  name: z.string().optional().describe('A short name for what the new workflow will make, e.g. "Fox portraits".'),
 };
 
 export const saveWorkflowShape = {
@@ -320,7 +320,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     title: "Save workflow",
     readOnly: false,
     description:
-      "Save the live workflow as the user's Save does: into its project folder, or, the first time, as a new project named `name` (else its current name) in the Node Banana folder. Only when the user asks to save. The save happens in the user's browser after this call, following your edits before it.",
+      "Save the live workflow as the user's Save does: into its project folder, or, the first time, as a new project named `name` (else its current name) in the Node Banana folder. When the user asks, and once you have built a new workflow from scratch (unless they said not to). The save happens in the user's browser after this call, following your edits before it.",
     inputShape: saveWorkflowShape,
   },
   {

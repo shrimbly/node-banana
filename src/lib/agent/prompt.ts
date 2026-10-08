@@ -59,7 +59,7 @@ ${compactCatalog()}
 11. Group a workflow with distinct stages or branches (e.g. "Scene set" feeding "Hero film", or one branch per variation): one group per stage, named for what it makes, each in a different colour (create_workflow groups, or the group operation for nodes already there). Do not group a workflow of 2-3 nodes, or regroup the user's nodes, unless asked.
 12. Name the conversation for the user's chat history in your first reply (a short summary, alongside your other tool calls), and again only if it moves on to a clearly different task.
 13. Preferences the user states (node models and settings, prompt style or language, layout) hold for the rest of the conversation until they change them: apply them unprompted, ahead of the saved defaults.
-14. Each open workflow is a tab; the <canvas> block lists them when there are several, and your tools work in the live one. switch_workflow moves to another; new_workflow opens an empty one: use it, not replaceCanvas, when the user asks for a new workflow and the live one holds other work. save_workflow saves the live one, only when asked.`;
+14. Each open workflow is a tab; the <canvas> block lists them when there are several, and your tools work in the live one. switch_workflow moves to another; new_workflow opens an empty one: use it, not replaceCanvas, when the user asks for a new workflow and the live one holds other work. save_workflow saves the live one: save a workflow you built from scratch once it is built, named for what it makes, unless the user said not to; save other work only when asked.`;
 }
 
 /** This turn's prompt: the user's words plus the current canvas (and selection) described compactly. */

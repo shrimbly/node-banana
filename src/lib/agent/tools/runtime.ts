@@ -85,6 +85,9 @@ const MUTATING_TOOLS: ReadonlySet<string> = new Set([TOOL_NAMES.createWorkflow, 
 const EDIT_TOOLS: ReadonlySet<string> = new Set([...MUTATING_TOOLS, TOOL_NAMES.arrangeWorkflow]);
 /** Tools that change the open workflows (`workspace` results), one after another with the edits around them. */
 const WORKSPACE_TOOLS: ReadonlySet<string> = new Set([TOOL_NAMES.switchWorkflow, TOOL_NAMES.newWorkflow, TOOL_NAMES.saveWorkflow]);
+/** What a workflow built from scratch, and never saved, tells the agent to do next. */
+const SAVE_NEW_WORKFLOW =
+  "This is a new workflow and it is not saved: once it is built, and before any run, save it with save_workflow, named for what it makes (keep a name it already has), unless the user said not to.";
 /** The tool search_models replaced; old sessions may still call it. */
 const LIST_MODELS_ALIAS = "list_models";
 const ignore = () => undefined;
@@ -137,12 +140,20 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
   const onLiveTab = async (tool: string, args: unknown) => {
     const tabId = workspace.currentId;
     const draft = workspace.draft;
+    const startedEmpty = draft.nodes.size === 0;
     const result = workspace.stamp(await handlers[tool](args, draft), tabId);
     if (!result.ok || result.ops.length === 0 || !EDIT_TOOLS.has(tool)) return result;
-    if (tool === TOOL_NAMES.createWorkflow) builtTabs.add(tabId);
-    else if (!builtTabs.has(tabId)) return result;
+    let text = result.text;
+    if (tool === TOOL_NAMES.createWorkflow) {
+      builtTabs.add(tabId);
+      // Built from scratch where no save will follow by itself: the agent saves it, as a user would.
+      const fromScratch = (startedEmpty || result.replacedCanvas) && draft.nodes.size > 1;
+      if (fromScratch && workspace.isSaved(tabId) === false) text = `${text}\n${SAVE_NEW_WORKFLOW}`;
+    } else if (!builtTabs.has(tabId)) {
+      return result;
+    }
     const graph = graphPreview(draft);
-    return graph ? { ...result, graph } : result;
+    return { ...result, text, ...(graph ? { graph } : {}) };
   };
 
   return {
@@ -257,6 +268,12 @@ class TurnWorkspace {
 
   get draft(): GraphDraft {
     return this.drafts.get(this.currentId)!;
+  }
+
+  /** The tab has a project folder, or this turn saved it; undefined without the tab strip, where nothing can be saved. */
+  isSaved(tabId: string | undefined): boolean | undefined {
+    if (!this.tabs) return undefined;
+    return this.tabs.find((tab) => tab.id === tabId)?.saved === true;
   }
 
   /** The result as the tab it worked in reports it. */

@@ -68,8 +68,9 @@ describe("buildAgentSystemPrompt", () => {
     // then from 14k for the rule that makes "this style" mean the selection,
     // then from 14.25k for what to run when the user asks for a run,
     // then from 14.5k for the chat's Run button and the open workflows,
-    // then from 15k for the button covering only the workflow the reply ends in (Claude 15,099, Codex 15,293).
-    expect(prompt.length).toBeLessThan(15_150);
+    // then from 15k for the button covering only the workflow the reply ends in (Claude 15,099, Codex 15,293),
+    // then from 15.15k for saving a workflow built from scratch (Claude 15,226, Codex 15,420).
+    expect(prompt.length).toBeLessThan(15_300);
   });
 
   it("points at the chat's Run button, and teaches the open workflows and their tools", () => {
@@ -82,7 +83,10 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("The button covers only the workflow you end in: for changes left in another tab, say which and to press Run on its canvas.");
     expect(prompt).toContain("Each open workflow is a tab; the <canvas> block lists them when there are several, and your tools work in the live one.");
     expect(prompt).toContain("new_workflow opens an empty one: use it, not replaceCanvas, when the user asks for a new workflow and the live one holds other work");
-    expect(prompt).toContain("save_workflow saves the live one, only when asked.");
+    // A workflow built from scratch is named and saved, as a user would; the user's own work only when asked.
+    expect(prompt).toContain(
+      "save_workflow saves the live one: save a workflow you built from scratch once it is built, named for what it makes, unless the user said not to; save other work only when asked.",
+    );
   });
 
   it("runs only when asked, picks what to run from the conversation, and reports from the canvas", () => {

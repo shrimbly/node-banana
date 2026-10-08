@@ -420,7 +420,11 @@ runtime keeps a draft per tab and `switch_workflow`, `new_workflow` and
 `save_workflow` emit workspace steps (`AgentWorkspaceOp`) that `useAgentChat`
 applies in stream order with the graph batches (each batch names its
 `tabId`). The turn's own tab changes never stop it; a user's still do. A first
-save goes into the Node Banana folder by name (`saveLiveWorkflow`).
+save goes into the Node Banana folder by name (`saveLiveWorkflow`). A workflow
+the agent builds from scratch (on an empty canvas that was never saved, or in a
+tab it opened) it names and saves in the same turn, unless told not to: the
+prompt says so, and that `create_workflow` result reminds it. Other work it
+saves only when asked.
 
 | Purpose | Location |
 |---------|----------|

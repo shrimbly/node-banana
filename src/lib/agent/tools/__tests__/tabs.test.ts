@@ -136,6 +136,41 @@ describe("switch_workflow", () => {
   });
 });
 
+describe("a workflow built from scratch", () => {
+  const SAVE = "This is a new workflow and it is not saved: once it is built, and before any run, save it with save_workflow";
+  const film = { nodes: [{ ref: "p", type: "prompt" }, { ref: "g", type: "nanoBanana" }], connections: [{ from: "p", to: "g" }] };
+
+  it("tells the agent to name and save it, once, until it is saved", async () => {
+    const runtime = workspace();
+    await call(runtime, "new_workflow", { name: "Cat posters" });
+    const built = await call(runtime, "create_workflow", film);
+    expect(built.ok, built.text).toBe(true);
+    expect(built.text).toContain(SAVE);
+    expect(built.text).toContain("named for what it makes (keep a name it already has), unless the user said not to.");
+
+    // Adding to it is not building from scratch; rebuilding it after the save needs no reminder either.
+    expect((await call(runtime, "create_workflow", { nodes: [{ ref: "o", type: "output" }] })).text).not.toContain(SAVE);
+    expect((await call(runtime, "save_workflow", {})).ok).toBe(true);
+    expect((await call(runtime, "create_workflow", { ...film, replaceCanvas: true })).text).not.toContain(SAVE);
+  });
+
+  it("says it for an empty, never-saved live canvas too, and for a replaced one", async () => {
+    const empty = workspace({ live: { nodes: [], edges: [], workflowName: undefined }, tabs: [{ id: "tab-a", active: true, nodeCount: 0 }] });
+    expect((await call(empty, "create_workflow", film)).text).toContain(SAVE);
+    const replaced = workspace({ tabs: [{ id: "tab-a", active: true, nodeCount: 2, unsaved: true }] });
+    expect((await call(replaced, "create_workflow", { ...film, replaceCanvas: true })).text).toContain(SAVE);
+  });
+
+  it("stays quiet for a saved workflow, a single node, and without the tab strip", async () => {
+    // tab-a has a project folder: autosave keeps it.
+    expect((await call(workspace(), "create_workflow", { ...film, replaceCanvas: true })).text).not.toContain(SAVE);
+    const runtime = workspace();
+    await call(runtime, "new_workflow", {});
+    expect((await call(runtime, "create_workflow", { nodes: [{ ref: "p", type: "prompt" }] })).text).not.toContain(SAVE);
+    expect((await call(createAgentToolRuntime(emptySnapshot(), { randomId: sequentialIds() }), "create_workflow", film)).text).not.toContain(SAVE);
+  });
+});
+
 describe("the graph of a built workflow", () => {
   it("rides on a build and the turn's later edits to that tab, not on reads or other tabs' edits", async () => {
     const runtime = workspace();
