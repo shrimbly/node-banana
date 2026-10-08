@@ -172,7 +172,8 @@ export const AgentMessage = memo(function AgentMessage({ message, streaming, lat
 
   return (
     <Message from="assistant" className="group/message max-w-full">
-      <MessageContent className={cn("w-full", page ? `gap-4 ${PAGE_ASSISTANT_TEXT}` : "gap-3")}>{blocks}</MessageContent>
+      {/* Unclipped: a run's preview row reaches past the text, wider than the column on the page and to the window's edges. */}
+      <MessageContent className={cn("w-full overflow-visible", page ? `gap-4 ${PAGE_ASSISTANT_TEXT}` : "gap-3")}>{blocks}</MessageContent>
       {replyText && (
         <MessageActions
           data-message-actions=""

@@ -80,9 +80,9 @@ function runButton() {
   return screen.getByRole("button", { name: /^Run( again)?( in .+?)?(, \d+ runs)?$/ });
 }
 
-/** The line under the title: what it runs (or where), then the estimate. */
+/** The card's one line: its name, then what it runs (or where, or how the run went), then the estimate. */
 function offerLine(card: HTMLElement = document.querySelector<HTMLElement>("[data-run-offer]")!) {
-  return within(card).getByRole("heading").nextElementSibling as HTMLElement;
+  return within(card).getByRole("heading").parentElement as HTMLElement;
 }
 
 function openMenu() {
@@ -121,11 +121,11 @@ beforeEach(() => {
 });
 
 describe("AgentRunCard", () => {
-  it("is one row: the title, a line naming its nodes and the estimate, and the Run button", () => {
+  it("is one frameless line: its name, the nodes it runs, the estimate, and the Run button", () => {
     renderOffer();
     const card = screen.getByRole("group", { name: "Run 2 changed nodes" });
     expect(within(card).queryByText(/Ready to run/i)).not.toBeInTheDocument();
-    expect(offerLine(card)).toHaveTextContent(/^Generate Image · Output≈ \$0\.04$/);
+    expect(offerLine(card)).toHaveTextContent(/^Run 2 changed nodes· Generate Image · Output≈ \$0\.04$/);
     expect(runButton()).toHaveAccessibleName("Run");
     expect(runButton()).toHaveTextContent(/^Run$/);
     expectReady();
@@ -136,9 +136,9 @@ describe("AgentRunCard", () => {
     useWorkflowStore.setState({ nodes: [...gens, node("gallery", "outputGallery")] });
     const ids = [...gens.map((n) => n.id), "gallery"];
     renderOffer({ ...offer, primary: { scope: { kind: "nodes", nodeIds: ids }, label: "Run 4 changed nodes", nodeIds: ids }, alternatives: [] });
-    expect(offerLine()).toHaveTextContent(/^Generate Image ×4 · Output Gallery/);
+    expect(offerLine()).toHaveTextContent(/^Run 4 changed nodes· Generate Image ×4 · Output Gallery/);
     // Every node is still named in full on hover.
-    expect(offerLine().querySelector("p")).toHaveAttribute("title", "Generate Image, Generate Image, Generate Image, Generate Image, Output Gallery");
+    expect(offerLine().querySelector("[title]")).toHaveAttribute("title", "Generate Image, Generate Image, Generate Image, Generate Image, Output Gallery");
   });
 
   it("sets the runs in the button's menu, as the canvas's Run menu does, and prices them", () => {
@@ -174,7 +174,7 @@ describe("AgentRunCard", () => {
 
     useWorkflowStore.setState({ tabs: [{ id: "tab-z", snapshot: null }], activeTabId: "tab-z" });
     renderOffer();
-    expect(offerLine()).toHaveTextContent(/^In Hero shots · 2 nodes$/);
+    expect(offerLine()).toHaveTextContent(/^Run 2 changed nodes· In Hero shots · 2 nodes$/);
     expect(screen.getByText("That workflow is no longer open")).toBeInTheDocument();
     expectHeld("That workflow is no longer open");
   });
@@ -197,7 +197,7 @@ describe("AgentRunCard", () => {
       activeTabId: "tab-b",
     });
     renderOffer();
-    expect(offerLine()).toHaveTextContent(/^In Hero shots v2 · Generate Image · Output≈ \$0\.04$/);
+    expect(offerLine()).toHaveTextContent(/^Run 2 changed nodes· In Hero shots v2 · Generate Image · Output≈ \$0\.04$/);
     expect(runButton()).toHaveAccessibleName("Run in Hero shots v2");
     expect(runButton()).toHaveTextContent(/^Run$/);
     fireEvent.click(runButton());
@@ -215,7 +215,7 @@ describe("AgentRunCard", () => {
       activeTabId: "tab-b",
     });
     renderOffer({ ...offer, workflowName: undefined });
-    expect(offerLine()).toHaveTextContent(/^In Untitled \(tab 2\) · /);
+    expect(offerLine()).toHaveTextContent(/^Run 2 changed nodes· In Untitled \(tab 2\) · /);
     expect(runButton()).toHaveAccessibleName("Run in Untitled (tab 2)");
   });
 
@@ -254,14 +254,16 @@ describe("AgentRunCard", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("The run didn't start");
   });
 
-  it("once run, its line is the run's status and its button stops the run, then runs it again", () => {
+  it("once run, its line says how the run goes and its button (now quiet) stops it, then runs it again", () => {
     useAgentRuns.setState({ records: [record({ status: "running", finishedAt: undefined })] });
     useWorkflowStore.setState({ isRunning: true });
     const { rerender } = renderOffer();
     const card = screen.getByRole("group", { name: "Run 2 changed nodes" });
-    expect(offerLine(card)).toHaveTextContent(/^Running · \ds$/);
-    // No second header or frame: the results sit straight under the card's row.
-    expect(within(card).queryByRole("group")).not.toBeInTheDocument();
+    // Its generator still to make: "0 of 1".
+    expect(offerLine(card)).toHaveTextContent(/^Run 2 changed nodes· Running · 0 of 1 · \ds$/);
+    // No second header: the previews (a placeholder for the generator still to come) sit straight under the line.
+    expect(within(card).getAllByRole("heading")).toHaveLength(1);
+    expect(within(card).getByRole("group", { name: "1 preview" }).querySelector('[data-run-skeleton="image"]')).toBeInTheDocument();
     // Its own run: no hold to explain, and the button is its Stop.
     expect(screen.queryByText("Wait for the run to finish")).not.toBeInTheDocument();
     const stop = within(card).getByRole("button", { name: "Stop" });
@@ -278,7 +280,8 @@ describe("AgentRunCard", () => {
         <AgentRunCard offer={offer} />
       </AgentTranscriptActionsProvider>,
     );
-    expect(offerLine(card)).toHaveTextContent(/^Done · \ds$/);
+    expect(offerLine(card)).toHaveTextContent(/^Run 2 changed nodes· \ds$/);
+    expect(within(card).getByRole("img", { name: "Done" })).toBeInTheDocument();
     expectReady();
     expect(screen.getAllByRole("button", { name: /^Run again/ })).toHaveLength(1);
     fireEvent.click(within(openMenu()).getByRole("menuitem", { name: "Show on canvas" }));

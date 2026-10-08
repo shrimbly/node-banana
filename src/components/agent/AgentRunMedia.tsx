@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { CheckIcon, CopyIcon, LocateFixedIcon, Maximize2Icon, PlayIcon } from "lucide-react";
 import { MessageResponse } from "@/components/ai-elements/message";
 import { cn } from "@/components/agent/lib/utils";
@@ -110,14 +110,6 @@ const HANDLE_DOTS: Record<string, string> = {
   reference: "bg-handle-reference",
 };
 
-const OUTPUT_HANDLES: Record<AgentRunOutput["kind"], string> = {
-  image: "image",
-  video: "video",
-  audio: "audio",
-  text: "text",
-  model3d: "3d",
-};
-
 /** The handle type a node's main output carries ("reference" when it has none). */
 export function nodeOutputHandle(nodeType: string): string {
   return getNodeHandles(nodeType).outputs[0] ?? "reference";
@@ -158,14 +150,14 @@ function fileSteps(url: string, liveSrc: string | undefined): SourceStep[] {
 }
 
 /**
- * What a tile tries, in order. A grid cell starts from the 640px thumbnail
- * (an image's; a video's poster is separate), a lone tile is shown large and
- * a video plays, so those start from the file. The node's own media is last.
+ * What a preview tries, in order. An image starts from the 640px thumbnail (a
+ * video's poster is separate, and a video plays, so it starts from the file).
+ * The node's own media is last.
  */
-function tileSteps(output: AgentRunOutput, liveSrc: string | undefined, lone: boolean): SourceStep[] {
+function tileSteps(output: AgentRunOutput, liveSrc: string | undefined): SourceStep[] {
   if (!output.assetId) return liveSrc ? [{ src: liveSrc }] : [];
   const file = assetFileUrl(output.assetId);
-  if (lone || output.kind !== "image" || !output.sha256) return fileSteps(file, liveSrc);
+  if (output.kind !== "image" || !output.sha256) return fileSteps(file, liveSrc);
   return [...fileSteps(assetThumbUrl(output.sha256, 640), undefined), ...fileSteps(file, liveSrc).filter((step) => !step.delayMs)];
 }
 
@@ -222,7 +214,7 @@ export function outputAspect(output: Pick<AgentRunOutput, "width" | "height">): 
 }
 
 // ---------------------------------------------------------------------------
-// Visual tiles
+// The preview row
 // ---------------------------------------------------------------------------
 
 /** An output a node is still making: a skeleton in its place. */
@@ -233,265 +225,268 @@ export interface PendingOutput {
   kind: AgentRunOutput["kind"];
   /** Width over height, when the node says (an image node's aspect ratio). */
   aspect?: number;
+  /** Which run of a batch it belongs to (0-based), when the record ran more than once. */
+  batchIndex?: number;
 }
 
-/** One cell of the media grid: an image, video or 3D output, or a skeleton for one. */
+/** One preview: an image, video or 3D output, or a skeleton for one. */
 export type RunVisual = { key: string; output: AgentRunOutput; pending?: never } | { key: string; pending: PendingOutput; output?: never };
 
-export interface RunMediaGridProps {
+export interface RunPreviewRowProps {
   items: RunVisual[];
   /** The nodes' own media, by output id, while the run's tab is open. */
   liveSources: Readonly<Record<string, string>>;
   surface: AgentSurface;
+  /** The record ran more than once: each caption says which run (R1, R2…). */
+  batched: boolean;
   onOpen: (outputId: string) => void;
   /** Bring a node into view on the canvas; absent outside the agent session. */
   onShowNode?: (nodeId: string) => void;
 }
 
-/** The tallest a lone tile gets: it keeps its shape and never fills the column. */
-export const LONE_TILE_MAX_HEIGHT: Record<AgentSurface, number> = { page: 360, window: 240 };
+/** The row's fixed height: every preview is this tall, as wide as its own shape makes it. */
+export const PREVIEW_HEIGHT: Record<AgentSurface, number> = { page: 200, window: 120 };
+export const PREVIEW_GAP = 6;
+/** The widest the row gets on the page, beyond the 768px text column. */
+export const PREVIEW_ROW_MAX_WIDTH = 1084;
+/** What the row measures before it has been laid out (and in tests): its usual width. */
+const ROW_WIDTH_FALLBACK: Record<AgentSurface, number> = { page: PREVIEW_ROW_MAX_WIDTH, window: 388 };
 
 /**
- * How many columns a grid of `count` (two or more) outputs takes: on the
- * page, one row of up to four, then rows of four; the window's narrow column
- * takes three at most, with four as two rows of two.
+ * How many of `aspects` fit side by side in `width` at `height`, each
+ * `height × aspect` wide with `gap` between: always at least one.
  */
-export function gridColumns(count: number, surface: AgentSurface): 2 | 3 | 4 {
-  if (surface === "page") return Math.min(Math.max(count, 2), 4) as 2 | 3 | 4;
-  return count === 4 ? 2 : (Math.min(Math.max(count, 2), 3) as 2 | 3);
+export function fitPreviews(aspects: readonly number[], height: number, width: number, gap = PREVIEW_GAP): number {
+  let used = 0;
+  for (let index = 0; index < aspects.length; index++) {
+    const next = used + (index > 0 ? gap : 0) + Math.round(height * aspects[index]);
+    if (next > width && index > 0) return index;
+    used = next;
+  }
+  return aspects.length;
 }
 
-const GRID_COLUMNS: Record<2 | 3 | 4, string> = { 2: "grid-cols-2", 3: "grid-cols-3", 4: "grid-cols-4" };
+/** Width over height for a preview's frame. A panorama past 4:1 (or a strip past 1:4) is cropped to that. */
+function previewAspect(item: RunVisual, measured: Readonly<Record<string, number>>): number {
+  const known = item.pending
+    ? (item.pending.aspect ?? (item.pending.kind === "video" ? 16 / 9 : 1))
+    : item.output.kind === "model3d"
+      ? 1
+      : (outputAspect(item.output) ?? measured[item.output.id] ?? (item.output.kind === "video" ? 16 / 9 : 1));
+  return Math.min(4, Math.max(1 / 4, known));
+}
+
+/** The row's own width, followed as the chat resizes; `shown` once the row is in the page. */
+function useRowWidth(shown: boolean, fallback: number) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  useLayoutEffect(() => {
+    const row = ref.current;
+    if (!shown || !row) return;
+    setWidth(row.clientWidth);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setWidth(row.clientWidth));
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [shown]);
+  return { ref, width: width || fallback };
+}
 
 /**
- * One output large, keeping its shape; more in a grid (see gridColumns), so a
- * run's results stay a row or two tall. Grid cells share the first known
- * shape, so a row of 16:9 frames isn't cropped square.
+ * A run's images, videos and 3D in one line: a fixed height, each preview at
+ * its own shape (nothing cropped), named under it. As many as fit; the last
+ * one that fits says how many more there are and opens the viewer at the
+ * first of them. On the page the line is wider than the text column, up to
+ * PREVIEW_ROW_MAX_WIDTH (the transcript is a size container, so `cqw` is the
+ * chat's width); in the window it runs past the text's inset to the edges.
  */
-export function RunMediaGrid({ items, liveSources, surface, onOpen, onShowNode }: RunMediaGridProps) {
+export function RunPreviewRow({ items, liveSources, surface, batched, onOpen, onShowNode }: RunPreviewRowProps) {
+  const height = PREVIEW_HEIGHT[surface];
+  const { ref, width } = useRowWidth(items.length > 0, ROW_WIDTH_FALLBACK[surface]);
+  // Natural shapes of outputs whose record has none (a live output's image), once loaded.
+  const [measured, setMeasured] = useState<Readonly<Record<string, number>>>({});
+  const onMeasure = useCallback((id: string, aspect: number) => {
+    setMeasured((previous) => (Math.abs((previous[id] ?? 0) - aspect) < 0.01 ? previous : { ...previous, [id]: aspect }));
+  }, []);
   if (items.length === 0) return null;
-  if (items.length === 1) {
-    const [item] = items;
-    return (
-      <div data-run-media="lone">
-        <VisualTile item={item} liveSrc={liveSources[item.key]} lone maxHeight={LONE_TILE_MAX_HEIGHT[surface]} onOpen={onOpen} onShowNode={onShowNode} />
-      </div>
-    );
-  }
-  const columns = gridColumns(items.length, surface);
-  const known = items.map((item) => (item.output ? outputAspect(item.output) : item.pending.aspect)).find((aspect) => aspect !== undefined);
-  const aspect = Math.min(16 / 9, Math.max(3 / 4, known ?? 1));
+
+  const aspects = items.map((item) => previewAspect(item, measured));
+  const fit = fitPreviews(aspects, height, width);
+  const more = items.length - fit;
+  // "+N" opens the first output it stands for that can be opened (a skeleton or 3D can't).
+  const firstHidden = items.slice(fit).find((item) => item.output && item.output.kind !== "model3d")?.output?.id;
+
   return (
-    <div data-run-media="grid" data-columns={columns} className={cn("grid gap-1", GRID_COLUMNS[columns])}>
-      {items.map((item) => (
-        <VisualTile key={item.key} item={item} liveSrc={liveSources[item.key]} aspect={aspect} onOpen={onOpen} onShowNode={onShowNode} />
-      ))}
+    <div
+      ref={ref}
+      role="group"
+      aria-label={`${items.length} ${items.length === 1 ? "preview" : "previews"}`}
+      data-run-media="row"
+      data-shown={fit}
+      className={cn(
+        "flex",
+        surface === "page"
+          ? "relative left-1/2 w-[min(1084px,calc(100cqw-48px))] -translate-x-1/2 justify-center"
+          : "-mx-2.5 w-[calc(100%+20px)]",
+      )}
+      style={{ gap: PREVIEW_GAP }}
+    >
+      {items.slice(0, fit).map((item, index) => {
+        const frameWidth = Math.round(height * aspects[index]);
+        const overflow = more > 0 && index === fit - 1;
+        const batchIndex = item.output ? item.output.batchIndex : item.pending.batchIndex;
+        const title = item.output ? item.output.nodeTitle : item.pending.nodeTitle;
+        return (
+          <figure key={item.key} className="m-0 flex shrink-0 flex-col gap-[7px]" style={{ width: frameWidth }}>
+            <div className="relative overflow-hidden rounded-[10px] bg-well" style={{ width: frameWidth, height }}>
+              <PreviewFrame item={item} liveSrc={item.output ? liveSources[item.output.id] : undefined} onOpen={onOpen} onShowNode={onShowNode} onMeasure={onMeasure} />
+              {overflow && (
+                <button
+                  type="button"
+                  aria-label={`Show all ${items.length}`}
+                  disabled={!firstHidden}
+                  onClick={firstHidden ? () => onOpen(firstHidden) : undefined}
+                  className={cn(
+                    "absolute inset-0 flex items-center justify-center bg-black/60 font-display font-semibold tracking-[-0.02em] text-white",
+                    "transition-colors duration-150 enabled:hover:bg-black/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-selection",
+                    surface === "page" ? "text-[26px]" : "text-lg",
+                  )}
+                >
+                  +{more}
+                </button>
+              )}
+            </div>
+            <figcaption className="flex min-w-0 items-baseline gap-1.5 px-0.5 text-[11px] leading-[14px]">
+              <span className="min-w-0 truncate text-neutral-400">{overflow ? `${more} more` : title}</span>
+              {batched && !overflow && batchIndex !== undefined && (
+                <span className="shrink-0 font-mono text-[10px] text-neutral-600">R{batchIndex + 1}</span>
+              )}
+            </figcaption>
+          </figure>
+        );
+      })}
     </div>
   );
 }
 
-function VisualTile({
+function PreviewFrame({
   item,
   liveSrc,
-  lone = false,
-  aspect,
-  maxHeight = 0,
   onOpen,
   onShowNode,
+  onMeasure,
 }: {
   item: RunVisual;
   liveSrc: string | undefined;
-  lone?: boolean;
-  aspect?: number;
-  maxHeight?: number;
   onOpen: (outputId: string) => void;
   onShowNode?: (nodeId: string) => void;
+  onMeasure: (outputId: string, aspect: number) => void;
 }) {
-  if (item.pending) {
-    if (lone && item.pending.kind === "model3d") {
-      return (
-        <CompactTile>
-          <SkeletonTile title={item.pending.nodeTitle} kind="model3d" />
-        </CompactTile>
-      );
-    }
-    return (
-      <TileFrame lone={lone} aspect={aspect ?? item.pending.aspect ?? 1} maxHeight={maxHeight}>
-        <SkeletonTile title={item.pending.nodeTitle} kind={item.pending.kind} />
-      </TileFrame>
-    );
-  }
+  if (item.pending) return <SkeletonTile kind={item.pending.kind} />;
   const { output } = item;
-  if (output.kind === "model3d") {
-    const tile = <Model3dTile output={output} onShowNode={onShowNode} />;
-    return lone ? (
-      <CompactTile>{tile}</CompactTile>
-    ) : (
-      <TileFrame lone={false} aspect={aspect ?? 1} maxHeight={maxHeight}>
-        {tile}
-      </TileFrame>
-    );
-  }
-  return (
-    <MediaTile
-      key={output.id}
-      output={output}
-      liveSrc={liveSrc}
-      lone={lone}
-      aspect={aspect}
-      maxHeight={maxHeight}
-      onOpen={onOpen}
-      onShowNode={onShowNode}
-    />
-  );
-}
-
-/** A grid cell, or a lone tile sized to its shape: as wide as it can be without passing `maxHeight`. */
-function TileFrame({ lone, aspect, maxHeight, children }: { lone: boolean; aspect: number; maxHeight: number; children: ReactNode }) {
-  const style: CSSProperties = lone
-    ? { aspectRatio: `${aspect}`, maxWidth: `${Math.round(maxHeight * aspect)}px` }
-    : { aspectRatio: `${aspect}` };
-  return (
-    <div className="relative w-full" style={style}>
-      {children}
-    </div>
-  );
-}
-
-/** A lone tile with nothing to look at (3D, an output only the canvas has): a short strip, not a picture's frame. */
-function CompactTile({ children }: { children: ReactNode }) {
-  return <div className="relative h-28 w-full">{children}</div>;
+  if (output.kind === "model3d") return <Model3dTile output={output} onShowNode={onShowNode} />;
+  return <MediaTile key={output.id} output={output} liveSrc={liveSrc} onOpen={onOpen} onShowNode={onShowNode} onMeasure={onMeasure} />;
 }
 
 const TILE_BUTTON = cn(
-  "group/tile relative block size-full overflow-hidden rounded-media bg-well text-left",
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
+  "group/tile relative block size-full overflow-hidden rounded-[10px] bg-well text-left",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-selection",
 );
 
-/** The image's hairline: an outline over the picture so light edges don't bleed into the card. */
+/** The image's hairline: an outline over the picture so light edges don't bleed into the page. */
 function TileOutline() {
-  return <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-media shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]" />;
+  return <span aria-hidden="true" className="pointer-events-none absolute inset-0 rounded-[10px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]" />;
 }
 
-/** The node's name along the bottom and an expand glyph, on hover or focus. */
-function TileHoverOverlay({ title }: { title: string }) {
-  const reveal = "opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 group-focus-visible/tile:opacity-100 motion-reduce:transition-none";
+/** An expand glyph on hover or focus (the caption under the preview names it). */
+function TileHoverOverlay() {
   return (
-    <>
-      <span
-        aria-hidden="true"
-        className={cn("pointer-events-none absolute inset-x-0 bottom-0 flex bg-linear-to-t from-black/65 to-transparent px-2.5 pt-8 pb-2", reveal)}
-      >
-        <span className="truncate text-[11px] font-medium leading-4 text-white">{title}</span>
-      </span>
-      <span
-        aria-hidden="true"
-        className={cn("pointer-events-none absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-md bg-black/55 text-white", reveal)}
-      >
-        <Maximize2Icon size={13} strokeWidth={2} />
-      </span>
-    </>
+    <span
+      aria-hidden="true"
+      className={cn(
+        "pointer-events-none absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-md bg-black/55 text-white",
+        "opacity-0 transition-opacity duration-150 group-hover/tile:opacity-100 group-focus-visible/tile:opacity-100 motion-reduce:transition-none",
+      )}
+    >
+      <Maximize2Icon size={13} strokeWidth={2} />
+    </span>
   );
 }
 
 function MediaTile({
   output,
   liveSrc,
-  lone,
-  aspect,
-  maxHeight,
   onOpen,
   onShowNode,
+  onMeasure,
 }: {
   output: AgentRunOutput;
   liveSrc: string | undefined;
-  lone: boolean;
-  aspect?: number;
-  maxHeight: number;
   onOpen: (outputId: string) => void;
   onShowNode?: (nodeId: string) => void;
+  onMeasure: (outputId: string, aspect: number) => void;
 }) {
   const video = output.kind === "video";
-  const chain = useSourceChain(tileSteps(output, liveSrc, lone));
+  const chain = useSourceChain(tileSteps(output, liveSrc));
   const poster = video ? posterUrl(output) : undefined;
   const [posterFailed, setPosterFailed] = useState(false);
-  const [natural, setNatural] = useState<number | undefined>(undefined);
-  const shape = aspect ?? outputAspect(output) ?? natural ?? (video ? 16 / 9 : 1);
 
-  if (chain.exhausted) {
-    const tile = <UnavailableTile nodeId={output.nodeId} nodeTitle={output.nodeTitle} onShowNode={onShowNode} />;
-    return lone ? (
-      <CompactTile>{tile}</CompactTile>
-    ) : (
-      <TileFrame lone={false} aspect={shape} maxHeight={maxHeight}>
-        {tile}
-      </TileFrame>
-    );
-  }
+  if (chain.exhausted) return <UnavailableTile nodeId={output.nodeId} nodeTitle={output.nodeTitle} onShowNode={onShowNode} />;
   const label = `Open ${output.nodeTitle}'s ${video ? "video" : "image"}`;
   return (
-    <TileFrame lone={lone} aspect={shape} maxHeight={maxHeight}>
-      <button type="button" aria-label={label} data-run-tile={output.id} onClick={() => onOpen(output.id)} className={TILE_BUTTON}>
-        {chain.src === undefined ? (
-          <span aria-hidden="true" className="absolute inset-0 bg-white/[0.04] motion-safe:animate-pulse" />
-        ) : video ? (
-          poster && !posterFailed ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={poster} alt="" draggable={false} decoding="async" onError={() => setPosterFailed(true)} className="pointer-events-none size-full object-cover" />
-          ) : (
-            <video
-              src={stillFrame(chain.src)}
-              muted
-              playsInline
-              preload="metadata"
-              onError={chain.onError}
-              onLoadedMetadata={(event) => {
-                const { videoWidth, videoHeight } = event.currentTarget;
-                if (videoWidth && videoHeight) setNatural(videoWidth / videoHeight);
-              }}
-              className="pointer-events-none size-full object-cover"
-            />
-          )
-        ) : (
+    <button type="button" aria-label={label} data-run-tile={output.id} onClick={() => onOpen(output.id)} className={TILE_BUTTON}>
+      {chain.src === undefined ? (
+        <span aria-hidden="true" className="absolute inset-0 bg-white/[0.04] motion-safe:animate-pulse" />
+      ) : video ? (
+        poster && !posterFailed ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={chain.src}
-            alt=""
-            draggable={false}
-            decoding="async"
-            loading="lazy"
+          <img src={poster} alt="" draggable={false} decoding="async" onError={() => setPosterFailed(true)} className="pointer-events-none size-full object-cover" />
+        ) : (
+          <video
+            src={stillFrame(chain.src)}
+            muted
+            playsInline
+            preload="metadata"
             onError={chain.onError}
-            onLoad={(event) => {
-              const { naturalWidth, naturalHeight } = event.currentTarget;
-              if (naturalWidth && naturalHeight) setNatural(naturalWidth / naturalHeight);
+            onLoadedMetadata={(event) => {
+              const { videoWidth, videoHeight } = event.currentTarget;
+              if (videoWidth && videoHeight) onMeasure(output.id, videoWidth / videoHeight);
             }}
             className="pointer-events-none size-full object-cover"
           />
-        )}
-        {video && (
-          <span aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <span className="flex size-9 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm">
-              <PlayIcon size={15} strokeWidth={0} fill="currentColor" className="ml-0.5" />
-            </span>
+        )
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={chain.src}
+          alt=""
+          draggable={false}
+          decoding="async"
+          loading="lazy"
+          onError={chain.onError}
+          onLoad={(event) => {
+            const { naturalWidth, naturalHeight } = event.currentTarget;
+            if (naturalWidth && naturalHeight) onMeasure(output.id, naturalWidth / naturalHeight);
+          }}
+          className="pointer-events-none size-full object-cover"
+        />
+      )}
+      {video && (
+        <span aria-hidden="true" className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <span className="flex size-9 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm">
+            <PlayIcon size={15} strokeWidth={0} fill="currentColor" className="ml-0.5" />
           </span>
-        )}
-        <TileOutline />
-        <TileHoverOverlay title={output.nodeTitle} />
-      </button>
-    </TileFrame>
+        </span>
+      )}
+      <TileOutline />
+      <TileHoverOverlay />
+    </button>
   );
 }
 
-/** A pulsing stand-in, with the node it waits on, so the layout doesn't jump when the output lands. */
-function SkeletonTile({ title, kind }: { title: string; kind: AgentRunOutput["kind"] }) {
-  return (
-    <div data-run-skeleton={kind} className="relative flex size-full items-end overflow-hidden rounded-media bg-white/[0.04] p-2.5 motion-safe:animate-pulse">
-      <span className="flex min-w-0 items-center gap-1.5 text-[11px] leading-4 text-ink-3">
-        <TypeDot handle={OUTPUT_HANDLES[kind]} />
-        <span className="truncate">{title}</span>
-      </span>
-    </div>
-  );
+/** A pulsing stand-in at the shape the node will make, so the row doesn't jump when the output lands. */
+function SkeletonTile({ kind }: { kind: AgentRunOutput["kind"] }) {
+  return <div data-run-skeleton={kind} aria-hidden="true" className="absolute inset-0 bg-white/[0.04] motion-safe:animate-pulse" />;
 }
 
 /** 3D isn't drawn in the chat: the tile opens it on the canvas, where the viewer node shows it. */
@@ -499,16 +494,15 @@ function Model3dTile({ output, onShowNode }: { output: AgentRunOutput; onShowNod
   const body = (
     <>
       <AssetPlaceholder kind="3d" className="absolute inset-0" />
-      <span className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col px-2.5 pb-2">
-        <span className="truncate text-[11px] font-medium leading-4 text-neutral-100">{output.nodeTitle}</span>
-        {onShowNode && <span className="text-[10px] leading-[14px] text-ink-3">Open on canvas</span>}
-      </span>
+      {onShowNode && (
+        <span className="pointer-events-none absolute inset-x-0 bottom-0 px-2.5 pb-2 text-[10px] leading-[14px] text-ink-3">Open on canvas</span>
+      )}
       <TileOutline />
     </>
   );
   if (!onShowNode) {
     return (
-      <div role="img" aria-label={`${output.nodeTitle}: 3D model`} className="relative size-full overflow-hidden rounded-media">
+      <div role="img" aria-label={`${output.nodeTitle}: 3D model`} className="relative size-full overflow-hidden rounded-[10px]">
         {body}
       </div>
     );
@@ -539,12 +533,12 @@ export function UnavailableTile({
 }) {
   const inner = (
     <>
-      <LocateFixedIcon {...AGENT_ICON} className="size-4 text-ink-3" />
+      <LocateFixedIcon {...AGENT_ICON} className="size-4 shrink-0 text-ink-3" />
       <span className="text-[11px] leading-4 text-neutral-300">Open the canvas to {verb} it</span>
-      <span className="max-w-full truncate text-[10px] leading-[14px] text-ink-3">{nodeTitle}</span>
+      <span className="sr-only">{nodeTitle}</span>
     </>
   );
-  const frame = "flex size-full flex-col items-center justify-center gap-1 rounded-media bg-well px-3 text-center shadow-well";
+  const frame = "flex size-full flex-col items-center justify-center gap-1 rounded-[10px] bg-well px-3 text-center shadow-well";
   if (!onShowNode) return <div className={frame}>{inner}</div>;
   return (
     <button

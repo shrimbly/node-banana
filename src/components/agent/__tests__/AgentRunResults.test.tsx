@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished, type MockInstance } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
@@ -18,8 +18,8 @@ vi.mock("@/utils/downloadMedia", () => ({ downloadMedia: download }));
 
 import { AgentTranscriptActionsProvider, type AgentTranscriptActions } from "@/components/agent/AgentSession";
 import { AgentSurfaceProvider, type AgentSurface } from "@/components/agent/AgentSurface";
-import { AgentRunResults, fixRequestMessage, formatElapsed, pendingOutputs } from "@/components/agent/AgentRunResults";
-import { gridColumns, LONE_TILE_MAX_HEIGHT, MEDIA_RETRY_MS, withLineBreaks } from "@/components/agent/AgentRunMedia";
+import { AgentRunResults, fixRequestMessage, formatElapsed, orderPreviews, pendingOutputs } from "@/components/agent/AgentRunResults";
+import { fitPreviews, MEDIA_RETRY_MS, PREVIEW_HEIGHT, withLineBreaks, type RunVisual } from "@/components/agent/AgentRunMedia";
 import type { AgentRunOutput, AgentRunRecord } from "@/lib/agent/types";
 import { useAssetStore } from "@/store/assetStore";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -85,7 +85,19 @@ function renderCard(run: AgentRunRecord, options: { transcript?: AgentTranscript
   return { ...view, transcript, rerenderCard: (next: AgentRunRecord) => view.rerender(wrap(<AgentRunResults record={next} />)) };
 }
 
+/** jsdom lays nothing out: the preview row is given its width here (wide enough for every preview unless a test narrows it). */
+let rowWidth: MockInstance;
+
+/** The frames of the previews shown, in order: [width, height] in px. */
+function frames(container: HTMLElement): Array<[number, number]> {
+  return [...container.querySelectorAll<HTMLElement>('[data-run-media="row"] figure > div')].map((frame) => [
+    parseFloat(frame.style.width),
+    parseFloat(frame.style.height),
+  ]);
+}
+
 beforeEach(() => {
+  rowWidth = vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(2000);
   useWorkflowStore.setState({
     nodes: [node("gen", "nanoBanana", { aspectRatio: "16:9" })],
     edges: [],
@@ -99,6 +111,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  rowWidth.mockRestore();
   vi.useRealTimers();
 });
 
@@ -130,9 +143,8 @@ describe("AgentRunResults while running", () => {
     expect(container.querySelectorAll('[data-run-skeleton="image"]')).toHaveLength(1);
     expect(container.querySelectorAll('[data-run-skeleton="text"]')).toHaveLength(1);
     expect(container.querySelectorAll('[data-run-skeleton="audio"]')).toHaveLength(1);
-    // One lone image skeleton keeps the node's 16:9 shape.
-    const lone = container.querySelector('[data-run-media="lone"] > div') as HTMLElement;
-    expect(lone.style.aspectRatio).toBe(`${16 / 9}`);
+    // The image's placeholder sits in the row at the node's 16:9, the row's height.
+    expect(frames(container)).toEqual([[Math.round(PREVIEW_HEIGHT.window * (16 / 9)), PREVIEW_HEIGHT.window]]);
   });
 
   it("fills a skeleton as its output arrives, and keeps one per run still to come in a batch", () => {
@@ -164,11 +176,11 @@ describe("AgentRunResults while running", () => {
     useWorkflowStore.setState({ isRunning: true, requestStop });
     renderCard(record({ status: "running", startedAt: Date.now() - 5_000, finishedAt: undefined }));
     // The transcript is a live log: the time ticks quietly, not once a second in a screen reader.
-    expect(screen.getByText("5s")).toHaveAttribute("aria-live", "off");
+    expect(screen.getByText("· Running · 0 of 1 · 5s")).toHaveAttribute("aria-live", "off");
     act(() => {
       vi.advanceTimersByTime(2_000);
     });
-    expect(screen.getByText("7s")).toBeInTheDocument();
+    expect(screen.getByText("· Running · 0 of 1 · 7s")).toBeInTheDocument();
     // A filled square, as the composer's stop: an outline one reads as a checkbox.
     const stop = screen.getByRole("button", { name: "Stop" });
     expect(stop.querySelector("svg")).toHaveClass("fill-current");
@@ -219,9 +231,16 @@ describe("AgentRunResults outputs", () => {
     });
     const { container, transcript } = renderCard(run);
 
-    const grid = container.querySelector('[data-run-media="grid"]')!;
-    expect(grid).toHaveAttribute("data-columns", "2");
-    // Grid cells use the 640px thumbnail; a video its stored poster.
+    // One row: the image, the video, the 3D model and the live image, each named under it.
+    const row = container.querySelector('[data-run-media="row"]') as HTMLElement;
+    expect(row).toHaveAttribute("data-shown", "4");
+    expect([...row.querySelectorAll("figcaption")].map((caption) => caption.textContent)).toEqual([
+      "Generate Image",
+      "Generate Video",
+      "Generate 3D",
+      "Live Image",
+    ]);
+    // Previews use the 640px thumbnail; a video its stored poster.
     expect(container.querySelector('[data-run-tile="img-1"] img')).toHaveAttribute("src", `/api/assets/thumb/${SHA}?w=640`);
     expect(container.querySelector('[data-run-tile="vid-1"] img')).toHaveAttribute("src", `/api/assets/thumb/${SHA}?w=640&poster=1`);
     expect(container.querySelector('[data-run-tile="live:0"] img')).toHaveAttribute("src", "data:image/png;base64,AAAA");
@@ -318,33 +337,59 @@ describe("AgentRunResults outputs", () => {
     expect(transcript!.showOnCanvas).toHaveBeenCalledWith({ tabId: "tab-a", nodeIds: ["gen"] });
   });
 
-  it("draws one image large, keeping its shape under the surface's height", () => {
-    const { container, unmount } = renderCard(record({ outputs: [image("img-1")] }));
-    const frame = container.querySelector('[data-run-media="lone"] > div') as HTMLElement;
-    expect(frame.style.aspectRatio).toBe(`${1600 / 900}`);
-    expect(LONE_TILE_MAX_HEIGHT.window).toBe(240);
-    expect(frame.style.maxWidth).toBe(`${Math.round(240 * (1600 / 900))}px`);
-    // Shown large, so the file rather than the thumbnail.
-    expect(frame.querySelector("img")).toHaveAttribute("src", "/api/assets/img-1/file");
+  it("keeps every preview at its own shape, the row's fixed height: nothing is cropped", () => {
+    const outputs = [image("wide"), image("tall", "gen", { width: 900, height: 1600 }), image("square", "gen", { width: 1000, height: 1000 })];
+    const { container, unmount } = renderCard(record({ outputs }));
+    const h = PREVIEW_HEIGHT.window;
+    expect(frames(container)).toEqual([
+      [Math.round(h * (16 / 9)), h],
+      [Math.round(h * (9 / 16)), h],
+      [h, h],
+    ]);
     unmount();
 
-    const page = renderCard(record({ outputs: [image("img-1")] }), { surface: "page" });
-    const pageFrame = page.container.querySelector('[data-run-media="lone"] > div') as HTMLElement;
-    expect(pageFrame.style.maxWidth).toBe(`${Math.round(LONE_TILE_MAX_HEIGHT.page * (1600 / 900))}px`);
-  });
-
-  it("lays five or more out in four columns on the page and three in the window", () => {
-    const outputs = ["1", "2", "3", "4", "5"].map((id) => image(`img-${id}`));
     const page = renderCard(record({ outputs }), { surface: "page" });
-    expect(page.container.querySelector('[data-run-media="grid"]')).toHaveAttribute("data-columns", "4");
-    page.unmount();
-    const window = renderCard(record({ outputs }));
-    expect(window.container.querySelector('[data-run-media="grid"]')).toHaveAttribute("data-columns", "3");
+    expect(frames(page.container).map(([, height]) => height)).toEqual([PREVIEW_HEIGHT.page, PREVIEW_HEIGHT.page, PREVIEW_HEIGHT.page]);
+    // On the page the row reaches past the 768px column, up to 1084px of the chat's width.
+    expect(page.container.querySelector('[data-run-media="row"]')).toHaveClass("w-[min(1084px,calc(100cqw-48px))]");
   });
 
-  it("keeps a run's grid to a row or two: up to four across on the page, three in the window", () => {
-    expect([2, 3, 4, 5, 9].map((count) => gridColumns(count, "page"))).toEqual([2, 3, 4, 4, 4]);
-    expect([2, 3, 4, 5, 9].map((count) => gridColumns(count, "window"))).toEqual([2, 3, 2, 3, 3]);
+  it("shows as many as fit, and +N on the last one opens the first it stands for", () => {
+    // Two 16:9 previews fit in 500px at the window's 120px (213 + 6 + 213); a third would not.
+    rowWidth.mockReturnValue(500);
+    const outputs = ["1", "2", "3", "4", "5"].map((id) => image(`img-${id}`));
+    const { container } = renderCard(record({ outputs }));
+    const row = container.querySelector('[data-run-media="row"]') as HTMLElement;
+    expect(row).toHaveAttribute("data-shown", "2");
+    const more = within(row).getByRole("button", { name: "Show all 5" });
+    expect(more).toHaveTextContent("+3");
+    expect(within(row).getByText("3 more")).toBeInTheDocument();
+    fireEvent.click(more);
+    expect(within(screen.getByRole("dialog", { name: "Run workflow" })).getByText("3 of 5")).toBeInTheDocument();
+  });
+
+  it("orders previews by run, then by the workflow's order, and tags each with its run", () => {
+    const a = (batchIndex: number) => image(`a${batchIndex}`, "a", { nodeTitle: "Portrait", batchIndex });
+    const b = (batchIndex: number) => image(`b${batchIndex}`, "b", { nodeTitle: "Wide", batchIndex });
+    // As they finished: b's first take, a's second, a's first, b's second.
+    const run = record({ runs: 2, progress: { index: 2, count: 2 }, plannedNodeIds: ["a", "b"], outputs: [b(0), a(1), a(0), b(1)] });
+    const visual: RunVisual[] = run.outputs.map((output) => ({ key: output.id, output }));
+    expect(orderPreviews(run, visual).map((item) => item.key)).toEqual(["a0", "b0", "a1", "b1"]);
+
+    const { container } = renderCard(run);
+    expect([...container.querySelectorAll('[data-run-media="row"] figcaption')].map((caption) => caption.textContent)).toEqual([
+      "PortraitR1",
+      "WideR1",
+      "PortraitR2",
+      "WideR2",
+    ]);
+  });
+
+  it("fits previews side by side, always at least one", () => {
+    expect(fitPreviews([1, 1, 1], 100, 310, 6)).toBe(2);
+    expect(fitPreviews([0.5, 0.5], 100, 106, 6)).toBe(2);
+    expect(fitPreviews([3], 100, 50, 6)).toBe(1);
+    expect(fitPreviews([], 100, 500, 6)).toBe(0);
   });
 
   it("keeps playing and showing a run's files when the node makes something new", () => {
@@ -375,12 +420,15 @@ describe("AgentRunResults outputs", () => {
     useWorkflowStore.setState({ nodes: [node("gen", "nanoBanana", { outputImage: "data:image/png;base64,LIVE" })] });
     const { container } = renderCard(record({ outputs: [image("img-1")] }));
     const tile = () => container.querySelector('[data-run-tile="img-1"]')!;
+    expect(tile().querySelector("img")).toHaveAttribute("src", `/api/assets/thumb/${SHA}?w=640`);
     fireEvent.error(tile().querySelector("img")!);
     expect(tile().querySelector("img")).toBeNull();
     act(() => {
       vi.advanceTimersByTime(MEDIA_RETRY_MS);
     });
-    expect(tile().querySelector("img")).toHaveAttribute("src", "/api/assets/img-1/file?retry=1");
+    expect(tile().querySelector("img")).toHaveAttribute("src", `/api/assets/thumb/${SHA}?w=640&retry=1`);
+    fireEvent.error(tile().querySelector("img")!);
+    expect(tile().querySelector("img")).toHaveAttribute("src", "/api/assets/img-1/file");
     fireEvent.error(tile().querySelector("img")!);
     expect(tile().querySelector("img")).toHaveAttribute("src", "data:image/png;base64,LIVE");
     fireEvent.error(tile().querySelector("img")!);
@@ -394,6 +442,7 @@ describe("AgentRunResults outputs", () => {
     act(() => {
       vi.advanceTimersByTime(MEDIA_RETRY_MS);
     });
+    fireEvent.error(container.querySelector('[data-run-tile="img-1"] img')!);
     fireEvent.error(container.querySelector('[data-run-tile="img-1"] img')!);
     expect(screen.getByText("Open the canvas to see it")).toBeInTheDocument();
     act(() => useWorkflowStore.setState({ nodes: [node("gen", "nanoBanana", { outputImage: "data:image/png;base64,LIVE" })] }));
@@ -520,7 +569,7 @@ describe("AgentRunResults outcomes", () => {
   it("marks a stopped run, with Show on canvas and Run again", () => {
     const { transcript } = renderCard(record({ status: "stopped", ranNodeIds: ["gen", "out"] }));
     expect(screen.getByRole("img", { name: "Stopped" })).toBeInTheDocument();
-    expect(screen.getByText(/^Stopped · \d+s$/)).toBeInTheDocument();
+    expect(screen.getByText(/^· Stopped · \d+s$/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Show on canvas" }));
     expect(transcript!.showOnCanvas).toHaveBeenCalledWith({ tabId: "tab-a", nodeIds: ["gen", "out"] });
     expect(screen.getByRole("button", { name: "Run again" })).not.toHaveAttribute("aria-disabled");

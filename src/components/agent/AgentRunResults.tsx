@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useMemo, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
 import {
   CheckIcon,
   CircleAlertIcon,
@@ -32,7 +32,7 @@ import {
   PendingTextCard,
   posterUrl,
   RunAudioRow,
-  RunMediaGrid,
+  RunPreviewRow,
   RunTextCard,
   type PendingOutput,
   type RunVisual,
@@ -131,7 +131,15 @@ export function pendingOutputs(record: AgentRunRecord, state: Pick<WorkflowStore
       kind === "text" ? 1 - made.length : capped ? Number(!made.some((output) => output.batchIndex === current)) : record.progress.index - made.length;
     const aspect = parseAspect((node.data as { aspectRatio?: unknown }).aspectRatio) ?? (kind === "video" ? 16 / 9 : undefined);
     for (let index = made.length; index < made.length + missing; index++) {
-      pending.push({ key: `pending:${id}:${index}`, nodeId: id, nodeTitle: nodeDisplayTitle(node), kind, ...(aspect ? { aspect } : {}) });
+      const batchIndex = record.runs > 1 ? (capped ? current : index) : undefined;
+      pending.push({
+        key: `pending:${id}:${index}`,
+        nodeId: id,
+        nodeTitle: nodeDisplayTitle(node),
+        kind,
+        ...(aspect ? { aspect } : {}),
+        ...(batchIndex !== undefined ? { batchIndex } : {}),
+      });
     }
   }
   return pending;
@@ -169,6 +177,25 @@ export function liveSources(record: AgentRunRecord, state: Pick<WorkflowStore, "
     if (typeof value === "string" && value) sources[output.id] = value;
   }
   return sources;
+}
+
+/**
+ * The previews in the workflow's order rather than the order they finished
+ * in: by run, then by where the node comes in the run (planned, else started).
+ * Outputs of one node in one run keep their order.
+ */
+export function orderPreviews(record: AgentRunRecord, items: RunVisual[]): RunVisual[] {
+  const order = new Map<string, number>();
+  for (const id of [...record.plannedNodeIds, ...record.ranNodeIds]) if (!order.has(id)) order.set(id, order.size);
+  const rank = (item: RunVisual) => {
+    const batch = (item.output ? item.output.batchIndex : item.pending.batchIndex) ?? 0;
+    return [batch, order.get(item.output ? item.output.nodeId : item.pending.nodeId) ?? order.size] as const;
+  };
+  return [...items].sort((a, b) => {
+    const [batchA, nodeA] = rank(a);
+    const [batchB, nodeB] = rank(b);
+    return batchA - batchB || nodeA - nodeB;
+  });
 }
 
 /**
@@ -234,37 +261,83 @@ export function runStopLabel(state: Pick<WorkflowStore, "batch">): string {
   return state.batch.stopping ? "Stop now" : "Stop after this run";
 }
 
-/** "Run 2 of 3 · 12s": the batch's progress and the time, ticking while it runs. */
-function useRunMeta(record: AgentRunRecord): string {
-  const running = record.status === "running";
-  const now = useNow(running);
-  const elapsed = running ? now - record.startedAt : record.finishedAt !== undefined ? record.finishedAt - record.startedAt : undefined;
-  const { index, count } = record.progress;
-  const batchNote = count > 1 ? (running || index < count ? `Run ${index} of ${count}` : `${count} runs`) : null;
-  return [batchNote, elapsed !== undefined ? formatElapsed(elapsed) : null].filter(Boolean).join(" · ");
+/** The words a run's summary uses for what it made: "images" when that is all it made. */
+function outputsNoun(count: number, allImages: boolean): string {
+  return `${count} ${allImages ? "image" : "output"}${count === 1 ? "" : "s"}`;
 }
 
 /**
- * A run's status in one line, under the Run card's title: the glyph, the
- * word, then its progress and time (kept out of the transcript's live log
- * while it ticks; the results below announce the end).
+ * What the header line says after the run's name: its status (unless it
+ * simply finished), the batch's progress, how many outputs, and the time,
+ * ticking while it runs: "Running · Run 1 of 2 · 3 of 14 · 18s", "2 runs ·
+ * 14 images · 1m 28s".
  */
-export function RunStatusLine({ record, className }: { record: AgentRunRecord; className?: string }) {
-  const meta = useRunMeta(record);
+export function useRunSummary(record: AgentRunRecord | undefined, expected = 0): string {
+  const running = record?.status === "running";
+  const now = useNow(running);
+  if (!record) return "";
+  const elapsed = running ? now - record.startedAt : record.finishedAt !== undefined ? record.finishedAt - record.startedAt : undefined;
+  const { index, count } = record.progress;
+  const made = record.outputs.length;
+  const allImages = made > 0 && record.outputs.every((output) => output.kind === "image");
+  return [
+    record.status === "done" ? null : STATUS_LABELS[record.status],
+    count > 1 ? (running || index < count ? `Run ${index} of ${count}` : `${count} runs`) : null,
+    running ? (made + expected > 0 ? `${made} of ${made + expected}` : null) : made > 0 ? outputsNoun(made, allImages) : null,
+    elapsed !== undefined ? formatElapsed(elapsed) : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/**
+ * A run's header, one frameless line: its status glyph (once it has run), its
+ * name, a quiet summary that truncates (kept out of the transcript's live log
+ * while it ticks: the end is announced on its own), anything that must stay
+ * whole (an estimate), then its buttons.
+ */
+export function RunHeaderLine({
+  headingId,
+  status,
+  title,
+  summary,
+  trailing,
+  actions,
+}: {
+  headingId: string;
+  status?: AgentRunStatus;
+  title: string;
+  summary?: ReactNode;
+  trailing?: ReactNode;
+  actions?: ReactNode;
+}) {
   return (
-    <p className={cn("flex min-w-0 items-center gap-1.5 text-xs leading-4", className)}>
-      <RunStatusIcon status={record.status} silent />
-      <span className="shrink-0 font-medium text-neutral-200">{STATUS_LABELS[record.status]}</span>
-      {/* Whitespace between flex items isn't drawn: this one is for screen readers and copied text. */}
-      {meta && " "}
-      {meta && (
-        <span aria-live="off" className="min-w-0 truncate tabular-nums text-ink-3">
-          · {meta}
-        </span>
-      )}
-    </p>
+    <div className="flex min-h-8 items-center gap-2">
+      {status && <RunStatusIcon status={status} />}
+      <div className="flex min-w-0 flex-1 items-baseline gap-1.5 text-[13px] leading-[18px]">
+        <h3 id={headingId} className="m-0 max-w-full shrink-0 truncate font-medium text-neutral-100">
+          {title}
+        </h3>
+        {summary && (
+          <span aria-live="off" className="min-w-0 truncate tabular-nums text-ink-3">
+            · {summary}
+          </span>
+        )}
+        {trailing}
+      </div>
+      {actions && <div className="flex shrink-0 items-center gap-1">{actions}</div>}
+    </div>
   );
 }
+
+/** The header's quiet buttons: a faint fill, ink on hover; held ones stay focusable and say why. */
+export const QUIET_BUTTON = cn(
+  "flex h-7 items-center gap-1.5 rounded-[7px] bg-white/[0.05] px-2.5 text-xs text-neutral-300 outline-none",
+  "transition-colors duration-[120ms] hover:bg-white/[0.09] hover:text-neutral-100 data-[state=open]:bg-white/[0.1]",
+  "focus-visible:ring-2 focus-visible:ring-selection",
+  "aria-disabled:cursor-not-allowed aria-disabled:opacity-40 aria-disabled:hover:bg-white/[0.05] aria-disabled:hover:text-neutral-300",
+  "[&_svg]:shrink-0",
+);
 
 export interface AgentRunResultsProps {
   record: AgentRunRecord;
@@ -293,9 +366,7 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
         (transcript?.busy && state.activeTabId !== record.tabId ? AGENT_TURN_RUNNING : null),
   );
   const stopLabel = useWorkflowStore(runStopLabel);
-  const runMeta = useRunMeta(record);
-  const statusNote = running || record.status === "done" ? null : STATUS_LABELS[record.status];
-  const meta = [statusNote, runMeta].filter(Boolean).join(" · ");
+  const summary = useRunSummary(record, pending.length);
 
   // Said once, politely, when a run this card watched ends (not for a record that was already over).
   const [watched, setWatched] = useState<string | null>(running ? record.id : null);
@@ -306,15 +377,15 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
   const [asked, setAsked] = useState<string | null>(null);
   const [viewing, setViewing] = useState<string | null>(null);
 
-  const visual: RunVisual[] = [
+  const visual: RunVisual[] = orderPreviews(record, [
     ...record.outputs.filter((output) => VISUAL_KINDS.has(output.kind)).map((output) => ({ key: output.id, output })),
     ...pending.filter((entry) => VISUAL_KINDS.has(entry.kind)).map((entry) => ({ key: entry.key, pending: entry })),
-  ];
+  ]);
   const audio = record.outputs.filter((output) => output.kind === "audio");
   const texts = record.outputs.filter((output) => output.kind === "text");
   const pendingAudio = pending.filter((entry) => entry.kind === "audio");
   const pendingTexts = pending.filter((entry) => entry.kind === "text");
-  const hasBody = visual.length + audio.length + texts.length + pendingAudio.length + pendingTexts.length + record.errors.length > 0;
+  const hasRows = audio.length + texts.length + pendingAudio.length + pendingTexts.length + record.errors.length > 0;
 
   const viewerItems = useMemo<MediaViewerItem[]>(
     () =>
@@ -406,62 +477,64 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
     if (transcript.send(fixRequestMessage(record, elsewhere))) setAsked(record.id);
   };
 
-  const page = surface === "page";
   const Frame = embedded ? "div" : "section";
   return (
     <Frame
       {...(embedded ? {} : { role: "group", "aria-labelledby": headingId })}
       data-run-results={record.id}
       data-status={record.status}
-      className={cn("flex flex-col", !embedded && "rounded-card squircle border border-white/[0.08] bg-white/[0.02]")}
+      className="flex flex-col gap-2.5"
     >
       {!embedded && (
-        // The same inset as the Run card's text; the icon buttons' own padding makes up the right side.
-        <div className={cn("flex min-h-11 items-center gap-2 py-2", page ? "pr-2.5 pl-4" : "pr-2 pl-3.5")}>
-          <RunStatusIcon status={record.status} />
-          <h3 id={headingId} className={cn("min-w-0 truncate font-medium text-neutral-100", page ? "text-sm leading-5" : "text-[13px] leading-5")}>
-            {record.label}
-          </h3>
-          {/* The transcript is a live log: the time ticks without being read out each second (the end is announced below). */}
-          {meta && (
-            <span aria-live="off" className="shrink-0 text-xs leading-4 tabular-nums text-ink-3">
-              {meta}
-            </span>
-          )}
-          <div className="ml-auto flex shrink-0 items-center gap-0.5">
-            {running && (
-              <CardIconButton
-                label={stopLabel}
-                onClick={stopChatRun}
-                className="[&_svg]:size-3"
-              >
-                {/* Filled, as the composer's stop: an outline square reads as a checkbox (and is the "stopped" status). */}
-                <SquareIcon aria-hidden="true" strokeWidth={0} className="fill-current" />
-              </CardIconButton>
-            )}
-            {transcript && (
-              <CardIconButton label="Show on canvas" onClick={() => transcript.showOnCanvas({ tabId: record.tabId, nodeIds: nodesInView })}>
-                <LocateFixedIcon {...AGENT_ICON} />
-              </CardIconButton>
-            )}
-            {!running && (
-              <CardIconButton label="Run again" onClick={runAgain} disabledReason={blocked}>
-                <RotateCcwIcon {...AGENT_ICON} />
-              </CardIconButton>
-            )}
-          </div>
-        </div>
+        <RunHeaderLine
+          headingId={headingId}
+          status={record.status}
+          title={record.label}
+          summary={summary}
+          actions={
+            <>
+              {running ? (
+                <button type="button" aria-label={stopLabel} onClick={stopChatRun} className={QUIET_BUTTON}>
+                  {/* Filled, as the composer's stop: an outline square reads as a checkbox (and is the "stopped" status). */}
+                  <SquareIcon aria-hidden="true" strokeWidth={0} className="size-3 fill-current" />
+                  Stop
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  aria-disabled={blocked ? true : undefined}
+                  title={blocked ?? undefined}
+                  onClick={blocked ? undefined : runAgain}
+                  className={QUIET_BUTTON}
+                >
+                  <RotateCcwIcon aria-hidden="true" strokeWidth={1.75} className="size-3.5" />
+                  Run again
+                </button>
+              )}
+              {transcript && (
+                <CardIconButton
+                  label="Show on canvas"
+                  onClick={() => transcript.showOnCanvas({ tabId: record.tabId, nodeIds: nodesInView })}
+                  className="bg-white/[0.05] hover:bg-white/[0.09]"
+                >
+                  <LocateFixedIcon {...AGENT_ICON} />
+                </CardIconButton>
+              )}
+            </>
+          }
+        />
       )}
       {!embedded && note?.id === record.id && (
-        <p role="alert" className={cn("-mt-1 flex items-center gap-2 pb-2 text-[11px] leading-4 text-neutral-300", page ? "px-4" : "px-3.5")}>
+        <p role="alert" className="-mt-1 flex items-center gap-2 text-[11px] leading-4 text-neutral-300">
           <StatusDot tone="blocked" />
           {note.text}
         </p>
       )}
 
-      {hasBody && (
-        <div className="flex flex-col gap-1 border-t border-white/[0.06] p-1">
-          <RunMediaGrid items={visual} liveSources={sources} surface={surface} onOpen={setViewing} onShowNode={showNode} />
+      <RunPreviewRow items={visual} liveSources={sources} surface={surface} batched={record.runs > 1} onOpen={setViewing} onShowNode={showNode} />
+
+      {hasRows && (
+        <div className="flex flex-col gap-1.5">
           {audio.map((output) => (
             <RunAudioRow key={output.id} output={output} liveSrc={sources[output.id]} onShowNode={showNode} />
           ))}
@@ -475,31 +548,29 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
             <PendingTextCard key={entry.key} pending={entry} />
           ))}
           {record.errors.length > 0 && (
-            <div className="px-2 py-1.5">
-              <AgentAlert
-                tone="danger"
-                actions={
-                  transcript ? (
-                    <AgentTextButton onClick={askToFix} disabled={asked === record.id}>
-                      <WandSparklesIcon aria-hidden="true" strokeWidth={1.75} />
-                      {asked === record.id ? "Asked the agent" : "Ask the agent to fix it"}
-                    </AgentTextButton>
-                  ) : undefined
-                }
-              >
-                {record.errors.length === 1 ? (
-                  <ErrorLine {...record.errors[0]} />
-                ) : (
-                  <ul className="flex flex-col gap-1">
-                    {record.errors.map((error) => (
-                      <li key={error.nodeId}>
-                        <ErrorLine {...error} />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </AgentAlert>
-            </div>
+            <AgentAlert
+              tone="danger"
+              actions={
+                transcript ? (
+                  <AgentTextButton onClick={askToFix} disabled={asked === record.id}>
+                    <WandSparklesIcon aria-hidden="true" strokeWidth={1.75} />
+                    {asked === record.id ? "Asked the agent" : "Ask the agent to fix it"}
+                  </AgentTextButton>
+                ) : undefined
+              }
+            >
+              {record.errors.length === 1 ? (
+                <ErrorLine {...record.errors[0]} />
+              ) : (
+                <ul className="flex flex-col gap-1">
+                  {record.errors.map((error) => (
+                    <li key={error.nodeId}>
+                      <ErrorLine {...error} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </AgentAlert>
           )}
         </div>
       )}

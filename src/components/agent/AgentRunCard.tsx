@@ -13,17 +13,16 @@ import type { NodeType, SelectedModel, WorkflowNode } from "@/types";
 import { calculatePredictedCost, formatCost, getModelCost, type ModelPricing } from "@/utils/costCalculator";
 import { AGENT_POPOVER_LAYER, StatusDot } from "./AgentChrome";
 import { nodeOutputHandle, TypeDot } from "./AgentRunMedia";
-import { AGENT_TURN_RUNNING, AgentRunResults, nodeDisplayTitle, RunStatusLine, runStopLabel } from "./AgentRunResults";
+import { AGENT_TURN_RUNNING, AgentRunResults, nodeDisplayTitle, pendingOutputs, RunHeaderLine, runStopLabel, useRunSummary } from "./AgentRunResults";
 import { useAgentTranscriptActions } from "./AgentSession";
-import { useAgentSurface } from "./AgentSurface";
 
 /**
- * The chat's Run button (a `data-run-offer` part), kept to one row: what it
- * runs and a line naming its nodes (alike ones counted once) and the
- * estimated cost, beside a split Run button whose menu holds the run count,
- * the other ways to run and Show on canvas, as the canvas's Run menu does.
- * Once run, the line is the run's status, the button stops or runs it
- * again, and the results show below.
+ * The chat's Run button (a `data-run-offer` part): one frameless line naming
+ * what it runs, its nodes (alike ones counted once) and the estimated cost,
+ * beside a split Run button whose menu holds the run count, the other ways to
+ * run and Show on canvas, as the canvas's Run menu does. Once run, the line
+ * says how the run went, the button (now quiet) stops it or runs it again,
+ * and the previews follow in a row under it.
  */
 
 /** The node types that make something (the server's run offers count the same ones). */
@@ -149,6 +148,13 @@ const STEP = cn(
  * still opens its menu (the run count, Show on canvas), with the other ways
  * to run held there.
  */
+/** The quiet split button's halves, once the offer has run. */
+const QUIET_HALF = cn(
+  "flex items-center transition-colors duration-[120ms] hover:bg-white/[0.09] hover:text-neutral-100",
+  "aria-disabled:cursor-not-allowed aria-disabled:opacity-40 aria-disabled:hover:bg-transparent",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-selection",
+);
+
 const SPLIT_HALF = cn(
   "flex items-center transition-colors duration-[120ms] hover:bg-[#ededed]",
   "disabled:cursor-not-allowed disabled:hover:bg-transparent aria-disabled:cursor-not-allowed aria-disabled:hover:bg-transparent",
@@ -157,7 +163,6 @@ const SPLIT_HALF = cn(
 
 export function AgentRunCard({ offer }: { offer: AgentRunOffer }) {
   const transcript = useAgentTranscriptActions();
-  const surface = useAgentSurface();
   const titleId = useId();
   const reasonId = useId();
   const record = useLatestRun({ offerId: offer.offerId });
@@ -184,6 +189,8 @@ export function AgentRunCard({ offer }: { offer: AgentRunOffer }) {
   const name = `${target.workflowName || "Untitled"}${target.tabNumber ? ` (tab ${target.tabNumber})` : ""}`;
   const runningHere = record?.status === "running";
   const stopLabel = useWorkflowStore(runStopLabel);
+  const expected = useWorkflowStore((state) => (record && runningHere ? pendingOutputs(record, state).length : 0));
+  const runSummary = useRunSummary(record, expected);
   const times = runs > 1 ? ` ×${runs}` : "";
   const buttonText = runningHere ? "Stop" : `${record ? "Run again" : "Run"}${times}`;
   // The button stays short; its name says where and how often.
@@ -195,164 +202,157 @@ export function AgentRunCard({ offer }: { offer: AgentRunOffer }) {
   const cost = target.cost !== null ? `≈ ${formatCost(target.cost * runs)}` : null;
   // A run this card started is going: its status says so, and the button stops it.
   const reason = blocked && !runningHere ? blocked : null;
-  const page = surface === "page";
-  const inset = page ? "px-4" : "px-3.5";
+  // Before its first run the button is the call to action (ink); after, it is quiet.
+  const ink = !record;
+  const held = !!reason;
   const nodesForCanvas = record ? (record.ranNodeIds.length > 0 ? record.ranNodeIds : record.plannedNodeIds) : current.nodeIds;
 
-  return (
-    <section
-      role="group"
-      aria-labelledby={titleId}
-      data-run-offer={offer.offerId}
-      className="flex flex-col rounded-card squircle border border-white/[0.08] bg-white/[0.02]"
-    >
-      <div className={cn("flex items-center gap-3", inset, page ? "py-3" : "py-2.5")}>
-        <div className="min-w-0 flex-1">
-          <h3
-            id={titleId}
-            className={cn(
-              "truncate font-display font-semibold tracking-[-0.01em] text-neutral-100",
-              page ? "text-[15px] leading-5" : "text-sm leading-5",
-            )}
-          >
-            {current.label}
-          </h3>
-          {record ? (
-            <RunStatusLine record={record} className="mt-1" />
-          ) : (
-            <div className="mt-1 flex min-w-0 items-center gap-2 text-xs leading-4 text-ink-3">
-              <p className="min-w-0 truncate" title={target.nodes.map((node) => node.title).join(", ") || undefined}>
-                {!target.live && <>In {name} · </>}
-                {groups.length > 0
-                  ? groups.map((group, index) => (
-                      <Fragment key={`${group.handle}:${group.title}`}>
-                        {index > 0 && " · "}
-                        <TypeDot handle={group.handle} className="mr-1.5 mb-px align-middle" />
-                        <span className="text-neutral-300">{group.title}</span>
-                        {group.count > 1 && <span className="tabular-nums"> ×{group.count}</span>}
-                      </Fragment>
-                    ))
-                  : plural(nodeCount, "node")}
-              </p>
-              {cost && <span className="shrink-0 tabular-nums">{cost}</span>}
-            </div>
-          )}
-        </div>
+  const offerSummary = (
+    <span title={target.nodes.map((node) => node.title).join(", ") || undefined}>
+      {!target.live && <>In {name} · </>}
+      {groups.length > 0
+        ? groups.map((group, index) => (
+            <Fragment key={`${group.handle}:${group.title}`}>
+              {index > 0 && " · "}
+              <TypeDot handle={group.handle} className="mr-1.5 mb-px align-middle" />
+              {group.title}
+              {group.count > 1 && <span className="tabular-nums"> ×{group.count}</span>}
+            </Fragment>
+          ))
+        : plural(nodeCount, "node")}
+    </span>
+  );
 
-        {transcript && (
-          <div
-            className={cn(
-              "flex h-8 min-w-0 shrink-0 items-stretch overflow-hidden rounded-lg squircle font-display text-[13px] font-semibold tracking-[-0.01em]",
-              blocked && !runningHere ? "bg-white/8 text-neutral-500" : "bg-neutral-200 text-neutral-900",
-            )}
-          >
-            <button
-              type="button"
-              aria-label={buttonName}
-              title={buttonName === buttonText ? undefined : buttonName}
-              aria-disabled={reason ? true : undefined}
-              aria-describedby={reason && !failure ? reasonId : undefined}
-              onClick={runningHere ? stopChatRun : reason ? undefined : () => run(current)}
-              className={cn(SPLIT_HALF, "min-w-0 gap-1.5 pr-3 pl-2.5")}
-            >
-              {runningHere ? (
-                <SquareIcon aria-hidden="true" strokeWidth={0} fill="currentColor" className="size-3 shrink-0" />
-              ) : record ? (
-                <RotateCcwIcon aria-hidden="true" strokeWidth={2} className="size-3.5 shrink-0" />
-              ) : (
-                <PlayIcon aria-hidden="true" strokeWidth={0} fill="currentColor" className="size-3.5 shrink-0" />
+  return (
+    <section role="group" aria-labelledby={titleId} data-run-offer={offer.offerId} className="flex flex-col gap-2.5">
+      <RunHeaderLine
+        headingId={titleId}
+        status={record?.status}
+        title={current.label}
+        summary={record ? runSummary : offerSummary}
+        trailing={!record && cost ? <span className="shrink-0 tabular-nums text-ink-3">{cost}</span> : undefined}
+        actions={
+          transcript && (
+            <div
+              className={cn(
+                "flex h-7 min-w-0 items-stretch overflow-hidden rounded-[7px] text-xs",
+                ink
+                  ? cn("font-display text-[13px] font-semibold tracking-[-0.01em]", held ? "bg-white/8 text-neutral-500" : "bg-neutral-200 text-neutral-900")
+                  : "bg-white/[0.05] text-neutral-300",
               )}
-              <span className="truncate">{buttonText}</span>
-            </button>
-            <DropdownMenu modal={false}>
-              <DropdownMenuTrigger
-                aria-label="Run options"
-                className={cn(
-                  SPLIT_HALF,
-                  "w-7 shrink-0 justify-center border-l data-[state=open]:bg-[#e0e0e0]",
-                  blocked && !runningHere ? "border-white/10 hover:bg-white/10 data-[state=open]:bg-white/10" : "border-black/10",
-                )}
+            >
+              <button
+                type="button"
+                aria-label={buttonName}
+                title={buttonName === buttonText ? undefined : buttonName}
+                aria-disabled={held ? true : undefined}
+                aria-describedby={reason && !failure ? reasonId : undefined}
+                onClick={runningHere ? stopChatRun : held ? undefined : () => run(current)}
+                className={cn(ink ? SPLIT_HALF : QUIET_HALF, "min-w-0 gap-1.5 pr-2.5 pl-2.5")}
               >
-                <ChevronDownIcon aria-hidden="true" strokeWidth={2.25} className="size-3.5" />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="end"
-                sideOffset={6}
-                className={cn(
-                  menuSurfaceClass,
-                  AGENT_POPOVER_LAYER,
-                  "w-auto min-w-56 max-w-[min(20rem,calc(100vw-2rem))] bg-card p-1 text-neutral-300 shadow-menu ring-0",
+                {runningHere ? (
+                  <SquareIcon aria-hidden="true" strokeWidth={0} fill="currentColor" className="size-3 shrink-0" />
+                ) : record ? (
+                  <RotateCcwIcon aria-hidden="true" strokeWidth={1.75} className="size-3.5 shrink-0" />
+                ) : (
+                  <PlayIcon aria-hidden="true" strokeWidth={0} fill="currentColor" className="size-3 shrink-0" />
                 )}
-              >
-                {/* The run count, as in the canvas's Run menu. Its steps are menu items, so the arrow keys reach them. */}
-                <div className="flex h-8 items-center gap-3 px-2.5">
-                  <span className="flex-1 text-[13px] text-neutral-300">Runs</span>
-                  <span role="group" aria-label="Runs" className="inline-flex h-[22px] items-center rounded-[6px] bg-well shadow-well">
-                    <DropdownMenuItem
-                      aria-label="Fewer runs"
-                      disabled={runs <= 1 || runningHere}
-                      onSelect={(event) => {
-                        event.preventDefault();
-                        setRuns((count) => clampRunCount(count - 1));
-                      }}
-                      className={STEP}
-                    >
-                      <MinusIcon aria-hidden="true" strokeWidth={2} />
-                    </DropdownMenuItem>
-                    <output aria-live="polite" className="min-w-7 text-center font-mono text-[11px] tabular-nums text-neutral-100">
-                      {runs}
-                    </output>
-                    <DropdownMenuItem
-                      aria-label="More runs"
-                      disabled={runs >= MAX_RUN_COUNT || runningHere}
-                      onSelect={(event) => {
-                        event.preventDefault();
-                        setRuns((count) => clampRunCount(count + 1));
-                      }}
-                      className={STEP}
-                    >
-                      <PlusIcon aria-hidden="true" strokeWidth={2} />
-                    </DropdownMenuItem>
-                  </span>
-                </div>
-                {record && (
-                  <>
-                    <MenuDivider />
-                    <DropdownMenuItem
-                      className={MENU_ROW}
-                      onSelect={() => transcript.showOnCanvas({ ...(offer.tabId ? { tabId: offer.tabId } : {}), nodeIds: nodesForCanvas })}
-                    >
-                      <LocateFixedIcon aria-hidden="true" strokeWidth={1.75} className="size-3.5 shrink-0 text-neutral-400" />
-                      <span className="min-w-0 flex-1 truncate">Show on canvas</span>
-                    </DropdownMenuItem>
-                  </>
-                )}
-                {others.length > 0 && (
-                  <>
-                    <MenuDivider />
-                    <MenuSectionLabel className="px-2.5 pt-1.5 pb-1">Run instead</MenuSectionLabel>
-                    {others.map((option) => (
+                <span className="truncate">{buttonText}</span>
+              </button>
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger
+                  aria-label="Run options"
+                  className={cn(
+                    ink ? SPLIT_HALF : QUIET_HALF,
+                    "w-7 shrink-0 justify-center border-l",
+                    ink
+                      ? held
+                        ? "border-white/10 hover:bg-white/10 data-[state=open]:bg-white/10"
+                        : "border-black/10 data-[state=open]:bg-[#e0e0e0]"
+                      : "border-white/[0.06] data-[state=open]:bg-white/[0.1]",
+                  )}
+                >
+                  <ChevronDownIcon aria-hidden="true" strokeWidth={2} className="size-3.5" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  sideOffset={6}
+                  className={cn(
+                    menuSurfaceClass,
+                    AGENT_POPOVER_LAYER,
+                    "w-auto min-w-56 max-w-[min(20rem,calc(100vw-2rem))] bg-card p-1 text-neutral-300 shadow-menu ring-0",
+                  )}
+                >
+                  {/* The run count, as in the canvas's Run menu. Its steps are menu items, so the arrow keys reach them. */}
+                  <div className="flex h-8 items-center gap-3 px-2.5">
+                    <span className="flex-1 text-[13px] text-neutral-300">Runs</span>
+                    <span role="group" aria-label="Runs" className="inline-flex h-[22px] items-center rounded-[6px] bg-well shadow-well">
                       <DropdownMenuItem
-                        key={`${option.label}:${JSON.stringify(option.scope)}`}
-                        disabled={!!blocked}
-                        className={MENU_ROW}
-                        onSelect={() => run(option)}
+                        aria-label="Fewer runs"
+                        disabled={runs <= 1 || runningHere}
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          setRuns((count) => clampRunCount(count - 1));
+                        }}
+                        className={STEP}
                       >
-                        <PlayIcon aria-hidden="true" strokeWidth={0} fill="currentColor" className="size-3 shrink-0 text-neutral-400" />
-                        <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                        <span className="shrink-0 pl-3 font-mono text-[11px] tabular-nums text-ink-3">{plural(option.nodeIds.length, "node")}</span>
+                        <MinusIcon aria-hidden="true" strokeWidth={2} />
                       </DropdownMenuItem>
-                    ))}
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        )}
-      </div>
+                      <output aria-live="polite" className="min-w-7 text-center font-mono text-[11px] tabular-nums text-neutral-100">
+                        {runs}
+                      </output>
+                      <DropdownMenuItem
+                        aria-label="More runs"
+                        disabled={runs >= MAX_RUN_COUNT || runningHere}
+                        onSelect={(event) => {
+                          event.preventDefault();
+                          setRuns((count) => clampRunCount(count + 1));
+                        }}
+                        className={STEP}
+                      >
+                        <PlusIcon aria-hidden="true" strokeWidth={2} />
+                      </DropdownMenuItem>
+                    </span>
+                  </div>
+                  {record && (
+                    <>
+                      <MenuDivider />
+                      <DropdownMenuItem
+                        className={MENU_ROW}
+                        onSelect={() => transcript.showOnCanvas({ ...(offer.tabId ? { tabId: offer.tabId } : {}), nodeIds: nodesForCanvas })}
+                      >
+                        <LocateFixedIcon aria-hidden="true" strokeWidth={1.75} className="size-3.5 shrink-0 text-neutral-400" />
+                        <span className="min-w-0 flex-1 truncate">Show on canvas</span>
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {others.length > 0 && (
+                    <>
+                      <MenuDivider />
+                      <MenuSectionLabel className="px-2.5 pt-1.5 pb-1">Run instead</MenuSectionLabel>
+                      {others.map((option) => (
+                        <DropdownMenuItem
+                          key={`${option.label}:${JSON.stringify(option.scope)}`}
+                          disabled={!!blocked}
+                          className={MENU_ROW}
+                          onSelect={() => run(option)}
+                        >
+                          <PlayIcon aria-hidden="true" strokeWidth={0} fill="currentColor" className="size-3 shrink-0 text-neutral-400" />
+                          <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                          <span className="shrink-0 pl-3 font-mono text-[11px] tabular-nums text-ink-3">{plural(option.nodeIds.length, "node")}</span>
+                        </DropdownMenuItem>
+                      ))}
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )
+        }
+      />
 
       {transcript && (failure || reason) && (
-        <div className={cn("-mt-1 pb-2.5", inset)}>
+        <div className="-mt-1.5 flex justify-end">
           {failure ? (
             <p role="alert" className="flex items-center gap-2 text-[11px] leading-4 text-neutral-300">
               <StatusDot tone="blocked" />

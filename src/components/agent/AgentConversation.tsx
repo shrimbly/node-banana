@@ -58,7 +58,8 @@ export function AgentConversation({
   return (
     // Opens at the newest line rather than gliding down from the top each time it mounts
     // (opening a chat, coming back to the view); a reply grows into view, at once under reduced motion.
-    <Conversation className="min-h-0 flex-1" initial="instant" resize={reducedMotion ? "instant" : "smooth"}>
+    // On the page the transcript is a size container, so a run's preview row can measure the chat's width (cqw) and reach past the column.
+    <Conversation className={cn("min-h-0 flex-1", page && "@container")} initial="instant" resize={reducedMotion ? "instant" : "smooth"}>
       <ConversationContent className={page ? `${PAGE_COLUMN} gap-7 pb-10 pt-6` : "gap-5 px-4 py-4"}>
         {messages.map((message, index) => {
           const switchedTo = switches.get(message.id);
