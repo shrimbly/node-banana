@@ -385,6 +385,12 @@ describe("AgentRunResults outcomes", () => {
     expect(screen.getByRole("button", { name: "Run again" })).toHaveAttribute("aria-disabled", "true");
   });
 
+  it("holds Run again for the whole workflow once the tab holds another one", () => {
+    useWorkflowStore.setState({ nodes: [node("other", "nanoBanana")] });
+    renderCard(record({ scope: { kind: "all" }, plannedNodeIds: ["gen"] }));
+    expect(screen.getByRole("button", { name: "Run again" })).toHaveAttribute("aria-disabled", "true");
+  });
+
   it("runs again under the same anchor, and says why when the run doesn't start", () => {
     // A store whose run never starts (offline, nothing runnable).
     const runBatch = vi.fn().mockResolvedValue(undefined);

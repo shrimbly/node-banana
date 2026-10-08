@@ -229,7 +229,7 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
   const blocked = useWorkflowStore((state) =>
     embedded || running
       ? null
-      : chatRunBlockedReason({ tabId: record.tabId, scope: record.scope }, state) ??
+      : chatRunBlockedReason({ tabId: record.tabId, scope: record.scope, plannedNodeIds: record.plannedNodeIds }, state) ??
         (transcript?.busy && state.activeTabId !== record.tabId ? AGENT_TURN_RUNNING : null),
   );
   const stopMode = useWorkflowStore((state) =>

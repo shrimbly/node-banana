@@ -72,7 +72,7 @@ export function estimateRunCost(nodes: WorkflowNode[], generators: number): numb
 export function describeOfferTarget(
   offer: AgentRunOffer,
   option: AgentRunOption,
-  state: Pick<WorkflowStore, "activeTabId" | "tabs" | "nodes" | "workflowName">,
+  state: Pick<WorkflowStore, "activeTabId" | "tabs" | "nodes" | "groups" | "workflowName">,
 ): OfferTarget {
   const live = !offer.tabId || offer.tabId === state.activeTabId;
   const source = live ? state : state.tabs.find((tab) => tab.id === offer.tabId)?.snapshot;
@@ -80,7 +80,14 @@ export function describeOfferTarget(
     return { live: false, open: false, ...(offer.workflowName ? { workflowName: offer.workflowName } : {}), nodes: [], generators: 0, cost: null };
   }
   const byId = new Map(source.nodes.map((node) => [node.id, node] as const));
-  const present = option.nodeIds.map((id) => byId.get(id)).filter((node): node is WorkflowNode => node !== undefined);
+  let present = option.nodeIds.map((id) => byId.get(id)).filter((node): node is WorkflowNode => node !== undefined);
+  // The whole workflow runs what the tab holds now, nodes added since the offer too (none of
+  // the offered ones left: another workflow, which it won't run). A locked group's nodes don't run.
+  if (option.scope.kind === "all" && present.length > 0) {
+    const runs = (node: WorkflowNode) => !(node.groupId && source.groups[node.groupId]?.locked);
+    const offered = new Set(option.nodeIds);
+    present = [...present, ...source.nodes.filter((node) => !offered.has(node.id))].filter(runs);
+  }
   const generators = present.filter((node) => GENERATOR_TYPES.has(node.type ?? "")).length;
   const workflowName = source.workflowName ?? offer.workflowName;
   return {
@@ -128,7 +135,7 @@ export function AgentRunCard({ offer }: { offer: AgentRunOffer }) {
   const targetKey = useWorkflowStore((state) => JSON.stringify(describeOfferTarget(offer, current, state)));
   const target = useMemo<OfferTarget>(() => JSON.parse(targetKey), [targetKey]);
   const storeBlocked = useWorkflowStore((state) =>
-    chatRunBlockedReason(offer.tabId ? { tabId: offer.tabId, scope: current.scope } : { scope: current.scope }, state),
+    chatRunBlockedReason({ ...(offer.tabId ? { tabId: offer.tabId } : {}), scope: current.scope, plannedNodeIds: current.nodeIds }, state),
   );
   const blocked = storeBlocked ?? (!target.live && transcript?.busy ? AGENT_TURN_RUNNING : null);
   const [runs, setRuns] = useState(1);

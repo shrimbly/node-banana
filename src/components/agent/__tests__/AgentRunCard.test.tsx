@@ -23,7 +23,7 @@ import { AgentTranscriptActionsProvider, type AgentTranscriptActions } from "@/c
 import { useAgentRuns } from "@/lib/agent/client/runs";
 import type { AgentRunOffer, AgentRunRecord } from "@/lib/agent/types";
 import { useWorkflowStore } from "@/store/workflowStore";
-import type { WorkflowNode } from "@/types";
+import type { NodeGroup, WorkflowNode } from "@/types";
 import type { WorkflowTabSnapshot } from "@/store/utils/workflowTabs";
 
 function node(id: string, type: string, data: Record<string, unknown> = {}): WorkflowNode {
@@ -149,6 +149,13 @@ describe("AgentRunCard", () => {
     expect(runButton()).toBeDisabled();
   });
 
+  it("is held when the tab now holds another workflow than the one it was offered for", () => {
+    // Cleared and rebuilt since: none of the offered nodes is left, so "Run workflow" would run something else.
+    renderOffer({ ...offer, primary: { scope: { kind: "all" }, label: "Run workflow", nodeIds: ["old-1", "old-2"] }, alternatives: [] });
+    expect(screen.getByText("The nodes it would run are no longer on the canvas")).toBeInTheDocument();
+    expect(runButton()).toBeDisabled();
+  });
+
   it("runs in another open tab by name", () => {
     useWorkflowStore.setState({
       nodes: [node("elsewhere", "prompt")],
@@ -247,14 +254,29 @@ describe("AgentRunCard", () => {
 
 describe("describeOfferTarget", () => {
   it("leaves out nodes no longer on the canvas", () => {
-    const target = describeOfferTarget(offer, offer.alternatives[0], {
+    const target = describeOfferTarget(offer, offer.primary, {
       activeTabId: "tab-a",
       tabs: [{ id: "tab-a", snapshot: null }],
       nodes: [NODES[1]],
+      groups: {},
       workflowName: null,
     });
     expect(target).toMatchObject({ live: true, open: true, workflowName: "Hero shots", generators: 1 });
     expect(target.nodes.map((entry) => entry.id)).toEqual(["gen"]);
+  });
+
+  it("describes a whole-workflow run as what the tab holds now, outside locked groups", () => {
+    const locked: NodeGroup = { id: "g-locked", name: "Locked", color: "neutral", position: { x: 0, y: 0 }, size: { width: 1, height: 1 }, locked: true };
+    const target = describeOfferTarget(offer, offer.alternatives[0], {
+      activeTabId: "tab-a",
+      tabs: [{ id: "tab-a", snapshot: null }],
+      // A video generator added after the offer, and a node in a locked group, which doesn't run.
+      nodes: [...NODES, node("vid", "generateVideo"), { ...node("held", "nanoBanana"), groupId: "g-locked" } as WorkflowNode],
+      groups: { "g-locked": locked },
+      workflowName: null,
+    });
+    expect(target.nodes.map((entry) => entry.id)).toEqual(["prompt", "gen", "out", "vid"]);
+    expect(target.generators).toBe(2);
   });
 });
 
