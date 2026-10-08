@@ -171,9 +171,14 @@ export function liveSources(record: AgentRunRecord, state: Pick<WorkflowStore, "
   return sources;
 }
 
-/** The message "Ask the agent to fix it" sends: each failed node, by name and id, with its error. */
-export function fixRequestMessage(record: AgentRunRecord): string {
-  const where = record.workflowName ? ` in "${record.workflowName}"` : "";
+/**
+ * The message "Ask the agent to fix it" sends: each failed node, by name and
+ * id, with its error. `elsewhere`: the run's tab isn't the live one, so the
+ * message names it for the agent to switch to.
+ */
+export function fixRequestMessage(record: AgentRunRecord, elsewhere = false): string {
+  const tab = elsewhere ? ` (${record.tabId})` : "";
+  const where = record.workflowName ? ` in "${record.workflowName}"${tab}` : elsewhere ? ` in an untitled workflow${tab}` : "";
   const lines = record.errors.map((error) => `- ${error.nodeTitle} (${error.nodeId}): ${error.message}`);
   return `The run "${record.label}"${where} failed:\n${lines.join("\n")}\nPlease fix it.`;
 }
@@ -361,7 +366,11 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
   };
   const askToFix = () => {
     if (!transcript) return;
-    if (transcript.send(fixRequestMessage(record))) setAsked(record.id);
+    const store = useWorkflowStore.getState();
+    let elsewhere = record.tabId !== store.activeTabId && store.tabs.some((tab) => tab.id === record.tabId);
+    // The agent works in the live tab: go to the run's first, unless that would stop a turn or a tab is busy.
+    if (elsewhere && !transcript.busy && !store.tabsBusyReason() && store.switchTab(record.tabId)) elsewhere = false;
+    if (transcript.send(fixRequestMessage(record, elsewhere))) setAsked(record.id);
   };
 
   const page = surface === "page";

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach, onTestFinished } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 
@@ -468,6 +468,36 @@ describe("AgentRunResults outcomes", () => {
       'The run "Run workflow" in "Hero shots" failed:\n- Generate Image (gen): Invalid API key\nPlease fix it.',
     );
     expect(screen.getByRole("button", { name: "Asked the agent" })).toBeDisabled();
+  });
+
+  it("asks for the fix in the run's own tab: switching to it, or naming it while a turn runs", () => {
+    const { switchTab: realSwitchTab, tabsBusyReason: realTabsBusyReason } = useWorkflowStore.getState();
+    onTestFinished(() => useWorkflowStore.setState({ switchTab: realSwitchTab, tabsBusyReason: realTabsBusyReason }));
+    const switchTab = vi.fn(() => true);
+    useWorkflowStore.setState({
+      tabs: [
+        { id: "tab-a", snapshot: null },
+        { id: "tab-b", snapshot: null },
+      ],
+      activeTabId: "tab-b",
+      switchTab,
+      tabsBusyReason: () => null,
+    });
+    const idle = renderCard(failed);
+    fireEvent.click(screen.getByRole("button", { name: "Ask the agent to fix it" }));
+    expect(switchTab).toHaveBeenCalledWith("tab-a");
+    expect(idle.transcript!.send).toHaveBeenCalledWith(fixRequestMessage(failed));
+    idle.unmount();
+
+    // Mid-turn a switch would stop the turn: the message names the tab, for the agent to switch to.
+    switchTab.mockClear();
+    const busy = renderCard(failed, { transcript: { ...actions(), busy: true } });
+    fireEvent.click(screen.getByRole("button", { name: "Ask the agent to fix it" }));
+    expect(switchTab).not.toHaveBeenCalled();
+    expect(busy.transcript!.send).toHaveBeenCalledWith(
+      'The run "Run workflow" in "Hero shots" (tab-a) failed:\n- Generate Image (gen): Invalid API key\nPlease fix it.',
+    );
+    expect(fixRequestMessage({ ...failed, workflowName: undefined }, true)).toMatch(/^The run "Run workflow" in an untitled workflow \(tab-a\) failed:/);
   });
 
   it("leaves out what needs the agent session when there is none", () => {
