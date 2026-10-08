@@ -53,10 +53,31 @@ export interface WorkflowTabSummary {
 }
 
 let tabIdCounter = 0;
+/** Every tab id handed out in this page: desktop recovery drops a closed id for the rest of the session. */
+const usedTabIds = new Set<string>();
 
 export function createTabId(): string {
   tabIdCounter += 1;
-  return `tab-${Date.now().toString(36)}-${tabIdCounter}-${Math.random().toString(36).slice(2, 8)}`;
+  const id = `tab-${Date.now().toString(36)}-${tabIdCounter}-${Math.random().toString(36).slice(2, 8)}`;
+  usedTabIds.add(id);
+  return id;
+}
+
+const TAB_ID_PATTERN = /^tab-[A-Za-z0-9_-]{1,100}$/;
+
+/**
+ * Takes a caller-chosen tab id (the agent's new tabs). False when it is
+ * malformed or was ever used in this page, so a closed tab's id never comes back.
+ */
+export function claimTabId(id: string): boolean {
+  if (!TAB_ID_PATTERN.test(id) || usedTabIds.has(id)) return false;
+  usedTabIds.add(id);
+  return true;
+}
+
+/** Tab ids restored from a saved session count as used. */
+export function markTabIdsUsed(ids: Iterable<string>): void {
+  for (const id of ids) usedTabIds.add(id);
 }
 
 /** Copy the workflow fields out of the live store state. */

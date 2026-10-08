@@ -76,7 +76,9 @@ import {
 import { normalizeEdgeAppearance } from "@/lib/edges/appearance";
 import {
   captureWorkflowTabSnapshot,
+  claimTabId,
   createTabId,
+  markTabIdsUsed,
   emptyWorkflowTabSnapshot,
   isWorkflowTabPristine,
   tabToActivateAfterClose,
@@ -436,8 +438,13 @@ export interface WorkflowStore {
   pendingMediaSaves: number;
   /** Why tab changes are refused right now, or null when they are allowed. */
   tabsBusyReason: () => string | null;
-  /** Park the live workflow and open an empty tab. Returns the new tab id, or null while a run or save is in flight. */
-  newTab: () => string | null;
+  /**
+   * Park the live workflow and open an empty tab. Returns the new tab id, or
+   * null while a run or save is in flight. `id` asks for that tab id (the
+   * agent names the tabs it opens): refused, null, when it is malformed or
+   * was ever used in this page. `name` labels the new, unsaved workflow.
+   */
+  newTab: (options?: { id?: string; name?: string }) => string | null;
   /** Park the live workflow and bring `tabId` into the canvas. False when nothing changed. */
   switchTab: (tabId: string) => boolean;
   /** Close a tab. Closing the only tab leaves an empty one. False when nothing changed. */
@@ -549,7 +556,7 @@ export interface WorkflowStore {
    * returned with reasons. A run the batch asks for starts after its edits,
    * outside the undo step; `runRefused` says why it did not.
    */
-  applyAgentGraphOps: (batch: AgentGraphOpBatch) => { applied: number; skipped: string[]; runRefused?: string };
+  applyAgentGraphOps: (batch: AgentGraphOpBatch) => { applied: number; skipped: string[]; runRefused?: string; runStarted?: true };
   /**
    * Bumped whenever a different canvas replaces the live one (loadWorkflow,
    * clearWorkflow, a tab switch). An agent turn remembers the generation it
@@ -866,12 +873,12 @@ function splitGridsToBuild(ops: AgentGraphOpBatch["ops"]): string[] {
  * entry point. Not awaited: the batch's edits are already in, and the run
  * goes on after the agent's turn.
  */
-function startAgentRun(get: () => WorkflowStore, run: ApplyGraphOpsResult["run"]): { runRefused?: string } {
+function startAgentRun(get: () => WorkflowStore, run: ApplyGraphOpsResult["run"]): { runRefused?: string; runStarted?: true } {
   if (!run) return {};
   // The turn saw an idle canvas; a run started since then (the user pressed Run) wins.
   if (get().isRunning || get().batch) return { runRefused: "a run is already going" };
   void get().runBatch(run.scope, run.runs);
-  return {};
+  return { runStarted: true };
 }
 
 function pushUndoCheckpoint(
@@ -3587,15 +3594,17 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   restoreDesktopSession: (tabs, activeTabId) => {
     const active = tabs.find(tab => tab.id === activeTabId);
     if (!active) return;
+    markTabIdsUsed(tabs.map((tab) => tab.id));
     set({ tabs: tabs.map(tab => ({ ...tab, snapshot: tab.id === activeTabId ? null : tab.snapshot })), activeTabId });
     applyTabSnapshot(set, get, active.snapshot);
   },
 
-  newTab: () => {
+  newTab: (options) => {
     if (get().tabsBusyReason()) return null;
     const { tabs, activeTabId, edgeStyle, edgeAppearance, useExternalImageStorage } = get();
+    if (options?.id !== undefined && !claimTabId(options.id)) return null;
     const parked = captureWorkflowTabSnapshot(get());
-    const id = createTabId();
+    const id = options?.id ?? createTabId();
     set({
       tabs: [
         ...tabs.map((tab) => (tab.id === activeTabId ? { ...tab, snapshot: parked } : tab)),
@@ -3604,6 +3613,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       activeTabId: id,
     });
     applyTabSnapshot(set, get, emptyWorkflowTabSnapshot({ edgeStyle, edgeAppearance, useExternalImageStorage }));
+    const name = options?.name?.trim();
+    if (name) set({ workflowName: name });
     return id;
   },
 

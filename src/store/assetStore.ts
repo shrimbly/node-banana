@@ -35,7 +35,8 @@ import type {
  * layout facts) and are fetched again by their cursor when scrolled back to.
  */
 
-export type AppView = "canvas" | "assets";
+/** What the frame under the tab strip shows: the canvas, the Assets view or the full-page agent chat. */
+export type AppView = "canvas" | "assets" | "chat";
 /** The rail's Library group. Favorites is a view of the live library, not a tag. */
 export type AssetLibraryView = "all" | "favorites" | "missing" | "trash";
 export type AssetDatePreset = "any" | "today" | "7d" | "30d";

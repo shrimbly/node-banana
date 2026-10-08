@@ -203,6 +203,13 @@ export interface AgentToolResult {
   ops: AgentGraphOp[];
   /** Nodes worth bringing into view after the ops are applied. */
   focusNodeIds?: string[];
+  /** A tab or save step for the browser instead of canvas edits (`ops` is empty). */
+  workspace?: AgentWorkspaceOp;
+  /**
+   * The workflow tab the call worked in (the runtime's live tab when it
+   * returned). Absent when the turn's snapshot carried no tab id.
+   */
+  tabId?: string;
   /**
    * The call replaced the canvas: the batch starts by removing every node of
    * the turn's snapshot, one `removeNode` each (never `clearCanvas`), so a
@@ -216,6 +223,12 @@ export interface AgentToolRuntime {
   definitions: AgentToolDefinition[];
   /** Validates args against the tool's shape. Never throws: failures come back as ok:false. */
   execute(name: string, args: unknown): Promise<AgentToolResult>;
+  /**
+   * Read once the turn has ended: the Run button the chat should offer for
+   * what this turn built or changed, or null (nothing runnable changed, the
+   * turn started a run itself, or what changed can't run yet).
+   */
+  runOffer?(): AgentRunOffer | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +325,23 @@ export type AgentGraphOp =
 /** The colours a group can have (the canvas's GROUP_COLOR_ORDER). */
 export type AgentGroupColor = GroupColor;
 
+/**
+ * A step on the open workflows rather than on one canvas, applied by the
+ * chat in stream order (it waits for each, a save included, before the next
+ * batch). Each comes alone in its batch.
+ */
+export type AgentWorkspaceOp =
+  /** Bring another open tab into the canvas (store.switchTab). Later batches apply to it. */
+  | { op: "switchTab"; tabId: string }
+  /** Park the live workflow and open an empty one in a new tab with this id (store.newTab), optionally named. */
+  | { op: "newTab"; tabId: string; name?: string }
+  /**
+   * Save the live workflow as the user's Save does: into its folder when it
+   * has one, else a first save as `name` (or its current name) in the Node
+   * Banana folder.
+   */
+  | { op: "save"; name?: string };
+
 export interface AgentGraphOpBatch {
   /** Unique per batch. */
   batchId: string;
@@ -322,6 +352,14 @@ export interface AgentGraphOpBatch {
   focusNodeIds?: string[];
   /** As {@link AgentToolResult.replacedCanvas}. */
   replacedCanvas?: boolean;
+  /** As {@link AgentToolResult.workspace}; `ops` is then empty. */
+  workspace?: AgentWorkspaceOp;
+  /**
+   * The tab the batch belongs to: graph ops apply only while it is live, a
+   * switchTab or newTab makes it live, a save saves it. Absent when the
+   * turn's snapshot had no tab id (then the live canvas is assumed).
+   */
+  tabId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -384,6 +422,8 @@ export interface AgentSnapshotGroup {
 }
 
 export interface AgentWorkflowSnapshot {
+  /** The workflow tab this is a picture of (store.activeTabId for the live one). */
+  tabId?: string;
   nodes: AgentSnapshotNode[];
   edges: AgentSnapshotEdge[];
   groups: AgentSnapshotGroup[];
@@ -403,6 +443,106 @@ export interface AgentWorkflowSnapshot {
    * matches what the browser creates. Absent types use the built-in defaults.
    */
   nodeDefaults?: Partial<Record<NodeType, Record<string, unknown>>>;
+}
+
+/** One open workflow tab, in strip order, as the agent sees the tab strip. */
+export interface AgentTabSummary {
+  id: string;
+  /** The workflow's name; absent while untitled. */
+  name?: string;
+  /** The tab live in the canvas: the one the request's `workflow` describes. */
+  active?: true;
+  nodeCount: number;
+  /** It has a project folder, so save_workflow needs no name. */
+  saved?: true;
+  /** It has changes no save has written yet. */
+  unsaved?: true;
+}
+
+// ---------------------------------------------------------------------------
+// Runs the chat offers and follows
+// ---------------------------------------------------------------------------
+
+/** One way to run, as the chat's Run button offers it. */
+export interface AgentRunOption {
+  scope: RunScope;
+  /** What the button says: "Run workflow", "Run Hero shots", "Run 3 changed nodes", "Run Nano Banana". */
+  label: string;
+  /**
+   * The nodes the run will execute, in run order where known (for "all",
+   * every node outside a locked group). For the card's count, cost and
+   * progress; the scope decides what actually runs.
+   */
+  nodeIds: string[];
+}
+
+/** A Run button under a reply, for what the turn built or changed (`data-run-offer`). */
+export interface AgentRunOffer {
+  /** Unique per offer: the runs started from it are found by it. */
+  offerId: string;
+  /** The tab the offer is for; running it from another tab switches there first. */
+  tabId?: string;
+  workflowName?: string;
+  primary: AgentRunOption;
+  /** Other scopes worth offering, e.g. the whole workflow when the primary is narrower. */
+  alternatives: AgentRunOption[];
+}
+
+/** One output a chat-started run produced, held as ids and text (never media bytes). */
+export interface AgentRunOutput {
+  /** Stable key: the asset id, else `${nodeId}:${index}`. */
+  id: string;
+  nodeId: string;
+  /** The node's title or display name when the run ended. */
+  nodeTitle: string;
+  nodeType: NodeType;
+  kind: "image" | "video" | "audio" | "text" | "model3d";
+  /** The asset library record (served by /api/assets/<id>/file), when the library recorded it. */
+  assetId?: string;
+  /** The file's hash, for /api/assets/thumb/<sha256>. */
+  sha256?: string;
+  /** A video asset with a stored poster frame. */
+  hasPoster?: boolean;
+  width?: number;
+  height?: number;
+  /** Text outputs (LLM), capped. */
+  text?: string;
+  /** The model that ran, and the resolved prompt, when known. */
+  model?: string;
+  prompt?: string;
+  /** Which run of a batch produced it (0-based). */
+  batchIndex?: number;
+  /**
+   * No library record: the output is only on the node, shown from the live
+   * canvas while its tab is open (the chat never keeps media bytes).
+   */
+  live?: true;
+}
+
+export type AgentRunStatus = "running" | "done" | "failed" | "stopped" | "paused";
+
+/** A run the chat started (the agent's run_workflow, or the Run button) and what came of it. */
+export interface AgentRunRecord {
+  id: string;
+  chatId: string;
+  /** Where it shows in the transcript: under that tool call, or that offer's card. */
+  anchor: { toolCallId: string } | { offerId: string };
+  tabId: string;
+  workflowName?: string;
+  label: string;
+  scope: RunScope;
+  runs: number;
+  startedAt: number;
+  finishedAt?: number;
+  status: AgentRunStatus;
+  /** Batch progress: which run (1-based) of how many is going or went last. */
+  progress: { index: number; count: number };
+  /** The nodes expected to run (from the offer or the scope), for placeholders. */
+  plannedNodeIds: string[];
+  /** Nodes seen running, in the order they started. */
+  ranNodeIds: string[];
+  outputs: AgentRunOutput[];
+  errors: Array<{ nodeId: string; nodeTitle: string; message: string }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -431,6 +571,9 @@ export interface AgentMessageMetadata {
 export interface AgentToolUIOutput {
   ok: boolean;
   summary: string;
+  /** The tab the call worked in, and the nodes it changed or created: the card's "Show on canvas". */
+  tabId?: string;
+  nodeIds?: string[];
 }
 
 export type AgentDataParts = {
@@ -444,6 +587,8 @@ export type AgentDataParts = {
   "agent-notice": { code: AgentErrorCode; message: string; harness: AgentHarnessId };
   /** Persisted: the conversation's short label in the chat history (the agent's name_conversation call). */
   "agent-summary": { summary: string };
+  /** Persisted (id "run-offer"): a Run button for what the turn built or changed, written as the turn ends. */
+  "run-offer": AgentRunOffer;
 };
 
 export type AgentUIMessage = UIMessage<AgentMessageMetadata, AgentDataParts>;
@@ -457,6 +602,10 @@ export interface AgentChatRequestBody {
   effort?: string;
   sessionId?: string;
   workflow: AgentWorkflowSnapshot;
+  /** Every open workflow tab, in strip order (the live one marked `active`). */
+  tabs?: AgentTabSummary[];
+  /** Media-free snapshots of the parked tabs, by tab id: the live tab is `workflow`. */
+  parkedWorkflows?: Record<string, AgentWorkflowSnapshot>;
 }
 
 export interface AgentStatusResponse {
