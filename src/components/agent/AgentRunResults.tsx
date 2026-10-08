@@ -17,7 +17,7 @@ import { MediaViewer, type MediaViewerAction, type MediaViewerItem } from "@/com
 import { cn } from "@/components/agent/lib/utils";
 import { assetFileUrl } from "@/lib/assets/client/api";
 import { NODE_TITLES } from "@/lib/nodes/handles";
-import { chatRunBlockedReason, rerunChatRun, stopChatRun, useLatestRun } from "@/lib/agent/client/runs";
+import { MAX_RUN_OUTPUTS, chatRunBlockedReason, rerunChatRun, stopChatRun, useLatestRun } from "@/lib/agent/client/runs";
 import type { AgentRunOutput, AgentRunRecord, AgentRunStatus } from "@/lib/agent/types";
 import { useAssetStore } from "@/store/assetStore";
 import { useWorkflowStore, type WorkflowStore } from "@/store/workflowStore";
@@ -112,20 +112,25 @@ function parseAspect(value: unknown): number | undefined {
 /**
  * The outputs a running record still waits for: one per run of the batch for
  * each planned or started generator (text once: it is read when the run ends),
- * minus what has arrived. Nodes that failed show in the errors instead.
+ * minus what has arrived. Once a long batch has dropped its oldest outputs,
+ * only the current run's. Nodes that failed show in the errors instead.
  */
 export function pendingOutputs(record: AgentRunRecord, state: Pick<WorkflowStore, "activeTabId" | "nodes">): PendingOutput[] {
   if (record.status !== "running" || state.activeTabId !== record.tabId) return [];
   const nodes = new Map(state.nodes.map((node) => [node.id, node] as const));
+  // The record keeps the newest outputs only: past that, counting them says nothing about earlier runs.
+  const capped = record.runs > 1 && record.outputs.length >= MAX_RUN_OUTPUTS;
+  const current = record.progress.index - 1;
   const pending: PendingOutput[] = [];
   for (const id of new Set([...record.plannedNodeIds, ...record.ranNodeIds])) {
     const node = nodes.get(id);
     const kind = node ? nodeKind(node) : undefined;
     if (!node || !kind || (node.data as { status?: unknown }).status === "error") continue;
-    const made = record.outputs.filter((output) => output.nodeId === id && output.kind === kind).length;
-    const expected = kind === "text" ? 1 : record.progress.index;
+    const made = record.outputs.filter((output) => output.nodeId === id && output.kind === kind);
+    const missing =
+      kind === "text" ? 1 - made.length : capped ? Number(!made.some((output) => output.batchIndex === current)) : record.progress.index - made.length;
     const aspect = parseAspect((node.data as { aspectRatio?: unknown }).aspectRatio) ?? (kind === "video" ? 16 / 9 : undefined);
-    for (let index = made; index < expected; index++) {
+    for (let index = made.length; index < made.length + missing; index++) {
       pending.push({ key: `pending:${id}:${index}`, nodeId: id, nodeTitle: nodeDisplayTitle(node), kind, ...(aspect ? { aspect } : {}) });
     }
   }

@@ -18,7 +18,7 @@ vi.mock("@/utils/downloadMedia", () => ({ downloadMedia: download }));
 
 import { AgentTranscriptActionsProvider, type AgentTranscriptActions } from "@/components/agent/AgentSession";
 import { AgentSurfaceProvider, type AgentSurface } from "@/components/agent/AgentSurface";
-import { AgentRunResults, fixRequestMessage, formatElapsed } from "@/components/agent/AgentRunResults";
+import { AgentRunResults, fixRequestMessage, formatElapsed, pendingOutputs } from "@/components/agent/AgentRunResults";
 import { MEDIA_RETRY_MS, withLineBreaks } from "@/components/agent/AgentRunMedia";
 import type { AgentRunOutput, AgentRunRecord } from "@/lib/agent/types";
 import { useAssetStore } from "@/store/assetStore";
@@ -144,6 +144,18 @@ describe("AgentRunResults while running", () => {
     rerenderCard({ ...running, outputs: [image("x1", "gen", { batchIndex: 0 })] });
     expect(container.querySelectorAll('[data-run-skeleton="image"]')).toHaveLength(1);
     expect(container.querySelector('[data-run-tile="x1"]')).toBeInTheDocument();
+  });
+
+  it("waits only for the current run once a long batch has dropped its oldest outputs", () => {
+    const gens = ["g1", "g2", "g3", "g4"];
+    const state = { activeTabId: "tab-a", nodes: gens.map((id) => node(id, "nanoBanana", { status: "loading" })) };
+    // Run 10 of 10: the newest 24 outputs are runs 4-9 of each node (0-based 3-8).
+    const kept = gens.flatMap((id) => [3, 4, 5, 6, 7, 8].map((batchIndex) => image(`${id}-${batchIndex}`, id, { batchIndex })));
+    const running = record({ status: "running", finishedAt: undefined, runs: 10, progress: { index: 10, count: 10 }, plannedNodeIds: gens, outputs: kept });
+    expect(pendingOutputs(running, state).map((entry) => entry.nodeId)).toEqual(gens);
+
+    const arrived = [...kept.slice(1), image("g1-9", "g1", { batchIndex: 9 })];
+    expect(pendingOutputs({ ...running, outputs: arrived }, state).map((entry) => entry.nodeId)).toEqual(["g2", "g3", "g4"]);
   });
 
   it("ticks the elapsed time and offers Stop", () => {
