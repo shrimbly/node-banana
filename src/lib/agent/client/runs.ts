@@ -258,14 +258,15 @@ export interface TrackRunInput {
 /**
  * What a record is called: the action, as the Run card's options name it
  * ("Run workflow", "Run Generate Image", "Run from Prompt"), which reads
- * right while it runs and after. The agent's tool summary is progressive
- * ("Running the workflow ×3"); the card's meta counts the runs.
+ * right while it runs and after. The agent's tool summary says what it
+ * started ("Started the workflow ×3"; older chats say "Running …"); the
+ * card's meta counts the runs.
  */
 function runActionLabel(label: string): string {
-  if (!label.startsWith("Running ")) return label;
+  if (!/^(Running|Started) /.test(label)) return label;
   return label
-    .replace(/^Running the workflow\b/, "Run workflow")
-    .replace(/^Running /, "Run ")
+    .replace(/^(Running|Started) the workflow\b/, "Run workflow")
+    .replace(/^(Running|Started) /, "Run ")
     .replace(/ ×\d+$/, "");
 }
 

@@ -825,7 +825,7 @@ function runWorkflow(draft: GraphDraft, args: Args<typeof runWorkflowShape>, alr
     case "all":
       scope = { kind: "all" };
       what = `the whole workflow (${draft.nodes.size} node${draft.nodes.size === 1 ? "" : "s"})`;
-      summary = `Running the workflow${times}`;
+      summary = `Started the workflow${times}`;
       ran = new Set(draft.nodes.keys());
       checked = [...ran].filter(unlocked);
       break;
@@ -838,7 +838,7 @@ function runWorkflow(draft: GraphDraft, args: Args<typeof runWorkflowShape>, alr
       const ids = [...new Set(keys.map((key) => find(key)!.id))];
       scope = { kind: "nodes", nodeIds: ids };
       what = ids.join(", ");
-      summary = `Running ${ids.length === 1 ? nodeName(draft.getNode(ids[0])!) : `${ids.length} nodes`}${times}`;
+      summary = `Started ${ids.length === 1 ? nodeName(draft.getNode(ids[0])!) : `${ids.length} nodes`}${times}`;
       ran = new Set(ids);
       checked = ids;
       break;
@@ -850,7 +850,7 @@ function runWorkflow(draft: GraphDraft, args: Args<typeof runWorkflowShape>, alr
       if (!start) return failure(`Not on the canvas: ${key}. Nothing was started.`, "Unknown node");
       scope = { kind: "from", nodeId: start.id };
       what = `from ${start.id} on`;
-      summary = `Running from ${nodeName(start)}${times}`;
+      summary = `Started from ${nodeName(start)}${times}`;
       ran = runsFrom(draft, start.id);
       checked = [...downstreamOf(draft, start.id)].filter((id) => ran.has(id) && unlocked(id));
       break;

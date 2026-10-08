@@ -1508,14 +1508,14 @@ describe("run_workflow", () => {
     const result = await call(runtimeFor(chain(false)), "run_workflow", { scope: "all" });
     expect(result.ok, result.text).toBe(true);
     expect(result.ops).toEqual([{ op: "run", scope: { kind: "all" }, runs: 1 }]);
-    expect(result.summary).toBe("Running the workflow");
+    expect(result.summary).toBe("Started the workflow");
     expect(result.text).toContain("Started a run of the whole workflow (4 nodes)");
     expect(result.text).toContain("you do not see its results in this turn");
     expect(result.text).toContain("report how it went from that, never before");
 
     const three = await call(runtimeFor(chain()), "run_workflow", { scope: "all", runs: 3 });
     expect(three.ops).toEqual([{ op: "run", scope: { kind: "all" }, runs: 3 }]);
-    expect(three.summary).toBe("Running the workflow ×3");
+    expect(three.summary).toBe("Started the workflow ×3");
     expect(three.text).toContain("3 times one after another");
     // Clamped like the Run menu.
     expect((await call(runtimeFor(chain()), "run_workflow", { scope: "all", runs: 500 })).ops).toEqual([{ op: "run", scope: { kind: "all" }, runs: 50 }]);
@@ -1526,10 +1526,10 @@ describe("run_workflow", () => {
     const result = await call(runtimeFor(chain()), "run_workflow", { scope: "nodes", nodeIds: ["nanoBanana-3"] });
     expect(result.ok, result.text).toBe(true);
     expect(result.ops).toEqual([{ op: "run", scope: { kind: "nodes", nodeIds: ["nanoBanana-3"] }, runs: 1 }]);
-    expect(result.summary).toBe(`Running ${NODE_CATALOG.nanoBanana.displayName}`);
+    expect(result.summary).toBe(`Started ${NODE_CATALOG.nanoBanana.displayName}`);
     const two = await call(runtimeFor(chain()), "run_workflow", { scope: "nodes", nodeIds: ["llmGenerate-2", "nanoBanana-3", "llmGenerate-2"] });
     expect(two.ops).toEqual([{ op: "run", scope: { kind: "nodes", nodeIds: ["llmGenerate-2", "nanoBanana-3"] }, runs: 1 }]);
-    expect(two.summary).toBe("Running 2 nodes");
+    expect(two.summary).toBe("Started 2 nodes");
     // The node fields mixed up still say which node is meant.
     const lone = await call(runtimeFor(chain()), "run_workflow", { scope: "nodes", node: "nanoBanana-3" });
     expect(lone.ops).toEqual([{ op: "run", scope: { kind: "nodes", nodeIds: ["nanoBanana-3"] }, runs: 1 }]);
@@ -1684,7 +1684,7 @@ describe("run_workflow", () => {
     const started = await call(runtimeFor(chain(false)), "run_workflow", { scope: "from", node: "llmGenerate-2", runs: 2 });
     expect(started.ok, started.text).toBe(true);
     expect(started.ops).toEqual([{ op: "run", scope: { kind: "from", nodeId: "llmGenerate-2" }, runs: 2 }]);
-    expect(started.summary).toBe(`Running from ${LLM} ×2`);
+    expect(started.summary).toBe(`Started from ${LLM} ×2`);
     // Starting after the LLM would read its empty output.
     const refused = await call(runtimeFor(chain(false)), "run_workflow", { scope: "from", node: "nanoBanana-3" });
     expect(refused.ok).toBe(false);

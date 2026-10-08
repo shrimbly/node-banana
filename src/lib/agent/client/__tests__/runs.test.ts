@@ -329,13 +329,21 @@ describe("chat run records", () => {
   });
 
   it("names a run the agent started as the action, which reads right once it has ended too", () => {
-    // run_workflow's summaries are progressive; the card's meta counts the runs.
-    const labels = ["Running the workflow", "Running Generate Image ×3", "Running 2 nodes", "Running from Hero prompt ×2", "Run 2 changed nodes"];
+    // run_workflow's summaries say what it started (older chats: "Running …"); the card's meta counts the runs.
+    const labels = [
+      "Started the workflow",
+      "Started Generate Image ×3",
+      "Started from Hero prompt ×2",
+      "Running the workflow",
+      "Running 2 nodes",
+      "Run 2 changed nodes",
+    ];
     expect(labels.map((label) => track({ label }).label)).toEqual([
       "Run workflow",
       "Run Generate Image",
-      "Run 2 nodes",
       "Run from Hero prompt",
+      "Run workflow",
+      "Run 2 nodes",
       "Run 2 changed nodes",
     ]);
   });
