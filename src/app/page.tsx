@@ -1,6 +1,7 @@
 "use client";
 
 import { DesktopSession } from "@/components/DesktopSession";
+import dynamic from "next/dynamic";
 import { useEffect, useState, type ReactNode } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { FloatingMenu } from "@/components/FloatingMenu";
@@ -18,7 +19,6 @@ import { requestSave } from "@/store/saveRequestStore";
 import { useAssetStore } from "@/store/assetStore";
 import { AssetsView } from "@/components/assets/AssetsView";
 import { AgentSessionProvider } from "@/components/agent/AgentSession";
-import { AgentChatView } from "@/components/agent/AgentChatView";
 import { clearGenerationToasts } from "@/components/GenerationToast";
 import { watchFirstRecording } from "@/components/assets/FirstRunHint";
 import { unloadWarning } from "@/components/assets/unloadWarning";
@@ -26,6 +26,14 @@ import { initAssetLibrary, pendingRecordings } from "@/lib/assets/client/recorde
 import { fetchLibraryStatus, reportProjects } from "@/lib/assets/client/api";
 import { watchMovedProjects } from "@/lib/assets/client/movedProjects";
 import { collectProjectReport } from "@/lib/assets/client/projects";
+
+// Loaded on first show, as the floating agent window is: the transcript's markdown and code
+// highlighting, the run cards and the sidebar stay out of the page for people who never open
+// it. Until then, the empty page the view paints on.
+const AgentChatView = dynamic(() => import("@/components/agent/AgentChatView").then((mod) => ({ default: mod.AgentChatView })), {
+  ssr: false,
+  loading: () => <div className="flex-1 bg-canvas-bg" />,
+});
 
 export default function Home() {
   return <DesktopSession><Editor /></DesktopSession>;
