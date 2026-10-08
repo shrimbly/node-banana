@@ -188,6 +188,21 @@ describe("AgentRunCard", () => {
     expect(startOfferRun).toHaveBeenCalledWith(expect.objectContaining({ option: offer.primary, runs: 1 }));
   });
 
+  it("tells its tab from another of the same name by its place in the strip", () => {
+    useWorkflowStore.setState({
+      nodes: [node("elsewhere", "prompt")],
+      workflowName: null,
+      tabs: [
+        { id: "tab-b", snapshot: null },
+        { id: "tab-a", snapshot: { nodes: NODES, groups: {}, workflowName: null } as unknown as WorkflowTabSnapshot },
+      ],
+      activeTabId: "tab-b",
+    });
+    renderOffer({ ...offer, workflowName: undefined });
+    expect(screen.getByText("Ready to run · In Untitled (tab 2)")).toBeInTheDocument();
+    expect(runButton()).toHaveAccessibleName("Run in Untitled (tab 2)");
+  });
+
   it("waits for the agent's turn before running in another tab (switching would stop the turn)", () => {
     useWorkflowStore.setState({
       tabs: [

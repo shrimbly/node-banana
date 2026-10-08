@@ -43,6 +43,8 @@ export interface OfferTarget {
   /** Its tab is still open. */
   open: boolean;
   workflowName?: string;
+  /** Its place in the tab strip (from 1), when another open tab goes by the same name. */
+  tabNumber?: number;
   /** The option's nodes still on the canvas, in run order. */
   nodes: Array<{ id: string; title: string; handle: string }>;
   generators: number;
@@ -90,10 +92,17 @@ export function describeOfferTarget(
   }
   const generators = present.filter((node) => GENERATOR_TYPES.has(node.type ?? "")).length;
   const workflowName = source.workflowName ?? offer.workflowName;
+  // Every new tab is "Untitled": a name another open tab shares needs the tab's place to say which it is.
+  const shown = (name: string | null | undefined) => name?.trim() || "Untitled";
+  const index = state.tabs.findIndex((tab) => tab.id === offer.tabId);
+  const shared =
+    !live &&
+    state.tabs.some((tab, at) => at !== index && shown(tab.id === state.activeTabId ? state.workflowName : tab.snapshot?.workflowName) === shown(workflowName));
   return {
     live,
     open: true,
     ...(workflowName ? { workflowName } : {}),
+    ...(shared ? { tabNumber: index + 1 } : {}),
     nodes: present.map((node) => ({ id: node.id, title: nodeDisplayTitle(node), handle: nodeOutputHandle(node.type ?? "") })),
     generators,
     cost: estimateRunCost(present, generators),
@@ -153,7 +162,7 @@ export function AgentRunCard({ offer }: { offer: AgentRunOffer }) {
     setFailure(result.ok ? null : result.reason);
   };
 
-  const name = target.workflowName || "Untitled";
+  const name = `${target.workflowName || "Untitled"}${target.tabNumber ? ` (tab ${target.tabNumber})` : ""}`;
   const elsewhere = target.live ? "" : ` in ${name}`;
   const buttonLabel = `${record ? "Run again" : "Run"}${elsewhere}`;
   const nodeCount = target.open ? target.nodes.length : current.nodeIds.length;
