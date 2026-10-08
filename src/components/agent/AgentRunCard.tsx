@@ -116,9 +116,14 @@ const MENU_ROW = cn(
   "data-disabled:pointer-events-none data-disabled:opacity-30",
 );
 
-/** The ink half of the split button, and the chevron beside it. */
+/**
+ * The ink half of the split button, and the chevron beside it. Held, the
+ * main half stays focusable (aria-disabled) so it can say why; the chevron
+ * is plainly disabled.
+ */
 const SPLIT_HALF = cn(
-  "flex items-center transition-colors duration-[120ms] enabled:hover:bg-[#ededed] disabled:cursor-not-allowed",
+  "flex items-center transition-colors duration-[120ms] hover:bg-[#ededed]",
+  "disabled:cursor-not-allowed disabled:hover:bg-transparent aria-disabled:cursor-not-allowed aria-disabled:hover:bg-transparent",
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-selection",
 );
 
@@ -126,6 +131,7 @@ export function AgentRunCard({ offer }: { offer: AgentRunOffer }) {
   const transcript = useAgentTranscriptActions();
   const surface = useAgentSurface();
   const titleId = useId();
+  const reasonId = useId();
   const record = useLatestRun({ offerId: offer.offerId });
   const options = useMemo(() => [offer.primary, ...offer.alternatives], [offer]);
   // After a run, the main button runs that option again; the menu has the rest.
@@ -235,7 +241,13 @@ export function AgentRunCard({ offer }: { offer: AgentRunOffer }) {
                 blocked ? "bg-white/8 text-neutral-500" : "bg-neutral-200 text-neutral-900",
               )}
             >
-              <button type="button" disabled={!!blocked} onClick={() => run(current)} className={cn(SPLIT_HALF, "min-w-0 gap-1.5 pr-3.5 pl-3")}>
+              <button
+                type="button"
+                aria-disabled={blocked ? true : undefined}
+                aria-describedby={reason && !failure ? reasonId : undefined}
+                onClick={blocked ? undefined : () => run(current)}
+                className={cn(SPLIT_HALF, "min-w-0 gap-1.5 pr-3.5 pl-3")}
+              >
                 {record ? (
                   <RotateCcwIcon aria-hidden="true" strokeWidth={2} className="size-3.5 shrink-0" />
                 ) : (
@@ -284,7 +296,9 @@ export function AgentRunCard({ offer }: { offer: AgentRunOffer }) {
               {failure}
             </p>
           ) : reason ? (
-            <p className="text-right text-[11px] leading-4 text-ink-3">{reason}</p>
+            <p id={reasonId} className="text-right text-[11px] leading-4 text-ink-3">
+              {reason}
+            </p>
           ) : null}
         </div>
       )}

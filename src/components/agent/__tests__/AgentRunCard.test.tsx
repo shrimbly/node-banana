@@ -78,6 +78,20 @@ function runButton() {
   return screen.getByRole("button", { name: /^Run( again)?( in .+)?$/ });
 }
 
+/** Held: still focusable, with its reason as the button's description, and a press runs nothing. */
+function expectHeld(reason?: string) {
+  const button = runButton();
+  expect(button).toHaveAttribute("aria-disabled", "true");
+  expect(button).not.toBeDisabled();
+  if (reason) expect(button).toHaveAccessibleDescription(reason);
+  fireEvent.click(button);
+  expect(startOfferRun).not.toHaveBeenCalled();
+}
+
+function expectReady() {
+  expect(runButton()).not.toHaveAttribute("aria-disabled");
+}
+
 beforeEach(() => {
   useWorkflowStore.setState({
     nodes: NODES,
@@ -102,7 +116,7 @@ describe("AgentRunCard", () => {
     const chips = within(card).getByRole("list", { name: "Nodes it runs" });
     expect(within(chips).getAllByRole("listitem").map((chip) => chip.textContent)).toEqual(["Generate Image", "Output"]);
     expect(runButton()).toHaveAccessibleName("Run");
-    expect(runButton()).toBeEnabled();
+    expectReady();
   });
 
   it("multiplies the estimate by the runs, from a 1–50 stepper", () => {
@@ -130,7 +144,7 @@ describe("AgentRunCard", () => {
   it("is held, saying why, while a run goes", () => {
     useWorkflowStore.setState({ isRunning: true });
     renderOffer();
-    expect(runButton()).toBeDisabled();
+    expectHeld("Wait for the run to finish");
     expect(screen.getByRole("button", { name: "Other ways to run" })).toBeDisabled();
     expect(screen.getByText("Wait for the run to finish")).toBeInTheDocument();
   });
@@ -146,14 +160,14 @@ describe("AgentRunCard", () => {
     expect(screen.getByText("Ready to run · In Hero shots")).toBeInTheDocument();
     expect(screen.getByText("2 nodes")).toBeInTheDocument();
     expect(screen.getByText("That workflow is no longer open")).toBeInTheDocument();
-    expect(runButton()).toBeDisabled();
+    expectHeld("That workflow is no longer open");
   });
 
   it("is held when the tab now holds another workflow than the one it was offered for", () => {
     // Cleared and rebuilt since: none of the offered nodes is left, so "Run workflow" would run something else.
     renderOffer({ ...offer, primary: { scope: { kind: "all" }, label: "Run workflow", nodeIds: ["old-1", "old-2"] }, alternatives: [] });
     expect(screen.getByText("The nodes it would run are no longer on the canvas")).toBeInTheDocument();
-    expect(runButton()).toBeDisabled();
+    expectHeld("The nodes it would run are no longer on the canvas");
   });
 
   it("runs in another open tab by name", () => {
@@ -183,7 +197,7 @@ describe("AgentRunCard", () => {
       activeTabId: "tab-b",
     });
     renderOffer(offer, { ...actions(), busy: true });
-    expect(runButton()).toBeDisabled();
+    expectHeld("Wait for the agent to finish");
     expect(screen.getByText("Wait for the agent to finish")).toBeInTheDocument();
   });
 
@@ -220,7 +234,7 @@ describe("AgentRunCard", () => {
     // Its own run: Stop is in the results, and the hold needs no explanation.
     expect(screen.queryByText("Wait for the run to finish")).not.toBeInTheDocument();
     expect(runButton()).toHaveAccessibleName("Run again");
-    expect(runButton()).toBeDisabled();
+    expectHeld();
 
     useWorkflowStore.setState({ isRunning: false });
     useAgentRuns.setState({ records: [record()] });
@@ -230,7 +244,7 @@ describe("AgentRunCard", () => {
       </AgentTranscriptActionsProvider>,
     );
     expect(screen.getByRole("heading", { name: "Done" })).toBeInTheDocument();
-    expect(runButton()).toBeEnabled();
+    expectReady();
     // Run again lives on the card's own button, not twice.
     expect(screen.getAllByRole("button", { name: /^Run again/ })).toHaveLength(1);
   });
