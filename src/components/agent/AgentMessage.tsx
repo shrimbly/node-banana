@@ -6,9 +6,22 @@ import { Message, MessageContent, MessageResponse } from "@/components/ai-elemen
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Tool, ToolContent, ToolHeader, ToolInput } from "@/components/ai-elements/tool";
-import { isRenderedPart, toolDisplayState, toolDisplayTitle, toolSummaryLine } from "@/lib/agent/client/messages";
+import { LocateFixedIcon } from "lucide-react";
+import {
+  isRenderedPart,
+  isRunWorkflowPart,
+  toolCanvasTarget,
+  toolDisplayState,
+  toolDisplayTitle,
+  toolSummaryLine,
+} from "@/lib/agent/client/messages";
 import type { AgentUIMessage } from "@/lib/agent/types";
+import { AGENT_ICON } from "./AgentChrome";
 import { AgentNotice, type AgentNoticeSignIn } from "./AgentNotice";
+import { AgentRunCard } from "./AgentRunCard";
+import { CardIconButton } from "./AgentRunMedia";
+import { AgentToolRunResults } from "./AgentRunResults";
+import { useAgentTranscriptActions } from "./AgentSession";
 
 export interface AgentMessageProps {
   message: AgentUIMessage;
@@ -31,6 +44,8 @@ function thinkingLabel(isStreaming: boolean, duration?: number) {
 
 function AgentToolRow({ part }: { part: DynamicToolUIPart }) {
   const state = toolDisplayState(part);
+  const transcript = useAgentTranscriptActions();
+  const target = transcript ? toolCanvasTarget(part) : null;
   return (
     <Tool>
       <ToolHeader
@@ -39,6 +54,13 @@ function AgentToolRow({ part }: { part: DynamicToolUIPart }) {
         toolName={part.toolName}
         title={toolDisplayTitle(part)}
         summary={toolSummaryLine(part)}
+        actions={
+          transcript && target ? (
+            <CardIconButton size="sm" label="Show on canvas" onClick={() => transcript.showOnCanvas(target)}>
+              <LocateFixedIcon {...AGENT_ICON} />
+            </CardIconButton>
+          ) : undefined
+        }
       />
       <ToolContent>
         {/* Height-capped: tool inputs (whole workflows) can be long. */}
@@ -55,7 +77,10 @@ function ToolRows({ children }: { children: ReactNode }) {
   );
 }
 
-/** One chat message: user text in a bubble; for the agent, text, reasoning, tool calls and notices in order. */
+/**
+ * One chat message: user text in a bubble; for the agent, text, reasoning,
+ * tool calls (then the results of runs they started), notices and the Run card, in order.
+ */
 export const AgentMessage = memo(function AgentMessage({ message, streaming, onSignIn }: AgentMessageProps) {
   if (message.role === "user") {
     const text = message.parts
@@ -74,15 +99,20 @@ export const AgentMessage = memo(function AgentMessage({ message, streaming, onS
   // Runs of tool calls are drawn together; everything else in order, one per part.
   const blocks: ReactNode[] = [];
   let toolRun: ReactNode[] = [];
+  // The runs those calls started: their results follow the list.
+  let runCalls: string[] = [];
   const flushTools = () => {
     if (toolRun.length) blocks.push(<ToolRows key={`tools-${blocks.length}`}>{toolRun}</ToolRows>);
+    for (const toolCallId of runCalls) blocks.push(<AgentToolRunResults key={`run-${toolCallId}`} toolCallId={toolCallId} />);
     toolRun = [];
+    runCalls = [];
   };
   message.parts.forEach((part, index) => {
     if (!isRenderedPart(part)) return;
     const key = `${message.id}-${index}`;
     if (part.type === "dynamic-tool") {
       toolRun.push(<AgentToolRow key={key} part={part} />);
+      if (isRunWorkflowPart(part)) runCalls.push(part.toolCallId);
       return;
     }
     flushTools();
@@ -105,6 +135,9 @@ export const AgentMessage = memo(function AgentMessage({ message, streaming, onS
         break;
       case "data-agent-notice":
         blocks.push(<AgentNotice key={key} notice={part.data} onSignIn={onSignIn} />);
+        break;
+      case "data-run-offer":
+        blocks.push(<AgentRunCard key={key} offer={part.data} />);
         break;
     }
   });
