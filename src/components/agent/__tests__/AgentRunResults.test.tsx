@@ -420,6 +420,29 @@ describe("AgentRunResults viewer", () => {
     expect(windowKeys).not.toHaveBeenCalled();
   });
 
+  it("steps with the arrows and downloads with D inside a surface that keeps every key to itself", () => {
+    // The agent window and the chat view stop every key, so none reaches the document.
+    render(
+      <div onKeyDown={(event) => event.stopPropagation()}>
+        <AgentRunResults record={record({ outputs: [image("img-1"), image("img-2")] })} />
+      </div>,
+    );
+    fireEvent.click(screen.getAllByRole("button", { name: "Open Generate Image's image" })[0]);
+    const viewer = screen.getByRole("dialog", { name: "Run workflow" });
+    expect(within(viewer).getByText("1 of 2")).toBeInTheDocument();
+    fireEvent.keyDown(viewer, { key: "ArrowRight" });
+    expect(within(viewer).getByText("2 of 2")).toBeInTheDocument();
+    fireEvent.keyDown(viewer, { key: "ArrowRight" });
+    expect(within(viewer).getByText("2 of 2")).toBeInTheDocument();
+    fireEvent.keyDown(viewer, { key: "d" });
+    expect(download).toHaveBeenCalledWith("/api/assets/img-2/file?download=1", "image");
+    fireEvent.keyDown(viewer, { key: "ArrowLeft" });
+    expect(within(viewer).getByText("1 of 2")).toBeInTheDocument();
+    // A shortcut held with a modifier is someone else's.
+    fireEvent.keyDown(viewer, { key: "ArrowRight", metaKey: true });
+    expect(within(viewer).getByText("1 of 2")).toBeInTheDocument();
+  });
+
   it("goes to Assets from the viewer's footer", () => {
     renderCard(record({ outputs: [image("img-1"), image("img-2")] }));
     fireEvent.click(screen.getAllByRole("button", { name: "Open Generate Image's image" })[0]);

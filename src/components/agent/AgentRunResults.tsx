@@ -335,13 +335,24 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
     : [];
 
   // The viewer is portalled, but its keys still bubble through this card to
-  // the agent window, which closes on Escape: they end here, and Escape closes the viewer.
+  // the agent's surfaces, which keep every key and close on Escape: none would
+  // reach the document, where the viewer listens. They end here, and the card
+  // does what the viewer would: Escape closes, the arrows step, an action's shortcut (D) fires it.
   const keepViewerKeys = (event: KeyboardEvent) => {
     event.stopPropagation();
-    if (event.key === "Escape" && !event.defaultPrevented) {
+    if (event.defaultPrevented) return;
+    if (event.key === "Escape") {
       event.preventDefault();
       closeViewer();
+      return;
     }
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const step = event.key === "ArrowLeft" ? -1 : event.key === "ArrowRight" ? 1 : 0;
+    const action = viewerActions.find((entry) => entry.shortcut && !entry.disabled && entry.shortcut.toLowerCase() === event.key.toLowerCase());
+    if (!step && !action) return;
+    event.preventDefault();
+    if (action) action.onClick();
+    else if (viewerItems[viewerIndex + step]) setViewing(viewerItems[viewerIndex + step].id);
   };
 
   const runAgain = () => {
