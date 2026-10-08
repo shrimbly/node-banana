@@ -8,6 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { useEffect, type ReactNode } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 import type { AgentHarnessStatus, AgentGraphOpBatch } from "@/lib/agent/types";
@@ -27,7 +28,8 @@ vi.mock("@/utils/logger", () => ({
   },
 }));
 
-import { AgentPanel } from "@/components/agent/AgentPanel";
+import { AgentPanel, type AgentPanelProps } from "@/components/agent/AgentPanel";
+import { AgentSessionProvider, useAgentPresence, type AgentPresence } from "@/components/agent/AgentSession";
 import { useToast } from "@/components/Toast";
 import { buildAgentSnapshot } from "@/lib/agent/graph/snapshot";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -137,14 +139,37 @@ function replyChunks({
 
 // ---------------------------------------------------------------------------
 
-function renderPanel(props: Partial<Parameters<typeof AgentPanel>[0]> = {}) {
-  const onClose = vi.fn();
-  const utils = render(
+/** Reports the session's presence (what the agent button shows) on every change. */
+function PresenceProbe({ onPresenceChange }: { onPresenceChange: (presence: AgentPresence) => void }) {
+  const { presence } = useAgentPresence();
+  useEffect(() => onPresenceChange(presence), [presence, onPresenceChange]);
+  return null;
+}
+
+/** The window as the page mounts it: inside React Flow and the agent session. */
+function Harness({ children }: { children: ReactNode }) {
+  return (
     <ReactFlowProvider>
-      <AgentPanel open onClose={onClose} buttonRight={15} buttonBottom={173} {...props} />
-    </ReactFlowProvider>,
+      <AgentSessionProvider>{children}</AgentSessionProvider>
+    </ReactFlowProvider>
   );
-  return { ...utils, onClose };
+}
+
+function renderPanel(
+  props: Partial<AgentPanelProps> = {},
+  { onPresenceChange }: { onPresenceChange?: (presence: AgentPresence) => void } = {},
+) {
+  const onClose = vi.fn();
+  const tree = (next: Partial<AgentPanelProps>) => (
+    <Harness>
+      <AgentPanel open onClose={onClose} buttonRight={15} buttonBottom={173} {...next} />
+      {onPresenceChange && <PresenceProbe onPresenceChange={onPresenceChange} />}
+    </Harness>
+  );
+  const utils = render(tree(props));
+  /** Re-renders the window with new props under the same session. */
+  const rerenderPanel = (next: Partial<AgentPanelProps>) => utils.rerender(tree({ ...props, ...next }));
+  return { ...utils, onClose, rerenderPanel };
 }
 
 /** Opens the header's harness and model menu (Radix opens it from the keyboard in jsdom). */
@@ -205,7 +230,7 @@ describe("AgentPanel", () => {
     const onPresenceChange = vi.fn();
     localStorage.setItem(AGENT_SETTINGS_KEY, JSON.stringify({ harness: "codex", harnessChosen: true, models: {} }));
     statuses.codex = harnessStatus("codex", { signedIn: false, billing: "none" });
-    renderPanel({ onPresenceChange });
+    renderPanel({}, { onPresenceChange });
 
     await screen.findByRole("button", { name: "Sign in with ChatGPT" });
     expect(onPresenceChange).toHaveBeenLastCalledWith({ harness: "codex", harnessChosen: true, attention: true });
@@ -736,13 +761,9 @@ describe("AgentPanel", () => {
   });
 
   it("stays mounted but hidden while closed", async () => {
-    const { rerender } = renderPanel();
+    const { rerenderPanel } = renderPanel();
     await waitForComposer();
-    rerender(
-      <ReactFlowProvider>
-        <AgentPanel open={false} onClose={vi.fn()} buttonRight={15} buttonBottom={173} />
-      </ReactFlowProvider>,
-    );
+    rerenderPanel({ open: false, onClose: vi.fn() });
     const panel = screen.getByTestId("agent-panel");
     expect(panel.className).toContain("hidden");
     expect(panel.className).not.toMatch(/(^|\s)flex(\s|$)/);

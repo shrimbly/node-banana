@@ -78,8 +78,7 @@ import {
   getAgentStackBottom,
   getHistoryRightInset,
 } from "@/lib/agent/client/layout";
-import { loadAgentSettings } from "@/lib/agent/client/settings";
-import type { AgentPresence } from "./agent/AgentPanel";
+import { useAgentPresence } from "./agent/AgentSession";
 import { useViewportWidth } from "./agent/hooks/useViewportWidth";
 import { GroupBackgroundsPortal, GroupControlsOverlay } from "./GroupsOverlay";
 import { requestSave } from "@/store/saveRequestStore";
@@ -390,19 +389,14 @@ export function WorkflowCanvas() {
   >(null);
   const [isSplitting, setIsSplitting] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  // Agent window: mounted on first open, then kept (hidden) so a running turn survives closing it
+  // Agent window: mounted on first open, then kept (hidden) so it reopens where it was.
+  // The conversation, and whether a turn runs, belong to the page's agent session.
   const [isAgentOpen, setIsAgentOpen] = useState(false);
   const [isAgentMounted, setIsAgentMounted] = useState(false);
-  const [isAgentBusy, setIsAgentBusy] = useState(false);
-  // What the agent button shows: the stored choice until the window reports its own.
-  const [agentPresence, setAgentPresence] = useState<AgentPresence | null>(null);
-  useEffect(() => {
-    const stored = loadAgentSettings();
-    setAgentPresence((current) => current ?? { harness: stored.harness, harnessChosen: stored.harnessChosen === true || stored.opened === true, attention: false });
-  }, []);
+  const { busy: isAgentBusy, presence: agentPresence } = useAgentPresence();
   const [agentButtonWidth, setAgentButtonWidth] = useState(AGENT_BUTTON_ESTIMATED_WIDTH);
-  // The agent window is portaled above everything, so the Assets view cannot cover it
-  const assetsShown = useAssetStore((state) => state.appView === "assets");
+  // The agent window is portaled above everything, so it hides itself while another view covers the canvas
+  const canvasShown = useAssetStore((state) => state.appView === "canvas");
   const [isMinimapVisible, setIsMinimapVisible] = useState(true);
   const agentStackBottom = getAgentStackBottom({
     margin: MINIMAP_GEOMETRY.margin,
@@ -2579,9 +2573,9 @@ export function WorkflowCanvas() {
         {!isAgentOpen && (
         <AgentButton
           open={false}
-          harness={agentPresence?.harnessChosen ? agentPresence.harness : null}
+          harness={agentPresence.harnessChosen ? agentPresence.harness : null}
           busy={isAgentBusy}
-          attention={agentPresence?.attention ?? false}
+          attention={agentPresence.attention}
           disabled={tutorialActive && lockedFeatures}
           dimmed={tutorialActive && lockedFeatures}
           onClick={toggleAgent}
@@ -2650,15 +2644,13 @@ export function WorkflowCanvas() {
         selectedNodeIds={selectedNodeIds}
       />
 
-      {/* Agent window - hangs under the agent button, down to the navigator; hidden (not closed) while Assets shows */}
+      {/* Agent window - hangs under the agent button, down to the navigator; hidden (not closed) while Assets or the chat view shows */}
       {isAgentMounted && (
         <AgentPanel
-          open={isAgentOpen && !assetsShown}
+          open={isAgentOpen && canvasShown}
           onClose={closeAgent}
           buttonRight={AGENT_BUTTON_MARGIN}
           buttonBottom={agentStackBottom}
-          onBusyChange={setIsAgentBusy}
-          onPresenceChange={setAgentPresence}
         />
       )}
 

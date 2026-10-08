@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type DragEvent,
@@ -13,47 +12,21 @@ import { createPortal } from "react-dom";
 import { CHROME_SURFACE } from "@/components/chromeStyles";
 import { cn } from "@/components/agent/lib/utils";
 import { TooltipProvider } from "@/components/agent/ui/tooltip";
-import { useWorkflowStore } from "@/store/workflowStore";
 import {
   getAgentPanelFrame,
   getAgentPanelOcclusion,
   AGENT_PANEL_EDGE,
 } from "@/lib/agent/client/layout";
 import { isImeKeyEvent } from "@/lib/agent/client/keyboard";
-import { agentSuggestions, latestTurnRejectedSignIn, selectionLabel } from "@/lib/agent/client/messages";
-import {
-  deriveAgentReadiness,
-  HARNESS_LABELS,
-  shouldPollReadiness,
-  type AgentReadiness,
-} from "@/lib/agent/client/readiness";
-import { findLatestAgentSession } from "@/lib/agent/client/session";
-import { deletePromptNotes, fetchPromptNotes } from "@/lib/agent/client/api";
-import { researchMessage, researchTargetForSelection } from "@/lib/agent/client/research";
-import { resolveAgentEffort, resolveAgentModel } from "@/lib/agent/client/settings";
-import { decideFirstOpen } from "@/lib/agent/client/readiness";
-import { useAgentSettings } from "@/lib/agent/client/useAgentSettings";
-import { useAgentStatus } from "@/lib/agent/client/useAgentStatus";
-import { useAgentHistory } from "@/lib/agent/client/useAgentHistory";
+import { agentSuggestions } from "@/lib/agent/client/messages";
 import type { AgentConversation as SavedConversation } from "@/lib/agent/client/history";
-import {
-  AGENT_HARNESS_IDS,
-  type AgentDataParts,
-  type AgentGraphOpBatch,
-  type AgentErrorCode,
-  type AgentHarnessId,
-  type AgentResearchTarget,
-} from "@/lib/agent/types";
-import { AgentComposer, type AgentComposerProps } from "./AgentComposer";
+import { AgentComposer } from "./AgentComposer";
 import { AgentHistory } from "./AgentHistory";
 import { AgentBillingNote, AgentConversation, AgentEmptyState } from "./AgentConversation";
 import { AgentPanelHeader } from "./AgentPanelHeader";
+import { useAgentSession } from "./AgentSession";
 import { AgentAlreadySignedInHint, AgentSignInCard, AgentSignedInBanner, type AgentBlockedReadiness } from "./AgentSignInCard";
-import { AgentChooserCard, type AgentChooserAction } from "./AgentChooserCard";
-import { useAgentCanvasView } from "./hooks/useAgentCanvasView";
-import { useAgentShimmer } from "./hooks/useAgentShimmer";
-import { useAgentChat } from "./hooks/useAgentChat";
-import { useAgentSignIn } from "./hooks/useAgentSignIn";
+import { AgentChooserCard } from "./AgentChooserCard";
 import { useViewportWidth } from "./hooks/useViewportWidth";
 
 export interface AgentPanelProps {
@@ -62,300 +35,67 @@ export interface AgentPanelProps {
   /** The window's offsets from the canvas's right edge and from its bottom (above the navigator). */
   buttonRight: number;
   buttonBottom: number;
-  /** A turn started or ended (the button shows it as working). */
-  onBusyChange?: (busy: boolean) => void;
-  /** The harness the button should show, and whether it needs the user's attention. */
-  onPresenceChange?: (presence: AgentPresence) => void;
 }
-
-/** Notices that mean the harness status is stale. */
-const STATUS_NOTICE_CODES = new Set<AgentDataParts["agent-notice"]["code"]>([
-  "not_signed_in",
-  "wrong_billing",
-  "not_installed",
-]);
 
 /**
- * The agent chat window. Mounted once on first open and then kept (hidden
- * while closed), so a running turn and the conversation survive closing it.
+ * The agent chat window, one surface of the page's agent session (the
+ * full-page chat view is the other). Mounted once on first open and then kept
+ * (hidden while closed); the conversation and a running turn live in the
+ * session, so they outlive closing it.
  */
-/** What the agent button shows for the window: whose mark, and whether that harness can run. */
-export interface AgentPresence {
-  harness: AgentHarnessId;
-  /** The user has opened the agent, so the harness is theirs rather than the default. */
-  harnessChosen: boolean;
-  /** The harness can't run a turn until the user acts (signed out, wrong account, not installed). */
-  attention: boolean;
-}
+export function AgentPanel({ open, onClose, buttonRight, buttonBottom }: AgentPanelProps) {
+  const session = useAgentSession();
+  const {
+    harness,
+    setHarness,
+    readiness,
+    ready,
+    mode,
+    harnessStatus,
+    models,
+    model,
+    modelOption,
+    effort,
+    chooseModel,
+    chooseEffort,
+    signInStarting,
+    signInStartedAt,
+    checking,
+    checkAgain,
+    cancelSignIn,
+    startSignIn,
+    pickHarness,
+    signedInBanner,
+    dismissSignedInBanner,
+    alreadySignedIn,
+    dismissAlreadySignedIn,
+    chat,
+    busy,
+    draft,
+    setDraft,
+    notes,
+    canvasHasNodes,
+    conversations,
+    setWindowOpen,
+    setWindowOcclusion,
+  } = session;
+  const { messages } = chat;
 
-/** Readiness states the button flags: blocked, and not merely still being checked. */
-function needsAttention(readiness: AgentReadiness): boolean {
-  return readiness.kind !== "ready" && readiness.kind !== "loading" && readiness.kind !== "signing_in";
-}
-
-export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyChange, onPresenceChange }: AgentPanelProps) {
   const viewportWidth = useViewportWidth();
   const frame = getAgentPanelFrame({ buttonRight, buttonBottom, viewportWidth });
   const occludedRight = open ? getAgentPanelOcclusion(frame) : 0;
-
-  // --- Harness, model, status and sign-in ---------------------------------
-  const { settings, setHarness, markOpened, setModel, setEffort } = useAgentSettings();
-  const harness = settings.harness;
-  // Once the window has been open, the button knows which harness will answer
-  // and stops offering both. Whether the person picked it is a separate flag.
-  useEffect(() => {
-    if (open) markOpened();
-  }, [open, markOpened]);
-  const signIn = useAgentSignIn();
-  const [pollHarness, setPollHarness] = useState<AgentHarnessId | null>(null);
-  const status = useAgentStatus({ active: open, pollHarness });
-
-  const readiness = useMemo(() => {
-    const entries = AGENT_HARNESS_IDS.map((id) => [
-      id,
-      deriveAgentReadiness({
-        status: status.statuses[id],
-        statusCheckedAt: status.checkedAt[id],
-        signIn: signIn.attempts[id],
-        fetchError: status.error,
-      }),
-    ]);
-    return Object.fromEntries(entries) as Record<AgentHarnessId, AgentReadiness>;
-  }, [status.statuses, status.checkedAt, status.error, signIn.attempts]);
-  const current = readiness[harness];
-  const ready = current.kind === "ready";
-  const harnessChosen = settings.harnessChosen === true || settings.opened === true;
-  const attention = needsAttention(current);
+  // The session checks the harness while a surface shows, and builds clear of the strip this one covers.
+  useEffect(() => setWindowOpen(open), [open, setWindowOpen]);
+  useEffect(() => setWindowOcclusion(occludedRight), [occludedRight, setWindowOcclusion]);
   useEffect(
-    () => onPresenceChange?.({ harness, harnessChosen, attention }),
-    [harness, harnessChosen, attention, onPresenceChange],
-  );
-
-  // First open: nobody has picked a harness yet. One with a paid subscription
-  // wins (the saved one when both have one); with none, the chooser.
-  const firstOpen = !settings.harnessChosen;
-  const firstOpenDecision = firstOpen ? decideFirstOpen(readiness, harness) : null;
-  useEffect(() => {
-    if (firstOpenDecision?.kind === "open" && firstOpenDecision.harness !== harness) {
-      setHarness(firstOpenDecision.harness, { chosen: false });
-    }
-  }, [firstOpenDecision, harness, setHarness]);
-  const mode: "checking" | "chooser" | "harness" =
-    firstOpenDecision?.kind === "checking" ? "checking" : firstOpenDecision?.kind === "choose" ? "chooser" : "harness";
-
-  // Once, right after a sign-in lands: who is in, on what.
-  const [signedInBanner, setSignedInBanner] = useState<AgentHarnessId | null>(null);
-  const previousKinds = useRef<Partial<Record<AgentHarnessId, AgentReadiness["kind"]>>>({});
-  useEffect(() => {
-    for (const id of AGENT_HARNESS_IDS) {
-      const was = previousKinds.current[id];
-      const now = readiness[id].kind;
-      if (now === "ready" && (was === "signing_in" || was === "sign_in_failed")) setSignedInBanner(id);
-      previousKinds.current[id] = now;
-    }
-  }, [readiness]);
-
-  // Poll only the harness the user is signing in to, only while it is pending.
-  const pollTarget = shouldPollReadiness(current) ? harness : null;
-  useEffect(() => setPollHarness(pollTarget), [pollTarget]);
-
-  const refreshStatus = status.refresh;
-  const [checking, setChecking] = useState(false);
-  const checkAgain = useCallback(async () => {
-    setChecking(true);
-    try {
-      // On the chooser, both harnesses are on the table.
-      await refreshStatus(mode === "harness" ? harness : undefined);
-    } finally {
-      setChecking(false);
-    }
-  }, [refreshStatus, harness, mode]);
-  const cancelSignIn = useCallback(async () => {
-    await signIn.cancel(harness);
-    await refreshStatus(harness);
-  }, [signIn, harness, refreshStatus]);
-  // When the running flow started: the panel's own request, else when the status first said so.
-  const signingSince = useRef<Partial<Record<AgentHarnessId, number>>>({});
-  for (const id of AGENT_HARNESS_IDS) {
-    if (readiness[id].kind === "signing_in") signingSince.current[id] ??= Date.now();
-    else delete signingSince.current[id];
-  }
-  const signInStartedAt = signIn.attempts[harness]?.startedAt ?? signingSince.current[harness];
-
-  const models = status.statuses[harness]?.models ?? [];
-  const model = resolveAgentModel(models, settings.models[harness]);
-  const modelOption = models.find((option) => option.id === model);
-  const effort = resolveAgentEffort(modelOption, settings.efforts[harness]);
-  // Saved only when this harness offers it: a pick stays until the user changes it,
-  // and a stray value (another harness's id) can never replace it.
-  const chooseModel = useCallback(
-    (next: string) => {
-      if (models.some((option) => option.id === next)) setModel(harness, next);
+    () => () => {
+      setWindowOpen(false);
+      setWindowOcclusion(0);
     },
-    [models, harness, setModel],
-  );
-  const chooseEffort = useCallback(
-    (next: string) => {
-      if (modelOption?.efforts?.includes(next)) setEffort(harness, next);
-    },
-    [modelOption, harness, setEffort],
+    [setWindowOpen, setWindowOcclusion],
   );
 
-  // --- Conversation ----------------------------------------------------------
-  const canvasView = useAgentCanvasView(occludedRight);
-  const shimmer = useAgentShimmer();
-  const { focusBatch } = canvasView;
-  // Bring the edit into view and mark the nodes it changed.
-  const showBatch = useCallback(
-    (batch: AgentGraphOpBatch) => {
-      focusBatch(batch);
-      shimmer(batch);
-    },
-    [focusBatch, shimmer],
-  );
-  const handleNotice = useCallback(
-    (notice: AgentDataParts["agent-notice"]) => {
-      if (STATUS_NOTICE_CODES.has(notice.code)) void refreshStatus(notice.harness);
-    },
-    [refreshStatus],
-  );
-  const chat = useAgentChat({
-    harness,
-    model,
-    effort,
-    getViewport: canvasView.getViewport,
-    onBatchApplied: showBatch,
-    onNotice: handleNotice,
-  });
-  const { busy, messages } = chat;
-  // Kept here, not in the composer: the composer unmounts whenever the harness
-  // isn't ready (switching harness, a re-check), and the unsent text must survive.
-  const [draft, setDraft] = useState("");
-
-  useEffect(() => onBusyChange?.(busy), [busy, onBusyChange]);
-
-  // --- History ---------------------------------------------------------------
-  const history = useAgentHistory();
   const [historyOpen, setHistoryOpen] = useState(false);
-  const recordConversation = history.record;
-  const { chatId } = chat;
-  // Saved once each turn has finished (and on reopening, which changes nothing).
-  useEffect(() => {
-    if (busy || messages.length === 0) return;
-    recordConversation({
-      id: chatId,
-      messages,
-      workflowName: useWorkflowStore.getState().workflowName ?? undefined,
-      harness: findLatestAgentSession(messages)?.harness ?? harness,
-    });
-    // harness is read, not watched: switching harness is not a change to the conversation.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busy, messages, chatId, recordConversation]);
-
-  // "Sign in" answered already_signed_in: say so, with the terminal command, instead of doing nothing.
-  const [alreadySignedIn, setAlreadySignedIn] = useState<{ harness: AgentHarnessId; message?: string } | null>(null);
-  // A new turn makes it moot.
-  useEffect(() => {
-    if (busy) setAlreadySignedIn(null);
-  }, [busy]);
-
-  const startSignIn = useCallback(
-    async (target: AgentHarnessId, noticeCode?: AgentErrorCode) => {
-      // A notice's "Sign in" may name the other harness: switch to it first.
-      if (target !== harness && !busy) setHarness(target);
-      setSignedInBanner(null);
-      setAlreadySignedIn(null);
-      // After a turn the vendor rejected, the CLI's own status may still read
-      // signed in: force the vendor's sign-in rather than be told it's fine.
-      // From the card, or from that turn's not_signed_in notice; an older notice
-      // whose turn was followed by a working one doesn't force.
-      const force =
-        (noticeCode === undefined || noticeCode === "not_signed_in") && latestTurnRejectedSignIn(messages, target);
-      const attempt = await signIn.start(target, force ? { force: true } : {});
-      if (attempt.state === "already_signed_in") {
-        setAlreadySignedIn({ harness: target, message: attempt.message });
-        void refreshStatus(target);
-      }
-    },
-    [harness, busy, setHarness, signIn, refreshStatus, messages],
-  );
-
-  const selectionCount = useWorkflowStore((state) => {
-    let count = 0;
-    for (const node of state.nodes) if (node.selected) count++;
-    return count;
-  });
-  const canvasHasNodes = useWorkflowStore((state) => state.nodes.length > 0);
-  const clearSelection = useCallback(() => {
-    const { nodes, onNodesChange } = useWorkflowStore.getState();
-    onNodesChange(nodes.filter((node) => node.selected).map((node) => ({ type: "select", id: node.id, selected: false })));
-  }, []);
-
-  // One selected generator with a model: offer to look up how to prompt it.
-  const researchKey = useWorkflowStore((state) => {
-    const target = researchTargetForSelection(state.nodes);
-    return target ? JSON.stringify(target) : "";
-  });
-  const researchTarget = useMemo<AgentResearchTarget | null>(() => (researchKey ? JSON.parse(researchKey) : null), [researchKey]);
-  const [savedTips, setSavedTips] = useState<{ key: string; savedAt: string } | null>(null);
-  // Re-read after every turn too: a research turn is what saves them.
-  useEffect(() => {
-    if (!researchTarget || busy) return;
-    const controller = new AbortController();
-    void fetchPromptNotes(researchTarget.provider, researchTarget.modelId, controller.signal).then((found) => {
-      if (!controller.signal.aborted) setSavedTips(found ? { key: researchKey, savedAt: found.savedAt } : null);
-    });
-    return () => controller.abort();
-  }, [researchKey, researchTarget, busy]);
-  const tipsSavedAt = savedTips?.key === researchKey ? savedTips.savedAt : undefined;
-  const { send } = chat;
-
-  const notes = useMemo(() => {
-    const list: NonNullable<AgentComposerProps["notes"]> = [];
-    const selected = selectionLabel(selectionCount);
-    if (selected) {
-      list.push({
-        key: "selection",
-        kind: "selection",
-        text: selected,
-        // The selection is what the agent focuses on: clearing it widens the turn to the whole canvas.
-        onDismiss: clearSelection,
-        dismissLabel: "Clear the selection",
-      });
-    }
-    const lastSession = findLatestAgentSession(messages);
-    if (lastSession && lastSession.harness !== harness) {
-      list.push({
-        key: "switch",
-        kind: "switch",
-        text: `${HARNESS_LABELS[harness]} picks up from here with the conversation so far`,
-      });
-    }
-    if (researchTarget) {
-      const name = researchTarget.name ?? researchTarget.modelId;
-      const saved = tipsSavedAt
-        ? new Date(tipsSavedAt).toLocaleDateString(undefined, { day: "numeric", month: "short" })
-        : undefined;
-      list.push({
-        key: "research",
-        kind: "action",
-        text: saved ? `Refresh prompting tips for ${name}` : `Look up prompting tips for ${name}`,
-        title: saved
-          ? `Tips saved ${saved}. Searches the web again and replaces them.`
-          : "Searches the web for this model's prompting advice and saves it for every chat.",
-        onClick: () => send(researchMessage(researchTarget), { research: researchTarget }),
-        ...(saved
-          ? {
-              onDismiss: () => {
-                void deletePromptNotes(researchTarget.provider, researchTarget.modelId).then(() => setSavedTips(null));
-              },
-              dismissLabel: `Forget the saved prompting tips for ${name}`,
-            }
-          : {}),
-      });
-    }
-    return list;
-  }, [selectionCount, messages, harness, clearSelection, researchTarget, tipsSavedAt, send]);
 
   // --- Focus and keyboard ----------------------------------------------------
   const panelRef = useRef<HTMLElement>(null);
@@ -412,27 +152,20 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
     event.preventDefault();
   }, []);
 
+  const { newChat: startNewChat, openConversation: openSavedConversation } = session;
   const newChat = useCallback(() => {
-    chat.newChat();
+    startNewChat();
     setHistoryOpen(false);
     focusInput();
-  }, [chat, focusInput]);
+  }, [startNewChat, focusInput]);
 
   const openConversation = useCallback(
     (conversation: SavedConversation) => {
-      if (conversation.id !== chat.chatId) chat.openConversation(conversation);
+      openSavedConversation(conversation);
       setHistoryOpen(false);
       focusInput();
     },
-    [chat, focusInput],
-  );
-  const deleteConversation = useCallback(
-    (id: string) => {
-      history.remove(id);
-      // Deleting the open conversation leaves an empty chat, not a conversation that no longer exists.
-      if (id === chat.chatId) chat.newChat();
-    },
-    [history, chat],
+    [openSavedConversation, focusInput],
   );
 
   // The buttons below vanish once clicked (the empty state, the error box). Put
@@ -456,7 +189,7 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
       setDraft((current) => (current.trim() ? `${current}\n${text}` : text));
       focusInput();
     },
-    [chat, focusInput],
+    [chat, setDraft, focusInput],
   );
   const dismissError = useCallback(() => {
     chat.clearError();
@@ -465,14 +198,14 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
 
   // --- Render -----------------------------------------------------------------
   const hasMessages = messages.length > 0;
-  const blocked = ready ? null : (current as AgentBlockedReadiness);
+  const blocked = ready ? null : (readiness[harness] as AgentBlockedReadiness);
   const signInCard = (variant: "full" | "inline") =>
     blocked && (
       <AgentSignInCard
         harness={harness}
         readiness={blocked}
         variant={variant}
-        startingSignIn={signIn.starting === harness}
+        startingSignIn={signInStarting === harness}
         checking={checking}
         signInStartedAt={signInStartedAt}
         onSignIn={() => void startSignIn(harness)}
@@ -480,23 +213,16 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
         onCancelSignIn={() => void cancelSignIn()}
       />
     );
-  const pickHarness = useCallback(
-    (target: AgentHarnessId, action: AgentChooserAction) => {
-      setHarness(target, { chosen: true });
-      if (action === "sign_in") void startSignIn(target);
-    },
-    [setHarness, startSignIn],
-  );
 
   let body;
   if (historyOpen) {
     body = (
       <AgentHistory
-        conversations={history.conversations}
+        conversations={conversations}
         currentId={chat.chatId}
         locked={busy}
         onOpen={openConversation}
-        onDelete={deleteConversation}
+        onDelete={session.deleteConversation}
       />
     );
   } else if (hasMessages) {
@@ -532,10 +258,10 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
             {signedInBanner === harness && (
               <AgentSignedInBanner
                 harness={harness}
-                email={status.statuses[harness]?.account?.email}
-                plan={status.statuses[harness]?.account?.plan}
+                email={harnessStatus?.account?.email}
+                plan={harnessStatus?.account?.plan}
                 model={modelOption?.label}
-                onDismiss={() => setSignedInBanner(null)}
+                onDismiss={dismissSignedInBanner}
               />
             )}
             <AgentEmptyState
@@ -592,7 +318,7 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
           switchDisabled={busy}
           onHarnessChange={setHarness}
           models={models}
-          modelsFallback={status.statuses[harness]?.modelsFallback}
+          modelsFallback={harnessStatus?.modelsFallback}
           model={model}
           onModelChange={chooseModel}
           canStartNewChat={hasMessages}
@@ -608,9 +334,9 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom, onBusyCha
             <AgentAlreadySignedInHint
               harness={harness}
               message={alreadySignedIn.message}
-              command={status.statuses[harness]?.signInCommand}
+              command={harnessStatus?.signInCommand}
               onDismiss={() => {
-                setAlreadySignedIn(null);
+                dismissAlreadySignedIn();
                 focusInput();
               }}
             />

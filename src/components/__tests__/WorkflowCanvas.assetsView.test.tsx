@@ -59,6 +59,10 @@ vi.mock("@xyflow/react", async () => {
 vi.mock("@/components/ConnectionDropMenu", () => ({ ConnectionDropMenu: () => null }));
 vi.mock("@/components/MultiSelectToolbar", () => ({ MultiSelectToolbar: () => null }));
 vi.mock("@/components/GlobalImageHistory", () => ({ GlobalImageHistory: () => null }));
+// The agent button reads the page's agent session, which page.tsx mounts around the canvas.
+vi.mock("@/components/agent/AgentSession", () => ({
+  useAgentPresence: () => ({ busy: false, presence: { harness: "claude", harnessChosen: false, attention: false } }),
+}));
 vi.mock("@/components/GroupsOverlay", () => ({ GroupBackgroundsPortal: () => null, GroupControlsOverlay: () => null }));
 vi.mock("@/components/quickstart", () => ({ WelcomeModal: () => null }));
 vi.mock("@/utils/logger", () => ({ logger: { log: vi.fn(), error: vi.fn() } }));
