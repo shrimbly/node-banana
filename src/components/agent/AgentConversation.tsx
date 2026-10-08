@@ -242,9 +242,9 @@ export function AgentPageIntro({ harness, workflowName, nodeCount }: AgentPageIn
       <span className="flex size-11 items-center justify-center rounded-full bg-white/[0.05] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)]">
         <HarnessIcon harness={harness} className="size-[22px]" />
       </span>
-      <h1 className="mt-5 font-display text-[30px] font-bold leading-9 tracking-display text-balance text-neutral-100">
+      <h2 className="mt-5 font-display text-[30px] font-bold leading-9 tracking-display text-balance text-neutral-100">
         What should we make?
-      </h1>
+      </h2>
       <p className="mt-2 max-w-full truncate font-display text-[15px] font-medium leading-6 text-ink-3">
         {nodeCount > 0 ? (
           <>
@@ -261,30 +261,35 @@ export function AgentPageIntro({ harness, workflowName, nodeCount }: AgentPageIn
   );
 }
 
-/** Things to try under the chat view's empty composer, as cards two to a row. Each sends itself. */
+/**
+ * Things to try under the chat view's empty composer, as cards two to a row
+ * (one, when the column is narrower than two cards read well). Each sends itself.
+ */
 export function AgentSuggestionCards({ suggestions, onSuggestion }: AgentEmptyStateProps) {
   return (
-    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-      {suggestions.map((suggestion) => (
-        <button
-          key={suggestion}
-          type="button"
-          data-agent-suggestion
-          onClick={() => onSuggestion(suggestion)}
-          className={cn(
-            "group flex min-h-16 items-start gap-3 rounded-[14px] squircle border border-white/[0.07] bg-white/[0.02] px-4 py-3 text-left text-[13px] leading-5 text-neutral-300",
-            "transition-[background-color,border-color,color] duration-[120ms] hover:border-white/[0.12] hover:bg-white/[0.04] hover:text-neutral-100",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
-          )}
-        >
-          <span className="min-w-0 flex-1">{suggestion}</span>
-          <ArrowRightIcon
-            aria-hidden="true"
-            strokeWidth={1.75}
-            className="mt-0.5 size-4 shrink-0 text-neutral-600 transition-colors duration-[120ms] group-hover:text-neutral-300"
-          />
-        </button>
-      ))}
+    <div className="@container">
+      <div className="grid grid-cols-1 gap-2.5 @md:grid-cols-2">
+        {suggestions.map((suggestion) => (
+          <button
+            key={suggestion}
+            type="button"
+            data-agent-suggestion
+            onClick={() => onSuggestion(suggestion)}
+            className={cn(
+              "group flex min-h-16 items-start gap-3 rounded-[14px] squircle border border-white/[0.07] bg-white/[0.02] px-4 py-3 text-left text-[13px] leading-5 text-neutral-300",
+              "transition-[background-color,border-color,color] duration-[120ms] hover:border-white/[0.12] hover:bg-white/[0.04] hover:text-neutral-100",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
+            )}
+          >
+            <span className="min-w-0 flex-1">{suggestion}</span>
+            <ArrowRightIcon
+              aria-hidden="true"
+              strokeWidth={1.75}
+              className="mt-0.5 size-4 shrink-0 text-neutral-600 transition-colors duration-[120ms] group-hover:text-neutral-300"
+            />
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

@@ -71,8 +71,8 @@ export function describeReadiness(readiness: AgentReadiness): string {
   }
 }
 
-/** Rows of the harness menu: the Instrument menu's 28px items, with a check on the chosen one. */
-const MENU_ROW = cn(
+/** Rows of the agent's menus: the Instrument menu's 28px items, with a check on the chosen one. */
+export const MENU_ROW = cn(
   menuItemClass,
   "relative cursor-default rounded-sm outline-none select-none",
   "focus:bg-neutral-700 focus:text-neutral-100 data-highlighted:bg-neutral-700 data-highlighted:text-neutral-100",
@@ -81,7 +81,7 @@ const MENU_ROW = cn(
   "[&>span[data-slot=dropdown-menu-radio-item-indicator]]:hidden",
 );
 
-function RowCheck({ checked }: { checked: boolean }) {
+export function RowCheck({ checked }: { checked: boolean }) {
   return checked ? (
     <CheckIcon className="size-3.5 shrink-0 text-neutral-200" strokeWidth={2} aria-hidden="true" />
   ) : (
