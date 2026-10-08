@@ -265,8 +265,11 @@ export function AgentChatView() {
   // when the first message moves it from the middle of the page down to the dock.
   let top: ReactNode;
   if (hasMessages) {
+    // A transcript per conversation: the sidebar keeps it mounted, and the old one's scroll
+    // position (scrolled up, say) would otherwise open the next one somewhere in its middle.
     top = (
       <AgentConversation
+        key={chat.chatId}
         messages={messages}
         busy={busy}
         statusLine={chat.statusLine}

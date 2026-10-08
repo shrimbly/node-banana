@@ -365,6 +365,26 @@ describe("AgentChatView", () => {
       expect(within(sidebar()).getByRole("button", { name: /^Hero film/ })).toHaveAttribute("aria-current", "true");
     });
 
+    it("opens another conversation in a fresh transcript, so it starts at its newest message", async () => {
+      localStorage.setItem(
+        AGENT_HISTORY_KEY,
+        JSON.stringify([
+          savedConversation({ id: "c-1", summary: "Hero film" }),
+          savedConversation({ id: "c-2", summary: "Moodboard", text: "Made the moodboard." }),
+        ]),
+      );
+      render(<Harness />);
+      await waitForComposer();
+      fireEvent.click(within(sidebar()).getByRole("button", { name: /^Hero film/ }));
+      await screen.findByText("Built the hero film.");
+      const first = screen.getByRole("log");
+
+      fireEvent.click(within(sidebar()).getByRole("button", { name: /^Moodboard/ }));
+      await screen.findByText("Made the moodboard.");
+      // Not the first one's scroller, still wherever the reader had left it.
+      expect(screen.getByRole("log")).not.toBe(first);
+    });
+
     it("deletes a conversation only once confirmed", async () => {
       localStorage.setItem(AGENT_HISTORY_KEY, JSON.stringify([savedConversation()]));
       const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);

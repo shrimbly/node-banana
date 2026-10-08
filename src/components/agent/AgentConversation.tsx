@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useStickToBottomContext } from "use-stick-to-bottom";
 import { ArrowRightIcon, RotateCcwIcon } from "lucide-react";
 import {
@@ -10,6 +10,7 @@ import {
 } from "@/components/ai-elements/conversation";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { cn } from "@/components/agent/lib/utils";
+import { prefersReducedMotion } from "@/components/assets/useVirtualWindow";
 import { findHarnessSwitches, turnIndicatorText } from "@/lib/agent/client/messages";
 import { HARNESS_BILLING_COPY, HARNESS_LABELS } from "@/lib/agent/client/readiness";
 import type { AgentHarnessId, AgentUIMessage } from "@/lib/agent/types";
@@ -52,9 +53,12 @@ export function AgentConversation({
   const page = useAgentSurface() === "page";
   const switches = useMemo(() => findHarnessSwitches(messages), [messages]);
   const indicator = turnIndicatorText(messages, busy, statusLine);
+  const [reducedMotion] = useState(prefersReducedMotion);
 
   return (
-    <Conversation className="min-h-0 flex-1">
+    // Opens at the newest line rather than gliding down from the top each time it mounts
+    // (opening a chat, coming back to the view); a reply grows into view, at once under reduced motion.
+    <Conversation className="min-h-0 flex-1" initial="instant" resize={reducedMotion ? "instant" : "smooth"}>
       <ConversationContent className={page ? `${PAGE_COLUMN} gap-7 pb-10 pt-6` : "gap-5 px-4 py-4"}>
         {messages.map((message, index) => {
           const switchedTo = switches.get(message.id);
