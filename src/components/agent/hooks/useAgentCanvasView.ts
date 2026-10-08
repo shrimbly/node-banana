@@ -29,6 +29,28 @@ export function useAgentCanvasView(occludedRight: number) {
     });
   }, [storeApi]);
 
+  /** Pan/zoom so these (existing) nodes fill the part of the pane the window leaves visible. */
+  const fitNodes = useCallback(
+    (ids: string[], maxZoom: number) => {
+      const paneWidth = storeApi.getState().width;
+      // On a narrow pane the window covers most of it; fit into the whole pane instead.
+      const rightInset =
+        paneWidth - occludedRef.current >= 240 ? occludedRef.current + FOCUS_PADDING_PX / 2 : FOCUS_PADDING_PX;
+      void reactFlow.fitView({
+        nodes: ids.map((id) => ({ id })),
+        duration: FOCUS_DURATION_MS,
+        maxZoom,
+        padding: {
+          top: `${FOCUS_PADDING_PX}px`,
+          bottom: `${FOCUS_PADDING_PX}px`,
+          left: `${FOCUS_PADDING_PX}px`,
+          right: `${rightInset}px`,
+        },
+      });
+    },
+    [reactFlow, storeApi],
+  );
+
   /**
    * After a frame (so React Flow has the new nodes), pan/zoom to the nodes a
    * batch touched — unless they are already in view. A replaced canvas always
@@ -46,27 +68,30 @@ export function useAgentCanvasView(occludedRight: number) {
         const visible = getViewport();
         if (!batch.replacedCanvas && visible && rectContains(visible, reactFlow.getNodesBounds(ids))) return;
 
-        const zoom = reactFlow.getZoom();
-        const paneWidth = storeApi.getState().width;
-        // On a narrow pane the window covers most of it; fit into the whole pane instead.
-        const rightInset =
-          paneWidth - occludedRef.current >= 240 ? occludedRef.current + FOCUS_PADDING_PX / 2 : FOCUS_PADDING_PX;
-        void reactFlow.fitView({
-          nodes: ids.map((id) => ({ id })),
-          duration: FOCUS_DURATION_MS,
-          // Never zoom in past 100%, nor past where the user already was for a small edit.
-          maxZoom: batch.replacedCanvas ? 1 : Math.min(1, Math.max(zoom, 0.1)),
-          padding: {
-            top: `${FOCUS_PADDING_PX}px`,
-            bottom: `${FOCUS_PADDING_PX}px`,
-            left: `${FOCUS_PADDING_PX}px`,
-            right: `${rightInset}px`,
-          },
-        });
+        // Never zoom in past 100%, nor past where the user already was for a small edit.
+        fitNodes(ids, batch.replacedCanvas ? 1 : Math.min(1, Math.max(reactFlow.getZoom(), 0.1)));
       });
     },
-    [reactFlow, storeApi, getViewport],
+    [reactFlow, getViewport, fitNodes],
   );
 
-  return { getViewport, focusBatch };
+  /**
+   * Fit these nodes into view (the user asked to see them), up to 100%. Waits
+   * two frames: after a tab switch or leaving the chat view, the tab's own
+   * viewport is restored first, and React Flow fits only once it has measured
+   * the nodes. Ids no longer on the canvas are ignored.
+   */
+  const focusNodes = useCallback(
+    (nodeIds: readonly string[]) => {
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const ids = nodeIds.filter((id) => reactFlow.getNode(id));
+          if (ids.length > 0) fitNodes(ids, 1);
+        }),
+      );
+    },
+    [reactFlow, fitNodes],
+  );
+
+  return { getViewport, focusBatch, focusNodes };
 }
