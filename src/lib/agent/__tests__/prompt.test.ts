@@ -67,8 +67,9 @@ describe("buildAgentSystemPrompt", () => {
     // then from 13.5k for the rule that keeps the user's stated preferences standing,
     // then from 14k for the rule that makes "this style" mean the selection,
     // then from 14.25k for what to run when the user asks for a run,
-    // then from 14.5k for the chat's Run button and the open workflows (Claude 14,976, Codex 15,170).
-    expect(prompt.length).toBeLessThan(15_000);
+    // then from 14.5k for the chat's Run button and the open workflows,
+    // then from 15k for the button covering only the workflow the reply ends in (Claude 15,099, Codex 15,293).
+    expect(prompt.length).toBeLessThan(15_150);
   });
 
   it("points at the chat's Run button, and teaches the open workflows and their tools", () => {
@@ -77,6 +78,8 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain(
       "What you build or change and leave unrun gets a Run button under your reply if it can run as it stands: point the user there, not to the canvas's Run button; if an upload or text is missing there is none, so say what to fill in, then to press Run on the canvas.",
     );
+    // The button runs the workflow the turn ended in: changes left in another tab have none.
+    expect(prompt).toContain("The button covers only the workflow you end in: for changes left in another tab, say which and to press Run on its canvas.");
     expect(prompt).toContain("Each open workflow is a tab; the <canvas> block lists them when there are several, and your tools work in the live one.");
     expect(prompt).toContain("new_workflow opens an empty one: use it, not replaceCanvas, when the user asks for a new workflow and the live one holds other work");
     expect(prompt).toContain("save_workflow saves the live one, only when asked.");
