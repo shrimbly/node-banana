@@ -337,6 +337,29 @@ describe("AgentRunResults outputs", () => {
     expect(window.container.querySelector('[data-run-media="grid"]')).toHaveAttribute("data-columns", "2");
   });
 
+  it("keeps playing and showing a run's files when the node makes something new", () => {
+    useWorkflowStore.setState({
+      nodes: [node("gen", "nanoBanana", { outputImage: "data:image/png;base64,ONE" }), node("voice", "generateAudio", { outputAudio: "data:audio/mp3;base64,ONE" })],
+    });
+    const { container } = renderCard(
+      record({
+        ranNodeIds: ["gen", "voice"],
+        outputs: [image("img-1"), { id: "aud-1", nodeId: "voice", nodeTitle: "Generate Audio", nodeType: "generateAudio", kind: "audio", assetId: "aud-1", sha256: SHA }],
+      }),
+    );
+    const audio = container.querySelector('[data-run-audio="aud-1"] audio');
+    const picture = container.querySelector('[data-run-tile="img-1"] img');
+    // A later run writes take 2 to both nodes: this card's own files stay as they are, mid-play too.
+    act(() =>
+      useWorkflowStore.setState({
+        nodes: [node("gen", "nanoBanana", { outputImage: "data:image/png;base64,TWO-TWO" }), node("voice", "generateAudio", { outputAudio: "data:audio/mp3;base64,TWO-TWO" })],
+      }),
+    );
+    expect(container.querySelector('[data-run-audio="aud-1"] audio')).toBe(audio);
+    expect(container.querySelector('[data-run-tile="img-1"] img')).toBe(picture);
+    expect(audio).toHaveAttribute("src", "/api/assets/aud-1/file");
+  });
+
   it("asks for a missing file again after a moment, then falls back to the node's own media", () => {
     vi.useFakeTimers();
     useWorkflowStore.setState({ nodes: [node("gen", "nanoBanana", { outputImage: "data:image/png;base64,LIVE" })] });
@@ -352,6 +375,19 @@ describe("AgentRunResults outputs", () => {
     expect(tile().querySelector("img")).toHaveAttribute("src", "data:image/png;base64,LIVE");
     fireEvent.error(tile().querySelector("img")!);
     expect(screen.getByText("Open the canvas to see it")).toBeInTheDocument();
+  });
+
+  it("shows the node's media once it has some, after the files ran out", () => {
+    vi.useFakeTimers();
+    const { container } = renderCard(record({ outputs: [image("img-1")] }));
+    fireEvent.error(container.querySelector('[data-run-tile="img-1"] img')!);
+    act(() => {
+      vi.advanceTimersByTime(MEDIA_RETRY_MS);
+    });
+    fireEvent.error(container.querySelector('[data-run-tile="img-1"] img')!);
+    expect(screen.getByText("Open the canvas to see it")).toBeInTheDocument();
+    act(() => useWorkflowStore.setState({ nodes: [node("gen", "nanoBanana", { outputImage: "data:image/png;base64,LIVE" })] }));
+    expect(container.querySelector('[data-run-tile="img-1"] img')).toHaveAttribute("src", "data:image/png;base64,LIVE");
   });
 });
 

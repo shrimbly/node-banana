@@ -406,7 +406,7 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
         <div className="flex flex-col gap-1 border-t border-white/[0.06] p-1">
           <RunMediaGrid items={visual} liveSources={sources} surface={surface} onOpen={setViewing} onShowNode={showNode} />
           {audio.map((output) => (
-            <RunAudioRow key={`${output.id}:${sources[output.id]?.length ?? 0}`} output={output} liveSrc={sources[output.id]} onShowNode={showNode} />
+            <RunAudioRow key={output.id} output={output} liveSrc={sources[output.id]} onShowNode={showNode} />
           ))}
           {pendingAudio.map((entry) => (
             <PendingAudioRow key={entry.key} pending={entry} />

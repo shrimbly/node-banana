@@ -172,8 +172,9 @@ function tileSteps(output: AgentRunOutput, liveSrc: string | undefined, lone: bo
 /**
  * Walks `steps` on each load error: the next source, after its delay (a
  * skeleton shows meanwhile). `exhausted` once none is left. The steps are
- * read when an error comes; a host that changes its sources keys the
- * component by them so the walk starts over.
+ * read on every render, so the walk never restarts: a step whose source
+ * changes (a live output following its node) swaps in place, and one added
+ * after the walk ran out (the node's media, once its tab opens) is shown.
  */
 export function useSourceChain(steps: readonly SourceStep[]) {
   const [index, setIndex] = useState(0);
@@ -199,11 +200,6 @@ export function useSourceChain(steps: readonly SourceStep[]) {
   };
   const step = steps[index];
   return { src: waiting ? undefined : step?.src, waiting, exhausted: !step, onError };
-}
-
-/** The key that restarts a tile's source walk: what it shows, and whether the node can stand in. */
-export function sourceKey(output: AgentRunOutput, liveSrc: string | undefined): string {
-  return `${output.id}:${liveSrc ? liveSrc.length : 0}`;
 }
 
 /** The full file for the viewer and downloads: the library's, else the node's. */
@@ -326,7 +322,7 @@ function VisualTile({
   }
   return (
     <MediaTile
-      key={sourceKey(output, liveSrc)}
+      key={output.id}
       output={output}
       liveSrc={liveSrc}
       lone={lone}
