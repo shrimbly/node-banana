@@ -2,7 +2,7 @@
 
 import { memo, type ReactNode } from "react";
 import type { DynamicToolUIPart } from "ai";
-import { Message, MessageActions, MessageContent, MessageResponse } from "@/components/ai-elements/message";
+import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Tool, ToolContent, ToolHeader, ToolInput } from "@/components/ai-elements/tool";
@@ -20,7 +20,7 @@ import type { AgentUIMessage } from "@/lib/agent/types";
 import { AGENT_ICON } from "./AgentChrome";
 import { AgentNotice, type AgentNoticeSignIn } from "./AgentNotice";
 import { AgentRunCard } from "./AgentRunCard";
-import { CardCopyButton, CardIconButton } from "./AgentRunMedia";
+import { CardIconButton } from "./AgentRunMedia";
 import { AgentToolRunResults } from "./AgentRunResults";
 import { useAgentTranscriptActions } from "./AgentSession";
 import { useAgentSurface } from "./AgentSurface";
@@ -29,8 +29,6 @@ export interface AgentMessageProps {
   message: AgentUIMessage;
   /** This message is the reply still streaming in. */
   streaming: boolean;
-  /** The conversation's last message (the page keeps its Copy in view). */
-  latest?: boolean;
   onSignIn?: AgentNoticeSignIn;
 }
 
@@ -92,9 +90,9 @@ const PAGE_ASSISTANT_TEXT = "text-[15px] leading-[26px]";
 /**
  * One chat message: user text in a bubble; for the agent, text, reasoning,
  * tool calls (then the results of runs they started), notices and the Run
- * card, in order, and a Copy of its text once it has finished.
+ * card, in order.
  */
-export const AgentMessage = memo(function AgentMessage({ message, streaming, latest = false, onSignIn }: AgentMessageProps) {
+export const AgentMessage = memo(function AgentMessage({ message, streaming, onSignIn }: AgentMessageProps) {
   const page = useAgentSurface() === "page";
   if (message.role === "user") {
     const text = message.parts
@@ -161,32 +159,10 @@ export const AgentMessage = memo(function AgentMessage({ message, streaming, lat
   });
   flushTools();
 
-  // What the reply said, as the markdown it was written in: a prompt it wrote, the settings it chose.
-  const replyText = streaming
-    ? ""
-    : message.parts
-        .filter((part) => part.type === "text")
-        .map((part) => part.text.trim())
-        .filter(Boolean)
-        .join("\n\n");
-
   return (
-    <Message from="assistant" className="group/message max-w-full">
+    <Message from="assistant" className="max-w-full">
       {/* Unclipped: a run's preview row reaches past the text, wider than the column on the page and to the window's edges. */}
       <MessageContent className={cn("w-full overflow-visible", page ? `gap-4 ${PAGE_ASSISTANT_TEXT}` : "gap-3")}>{blocks}</MessageContent>
-      {replyText && (
-        <MessageActions
-          data-message-actions=""
-          className={cn(
-            // The icon's edge on the text's; tucked under the last line.
-            "-mb-1 -ml-1.5 -mt-1 transition-opacity duration-[120ms] motion-reduce:transition-none",
-            // Quiet until wanted; on the page the latest reply keeps it, as chat apps do. Touch has no hover.
-            !(page && latest) && "opacity-0 focus-within:opacity-100 group-hover/message:opacity-100 pointer-coarse:opacity-100",
-          )}
-        >
-          <CardCopyButton value={replyText} label="Copy reply" />
-        </MessageActions>
-      )}
     </Message>
   );
 });

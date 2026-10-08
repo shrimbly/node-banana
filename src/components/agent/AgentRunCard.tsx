@@ -1,10 +1,21 @@
 "use client";
 
 import { Fragment, useId, useMemo, useState } from "react";
-import { ChevronDownIcon, LocateFixedIcon, MinusIcon, PlayIcon, PlusIcon, RotateCcwIcon, SquareIcon } from "lucide-react";
+import {
+  ChevronDownIcon,
+  ChevronsRightIcon,
+  FastForwardIcon,
+  LocateFixedIcon,
+  MinusIcon,
+  PlayIcon,
+  PlusIcon,
+  RepeatIcon,
+  RotateCcwIcon,
+  SquareIcon,
+} from "lucide-react";
 import { cn } from "@/components/agent/lib/utils";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/agent/ui/dropdown-menu";
-import { MenuDivider, MenuSectionLabel, menuItemClass, menuSurfaceClass } from "@/components/ui/Menu";
+import { MenuDivider, menuItemClass, menuSurfaceClass } from "@/components/ui/Menu";
 import { chatRunBlockedReason, startOfferRun, stopChatRun, useLatestRun } from "@/lib/agent/client/runs";
 import type { AgentRunOffer, AgentRunOption } from "@/lib/agent/types";
 import { MAX_RUN_COUNT, clampRunCount, type RunScope } from "@/store/utils/runBatch";
@@ -131,14 +142,14 @@ function sameScope(a: RunScope, b: RunScope): boolean {
 /** Rows of the alternatives menu: the Instrument menu's 28px items (as the header's harness menu). */
 const MENU_ROW = cn(
   menuItemClass,
-  "relative cursor-default rounded-sm outline-none select-none",
+  "relative cursor-default rounded-none outline-none select-none",
   "focus:bg-neutral-700 focus:text-neutral-100 data-highlighted:bg-neutral-700 data-highlighted:text-neutral-100",
   "data-disabled:pointer-events-none data-disabled:opacity-30",
 );
 
 /** The run count's steps: 22px squares in a well, as MenuStepper's. */
 const STEP = cn(
-  "flex size-[22px] cursor-default items-center justify-center rounded-[6px] p-0 text-neutral-400 outline-none [&_svg]:size-3",
+  "flex size-[22px] cursor-default items-center justify-center rounded-[6px] p-0 text-neutral-400 outline-none",
   "data-highlighted:bg-white/8 data-highlighted:text-neutral-100 data-disabled:pointer-events-none data-disabled:opacity-30",
 );
 
@@ -148,6 +159,12 @@ const STEP = cn(
  * still opens its menu (the run count, Show on canvas), with the other ways
  * to run held there.
  */
+/** Each way to run with the canvas Run menu's icon for it: the whole workflow, from a node, or a set of nodes. */
+function OptionIcon({ scope }: { scope: RunScope }) {
+  const Icon = scope.kind === "all" ? PlayIcon : scope.kind === "from" ? ChevronsRightIcon : FastForwardIcon;
+  return <Icon aria-hidden="true" strokeWidth={2} className="size-3.5" />;
+}
+
 /** The quiet split button's halves, once the offer has run. */
 const QUIET_HALF = cn(
   "flex items-center transition-colors duration-[120ms] hover:bg-white/[0.09] hover:text-neutral-100",
@@ -280,13 +297,37 @@ export function AgentRunCard({ offer }: { offer: AgentRunOffer }) {
                   className={cn(
                     menuSurfaceClass,
                     AGENT_POPOVER_LAYER,
-                    "w-auto min-w-56 max-w-[min(20rem,calc(100vw-2rem))] bg-card p-1 text-neutral-300 shadow-menu ring-0",
+                    "w-auto min-w-[220px] max-w-[min(20rem,calc(100vw-2rem))] bg-card px-0 py-1 text-neutral-300 shadow-menu ring-0",
                   )}
                 >
-                  {/* The run count, as in the canvas's Run menu. Its steps are menu items, so the arrow keys reach them. */}
-                  <div className="flex h-8 items-center gap-3 px-2.5">
-                    <span className="flex-1 text-[13px] text-neutral-300">Runs</span>
-                    <span role="group" aria-label="Runs" className="inline-flex h-[22px] items-center rounded-[6px] bg-well shadow-well">
+                  {/* The canvas's Run menu, row for row: the other ways to run, then the run count. */}
+                  {others.map((option) => (
+                    <DropdownMenuItem
+                      key={`${option.label}:${JSON.stringify(option.scope)}`}
+                      disabled={!!blocked}
+                      className={MENU_ROW}
+                      onSelect={() => run(option)}
+                    >
+                      <OptionIcon scope={option.scope} />
+                      <span className="min-w-0 truncate">{option.label}</span>
+                      <span className="ml-auto shrink-0 pl-3 tabular-nums text-neutral-500">{plural(option.nodeIds.length, "node")}</span>
+                    </DropdownMenuItem>
+                  ))}
+                  {record && (
+                    <DropdownMenuItem
+                      className={MENU_ROW}
+                      onSelect={() => transcript.showOnCanvas({ ...(offer.tabId ? { tabId: offer.tabId } : {}), nodeIds: nodesForCanvas })}
+                    >
+                      <LocateFixedIcon aria-hidden="true" strokeWidth={2} className="size-3.5" />
+                      Show on canvas
+                    </DropdownMenuItem>
+                  )}
+                  {(others.length > 0 || record) && <MenuDivider className="my-1" />}
+                  {/* Its steps are menu items, so the arrow keys reach them; they keep the menu open. */}
+                  <div className="flex min-h-7 items-center gap-2 px-2.5 py-1 text-xs text-neutral-300">
+                    <RepeatIcon aria-hidden="true" strokeWidth={2} className="size-3.5 shrink-0" />
+                    <span>Runs</span>
+                    <span role="group" aria-label="Runs" className="ml-auto inline-flex h-[22px] items-center rounded-[6px] bg-well shadow-well">
                       <DropdownMenuItem
                         aria-label="Fewer runs"
                         disabled={runs <= 1 || runningHere}
@@ -296,7 +337,7 @@ export function AgentRunCard({ offer }: { offer: AgentRunOffer }) {
                         }}
                         className={STEP}
                       >
-                        <MinusIcon aria-hidden="true" strokeWidth={2} />
+                        <MinusIcon aria-hidden="true" strokeWidth={2} className="size-3" />
                       </DropdownMenuItem>
                       <output aria-live="polite" className="min-w-7 text-center font-mono text-[11px] tabular-nums text-neutral-100">
                         {runs}
@@ -310,40 +351,10 @@ export function AgentRunCard({ offer }: { offer: AgentRunOffer }) {
                         }}
                         className={STEP}
                       >
-                        <PlusIcon aria-hidden="true" strokeWidth={2} />
+                        <PlusIcon aria-hidden="true" strokeWidth={2} className="size-3" />
                       </DropdownMenuItem>
                     </span>
                   </div>
-                  {record && (
-                    <>
-                      <MenuDivider />
-                      <DropdownMenuItem
-                        className={MENU_ROW}
-                        onSelect={() => transcript.showOnCanvas({ ...(offer.tabId ? { tabId: offer.tabId } : {}), nodeIds: nodesForCanvas })}
-                      >
-                        <LocateFixedIcon aria-hidden="true" strokeWidth={1.75} className="size-3.5 shrink-0 text-neutral-400" />
-                        <span className="min-w-0 flex-1 truncate">Show on canvas</span>
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  {others.length > 0 && (
-                    <>
-                      <MenuDivider />
-                      <MenuSectionLabel className="px-2.5 pt-1.5 pb-1">Run instead</MenuSectionLabel>
-                      {others.map((option) => (
-                        <DropdownMenuItem
-                          key={`${option.label}:${JSON.stringify(option.scope)}`}
-                          disabled={!!blocked}
-                          className={MENU_ROW}
-                          onSelect={() => run(option)}
-                        >
-                          <PlayIcon aria-hidden="true" strokeWidth={0} fill="currentColor" className="size-3 shrink-0 text-neutral-400" />
-                          <span className="min-w-0 flex-1 truncate">{option.label}</span>
-                          <span className="shrink-0 pl-3 font-mono text-[11px] tabular-nums text-ink-3">{plural(option.nodeIds.length, "node")}</span>
-                        </DropdownMenuItem>
-                      ))}
-                    </>
-                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>

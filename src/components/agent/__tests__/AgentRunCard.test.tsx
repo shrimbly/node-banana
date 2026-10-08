@@ -240,6 +240,19 @@ describe("AgentRunCard", () => {
     expect(startOfferRun).toHaveBeenCalledWith({ chatId: "chat-1", offer, option: offer.alternatives[0], runs: 1 });
   });
 
+  it("lays its menu out as the canvas's Run menu: the other ways to run, Show on canvas, then the run count", () => {
+    useAgentRuns.setState({ records: [record()] });
+    renderOffer();
+    const menu = openMenu();
+    expect(within(menu).getAllByRole("menuitem").map((item) => item.getAttribute("aria-label") ?? item.textContent)).toEqual([
+      "Run whole workflow3 nodes",
+      "Show on canvas",
+      "Fewer runs",
+      "More runs",
+    ]);
+    expect(within(menu).queryByText(/Run instead/i)).not.toBeInTheDocument();
+  });
+
   it("keeps the run count in the menu when there is no other way to run", () => {
     renderOffer({ ...offer, alternatives: [] });
     const menu = openMenu();
