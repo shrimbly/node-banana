@@ -5,8 +5,9 @@ import { WorkflowCanvas } from "@/components/WorkflowCanvas";
 import { useAssetStore } from "@/store/assetStore";
 
 /**
- * The canvas stays mounted (inert, invisible) under the Assets view, and its
- * window-level key handler must not act on the hidden graph. Rendered the
+ * The canvas stays mounted (inert, invisible) under the Assets and chat
+ * views, and its window-level key handler must not act on the hidden graph;
+ * bare A and C are how it opens them. Rendered the
  * way WorkflowCanvas.test.tsx renders it, with the store mocked; the
  * Assets view's side of the contract (the modal count it holds) is
  * modelled by `isModalOpen`.
@@ -212,6 +213,85 @@ describe("WorkflowCanvas behind the Assets view", () => {
     mocks.state = state({ isModalOpen: true });
     renderCanvas();
     fireEvent.keyDown(window, { key: "a" });
+    fireEvent.keyDown(window, { key: "c" });
     expect(useAssetStore.getState().appView).toBe("canvas");
+  });
+});
+
+describe("WorkflowCanvas and the chat view", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.state = state();
+    useAssetStore.setState({ appView: "canvas" });
+  });
+  afterEach(() => {
+    useAssetStore.setState({ appView: "canvas" });
+  });
+
+  it("shows the chat on a bare C, leaving Shift+C to add a ComfyUI node and Cmd+C to copy", () => {
+    renderCanvas();
+    fireEvent.keyDown(window, { key: "C", shiftKey: true });
+    expect(mockAddNode).toHaveBeenCalledWith("comfyApp", expect.any(Object));
+    fireEvent.keyDown(window, { key: "c", metaKey: true });
+    expect(mockCopySelectedNodes).toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: "c", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "c", altKey: true });
+    fireEvent.keyDown(window, { key: "c", repeat: true });
+    expect(useAssetStore.getState().appView).toBe("canvas");
+
+    fireEvent.keyDown(window, { key: "c" });
+    expect(useAssetStore.getState().appView).toBe("chat");
+  });
+
+  it("leaves C to a text field being typed in", () => {
+    renderCanvas();
+    const field = document.createElement("textarea");
+    document.body.appendChild(field);
+    try {
+      field.focus();
+      fireEvent.keyDown(field, { key: "c" });
+      expect(useAssetStore.getState().appView).toBe("canvas");
+    } finally {
+      field.remove();
+    }
+  });
+
+  it("does not switch views while a menu is open or from inside a dialog such as the agent window", () => {
+    renderCanvas();
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    document.body.appendChild(menu);
+    try {
+      fireEvent.keyDown(window, { key: "c" });
+      expect(useAssetStore.getState().appView).toBe("canvas");
+    } finally {
+      menu.remove();
+    }
+    const dialog = document.createElement("section");
+    dialog.setAttribute("role", "dialog");
+    const button = document.createElement("button");
+    dialog.appendChild(button);
+    document.body.appendChild(dialog);
+    try {
+      fireEvent.keyDown(button, { key: "c" });
+      expect(useAssetStore.getState().appView).toBe("canvas");
+    } finally {
+      dialog.remove();
+    }
+  });
+
+  it("ignores its keys while the chat shows: C, A and the rest do nothing to the hidden graph", () => {
+    mocks.state = state({ isModalOpen: true });
+    useAssetStore.setState({ appView: "chat" });
+    renderCanvas();
+    fireEvent.keyDown(window, { key: "c" });
+    fireEvent.keyDown(window, { key: "a" });
+    fireEvent.keyDown(window, { key: "g", shiftKey: true });
+    fireEvent.keyDown(window, { key: "c", metaKey: true });
+    fireEvent.keyDown(window, { key: "?" });
+    expect(useAssetStore.getState().appView).toBe("chat");
+    expect(mockAddNode).not.toHaveBeenCalled();
+    expect(mockCopySelectedNodes).not.toHaveBeenCalled();
+    expect(mockSetShortcutsDialogOpen).not.toHaveBeenCalled();
   });
 });

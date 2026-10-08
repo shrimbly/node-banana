@@ -66,10 +66,13 @@ const shortcutGroups: ShortcutGroup[] = [
   },
 ];
 
-/** Switching views: bare A, outside the Shift+letter namespace that adds nodes. */
+/** Switching views: bare letters, outside the Shift+letter namespace that adds nodes. */
 const viewGroup: ShortcutGroup = {
   title: "Views",
-  shortcuts: [{ keys: ["A"], description: "Show or hide Assets" }],
+  shortcuts: [
+    { keys: ["C"], description: "Show or hide the chat" },
+    { keys: ["A"], description: "Show or hide Assets" },
+  ],
 };
 
 const assetsGroup: ShortcutGroup = {
@@ -94,9 +97,15 @@ interface KeyboardShortcutsDialogProps {
 }
 
 export function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDialogProps) {
-  // Opened from the Assets view (?), its keys come first
-  const inAssets = useAssetStore((state) => state.appView === "assets");
-  const groups = inAssets ? [viewGroup, assetsGroup, ...shortcutGroups] : [...shortcutGroups, viewGroup, assetsGroup];
+  // Opened over another view, the view switches come first, then the Assets
+  // view's own keys when it is that one
+  const appView = useAssetStore((state) => state.appView);
+  const groups =
+    appView === "assets"
+      ? [viewGroup, assetsGroup, ...shortcutGroups]
+      : appView === "chat"
+        ? [viewGroup, ...shortcutGroups, assetsGroup]
+        : [...shortcutGroups, viewGroup, assetsGroup];
   return (
     <Dialog open={isOpen} onClose={onClose} className="w-[520px] max-h-[80vh]">
       <DialogHeader>

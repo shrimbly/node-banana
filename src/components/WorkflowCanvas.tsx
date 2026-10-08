@@ -1805,7 +1805,7 @@ export function WorkflowCanvas() {
       requestSave("shortcut");
       return;
     }
-    // The canvas is hidden behind the Assets view: none of its keys apply
+    // The canvas is hidden behind another view (Assets, the chat): none of its keys apply
     if (useAssetStore.getState().appView !== "canvas") return;
     // Ignore if user is typing in an input field (including the edge label
     // field, which lives in React Flow's label layer)
@@ -1838,12 +1838,14 @@ export function WorkflowCanvas() {
       return;
     }
 
-    // A (bare) shows the Assets view; Shift+letters add nodes. Not while a
-    // dialog, the annotation editor or the tutorial is up over the canvas, nor
-    // while a menu or dropdown is open: it would stay mounted (and keep its
-    // document key listener, e.g. Enter adding a node) under the Assets view.
+    // A (bare) shows the Assets view and C the chat; Shift+letters add nodes.
+    // Not while a dialog, the annotation editor or the tutorial is up over the
+    // canvas, nor while a menu or dropdown is open: it would stay mounted (and
+    // keep its document key listener, e.g. Enter adding a node) under the view.
+    const lowerKey = event.key.toLowerCase();
+    const view = lowerKey === "a" ? "assets" : lowerKey === "c" ? "chat" : null;
     if (
-      event.key.toLowerCase() === "a" &&
+      view &&
       !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey && !event.repeat &&
       !useWorkflowStore.getState().isModalOpen &&
       !useAnnotationStore.getState().isModalOpen &&
@@ -1854,7 +1856,7 @@ export function WorkflowCanvas() {
       !(event.target instanceof Element && event.target.closest('[role="dialog"]'))
     ) {
       event.preventDefault();
-      useAssetStore.getState().setAppView("assets");
+      useAssetStore.getState().setAppView(view);
       return;
     }
 

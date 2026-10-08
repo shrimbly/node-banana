@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderOpen, KeyRound, Keyboard, Layers, LayoutTemplate, LibraryBig, Menu, MessageSquareText, Plus, Save, Settings, SquareArrowOutUpRight } from "lucide-react";
+import { FolderOpen, KeyRound, Keyboard, Layers, LayoutTemplate, LibraryBig, Menu, MessageSquareText, MessagesSquare, Plus, Save, Settings, SquareArrowOutUpRight } from "lucide-react";
 import {
   useState,
   useMemo,
@@ -502,12 +502,20 @@ export function FloatingMenu() {
               onClick={choose(() => setShowQuickstart(true, "templates"))}
             />
             <MenuRow
+              icon={<MessagesSquare size={16} strokeWidth={1.75} />}
+              label="Chat"
+              shortcut="C"
+              onClick={choose(() => useAssetStore.getState().setAppView("chat"))}
+              title="The agent, full screen"
+            />
+            <MenuRow
               icon={<LibraryBig size={16} strokeWidth={1.75} />}
               label="Assets"
               shortcut="A"
               onClick={choose(() => useAssetStore.getState().setAppView("assets"))}
               title="Every generation, from every workflow"
-            />            {saveDirectoryPath && (
+            />
+            {saveDirectoryPath && (
               <MenuRow
                 icon={
                   <SquareArrowOutUpRight size={16} strokeWidth={1.75} />
