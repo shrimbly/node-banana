@@ -985,4 +985,41 @@ describe("useAgentChat: steps still pending when the turn ends", () => {
     expect(result.current.busy).toBe(true);
     streams[1].end();
   });
+
+  it("names the tab its turn worked on, once the turn's steps have settled", async () => {
+    const { tabA, tabB } = twoTabs();
+    const { result, streams } = await busyChat();
+    useWorkflowStore.setState({ isSaving: true });
+    await act(async () => {
+      push(streams[0], step("switch", { op: "switchTab", tabId: tabB }, tabB));
+      streams[0].push({ type: "finish" });
+      streams[0].end();
+      await sleep(50);
+    });
+    expect(result.current.busy).toBe(false);
+
+    let settled = false;
+    void result.current.stepsSettled!().then(() => (settled = true));
+    await act(() => sleep(30));
+    expect(settled).toBe(false);
+    expect(result.current.turnTabId!()).toBe(tabA);
+
+    await act(async () => {
+      useWorkflowStore.setState({ isSaving: false });
+      await sleep(200);
+    });
+    expect(settled).toBe(true);
+    expect(result.current.turnTabId!()).toBe(tabB);
+  });
+
+  it("keeps naming the turn's own tab when the user opens another one mid-turn", async () => {
+    const { tabA, tabB } = twoTabs();
+    const { result, streams } = await busyChat();
+    act(() => {
+      useWorkflowStore.getState().switchTab(tabB);
+    });
+    await waitFor(() => expect(result.current.busy).toBe(false));
+    expect(result.current.turnTabId!()).toBe(tabA);
+    streams[0].end();
+  });
 });

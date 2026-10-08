@@ -206,6 +206,61 @@ describe("AgentSessionProvider", () => {
     expect(screen.queryByText("Added a prompt node.")).not.toBeInTheDocument();
   });
 
+  it("saves a turn the user stopped by opening another tab against the tab it worked on", async () => {
+    const first = openSecondTab();
+    useWorkflowStore.setState({ workflowName: "Second" });
+    const second = store().activeTabId;
+    let refuse!: (error: unknown) => void;
+    chatGate = new Promise((_, reject) => (refuse = reject));
+    render(<Harness />);
+    act(() => {
+      session.chat.send("Make it a cat");
+    });
+    await waitFor(() => expect(chatSignals).toHaveLength(1));
+    chatSignals[0].addEventListener("abort", () => refuse(new DOMException("The operation was aborted.", "AbortError")));
+
+    act(() => {
+      store().switchTab(first);
+    });
+    await waitFor(() => expect(session.busy).toBe(false));
+    await flushEffects();
+
+    const saved = JSON.parse(localStorage.getItem(AGENT_HISTORY_KEY) ?? "[]") as AgentConversation[];
+    expect(saved[0]).toMatchObject({ tabId: second, workflowName: "Second" });
+  });
+
+  it("saves a turn whose tab step lands after its reply with the tab that step opened", async () => {
+    const live = store().activeTabId;
+    const opened = `tab-ag${Date.now().toString(36)}`;
+    const newTab = {
+      batchId: "b-new",
+      toolCallId: "call-new",
+      summary: "Opened Fox",
+      ops: [],
+      workspace: { op: "newTab", tabId: opened, name: "Fox" },
+      tabId: opened,
+    };
+    chatChunks.push([...reply("Opened a new workflow.").slice(0, 3), { type: "data-graph-ops", data: newTab, transient: true }, ...reply("Opened a new workflow.").slice(3)]);
+    // An autosave holds the tabs: the new tab opens only after the reply has ended.
+    useWorkflowStore.setState({ isSaving: true });
+    render(<Harness />);
+    act(() => {
+      session.chat.send("Start a fox workflow");
+    });
+    await waitFor(() => expect(screen.getByTestId("probe")).toHaveTextContent("Opened a new workflow."));
+    await waitFor(() => expect(session.busy).toBe(false));
+    await flushEffects();
+    expect(store().activeTabId).toBe(live);
+
+    await act(async () => {
+      useWorkflowStore.setState({ isSaving: false });
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    });
+    expect(store().activeTabId).toBe(opened);
+    const saved = JSON.parse(localStorage.getItem(AGENT_HISTORY_KEY) ?? "[]") as AgentConversation[];
+    expect(saved[0]).toMatchObject({ tabId: opened, workflowName: "Fox" });
+  });
+
   it("checks the harnesses only once a surface shows the agent", async () => {
     const { rerender } = render(
       <Harness>

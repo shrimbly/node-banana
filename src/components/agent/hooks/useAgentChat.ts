@@ -87,6 +87,10 @@ export interface UseAgentChatResult {
   /** The current conversation's id (its key in the history). */
   chatId: string;
   openConversation: (saved: { id: string; messages: AgentUIMessage[] }) => void;
+  /** The tab the latest turn worked on: the one it was sent from, or where its own tab steps took it. */
+  turnTabId?: () => string;
+  /** Settles once every step the turns so far queued has landed (a tab switch waiting on a save, say). */
+  stepsSettled?: () => Promise<void>;
 }
 
 interface ChatCallbacks {
@@ -136,6 +140,8 @@ export function useAgentChat({
   const queueIdRef = useRef(0);
   // The store's canvasGeneration the current turn was sent from (or its own last tab step moved it to).
   const turnGenerationRef = useRef(useWorkflowStore.getState().canvasGeneration);
+  // The tab the current turn was sent from (or its own last tab step moved it to); a user's switch leaves it.
+  const turnTabRef = useRef(useWorkflowStore.getState().activeTabId);
   // The canvas the queued messages were written about.
   const queueGenerationRef = useRef(turnGenerationRef.current);
   // Bumped per turn; a turn whose step was refused drops the rest of its batches.
@@ -177,6 +183,7 @@ export function useAgentChat({
           } = useWorkflowStore.getState();
           // The snapshot below is this generation's canvas: the turn's edits only fit it.
           turnGenerationRef.current = canvasGeneration;
+          turnTabRef.current = activeTabId;
           const body = buildAgentChatRequestBody({
             chatId: id,
             messages,
@@ -333,9 +340,10 @@ export function useAgentChat({
         return;
       }
       // The turn's own tab change: it and the queue carry on, on the canvas it brought in.
-      const generation = useWorkflowStore.getState().canvasGeneration;
+      const { canvasGeneration: generation, activeTabId } = useWorkflowStore.getState();
       turnGenerationRef.current = generation;
       queueGenerationRef.current = generation;
+      turnTabRef.current = activeTabId;
     },
     [haltTurn, whenTabsFree],
   );
@@ -552,6 +560,9 @@ export function useAgentChat({
   // Leaving the canvas (unmount) must not leave a CLI turn running on the server.
   useEffect(() => () => void activeChatRef.current?.stop(), []);
 
+  const turnTabId = useCallback(() => turnTabRef.current, []);
+  const stepsSettled = useCallback(() => stepsRef.current, []);
+
   return {
     messages,
     status,
@@ -574,6 +585,8 @@ export function useAgentChat({
     newChat,
     chatId: chat.id,
     openConversation,
+    turnTabId,
+    stepsSettled,
   };
 }
 

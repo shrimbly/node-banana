@@ -350,7 +350,7 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
     onBatchApplied: showBatch,
     onNotice: handleNotice,
   });
-  const { busy, messages, send, chatId, newChat, openConversation: openSavedChat } = chat;
+  const { busy, messages, send, chatId, newChat, openConversation: openSavedChat, turnTabId, stepsSettled } = chat;
   // Kept here, not in a composer: a composer unmounts whenever the harness
   // isn't ready (switching harness, a re-check), and the unsent text must survive.
   const [draft, setDraft] = useState("");
@@ -359,21 +359,28 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
   const history = useAgentHistory();
   const recordConversation = history.record;
   // Saved once each turn has finished (and on reopening, which changes nothing),
-  // with the workflow the turn ended on.
+  // with the workflow the turn ended on: its own, once its tab steps have
+  // landed, not one the user opened meanwhile.
   useEffect(() => {
     if (busy || messages.length === 0) return;
-    const { workflowName, workflowId, activeTabId } = useWorkflowStore.getState();
-    recordConversation({
-      id: chatId,
-      messages,
-      workflowName: workflowName ?? undefined,
-      tabId: activeTabId,
-      workflowId: workflowId ?? undefined,
-      harness: findLatestAgentSession(messages)?.harness ?? harness,
+    const turnHarness = findLatestAgentSession(messages)?.harness ?? harness;
+    void Promise.resolve(stepsSettled?.()).then(() => {
+      const store = useWorkflowStore.getState();
+      const tabId = turnTabId?.() ?? store.activeTabId;
+      // A tab closed since has no workflow to read: the saved one's name and id stay.
+      const workflow = tabId === store.activeTabId ? store : store.tabs.find((tab) => tab.id === tabId)?.snapshot;
+      recordConversation({
+        id: chatId,
+        messages,
+        workflowName: workflow?.workflowName ?? undefined,
+        tabId,
+        workflowId: workflow?.workflowId ?? undefined,
+        harness: turnHarness,
+      });
     });
     // harness is read, not watched: switching harness is not a change to the conversation.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busy, messages, chatId, recordConversation]);
+  }, [busy, messages, chatId, recordConversation, turnTabId, stepsSettled]);
 
   const openConversation = useCallback(
     (conversation: SavedConversation) => {
