@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckIcon, ChevronDownIcon, HistoryIcon, SquarePenIcon, XIcon, SparklesIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, HistoryIcon, Maximize2Icon, SquarePenIcon, XIcon, SparklesIcon } from "lucide-react";
+import { ChromeIconButton } from "@/components/ChromeIconButton";
 import { cn } from "@/components/agent/lib/utils";
 import {
   DropdownMenu,
@@ -39,6 +40,8 @@ export interface AgentPanelHeaderProps extends Omit<AgentModelMenuProps, "align"
   /** The history list is showing in place of the conversation. */
   historyOpen: boolean;
   onToggleHistory: () => void;
+  /** Carry on in the full-page chat view (the same conversation). */
+  onExpand: () => void;
   onClose: () => void;
 }
 
@@ -204,6 +207,7 @@ export function AgentPanelHeader({
   onNewChat,
   historyOpen,
   onToggleHistory,
+  onExpand,
   onClose,
   ...menu
 }: AgentPanelHeaderProps) {
@@ -212,6 +216,17 @@ export function AgentPanelHeader({
       <AgentModelMenu {...menu} />
 
       <div className="ml-auto flex items-center gap-0.5">
+        {/* PanelIconButton's look, with the chat view's shortcut in its label. */}
+        <ChromeIconButton
+          label="Open the full chat"
+          shortcut="C"
+          onClick={onExpand}
+          tooltipPlacement="bottom"
+          size="sm"
+          className="[&_svg]:size-4"
+        >
+          <Maximize2Icon {...AGENT_ICON} />
+        </ChromeIconButton>
         <PanelIconButton label={historyOpen ? "Back to chat" : "History"} onClick={onToggleHistory} open={historyOpen}>
           <HistoryIcon {...AGENT_ICON} />
         </PanelIconButton>

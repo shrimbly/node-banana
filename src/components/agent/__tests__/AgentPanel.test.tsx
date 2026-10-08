@@ -46,6 +46,7 @@ import { AgentPanel, type AgentPanelProps } from "@/components/agent/AgentPanel"
 import { AgentSessionProvider, useAgentPresence, type AgentPresence } from "@/components/agent/AgentSession";
 import { useToast } from "@/components/Toast";
 import { buildAgentSnapshot } from "@/lib/agent/graph/snapshot";
+import { useAssetStore } from "@/store/assetStore";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { AGENT_HISTORY_KEY } from "@/lib/agent/client/history";
 import { AGENT_SETTINGS_KEY } from "@/lib/agent/client/settings";
@@ -790,6 +791,17 @@ describe("AgentPanel", () => {
       expect(onClose).toHaveBeenCalledTimes(1);
     } finally {
       window.removeEventListener("keydown", windowKeys);
+    }
+  });
+
+  it("expands into the full-page chat, the same conversation with more room", async () => {
+    try {
+      renderPanel();
+      await waitForComposer();
+      fireEvent.click(screen.getByRole("button", { name: "Open the full chat" }));
+      expect(useAssetStore.getState().appView).toBe("chat");
+    } finally {
+      useAssetStore.setState({ appView: "canvas" });
     }
   });
 

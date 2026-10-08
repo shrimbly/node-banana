@@ -20,6 +20,7 @@ import {
 import { isImeKeyEvent } from "@/lib/agent/client/keyboard";
 import { agentSuggestions } from "@/lib/agent/client/messages";
 import type { AgentConversation as SavedConversation } from "@/lib/agent/client/history";
+import { useAssetStore } from "@/store/assetStore";
 import { AgentComposer } from "./AgentComposer";
 import { AgentHistory } from "./AgentHistory";
 import { AgentBillingNote, AgentConversation, AgentEmptyState } from "./AgentConversation";
@@ -152,6 +153,9 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom }: AgentPa
     event.stopPropagation();
     event.preventDefault();
   }, []);
+
+  // The chat view shows the same session; the window itself only shows over the canvas.
+  const expand = useCallback(() => useAssetStore.getState().setAppView("chat"), []);
 
   const { newChat: startNewChat, openConversation: openSavedConversation } = session;
   const newChat = useCallback(() => {
@@ -331,6 +335,7 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom }: AgentPa
           onNewChat={newChat}
           historyOpen={historyOpen}
           onToggleHistory={() => setHistoryOpen((shown) => !shown)}
+          onExpand={expand}
           onClose={close}
         />
         {body}
