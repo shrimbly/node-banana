@@ -1,7 +1,7 @@
 "use client";
 
 import { DesktopSession } from "@/components/DesktopSession";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { FloatingMenu } from "@/components/FloatingMenu";
 import { WorkflowTabs } from "@/components/WorkflowTabs";
@@ -17,6 +17,9 @@ import { anyWorkflowTabUnsaved } from "@/store/utils/workflowTabs";
 import { requestSave } from "@/store/saveRequestStore";
 import { useAssetStore } from "@/store/assetStore";
 import { AssetsView } from "@/components/assets/AssetsView";
+import { AgentSessionProvider } from "@/components/agent/AgentSession";
+import { AgentChatView } from "@/components/agent/AgentChatView";
+import { clearGenerationToasts } from "@/components/GenerationToast";
 import { watchFirstRecording } from "@/components/assets/FirstRunHint";
 import { unloadWarning } from "@/components/assets/unloadWarning";
 import { initAssetLibrary, pendingRecordings } from "@/lib/assets/client/recorder";
@@ -54,7 +57,9 @@ function Editor() {
   const cleanupAutoSave = useWorkflowStore((state) => state.cleanupAutoSave);
   const setShowQuickstart = useWorkflowStore((state) => state.setShowQuickstart);
   const [showFTUX, setShowFTUX] = useState(false);
-  const assetsShown = useAssetStore((state) => state.appView === "assets");
+  const appView = useAssetStore((state) => state.appView);
+  // Assets or the full-page chat is over the canvas
+  const canvasCovered = appView !== "canvas";
 
   useEffect(() => {
     initializeAutoSave();
@@ -86,13 +91,15 @@ function Editor() {
     };
   }, []);
 
-  // While Assets shows, the canvas behind counts as covered: React Flow's
-  // delete, pan and selection stay off (its key handler has its own guard)
+  // While another view shows, the canvas behind counts as covered: React
+  // Flow's delete, pan and selection stay off (its key handler has its own
+  // guard), and the generation cards hanging under its history button go
   useEffect(() => {
-    if (!assetsShown) return;
+    if (!canvasCovered) return;
+    clearGenerationToasts();
     useWorkflowStore.getState().incrementModalCount();
     return () => useWorkflowStore.getState().decrementModalCount();
-  }, [assetsShown]);
+  }, [canvasCovered]);
 
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
@@ -133,6 +140,8 @@ function Editor() {
 
   return (
     <ReactFlowProvider>
+      {/* One agent conversation for the floating window and the full-page chat */}
+      <AgentSessionProvider>
       <div className="h-screen flex flex-col bg-[#0f0f0f]">
         <WorkflowTabs />
         {/* The floating menu is positioned against this box, so it clears the tab
@@ -140,10 +149,10 @@ function Editor() {
             flows into. It must not isolate its stacking: modals and menus inside
             it are fixed and have to cover the strip too. */}
         <div className="workflow-canvas-frame relative mx-1 mb-1 flex-1 min-h-0 flex flex-col overflow-hidden rounded-t-lg border border-card-border bg-canvas-bg">
-        {/* The canvas stays mounted under the Assets view (React Flow keeps
-            measuring, a run or an agent turn keeps going), but inert and
+        {/* The canvas stays mounted under the Assets and chat views (React Flow
+            keeps measuring, a run or an agent turn keeps going), but inert and
             invisible, which also hides its fixed floaters */}
-        <div className={`flex min-h-0 flex-1 flex-col ${assetsShown ? "invisible" : ""}`} inert={assetsShown}>
+        <div className={`flex min-h-0 flex-1 flex-col ${canvasCovered ? "invisible" : ""}`} inert={canvasCovered}>
         <ErrorBoundary
           label="Canvas"
           onError={(error, info) =>
@@ -183,47 +192,32 @@ function Editor() {
           <WorkflowCanvas />
         </ErrorBoundary>
         </div>
-        {/* Hidden, not unmounted, while Assets shows: it hosts the settings and
-            shortcuts dialogs, which render inline and must still open from
-            there. Only its own chrome hides; an open dialog's overlay stays. */}
-        <div className={assetsShown ? "contents [&>:not([data-dialog-overlay])]:hidden" : "contents"}>
+        {/* Hidden, not unmounted, while another view shows: it hosts the
+            settings and shortcuts dialogs, which render inline and must still
+            open from there. Only its own chrome hides; an open dialog's overlay stays. */}
+        <div className={canvasCovered ? "contents [&>:not([data-dialog-overlay])]:hidden" : "contents"}>
           <FloatingMenu />
         </div>
-        {assetsShown && (
-          <div className="absolute inset-0 z-[60] flex">
-            <ErrorBoundary
-              label="Assets"
-              onError={(error, info) => console.error("Assets view crashed:", error, info)}
-              fallback={(error, reset) => (
-                <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-canvas-bg p-6 text-center">
-                  <div className="text-sm font-semibold text-red-400">The Assets view hit an unexpected error</div>
-                  <div className="max-w-md break-words text-xs text-neutral-400">{error.message || "Unexpected render error"}</div>
-                  <div className="text-xs text-neutral-500">Your files and workflows are not affected.</div>
-                  <div className="flex gap-2">
-                    <button
-                      type="button"
-                      onClick={reset}
-                      className="rounded-md border border-neutral-600 px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-700/40"
-                    >
-                      Try again
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => useAssetStore.getState().setAppView("canvas")}
-                      className="rounded-md border border-neutral-600 px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-700/40"
-                    >
-                      Back to canvas
-                    </button>
-                  </div>
-                </div>
-              )}
-            >
-              <AssetsView />
-            </ErrorBoundary>
-          </div>
+        {appView === "assets" && (
+          <CoveringView
+            label="Assets"
+            title="The Assets view hit an unexpected error"
+            note="Your files and workflows are not affected."
+          >
+            <AssetsView />
+          </CoveringView>
+        )}
+        {appView === "chat" && (
+          <CoveringView
+            label="Chat"
+            title="The chat hit an unexpected error"
+            note="Your conversations and workflows are not affected."
+          >
+            <AgentChatView />
+          </CoveringView>
         )}
         </div>
-        <div hidden={assetsShown} inert={assetsShown}>
+        <div hidden={canvasCovered} inert={canvasCovered}>
           <FloatingActionBar />
         </div>
         <AnnotationModal />
@@ -234,6 +228,47 @@ function Editor() {
           />
         )}
       </div>
+      </AgentSessionProvider>
     </ReactFlowProvider>
+  );
+}
+
+/**
+ * A view laid over the canvas inside its frame (Assets, the full-page chat).
+ * If it crashes, the fallback offers it again or the way back to the canvas.
+ */
+function CoveringView({ label, title, note, children }: { label: string; title: string; note: string; children: ReactNode }) {
+  return (
+    <div className="absolute inset-0 z-[60] flex">
+      <ErrorBoundary
+        label={label}
+        onError={(error, info) => console.error(`${label} view crashed:`, error, info)}
+        fallback={(error, reset) => (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-canvas-bg p-6 text-center">
+            <div className="text-sm font-semibold text-red-400">{title}</div>
+            <div className="max-w-md break-words text-xs text-neutral-400">{error.message || "Unexpected render error"}</div>
+            <div className="text-xs text-neutral-500">{note}</div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={reset}
+                className="rounded-md border border-neutral-600 px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-700/40"
+              >
+                Try again
+              </button>
+              <button
+                type="button"
+                onClick={() => useAssetStore.getState().setAppView("canvas")}
+                className="rounded-md border border-neutral-600 px-3 py-1.5 text-xs text-neutral-300 hover:bg-neutral-700/40"
+              >
+                Back to canvas
+              </button>
+            </div>
+          </div>
+        )}
+      >
+        {children}
+      </ErrorBoundary>
+    </div>
   );
 }
