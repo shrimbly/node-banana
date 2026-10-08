@@ -178,7 +178,7 @@ describe("WorkflowTabs", () => {
     beforeEach(() => useAssetStore.setState({ appView: "canvas" }));
     afterEach(() => useAssetStore.setState({ appView: "canvas" }));
 
-    it("leads the strip as a toggle button, not a tab", () => {
+    it("sits before the workflow tabs as a toggle button, not a tab", () => {
       render(<WorkflowTabs />);
       const assets = screen.getByRole("button", { name: "Assets" });
       expect(assets).toHaveAttribute("aria-pressed", "false");
@@ -259,6 +259,118 @@ describe("WorkflowTabs", () => {
       expect(screen.getByText("Summer campaign")).toBeDisabled();
       fireEvent.click(screen.getByText("Product shots"));
       expect(useAssetStore.getState().appView).toBe("canvas");
+    });
+  });
+
+  describe("Chat entry", () => {
+    beforeEach(() => useAssetStore.setState({ appView: "canvas" }));
+    afterEach(() => useAssetStore.setState({ appView: "canvas" }));
+
+    const chat = () => screen.getByRole("button", { name: "Chat" });
+
+    it("leads the strip, before Assets, as a toggle button and not a tab", () => {
+      render(<WorkflowTabs />);
+      expect(chat()).toHaveAttribute("aria-pressed", "false");
+      expect(chat()).not.toHaveAttribute("role", "tab");
+      expect(screen.getByRole("tablist").firstElementChild).toBe(chat());
+      expect(chat().nextElementSibling).toBe(screen.getByRole("button", { name: "Assets" }));
+      expect(screen.getAllByRole("tab")).toHaveLength(2);
+    });
+
+    it("is only its icon until the chat shows, then takes its label and says how to go back", () => {
+      const { rerender } = render(<WorkflowTabs />);
+      expect(chat()).not.toHaveTextContent("Chat");
+      expect(chat().querySelector("svg")).not.toBeNull();
+      expect(chat()).toHaveAttribute("title", "Chat (C)");
+      act(() => useAssetStore.setState({ appView: "chat" }));
+      rerender(<WorkflowTabs />);
+      expect(chat()).toHaveTextContent("Chat");
+      expect(chat()).toHaveAttribute("title", "Back to the canvas (C)");
+    });
+
+    it("shows the chat, and a second click goes back to the canvas", () => {
+      render(<WorkflowTabs />);
+      fireEvent.click(chat());
+      expect(useAssetStore.getState().appView).toBe("chat");
+      expect(chat()).toHaveAttribute("aria-pressed", "true");
+      fireEvent.click(chat());
+      expect(useAssetStore.getState().appView).toBe("canvas");
+      expect(chat()).toHaveAttribute("aria-pressed", "false");
+    });
+
+    it("moves straight between the chat and Assets", () => {
+      render(<WorkflowTabs />);
+      fireEvent.click(chat());
+      fireEvent.click(screen.getByRole("button", { name: "Assets" }));
+      expect(useAssetStore.getState().appView).toBe("assets");
+      expect(chat()).toHaveAttribute("aria-pressed", "false");
+      fireEvent.click(chat());
+      expect(useAssetStore.getState().appView).toBe("chat");
+      expect(screen.getByRole("button", { name: "Assets" })).toHaveAttribute("aria-pressed", "false");
+    });
+
+    it("takes the shown look, in the sidebar's colour, from the live tab without changing which tab is live", () => {
+      useAssetStore.setState({ appView: "chat" });
+      render(<WorkflowTabs />);
+      const [, live] = screen.getAllByRole("tab");
+      expect(live).toHaveAttribute("aria-selected", "true");
+      expect(live!.className).not.toContain("bg-canvas-bg");
+      expect(chat().className).toContain("bg-pane");
+      // Its feet flow into the sidebar: two ears
+      expect(chat().querySelectorAll('svg[viewBox="0 0 9 9"]')).toHaveLength(2);
+      expect(screen.getByRole("button", { name: "Assets" }).className).not.toContain("bg-pane");
+    });
+
+    it("goes back to the canvas from the live tab, a parked tab, the plus and closing a tab", () => {
+      useAssetStore.setState({ appView: "chat" });
+      render(<WorkflowTabs />);
+      fireEvent.click(screen.getByText("Product shots"));
+      expect(useAssetStore.getState().appView).toBe("canvas");
+      expect(mockSwitchTab).not.toHaveBeenCalled();
+
+      useAssetStore.setState({ appView: "chat" });
+      fireEvent.click(screen.getByText("Summer campaign"));
+      expect(useAssetStore.getState().appView).toBe("canvas");
+      expect(mockSwitchTab).toHaveBeenCalledWith("tab-1");
+
+      useAssetStore.setState({ appView: "chat" });
+      fireEvent.click(screen.getByRole("button", { name: "New tab" }));
+      expect(useAssetStore.getState().appView).toBe("canvas");
+      expect(mockNewTab).toHaveBeenCalled();
+
+      useAssetStore.setState({ appView: "chat" });
+      fireEvent.click(screen.getByRole("button", { name: "Close Product shots" }));
+      expect(useAssetStore.getState().appView).toBe("canvas");
+    });
+  });
+
+  describe("hairlines between tabs", () => {
+    const threeTabs: WorkflowTab[] = [
+      { id: "tab-1", snapshot: parked("One") },
+      { id: "tab-2", snapshot: parked("Two") },
+      { id: "tab-3", snapshot: null },
+    ];
+    const hairline = (tab: HTMLElement) => tab.querySelector("span.w-px");
+
+    afterEach(() => useAssetStore.setState({ appView: "canvas" }));
+
+    it("divides two tabs neither of which is shown, never beside the shown one or before the first", () => {
+      useState({ tabs: threeTabs, activeTabId: "tab-3" });
+      render(<WorkflowTabs />);
+      const [one, two, three] = screen.getAllByRole("tab");
+      expect(hairline(one!)).toBeNull();
+      expect(hairline(two!)).not.toBeNull();
+      expect(hairline(three!)).toBeNull();
+    });
+
+    it.each(["chat", "assets"] as const)("divides every tab but the first while the %s view shows", (view) => {
+      useState({ tabs: threeTabs, activeTabId: "tab-3" });
+      useAssetStore.setState({ appView: view });
+      render(<WorkflowTabs />);
+      const [one, two, three] = screen.getAllByRole("tab");
+      expect(hairline(one!)).toBeNull();
+      expect(hairline(two!)).not.toBeNull();
+      expect(hairline(three!)).not.toBeNull();
     });
   });
 
