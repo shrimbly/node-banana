@@ -91,7 +91,7 @@ function runRecord(): AgentRunRecord {
 }
 
 function transcript(): AgentTranscriptActions {
-  return { chatId: "chat-1", send: vi.fn(() => true), showOnCanvas: vi.fn(() => true) };
+  return { chatId: "chat-1", send: vi.fn(() => true), showOnCanvas: vi.fn(() => true), busy: false };
 }
 
 describe("AgentMessage runs", () => {

@@ -45,7 +45,7 @@ const offer: AgentRunOffer = {
 };
 
 function actions(): AgentTranscriptActions {
-  return { chatId: "chat-1", send: vi.fn(() => true), showOnCanvas: vi.fn(() => true) };
+  return { chatId: "chat-1", send: vi.fn(() => true), showOnCanvas: vi.fn(() => true), busy: false };
 }
 
 function renderOffer(value: AgentRunOffer = offer, transcript: AgentTranscriptActions | null = actions()) {
@@ -165,6 +165,19 @@ describe("AgentRunCard", () => {
     expect(screen.getByText("2 nodes · 1 generator · ≈ $0.04")).toBeInTheDocument();
     fireEvent.click(runButton());
     expect(startOfferRun).toHaveBeenCalledWith(expect.objectContaining({ option: offer.primary, runs: 1 }));
+  });
+
+  it("waits for the agent's turn before running in another tab (switching would stop the turn)", () => {
+    useWorkflowStore.setState({
+      tabs: [
+        { id: "tab-a", snapshot: { nodes: NODES, workflowName: "Hero shots" } as unknown as WorkflowTabSnapshot },
+        { id: "tab-b", snapshot: null },
+      ],
+      activeTabId: "tab-b",
+    });
+    renderOffer(offer, { ...actions(), busy: true });
+    expect(runButton()).toBeDisabled();
+    expect(screen.getByText("Wait for the agent to finish")).toBeInTheDocument();
   });
 
   it("offers the alternatives in the chevron's menu", () => {

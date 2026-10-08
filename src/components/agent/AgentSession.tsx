@@ -183,6 +183,8 @@ export interface AgentTranscriptActions {
   /** Message the agent; queued while a turn runs. */
   send: (text: string) => boolean;
   showOnCanvas: (target?: AgentCanvasTarget) => boolean;
+  /** A turn runs: a run in another tab waits, since switching tabs would stop the turn. */
+  busy: boolean;
 }
 
 const AgentSessionContext = createContext<AgentSessionValue | null>(null);
@@ -536,8 +538,8 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
 
   const presenceValue = useMemo<AgentPresenceValue>(() => ({ busy, presence }), [busy, presence]);
   const transcriptActions = useMemo<AgentTranscriptActions>(
-    () => ({ chatId, send, showOnCanvas }),
-    [chatId, send, showOnCanvas],
+    () => ({ chatId, send, showOnCanvas, busy }),
+    [chatId, send, showOnCanvas, busy],
   );
   const value: AgentSessionValue = {
     harness,

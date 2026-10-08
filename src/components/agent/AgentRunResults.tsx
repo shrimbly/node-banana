@@ -63,6 +63,9 @@ const ENDED_LABELS: Record<Exclude<AgentRunStatus, "running">, string> = {
   paused: "paused",
 };
 
+/** Why a run in another tab waits: switching tabs mid-turn would stop the turn. */
+export const AGENT_TURN_RUNNING = "Wait for the agent to finish";
+
 const VISUAL_KINDS: ReadonlySet<AgentRunOutput["kind"]> = new Set(["image", "video", "model3d"]);
 
 /** What each generator makes, for its skeleton while it runs. */
@@ -224,7 +227,10 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
   const sources = useWorkflowStore(useShallow((state) => liveSources(record, state)));
   // Only for this card's own Run again (an offer's card has its own button).
   const blocked = useWorkflowStore((state) =>
-    embedded || running ? null : chatRunBlockedReason({ tabId: record.tabId, scope: record.scope }, state),
+    embedded || running
+      ? null
+      : chatRunBlockedReason({ tabId: record.tabId, scope: record.scope }, state) ??
+        (transcript?.busy && state.activeTabId !== record.tabId ? AGENT_TURN_RUNNING : null),
   );
   const stopMode = useWorkflowStore((state) =>
     !state.batch ? "now" : state.batch.stopping ? "stopping" : state.batch.index < state.batch.count ? "after" : "now",

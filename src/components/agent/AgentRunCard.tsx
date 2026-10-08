@@ -13,7 +13,7 @@ import type { NodeType, SelectedModel, WorkflowNode } from "@/types";
 import { calculatePredictedCost, formatCost, getModelCost, type ModelPricing } from "@/utils/costCalculator";
 import { AGENT_POPOVER_LAYER, StatusDot } from "./AgentChrome";
 import { nodeOutputHandle, TypeDot } from "./AgentRunMedia";
-import { AgentRunResults, nodeDisplayTitle } from "./AgentRunResults";
+import { AGENT_TURN_RUNNING, AgentRunResults, nodeDisplayTitle } from "./AgentRunResults";
 import { useAgentTranscriptActions } from "./AgentSession";
 import { useAgentSurface } from "./AgentSurface";
 
@@ -127,9 +127,10 @@ export function AgentRunCard({ offer }: { offer: AgentRunOffer }) {
 
   const targetKey = useWorkflowStore((state) => JSON.stringify(describeOfferTarget(offer, current, state)));
   const target = useMemo<OfferTarget>(() => JSON.parse(targetKey), [targetKey]);
-  const blocked = useWorkflowStore((state) =>
+  const storeBlocked = useWorkflowStore((state) =>
     chatRunBlockedReason(offer.tabId ? { tabId: offer.tabId, scope: current.scope } : { scope: current.scope }, state),
   );
+  const blocked = storeBlocked ?? (!target.live && transcript?.busy ? AGENT_TURN_RUNNING : null);
   const [runs, setRuns] = useState(1);
   const [failure, setFailure] = useState<string | null>(null);
 

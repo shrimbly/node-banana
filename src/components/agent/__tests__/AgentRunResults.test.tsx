@@ -71,7 +71,7 @@ function image(id: string, nodeId = "gen", extra: Partial<AgentRunOutput> = {}):
 }
 
 function actions(): AgentTranscriptActions {
-  return { chatId: "chat-1", send: vi.fn(() => true), showOnCanvas: vi.fn(() => true) };
+  return { chatId: "chat-1", send: vi.fn(() => true), showOnCanvas: vi.fn(() => true), busy: false };
 }
 
 function renderCard(run: AgentRunRecord, options: { transcript?: AgentTranscriptActions | null; surface?: AgentSurface } = {}) {
