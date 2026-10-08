@@ -4,6 +4,12 @@ All notable changes to Node Banana will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Fixed
+
+- **fal.ai settings** — A fal.ai model's settings card could come up blank, with no message, after the model browser had just been opened: fal's model API rate-limits bursts, the app read a refusal as "no settings" and remembered it for two days. The settings and the generate path now share one schema lookup per model, a rate limit is waited out and retried, a refusal shows its reason on the node with a Retry, and nothing empty is remembered.
+
 ## [2.0.0] - 2026-10-04
 
 The desktop release. Node Banana is now an installable app for Mac (Apple

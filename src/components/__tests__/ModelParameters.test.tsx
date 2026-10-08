@@ -176,6 +176,45 @@ describe("ModelParameters", () => {
     });
   });
 
+  describe("Failed lookups", () => {
+    it("offers Retry after an error and asks again when pressed", async () => {
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce({ ok: false, json: () => Promise.resolve({ error: "fal.ai is rate limiting model lookups. Try again in a few seconds." }) })
+        .mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ parameters: [createMockParameter({ name: "num_images", type: "integer", default: 1 })], inputs: [] }) });
+
+      render(<ModelParameters {...defaultProps} provider="fal" modelId="google/nano-banana-2-lite" />);
+
+      expect(await screen.findByText(/rate limiting/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+
+      await waitFor(() => expect(screen.getByText("Num Images")).toBeInTheDocument());
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(JSON.parse(localStorage.getItem("node-banana-schema-cache") || "{}")["fal:google/nano-banana-2-lite"].parameters).toHaveLength(1);
+    });
+
+    it("never caches an empty schema, so the next mount asks again", async () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValue({ ok: true, json: () => Promise.resolve({ parameters: [], inputs: [] }) });
+
+      const { unmount } = render(<ModelParameters {...defaultProps} />);
+      await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(1));
+      expect(localStorage.getItem("node-banana-schema-cache")).toBeNull();
+      unmount();
+
+      render(<ModelParameters {...defaultProps} />);
+      await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2));
+    });
+
+    it("ignores an empty entry an older build cached", async () => {
+      localStorage.setItem("node-banana-schema-cache", JSON.stringify({ "replicate:test-model": { parameters: [], inputs: [], timestamp: Date.now() } }));
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ ok: true, json: () => Promise.resolve({ parameters: [createMockParameter()], inputs: [] }) });
+
+      render(<ModelParameters {...defaultProps} />);
+
+      await waitFor(() => expect(screen.getByText("Test Param")).toBeInTheDocument());
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("Collapse/Expand", () => {
     it("should start expanded by default", async () => {
       (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
