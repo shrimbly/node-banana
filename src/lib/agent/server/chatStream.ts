@@ -614,6 +614,7 @@ class TurnWriter {
         summary: result.summary,
         ...(result.tabId ? { tabId: result.tabId } : {}),
         ...(nodeIds.length > 0 ? { nodeIds } : {}),
+        ...(result.graph ? { graph: result.graph } : {}),
       };
       this.writer.write({ type: "tool-output-available", toolCallId, output, dynamic: true, providerExecuted: true });
     } else {

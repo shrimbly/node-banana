@@ -28,23 +28,7 @@ import {
   type AgentChatStreamOptions,
   type AgentUIMessageChunk,
 } from "../chatStream";
-import type {
-  AgentChatRequestBody,
-  AgentGraphOp,
-  AgentGraphOpBatch,
-  AgentHarness,
-  AgentHarnessStatus,
-  AgentRunOffer,
-  AgentSnapshotNode,
-  AgentToolDefinition,
-  AgentToolResult,
-  AgentToolRuntime,
-  AgentToolUIOutput,
-  AgentUIMessage,
-  AgentWorkflowSnapshot,
-  HarnessEvent,
-  HarnessTurnParams,
-} from "../../types";
+import type { AgentChatRequestBody, AgentGraphOp, AgentGraphOpBatch, AgentGraphPreview, AgentHarness, AgentHarnessStatus, AgentRunOffer, AgentSnapshotNode, AgentToolDefinition, AgentToolResult, AgentToolRuntime, AgentToolUIOutput, AgentUIMessage, AgentWorkflowSnapshot, HarnessEvent, HarnessTurnParams } from "../../types";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -733,6 +717,20 @@ describe("createAgentChatStream: tool calls", () => {
     // Removed nodes are not shown; the rest in the order the ops name them.
     expect(output.nodeIds!.slice(0, 5)).toEqual(["nanoBanana-2", "prompt-ag1", "output-3", "output-10", "output-11"]);
     expect(output).not.toHaveProperty("tabId");
+  });
+
+  it("keeps a built workflow's graph on its card, for the chat's map, and out of the canvas edits", async () => {
+    const graph: AgentGraphPreview = { name: "Cat posters", nodes: [["prompt", 0, 0, 320, 220], ["nanoBanana", 420, 0, 300, 460]], edges: [[0, 1]] };
+    const { runtime } = fakeRuntime({ create_workflow: { ...addPromptResult, tabId: "tab-b", graph } });
+    const { harness } = fakeHarness(async function* (params) {
+      await params.tools.execute("create_workflow", {});
+      yield* emit();
+    });
+
+    const { chunks, message } = await run({ harness, createToolRuntime: () => runtime });
+
+    expect((partsOfType(message, "dynamic-tool")[0].output as AgentToolUIOutput).graph).toEqual(graph);
+    expect(chunksOfType(chunks, "data-graph-ops")[0].data).not.toHaveProperty("graph");
   });
 
   it("says what each tab tool is doing while its call is written", async () => {

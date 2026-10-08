@@ -66,6 +66,8 @@ export interface AgentCanvasTarget {
   tabId?: string;
   /** Nodes to fit into the visible canvas. */
   nodeIds?: readonly string[];
+  /** Fit the whole workflow instead, once its tab is live. */
+  all?: boolean;
 }
 
 /**
@@ -532,7 +534,7 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
 
   // --- Showing the canvas ------------------------------------------------------
   const showOnCanvas = useCallback(
-    ({ tabId, nodeIds }: AgentCanvasTarget = {}) => {
+    ({ tabId, nodeIds, all }: AgentCanvasTarget = {}) => {
       const store = useWorkflowStore.getState();
       if (tabId && tabId !== store.activeTabId) {
         // A tab change mid-turn would stop the turn, as any other workflow switch does.
@@ -548,7 +550,8 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
         if (!store.switchTab(tabId)) return false;
       }
       useAssetStore.getState().setAppView("canvas");
-      if (nodeIds && nodeIds.length > 0) focusNodes(nodeIds);
+      const fit = all ? useWorkflowStore.getState().nodes.map((node) => node.id) : nodeIds;
+      if (fit && fit.length > 0) focusNodes(fit);
       return true;
     },
     [busy, focusNodes],

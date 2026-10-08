@@ -53,6 +53,7 @@ import type {
   AgentGraphOpBatch,
   AgentHarness,
   AgentHarnessStatus,
+  AgentToolUIOutput,
   AgentUIMessage,
   HarnessEvent,
   HarnessTurnParams,
@@ -193,11 +194,16 @@ describe("agent end to end (scripted harness, real bridge, runtime, prompts and 
     // UI parts: a titled dynamic tool with the summary, text either side, the session.
     const tool = turn1.message.parts.find((part) => part.type === "dynamic-tool");
     expect(tool).toMatchObject({ type: "dynamic-tool", toolName: "create_workflow", title: "Create workflow", state: "output-available" });
-    expect((tool as { output: { ok: boolean; summary: string } }).output).toEqual({
+    const toolOutput = (tool as { output: AgentToolUIOutput }).output;
+    expect(toolOutput).toEqual({
       ok: true,
       summary: expect.stringMatching(/3 nodes/),
       nodeIds: ["prompt-ag1", "nanoBanana-ag2", "output-ag3"],
+      graph: expect.any(Object),
     });
+    // The workflow it built, for the full-page chat's map.
+    expect(toolOutput.graph!.nodes.map(([type]) => type)).toEqual(["prompt", "nanoBanana", "output"]);
+    expect(toolOutput.graph!.edges).toEqual([[0, 1], [1, 2]]);
     // Built from an empty canvas and not run: the reply ends with a Run button for the whole workflow.
     expect(turn1.message.parts.map((part) => part.type)).toEqual(["data-agent-session", "text", "dynamic-tool", "text", "data-run-offer"]);
     expect(turn1.message.parts.at(-1)).toMatchObject({

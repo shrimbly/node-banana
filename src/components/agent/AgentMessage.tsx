@@ -17,6 +17,7 @@ import {
 import { LocateFixedIcon } from "lucide-react";
 import { cn } from "@/components/agent/lib/utils";
 import {
+  builtWorkflows,
   isRenderedPart,
   isRunWorkflowPart,
   toolCanvasTarget,
@@ -33,6 +34,7 @@ import { CardIconButton } from "./AgentRunMedia";
 import { AgentToolRunResults } from "./AgentRunResults";
 import { useAgentTranscriptActions } from "./AgentSession";
 import { useAgentSurface } from "./AgentSurface";
+import { AgentWorkflowPreview } from "./AgentWorkflowPreview";
 
 export interface AgentMessageProps {
   message: AgentUIMessage;
@@ -148,20 +150,24 @@ export const AgentMessage = memo(function AgentMessage({ message, streaming, onS
   // Runs of tool calls fold together; everything else in order, one per part.
   const blocks: ReactNode[] = [];
   let toolRun: ToolCall[] = [];
-  // The runs those calls started: their results follow the folded line, always in view.
-  let runCalls: string[] = [];
+  // What those calls made, always in view under the folded line: the workflow a call built
+  // (the full page only), the results of a run one started.
+  let made: ReactNode[] = [];
+  const built = page ? builtWorkflows(message.parts) : null;
   const flushTools = () => {
     if (toolRun.length) blocks.push(<AgentToolGroup key={`tools-${blocks.length}`} calls={toolRun} />);
-    for (const toolCallId of runCalls) blocks.push(<AgentToolRunResults key={`run-${toolCallId}`} toolCallId={toolCallId} />);
+    blocks.push(...made);
     toolRun = [];
-    runCalls = [];
+    made = [];
   };
   message.parts.forEach((part, index) => {
     if (!isRenderedPart(part)) return;
     const key = `${message.id}-${index}`;
     if (part.type === "dynamic-tool") {
       toolRun.push({ key, part });
-      if (isRunWorkflowPart(part)) runCalls.push(part.toolCallId);
+      const workflow = built?.get(part.toolCallId);
+      if (workflow) made.push(<AgentWorkflowPreview key={`built-${part.toolCallId}`} tabId={workflow.tabId} graph={workflow.graph} />);
+      if (isRunWorkflowPart(part)) made.push(<AgentToolRunResults key={`run-${part.toolCallId}`} toolCallId={part.toolCallId} />);
       return;
     }
     flushTools();

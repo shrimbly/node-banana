@@ -217,6 +217,21 @@ export interface AgentToolResult {
    * canvas was already empty.
    */
   replacedCanvas?: boolean;
+  /**
+   * The tab's whole graph, after a call that built a workflow and after the
+   * turn's later edits to that tab: the full-page chat draws it as a minimap.
+   */
+  graph?: AgentGraphPreview;
+}
+
+/** A workflow's graph in miniature: enough to draw its minimap, nothing a node holds. */
+export interface AgentGraphPreview {
+  /** The workflow's name when it had one, for a chat whose tab has since closed. */
+  name?: string;
+  /** Each node's type and its box on the canvas. */
+  nodes: Array<[type: NodeType, x: number, y: number, width: number, height: number]>;
+  /** Connections, as indexes into `nodes`. */
+  edges: Array<[source: number, target: number]>;
 }
 
 export interface AgentToolRuntime {
@@ -576,6 +591,8 @@ export interface AgentToolUIOutput {
   /** The tab the call worked in, and the nodes it changed or created: the card's "Show on canvas". */
   tabId?: string;
   nodeIds?: string[];
+  /** The workflow the call built, in miniature (AgentToolResult.graph). */
+  graph?: AgentGraphPreview;
 }
 
 export type AgentDataParts = {

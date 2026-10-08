@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { AgentMessage } from "@/components/agent/AgentMessage";
 import { AgentTranscriptActionsProvider, type AgentTranscriptActions } from "@/components/agent/AgentSession";
+import { AgentSurfaceProvider } from "@/components/agent/AgentSurface";
 import { useAgentRuns } from "@/lib/agent/client/runs";
 import type { AgentRunOffer, AgentRunRecord, AgentUIMessage } from "@/lib/agent/types";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -243,5 +244,40 @@ describe("AgentMessage tool rows", () => {
     expect(first.querySelector('[data-agent-tool-status="input-available"] .animate-ping')).toBeInTheDocument();
     expect(within(second).getByText("Inputs not ready")).toHaveClass("text-red-400");
     expect(second.querySelector('[data-agent-tool-status="output-error"] .bg-error')).toBeInTheDocument();
+  });
+});
+
+describe("AgentMessage built workflow", () => {
+  const graph = { name: "Cat posters", nodes: [["prompt", 0, 0, 320, 220], ["nanoBanana", 420, 0, 300, 460]], edges: [[0, 1]] };
+  const message = () =>
+    reply([
+      toolPart("create_workflow", "call-build", { ok: true, summary: "Added 2 nodes, 1 connection", tabId: "tab-a", nodeIds: ["p", "g"], graph }),
+      { type: "text", text: "I built Cat posters.", state: "done" },
+    ]);
+
+  beforeEach(() => {
+    useWorkflowStore.setState({ tabs: [{ id: "tab-a", snapshot: null }], activeTabId: "tab-a", workflowName: "Cat posters" });
+  });
+
+  it("draws the workflow a call built under the folded tool line, on the full page", () => {
+    const { container } = render(
+      <AgentSurfaceProvider value="page">
+        <AgentMessage message={message()} streaming={false} />
+      </AgentSurfaceProvider>,
+    );
+    const preview = screen.getByRole("group", { name: "Cat posters" });
+    expect(preview).toHaveTextContent("2 nodes · 1 connection");
+    const tools = container.querySelector("[data-agent-tool-group]")!;
+    expect(tools.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(preview.compareDocumentPosition(screen.getByText("I built Cat posters.")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("leaves it out of the floating window", () => {
+    const { container } = render(
+      <AgentSurfaceProvider value="window">
+        <AgentMessage message={message()} streaming={false} />
+      </AgentSurfaceProvider>,
+    );
+    expect(container.querySelector("[data-workflow-preview]")).toBeNull();
   });
 });

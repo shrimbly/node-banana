@@ -42,7 +42,12 @@ export function getNavigatorHeight(minimapVisible: boolean): number {
 }
 
 export function getMiniMapNodeColor(node: Node): string {
-  switch (node.type) {
+  return miniMapTypeColor(node.type);
+}
+
+/** A node type's colour in the minimap, and in the agent chat's map of a workflow it built. */
+export function miniMapTypeColor(type: string | undefined): string {
+  switch (type) {
     case "imageInput": return "#3b82f6";
     case "audioInput": return "#a78bfa";
     case "videoInput": return "#c084fc";

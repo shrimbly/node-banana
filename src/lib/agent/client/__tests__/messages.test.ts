@@ -3,6 +3,7 @@ import type { DynamicToolUIPart } from "ai";
 import type { AgentUIMessage } from "../../types";
 import {
   agentSuggestions,
+  builtWorkflows,
   countRenderedParts,
   findHarnessSwitches,
   hasVisibleParts,
@@ -14,6 +15,7 @@ import {
   toolCanvasTarget,
   toolDisplayState,
   toolDisplayTitle,
+  toolGraphPreview,
   toolGroupSummary,
   toolSummaryLine,
   turnIndicatorText,
@@ -139,6 +141,49 @@ describe("toolGroupSummary", () => {
     const running = tool({ toolCallId: "r", title: "Edit workflow", state: "input-available" });
     expect(toolGroupSummary([read, running]).running).toBe("Edit workflow…");
     expect(toolGroupSummary([read]).running).toBeNull();
+  });
+});
+
+describe("built workflows", () => {
+  const graph = (count: number, name?: string) => ({
+    ...(name ? { name } : {}),
+    nodes: Array.from({ length: count }, (_, i) => ["prompt", i * 400, 0, 320, 220]),
+    edges: count > 1 ? [[0, 1]] : [],
+  });
+  const done = (toolName: string, toolCallId: string, output: unknown) => tool({ toolName, toolCallId, state: "output-available", output });
+
+  it("reads a call's graph, and nothing from a malformed one", () => {
+    expect(toolGraphPreview(done("create_workflow", "c", { ok: true, summary: "", graph: graph(2, " Cats ") }))).toEqual({
+      name: "Cats",
+      nodes: graph(2).nodes,
+      edges: [[0, 1]],
+    });
+    for (const bad of [
+      { nodes: [], edges: [] },
+      { nodes: [["prompt", 0, 0, 320]], edges: [] },
+      { nodes: [["prompt", 0, 0, 320, "tall"]], edges: [] },
+      { nodes: graph(2).nodes, edges: [[0, 2]] },
+      { nodes: graph(2).nodes, edges: [[0.5, 1]] },
+      { nodes: graph(2).nodes },
+    ]) {
+      expect(toolGraphPreview(done("create_workflow", "c", { ok: true, summary: "", graph: bad }))).toBeNull();
+    }
+    expect(toolGraphPreview(done("create_workflow", "c", { ok: false, summary: "", graph: graph(2) }))).toBeNull();
+    expect(toolGraphPreview(tool({ state: "input-available" }))).toBeNull();
+  });
+
+  it("puts one workflow per tab on the call that built it, as the reply's last edit to that tab left it", () => {
+    const parts = [
+      done("update_node", "u0", { ok: true, summary: "", tabId: "tab-a", graph: graph(9) }),
+      done("mcp__node_banana__create_workflow", "c1", { ok: true, summary: "", tabId: "tab-b", graph: graph(2) }),
+      done("create_workflow", "c2", { ok: true, summary: "", tabId: "tab-c", graph: graph(1) }),
+      done("edit_workflow", "e1", { ok: true, summary: "", tabId: "tab-b", graph: graph(3) }),
+    ] as AgentUIMessage["parts"];
+    const built = builtWorkflows(parts);
+    expect([...built.keys()]).toEqual(["c1", "c2"]);
+    expect(built.get("c1")).toMatchObject({ tabId: "tab-b" });
+    expect(built.get("c1")!.graph.nodes).toHaveLength(3);
+    expect(built.get("c2")!.graph.nodes).toHaveLength(1);
   });
 });
 

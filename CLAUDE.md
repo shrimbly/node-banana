@@ -409,7 +409,11 @@ window are two surfaces of one session (`AgentSessionProvider` in page.tsx;
 per token; `useAgentSurface` sizes the transcript). Runs the chat starts (the
 Run card, or the agent's `run_workflow`) are followed as `AgentRunRecord`s in
 `src/lib/agent/client/runs.ts`: progress, then outputs as asset ids and text,
-never media bytes, shown as results cards with the full-screen viewer.
+never media bytes, shown as results cards with the full-screen viewer. A
+`create_workflow` call's output carries its tab's graph in miniature (`graph`:
+node types and boxes, connections; the turn's later edits to that tab carry it
+too), which the full-page chat alone draws as a minimap under the call
+(`AgentWorkflowPreview`), with Open in canvas.
 
 Tabs: each request carries every open tab (`tabs`, `parkedWorkflows`); the
 runtime keeps a draft per tab and `switch_workflow`, `new_workflow` and

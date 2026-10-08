@@ -3,7 +3,7 @@
  */
 
 import type { DynamicToolUIPart } from "ai";
-import type { AgentHarnessId, AgentToolUIOutput, AgentUIMessage } from "../types";
+import type { AgentGraphPreview, AgentHarnessId, AgentToolUIOutput, AgentUIMessage } from "../types";
 
 const MCP_PREFIX = /^mcp__[^_]+(?:_[^_]+)*__/;
 
@@ -29,6 +29,63 @@ export function readToolOutput(output: unknown): AgentToolUIOutput | null {
 /** A run_workflow call: the results of the run it started show under the tool rows. */
 export function isRunWorkflowPart(part: Pick<DynamicToolUIPart, "toolName">): boolean {
   return part.toolName.replace(MCP_PREFIX, "") === "run_workflow";
+}
+
+/** A create_workflow call: the full-page chat draws the workflow it built. */
+export function isCreateWorkflowPart(part: Pick<DynamicToolUIPart, "toolName">): boolean {
+  return part.toolName.replace(MCP_PREFIX, "") === "create_workflow";
+}
+
+const isCount = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+
+/** The workflow a finished call left, in miniature (its output's `graph`); null when it carries none, or a malformed one. */
+export function toolGraphPreview(part: Pick<DynamicToolUIPart, "state" | "output">): AgentGraphPreview | null {
+  if (part.state !== "output-available" || !part.output || typeof part.output !== "object") return null;
+  const { ok, graph } = part.output as { ok?: unknown; graph?: Partial<AgentGraphPreview> };
+  if (ok !== true || !graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || graph.nodes.length === 0) return null;
+  const nodesOk = graph.nodes.every(
+    (node) => Array.isArray(node) && node.length === 5 && typeof node[0] === "string" && node.slice(1).every(isCount),
+  );
+  const edgesOk = graph.edges.every(
+    (edge) =>
+      Array.isArray(edge) && edge.length === 2 && edge.every((end) => Number.isInteger(end) && end >= 0 && end < graph.nodes!.length),
+  );
+  if (!nodesOk || !edgesOk) return null;
+  return {
+    ...(typeof graph.name === "string" && graph.name.trim() ? { name: graph.name.trim() } : {}),
+    nodes: graph.nodes,
+    edges: graph.edges,
+  };
+}
+
+export interface BuiltWorkflow {
+  tabId?: string;
+  graph: AgentGraphPreview;
+}
+
+/**
+ * The workflows a reply built, one per tab, by the create_workflow call that
+ * built each: drawn as the reply's last edit to that tab left it.
+ */
+export function builtWorkflows(parts: AgentUIMessage["parts"]): Map<string, BuiltWorkflow> {
+  const byCall = new Map<string, BuiltWorkflow>();
+  const byTab = new Map<string, BuiltWorkflow>();
+  for (const part of parts) {
+    if (part.type !== "dynamic-tool") continue;
+    const graph = toolGraphPreview(part);
+    if (!graph) continue;
+    const tabId = (part.output as { tabId?: unknown }).tabId;
+    const key = typeof tabId === "string" ? tabId : "";
+    const built = byTab.get(key);
+    if (built) {
+      built.graph = graph;
+    } else if (isCreateWorkflowPart(part)) {
+      const entry: BuiltWorkflow = { ...(key ? { tabId: key } : {}), graph };
+      byTab.set(key, entry);
+      byCall.set(part.toolCallId, entry);
+    }
+  }
+  return byCall;
 }
 
 /** What a finished call's "Show on canvas" brings into view: the nodes it changed, in the tab it worked in. */

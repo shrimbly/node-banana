@@ -29,6 +29,7 @@ import type {
 import { findNodeType, NODE_CATALOG, NODE_TYPES, normalizeKey } from "../graph/catalog";
 import { describeNodeTypes, describeWorkflow, edgeLine, nodeLine, tabName } from "../graph/describe";
 import { GraphDraft, groupLabel, titleOf, type DraftEdge, type DraftNode, type DraftTransaction, type GraphDraftOptions, type RemovedNode } from "../graph/draft";
+import { graphPreview } from "../graph/preview";
 import { isModelNodeType } from "../graph/settings";
 import {
   AGENT_TOOL_DEFINITIONS,
@@ -130,10 +131,18 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
     [TOOL_NAMES.nameConversation]: () => ({ ok: true, text: "Saved.", summary: "Named the conversation", ops: [] }),
   };
   const schemas = new Map(AGENT_TOOL_DEFINITIONS.map((d) => [d.name, z.object(d.inputShape)]));
+  // Tabs this turn built a workflow in: their later edits carry the graph too, so the chat's map ends as the turn left it.
+  const builtTabs = new Set<string | undefined>();
   /** Runs a handler on the live tab's draft, its result stamped with that tab. */
   const onLiveTab = async (tool: string, args: unknown) => {
     const tabId = workspace.currentId;
-    return workspace.stamp(await handlers[tool](args, workspace.draft), tabId);
+    const draft = workspace.draft;
+    const result = workspace.stamp(await handlers[tool](args, draft), tabId);
+    if (!result.ok || result.ops.length === 0 || !EDIT_TOOLS.has(tool)) return result;
+    if (tool === TOOL_NAMES.createWorkflow) builtTabs.add(tabId);
+    else if (!builtTabs.has(tabId)) return result;
+    const graph = graphPreview(draft);
+    return graph ? { ...result, graph } : result;
   };
 
   return {

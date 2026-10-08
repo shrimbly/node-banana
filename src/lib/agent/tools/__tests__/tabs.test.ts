@@ -136,6 +136,38 @@ describe("switch_workflow", () => {
   });
 });
 
+describe("the graph of a built workflow", () => {
+  it("rides on a build and the turn's later edits to that tab, not on reads or other tabs' edits", async () => {
+    const runtime = workspace();
+    const elsewhere = await call(runtime, "update_node", { node: "prompt-1", settings: { prompt: "a red fox" } });
+    expect(elsewhere.ok, elsewhere.text).toBe(true);
+    expect(elsewhere.graph).toBeUndefined();
+
+    await call(runtime, "new_workflow", { name: "Cat posters" });
+    const built = await call(runtime, "create_workflow", {
+      nodes: [
+        { ref: "p", type: "prompt", settings: { prompt: "a cat" } },
+        { ref: "g", type: "nanoBanana" },
+      ],
+      connections: [{ from: "p", to: "g" }],
+    });
+    expect(built.ok, built.text).toBe(true);
+    expect(built.graph).toMatchObject({ name: "Cat posters", edges: [[0, 1]] });
+    expect(built.graph!.nodes.map(([type]) => type)).toEqual(["prompt", "nanoBanana"]);
+    // Where the ops put the nodes.
+    const add = built.ops.find((op) => op.op === "addNode" && op.id === "nanoBanana-ag2") as { position: { x: number; y: number } };
+    expect(built.graph!.nodes[1].slice(1, 3)).toEqual([add.position.x, add.position.y]);
+
+    expect((await call(runtime, "get_workflow", {})).graph).toBeUndefined();
+    const later = await call(runtime, "update_node", { node: "prompt-ag1", settings: { prompt: "a tabby cat" } });
+    expect(later.ok, later.text).toBe(true);
+    expect(later.graph?.nodes).toHaveLength(2);
+
+    await call(runtime, "switch_workflow", { tab: "tab-a" });
+    expect((await call(runtime, "update_node", { node: "prompt-1", settings: { prompt: "a grey fox" } })).graph).toBeUndefined();
+  });
+});
+
 describe("new_workflow", () => {
   it("opens an empty, named tab with a fresh id, and builds there", async () => {
     const runtime = workspace({ live: { nodeDefaults: { nanoBanana: { aspectRatio: "16:9" } } } });
