@@ -228,9 +228,50 @@ function RunStatusIcon({ status, silent = false }: { status: AgentRunStatus; sil
   );
 }
 
+/** What Stop does now: mid-batch the first press lets the current run finish. */
+export function runStopLabel(state: Pick<WorkflowStore, "batch">): string {
+  if (!state.batch || state.batch.index >= state.batch.count) return "Stop";
+  return state.batch.stopping ? "Stop now" : "Stop after this run";
+}
+
+/** "Run 2 of 3 · 12s": the batch's progress and the time, ticking while it runs. */
+function useRunMeta(record: AgentRunRecord): string {
+  const running = record.status === "running";
+  const now = useNow(running);
+  const elapsed = running ? now - record.startedAt : record.finishedAt !== undefined ? record.finishedAt - record.startedAt : undefined;
+  const { index, count } = record.progress;
+  const batchNote = count > 1 ? (running || index < count ? `Run ${index} of ${count}` : `${count} runs`) : null;
+  return [batchNote, elapsed !== undefined ? formatElapsed(elapsed) : null].filter(Boolean).join(" · ");
+}
+
+/**
+ * A run's status in one line, under the Run card's title: the glyph, the
+ * word, then its progress and time (kept out of the transcript's live log
+ * while it ticks; the results below announce the end).
+ */
+export function RunStatusLine({ record, className }: { record: AgentRunRecord; className?: string }) {
+  const meta = useRunMeta(record);
+  return (
+    <p className={cn("flex min-w-0 items-center gap-1.5 text-xs leading-4", className)}>
+      <RunStatusIcon status={record.status} silent />
+      <span className="shrink-0 font-medium text-neutral-200">{STATUS_LABELS[record.status]}</span>
+      {/* Whitespace between flex items isn't drawn: this one is for screen readers and copied text. */}
+      {meta && " "}
+      {meta && (
+        <span aria-live="off" className="min-w-0 truncate tabular-nums text-ink-3">
+          · {meta}
+        </span>
+      )}
+    </p>
+  );
+}
+
 export interface AgentRunResultsProps {
   record: AgentRunRecord;
-  /** Inside an offer's card: no frame of its own, and the card's own button runs it again. */
+  /**
+   * Inside an offer's card: no frame or header of its own. The card's title
+   * row names the run and holds its status, Stop, Show on canvas and Run again.
+   */
   embedded?: boolean;
 }
 
@@ -251,18 +292,10 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
       : chatRunBlockedReason({ tabId: record.tabId, scope: record.scope, plannedNodeIds: record.plannedNodeIds }, state) ??
         (transcript?.busy && state.activeTabId !== record.tabId ? AGENT_TURN_RUNNING : null),
   );
-  const stopMode = useWorkflowStore((state) =>
-    !state.batch ? "now" : state.batch.stopping ? "stopping" : state.batch.index < state.batch.count ? "after" : "now",
-  );
-
-  const now = useNow(running);
-  const elapsed = running ? now - record.startedAt : record.finishedAt !== undefined ? record.finishedAt - record.startedAt : undefined;
-  const { index, count } = record.progress;
-  const batchNote = count > 1 ? (running || index < count ? `Run ${index} of ${count}` : `${count} runs`) : null;
-  // Inside an offer's card the card already names the run: the heading is the status.
-  const heading = embedded ? STATUS_LABELS[record.status] : record.label;
-  const statusNote = embedded || running || record.status === "done" ? null : STATUS_LABELS[record.status];
-  const meta = [statusNote, batchNote, elapsed !== undefined ? formatElapsed(elapsed) : null].filter(Boolean).join(" · ");
+  const stopLabel = useWorkflowStore(runStopLabel);
+  const runMeta = useRunMeta(record);
+  const statusNote = running || record.status === "done" ? null : STATUS_LABELS[record.status];
+  const meta = [statusNote, runMeta].filter(Boolean).join(" · ");
 
   // Said once, politely, when a run this card watched ends (not for a record that was already over).
   const [watched, setWatched] = useState<string | null>(running ? record.id : null);
@@ -374,50 +407,52 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
   };
 
   const page = surface === "page";
+  const Frame = embedded ? "div" : "section";
   return (
-    <section
-      role="group"
-      aria-labelledby={headingId}
+    <Frame
+      {...(embedded ? {} : { role: "group", "aria-labelledby": headingId })}
       data-run-results={record.id}
       data-status={record.status}
       className={cn("flex flex-col", !embedded && "rounded-card squircle border border-white/[0.08] bg-white/[0.02]")}
     >
-      {/* The same inset as the Run card's text; the icon buttons' own padding makes up the right side. */}
-      <div className={cn("flex min-h-11 items-center gap-2 py-2", page ? "pr-2.5 pl-4" : "pr-2 pl-3.5")}>
-        <RunStatusIcon status={record.status} silent={embedded} />
-        <h3 id={headingId} className={cn("min-w-0 truncate font-medium text-neutral-100", page ? "text-sm leading-5" : "text-[13px] leading-5")}>
-          {heading}
-        </h3>
-        {/* The transcript is a live log: the time ticks without being read out each second (the end is announced below). */}
-        {meta && (
-          <span aria-live="off" className="shrink-0 text-xs leading-4 tabular-nums text-ink-3">
-            {meta}
-          </span>
-        )}
-        <div className="ml-auto flex shrink-0 items-center gap-0.5">
-          {running && (
-            <CardIconButton
-              label={stopMode === "after" ? "Stop after this run" : stopMode === "stopping" ? "Stop now" : "Stop"}
-              onClick={stopChatRun}
-              className="[&_svg]:size-3"
-            >
-              {/* Filled, as the composer's stop: an outline square reads as a checkbox (and is the "stopped" status). */}
-              <SquareIcon aria-hidden="true" strokeWidth={0} className="fill-current" />
-            </CardIconButton>
+      {!embedded && (
+        // The same inset as the Run card's text; the icon buttons' own padding makes up the right side.
+        <div className={cn("flex min-h-11 items-center gap-2 py-2", page ? "pr-2.5 pl-4" : "pr-2 pl-3.5")}>
+          <RunStatusIcon status={record.status} />
+          <h3 id={headingId} className={cn("min-w-0 truncate font-medium text-neutral-100", page ? "text-sm leading-5" : "text-[13px] leading-5")}>
+            {record.label}
+          </h3>
+          {/* The transcript is a live log: the time ticks without being read out each second (the end is announced below). */}
+          {meta && (
+            <span aria-live="off" className="shrink-0 text-xs leading-4 tabular-nums text-ink-3">
+              {meta}
+            </span>
           )}
-          {transcript && (
-            <CardIconButton label="Show on canvas" onClick={() => transcript.showOnCanvas({ tabId: record.tabId, nodeIds: nodesInView })}>
-              <LocateFixedIcon {...AGENT_ICON} />
-            </CardIconButton>
-          )}
-          {!running && !embedded && (
-            <CardIconButton label="Run again" onClick={runAgain} disabledReason={blocked}>
-              <RotateCcwIcon {...AGENT_ICON} />
-            </CardIconButton>
-          )}
+          <div className="ml-auto flex shrink-0 items-center gap-0.5">
+            {running && (
+              <CardIconButton
+                label={stopLabel}
+                onClick={stopChatRun}
+                className="[&_svg]:size-3"
+              >
+                {/* Filled, as the composer's stop: an outline square reads as a checkbox (and is the "stopped" status). */}
+                <SquareIcon aria-hidden="true" strokeWidth={0} className="fill-current" />
+              </CardIconButton>
+            )}
+            {transcript && (
+              <CardIconButton label="Show on canvas" onClick={() => transcript.showOnCanvas({ tabId: record.tabId, nodeIds: nodesInView })}>
+                <LocateFixedIcon {...AGENT_ICON} />
+              </CardIconButton>
+            )}
+            {!running && (
+              <CardIconButton label="Run again" onClick={runAgain} disabledReason={blocked}>
+                <RotateCcwIcon {...AGENT_ICON} />
+              </CardIconButton>
+            )}
+          </div>
         </div>
-      </div>
-      {note?.id === record.id && (
+      )}
+      {!embedded && note?.id === record.id && (
         <p role="alert" className={cn("-mt-1 flex items-center gap-2 pb-2 text-[11px] leading-4 text-neutral-300", page ? "px-4" : "px-3.5")}>
           <StatusDot tone="blocked" />
           {note.text}
@@ -497,7 +532,7 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
           }
         />
       </div>
-    </section>
+    </Frame>
   );
 }
 

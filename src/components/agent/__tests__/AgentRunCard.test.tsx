@@ -13,12 +13,14 @@ vi.mock("@/utils/logger", () => ({
   },
 }));
 const startOfferRun = vi.hoisted(() => vi.fn());
+const stopChatRun = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/agent/client/runs", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/agent/client/runs")>()),
   startOfferRun,
+  stopChatRun,
 }));
 
-import { AgentRunCard, describeOfferTarget, estimateRunCost } from "@/components/agent/AgentRunCard";
+import { AgentRunCard, describeOfferTarget, estimateRunCost, groupOfferNodes } from "@/components/agent/AgentRunCard";
 import { AgentTranscriptActionsProvider, type AgentTranscriptActions } from "@/components/agent/AgentSession";
 import { useAgentRuns } from "@/lib/agent/client/runs";
 import type { AgentRunOffer, AgentRunRecord } from "@/lib/agent/types";
@@ -75,7 +77,17 @@ function record(overrides: Partial<AgentRunRecord> = {}): AgentRunRecord {
 }
 
 function runButton() {
-  return screen.getByRole("button", { name: /^Run( again)?( in .+)?$/ });
+  return screen.getByRole("button", { name: /^Run( again)?( in .+?)?(, \d+ runs)?$/ });
+}
+
+/** The line under the title: what it runs (or where), then the estimate. */
+function offerLine(card: HTMLElement = document.querySelector<HTMLElement>("[data-run-offer]")!) {
+  return within(card).getByRole("heading").nextElementSibling as HTMLElement;
+}
+
+function openMenu() {
+  fireEvent.keyDown(screen.getByRole("button", { name: "Run options" }), { key: "Enter" });
+  return screen.getByRole("menu");
 }
 
 /** Held: still focusable, with its reason as the button's description, and a press runs nothing. */
@@ -105,48 +117,53 @@ beforeEach(() => {
   useAgentRuns.setState({ records: [] });
   startOfferRun.mockReset();
   startOfferRun.mockReturnValue({ ok: true, record: record() });
+  stopChatRun.mockReset();
 });
 
 describe("AgentRunCard", () => {
-  it("names what it runs: the nodes, the generators among them and the estimated cost", () => {
+  it("is one row: the title, a line naming its nodes and the estimate, and the Run button", () => {
     renderOffer();
     const card = screen.getByRole("group", { name: "Run 2 changed nodes" });
-    expect(within(card).getByText("Ready to run")).toBeInTheDocument();
-    expect(within(card).getByText("2 nodes · 1 generator · ≈ $0.04")).toBeInTheDocument();
-    const chips = within(card).getByRole("list", { name: "Nodes it runs" });
-    expect(within(chips).getAllByRole("listitem").map((chip) => chip.textContent)).toEqual(["Generate Image", "Output"]);
+    expect(within(card).queryByText(/Ready to run/i)).not.toBeInTheDocument();
+    expect(offerLine(card)).toHaveTextContent(/^Generate Image · Output≈ \$0\.04$/);
     expect(runButton()).toHaveAccessibleName("Run");
+    expect(runButton()).toHaveTextContent(/^Run$/);
     expectReady();
   });
 
-  it("multiplies the estimate by the runs, from a 1–50 stepper", () => {
+  it("names alike nodes once, with how many", () => {
+    const gens = Array.from({ length: 4 }, (_, index) => node(`g${index}`, "nanoBanana"));
+    useWorkflowStore.setState({ nodes: [...gens, node("gallery", "outputGallery")] });
+    const ids = [...gens.map((n) => n.id), "gallery"];
+    renderOffer({ ...offer, primary: { scope: { kind: "nodes", nodeIds: ids }, label: "Run 4 changed nodes", nodeIds: ids }, alternatives: [] });
+    expect(offerLine()).toHaveTextContent(/^Generate Image ×4 · Output Gallery/);
+    // Every node is still named in full on hover.
+    expect(offerLine().querySelector("p")).toHaveAttribute("title", "Generate Image, Generate Image, Generate Image, Generate Image, Output Gallery");
+  });
+
+  it("sets the runs in the button's menu, as the canvas's Run menu does, and prices them", () => {
     renderOffer();
-    const fewer = screen.getByRole("button", { name: "Fewer runs" });
-    expect(fewer).toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "More runs" }));
-    fireEvent.click(screen.getByRole("button", { name: "More runs" }));
-    expect(screen.getByText("2 nodes · 1 generator · ≈ $0.12")).toBeInTheDocument();
+    let menu = openMenu();
+    expect(within(menu).getByRole("menuitem", { name: "Fewer runs" })).toHaveAttribute("aria-disabled", "true");
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "More runs" }));
+    fireEvent.click(within(screen.getByRole("menu")).getByRole("menuitem", { name: "More runs" }));
+    // The steps keep the menu open.
+    menu = screen.getByRole("menu");
+    expect(within(menu).getByRole("group", { name: "Runs" })).toHaveTextContent("3");
+    expect(offerLine()).toHaveTextContent("≈ $0.12");
+    expect(runButton()).toHaveTextContent(/^Run ×3$/);
+    expect(runButton()).toHaveAccessibleName("Run, 3 runs");
     fireEvent.click(runButton());
     expect(startOfferRun).toHaveBeenCalledWith({ chatId: "chat-1", offer, option: offer.primary, runs: 3 });
   });
 
-  it("shows six chips at most, then how many more", () => {
-    const many = Array.from({ length: 9 }, (_, index) => node(`p${index}`, "prompt"));
-    useWorkflowStore.setState({ nodes: many });
-    renderOffer({ ...offer, primary: { scope: { kind: "all" }, label: "Run workflow", nodeIds: many.map((n) => n.id) }, alternatives: [] });
-    const chips = screen.getByRole("list", { name: "Nodes it runs" });
-    expect(within(chips).getAllByRole("listitem")).toHaveLength(7);
-    expect(within(chips).getByLabelText("and 3 more")).toHaveTextContent("+3");
-    // No generators priced (none at all): no estimate.
-    expect(screen.getByText("9 nodes · 0 generators")).toBeInTheDocument();
-  });
-
-  it("is held, saying why, while a run goes", () => {
+  it("is held, saying why, while a run goes; its menu still opens", () => {
     useWorkflowStore.setState({ isRunning: true });
     renderOffer();
     expectHeld("Wait for the run to finish");
-    expect(screen.getByRole("button", { name: "Other ways to run" })).toBeDisabled();
     expect(screen.getByText("Wait for the run to finish")).toBeInTheDocument();
+    const menu = openMenu();
+    expect(within(menu).getByRole("menuitem", { name: /Run whole workflow/ })).toHaveAttribute("aria-disabled", "true");
   });
 
   it("is held once its nodes are gone, or its tab was closed", () => {
@@ -157,8 +174,7 @@ describe("AgentRunCard", () => {
 
     useWorkflowStore.setState({ tabs: [{ id: "tab-z", snapshot: null }], activeTabId: "tab-z" });
     renderOffer();
-    expect(screen.getByText("Ready to run · In Hero shots")).toBeInTheDocument();
-    expect(screen.getByText("2 nodes")).toBeInTheDocument();
+    expect(offerLine()).toHaveTextContent(/^In Hero shots · 2 nodes$/);
     expect(screen.getByText("That workflow is no longer open")).toBeInTheDocument();
     expectHeld("That workflow is no longer open");
   });
@@ -170,7 +186,7 @@ describe("AgentRunCard", () => {
     expectHeld("The nodes it would run are no longer on the canvas");
   });
 
-  it("runs in another open tab by name", () => {
+  it("runs in another open tab, saying which on its line and in the button's name", () => {
     useWorkflowStore.setState({
       nodes: [node("elsewhere", "prompt")],
       workflowName: "Scratch",
@@ -181,9 +197,9 @@ describe("AgentRunCard", () => {
       activeTabId: "tab-b",
     });
     renderOffer();
-    expect(screen.getByText("Ready to run · In Hero shots v2")).toBeInTheDocument();
+    expect(offerLine()).toHaveTextContent(/^In Hero shots v2 · Generate Image · Output≈ \$0\.04$/);
     expect(runButton()).toHaveAccessibleName("Run in Hero shots v2");
-    expect(screen.getByText("2 nodes · 1 generator · ≈ $0.04")).toBeInTheDocument();
+    expect(runButton()).toHaveTextContent(/^Run$/);
     fireEvent.click(runButton());
     expect(startOfferRun).toHaveBeenCalledWith(expect.objectContaining({ option: offer.primary, runs: 1 }));
   });
@@ -199,7 +215,7 @@ describe("AgentRunCard", () => {
       activeTabId: "tab-b",
     });
     renderOffer({ ...offer, workflowName: undefined });
-    expect(screen.getByText("Ready to run · In Untitled (tab 2)")).toBeInTheDocument();
+    expect(offerLine()).toHaveTextContent(/^In Untitled \(tab 2\) · /);
     expect(runButton()).toHaveAccessibleName("Run in Untitled (tab 2)");
   });
 
@@ -216,19 +232,19 @@ describe("AgentRunCard", () => {
     expect(screen.getByText("Wait for the agent to finish")).toBeInTheDocument();
   });
 
-  it("offers the alternatives in the chevron's menu", () => {
+  it("offers the other ways to run in the button's menu", () => {
     renderOffer();
-    fireEvent.keyDown(screen.getByRole("button", { name: "Other ways to run" }), { key: "Enter" });
-    const menu = screen.getByRole("menu");
-    const whole = within(menu).getByRole("menuitem", { name: /Run whole workflow/ });
+    const whole = within(openMenu()).getByRole("menuitem", { name: /Run whole workflow/ });
     expect(whole).toHaveTextContent("3 nodes");
     fireEvent.click(whole);
     expect(startOfferRun).toHaveBeenCalledWith({ chatId: "chat-1", offer, option: offer.alternatives[0], runs: 1 });
   });
 
-  it("has no chevron without alternatives", () => {
+  it("keeps the run count in the menu when there is no other way to run", () => {
     renderOffer({ ...offer, alternatives: [] });
-    expect(screen.queryByRole("button", { name: "Other ways to run" })).not.toBeInTheDocument();
+    const menu = openMenu();
+    expect(within(menu).getByRole("group", { name: "Runs" })).toBeInTheDocument();
+    expect(within(menu).queryByText("Run instead")).not.toBeInTheDocument();
   });
 
   it("says why a run didn't start", () => {
@@ -238,46 +254,68 @@ describe("AgentRunCard", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("The run didn't start");
   });
 
-  it("shows its run's results once run, and offers to run it again", () => {
+  it("once run, its line is the run's status and its button stops the run, then runs it again", () => {
     useAgentRuns.setState({ records: [record({ status: "running", finishedAt: undefined })] });
     useWorkflowStore.setState({ isRunning: true });
     const { rerender } = renderOffer();
-    // Under the card's own title, the results are headed by their status.
     const card = screen.getByRole("group", { name: "Run 2 changed nodes" });
-    expect(within(card).getByRole("group", { name: "Running" })).toBeInTheDocument();
-    expect(within(card).getByRole("heading", { name: "Running" })).toBeInTheDocument();
-    // Its own run: Stop is in the results, and the hold needs no explanation.
+    expect(offerLine(card)).toHaveTextContent(/^Running · \ds$/);
+    // No second header or frame: the results sit straight under the card's row.
+    expect(within(card).queryByRole("group")).not.toBeInTheDocument();
+    // Its own run: no hold to explain, and the button is its Stop.
     expect(screen.queryByText("Wait for the run to finish")).not.toBeInTheDocument();
-    expect(runButton()).toHaveAccessibleName("Run again");
-    expectHeld();
+    const stop = within(card).getByRole("button", { name: "Stop" });
+    expect(stop).not.toHaveAttribute("aria-disabled");
+    fireEvent.click(stop);
+    expect(stopChatRun).toHaveBeenCalledTimes(1);
+    expect(startOfferRun).not.toHaveBeenCalled();
 
     useWorkflowStore.setState({ isRunning: false });
     useAgentRuns.setState({ records: [record()] });
+    const transcript = actions();
     rerender(
-      <AgentTranscriptActionsProvider value={actions()}>
+      <AgentTranscriptActionsProvider value={transcript}>
         <AgentRunCard offer={offer} />
       </AgentTranscriptActionsProvider>,
     );
-    expect(screen.getByRole("heading", { name: "Done" })).toBeInTheDocument();
+    expect(offerLine(card)).toHaveTextContent(/^Done · \ds$/);
     expectReady();
-    // Run again lives on the card's own button, not twice.
     expect(screen.getAllByRole("button", { name: /^Run again/ })).toHaveLength(1);
+    fireEvent.click(within(openMenu()).getByRole("menuitem", { name: "Show on canvas" }));
+    expect(transcript.showOnCanvas).toHaveBeenCalledWith({ tabId: "tab-a", nodeIds: ["gen", "out"] });
   });
 
   it("runs an alternative it ran last time from the main button, offering the primary in the menu", () => {
     useAgentRuns.setState({ records: [record({ label: "Run whole workflow", scope: { kind: "all" } })] });
     renderOffer();
-    expect(screen.getAllByRole("heading", { name: "Run whole workflow" }).length).toBeGreaterThan(0);
+    expect(screen.getByRole("heading", { name: "Run whole workflow" })).toBeInTheDocument();
     fireEvent.click(runButton());
     expect(startOfferRun).toHaveBeenCalledWith(expect.objectContaining({ option: offer.alternatives[0] }));
-    fireEvent.keyDown(screen.getByRole("button", { name: "Other ways to run" }), { key: "Enter" });
-    expect(within(screen.getByRole("menu")).getByRole("menuitem", { name: /Run 2 changed nodes/ })).toBeInTheDocument();
+    expect(within(openMenu()).getByRole("menuitem", { name: /Run 2 changed nodes/ })).toBeInTheDocument();
   });
 
   it("leaves the Run controls out without an agent session", () => {
     renderOffer(offer, null);
     expect(screen.getByRole("group", { name: "Run 2 changed nodes" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Run/ })).not.toBeInTheDocument();
+  });
+});
+
+describe("groupOfferNodes", () => {
+  it("counts alike nodes once, keeping run order, and tells same titles of different outputs apart", () => {
+    expect(
+      groupOfferNodes([
+        { id: "a", title: "Generate Image", handle: "image" },
+        { id: "b", title: "Generate Image", handle: "image" },
+        { id: "c", title: "Hero", handle: "text" },
+        { id: "d", title: "Hero", handle: "image" },
+        { id: "e", title: "Generate Image", handle: "image" },
+      ]),
+    ).toEqual([
+      { title: "Generate Image", handle: "image", count: 3 },
+      { title: "Hero", handle: "text", count: 1 },
+      { title: "Hero", handle: "image", count: 1 },
+    ]);
   });
 });
 

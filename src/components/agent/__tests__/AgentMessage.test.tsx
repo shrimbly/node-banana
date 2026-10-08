@@ -165,7 +165,7 @@ describe("AgentMessage runs", () => {
 
   it("draws a run offer as the Run card, without the session's Run controls on its own", () => {
     render(<AgentMessage message={reply([offerPart])} streaming={false} />);
-    expect(screen.getByRole("group", { name: "Run workflow" })).toHaveTextContent("Ready to run");
+    expect(screen.getByRole("group", { name: "Run workflow" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Run" })).not.toBeInTheDocument();
   });
 
