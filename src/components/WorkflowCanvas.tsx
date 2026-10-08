@@ -2629,7 +2629,7 @@ export function WorkflowCanvas() {
       {/* Edge toolbar */}
 
       {/* Global image history */}
-      <GlobalImageHistory rightInset={historyRightInset} anchorRight={isAgentOpen ? historyRightInset : AGENT_BUTTON_MARGIN} />
+      <GlobalImageHistory rightInset={historyRightInset} anchorRight={isAgentOpen && canvasShown ? historyRightInset : AGENT_BUTTON_MARGIN} />
 
       {/* Chat toggle button - hidden for now */}
 

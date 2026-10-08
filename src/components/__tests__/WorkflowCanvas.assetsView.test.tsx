@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { WorkflowCanvas } from "@/components/WorkflowCanvas";
+import { AGENT_BUTTON_MARGIN } from "@/lib/agent/client/layout";
 import { useAssetStore } from "@/store/assetStore";
 
 /**
@@ -16,6 +17,7 @@ import { useAssetStore } from "@/store/assetStore";
 const mocks = vi.hoisted(() => ({
   state: {} as Record<string, unknown>,
   reactFlowProps: { current: null as Record<string, unknown> | null },
+  historyProps: { current: null as { rightInset?: number; anchorRight?: number } | null },
 }));
 
 const mockAddNode = vi.fn().mockReturnValue("new-node-id");
@@ -58,7 +60,13 @@ vi.mock("@xyflow/react", async () => {
 
 vi.mock("@/components/ConnectionDropMenu", () => ({ ConnectionDropMenu: () => null }));
 vi.mock("@/components/MultiSelectToolbar", () => ({ MultiSelectToolbar: () => null }));
-vi.mock("@/components/GlobalImageHistory", () => ({ GlobalImageHistory: () => null }));
+vi.mock("@/components/GlobalImageHistory", () => ({
+  GlobalImageHistory: (props: { rightInset?: number; anchorRight?: number }) => {
+    mocks.historyProps.current = props;
+    return null;
+  },
+}));
+vi.mock("@/components/agent/AgentPanel", () => ({ AgentPanel: () => null }));
 // The agent button reads the page's agent session, which page.tsx mounts around the canvas.
 vi.mock("@/components/agent/AgentSession", () => ({
   useAgentPresence: () => ({ busy: false, presence: { harness: "claude", harnessChosen: false, attention: false } }),
@@ -297,5 +305,18 @@ describe("WorkflowCanvas and the chat view", () => {
     expect(mockAddNode).not.toHaveBeenCalled();
     expect(mockCopySelectedNodes).not.toHaveBeenCalled();
     expect(mockSetShortcutsDialogOpen).not.toHaveBeenCalled();
+  });
+
+  it("puts notifications back in the corner while the chat hides the agent window", () => {
+    renderCanvas();
+    fireEvent.click(screen.getByRole("button", { name: "Open agent" }));
+    const windowEdge = mocks.historyProps.current?.anchorRight;
+    expect(windowEdge).toBeGreaterThan(AGENT_BUTTON_MARGIN);
+
+    act(() => useAssetStore.getState().setAppView("chat"));
+    expect(mocks.historyProps.current?.anchorRight).toBe(AGENT_BUTTON_MARGIN);
+
+    act(() => useAssetStore.getState().setAppView("canvas"));
+    expect(mocks.historyProps.current?.anchorRight).toBe(windowEdge);
   });
 });
