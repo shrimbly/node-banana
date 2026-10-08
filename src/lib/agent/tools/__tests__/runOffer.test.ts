@@ -174,15 +174,64 @@ describe("runOffer", () => {
     expect(locked.runOffer!()).toBeNull();
   });
 
+  it("leaves out a node the turn only wired onward from, since its output stays what it was", async () => {
+    // prompt-1 → nanoBanana-2, which already made its image.
+    const made: StoreState = {
+      nodes: [
+        storeNode("prompt-1", "prompt", { x: 0, y: 0 }, { prompt: "a fox in snow" }),
+        storeNode("nanoBanana-2", "nanoBanana", { x: 400, y: 0 }, { outputImage: "data:image/png;base64,AAAA" }),
+      ],
+      edges: [storeEdge("prompt-1", "text", "nanoBanana-2", "text")],
+    };
+    const animate = runtimeFor(made);
+    const built = await call(animate, "create_workflow", {
+      nodes: [
+        { ref: "p", type: "prompt", settings: { prompt: "the fox turns its head" } },
+        { ref: "v", type: "generateVideo" },
+      ],
+      connections: [
+        { from: "nanoBanana-2", to: "v" },
+        { from: "p", to: "v" },
+      ],
+    });
+    expect(built.ok, built.text).toBe(true);
+    expect(animate.runOffer!()?.primary).toEqual({
+      scope: { kind: "nodes", nodeIds: ["prompt-ag1", "generateVideo-ag2"] },
+      label: "Run 2 changed nodes",
+      nodeIds: ["prompt-ag1", "generateVideo-ag2"],
+    });
+
+    // A viewer after it shows the image it has: nothing to generate.
+    const viewer = runtimeFor(made);
+    await call(viewer, "create_workflow", { nodes: [{ ref: "o", type: "output" }], connections: [{ from: "nanoBanana-2", to: "o" }] });
+    expect(viewer.runOffer!()).toBeNull();
+  });
+
+  it("counts the node a new wire feeds as changed", async () => {
+    const rewired = runtimeFor(chain());
+    await call(rewired, "edit_workflow", {
+      operations: [
+        { op: "add_node", ref: "p", type: "prompt", settings: { prompt: "a wolf" } },
+        { op: "connect", from: "p", to: "nanoBanana-3" },
+      ],
+    });
+    expect(rewired.runOffer!()?.primary.nodeIds).toEqual(["prompt-ag1", "nanoBanana-3", "output-4"]);
+  });
+
   it("forgets nodes removed later in the turn", async () => {
     const runtime = runtimeFor(chain());
-    await call(runtime, "create_workflow", { nodes: [{ ref: "g", type: "nanoBanana" }], connections: [{ from: "llmGenerate-2", to: "g" }] });
-    await call(runtime, "edit_workflow", { operations: [{ op: "remove_node", node: "g" }] });
-    // Wiring the new generator changed the LLM too, which still feeds nanoBanana-3.
+    await call(runtime, "edit_workflow", {
+      operations: [
+        { op: "add_node", ref: "g", type: "nanoBanana" },
+        { op: "connect", from: "llmGenerate-2", to: "g" },
+        { op: "update_node", node: "nanoBanana-3", settings: { aspectRatio: "16:9" } },
+      ],
+    });
+    await call(runtime, "edit_workflow", { operations: [{ op: "remove_node", node: "nanoBanana-ag1" }] });
     expect(runtime.runOffer!()?.primary).toEqual({
-      scope: { kind: "nodes", nodeIds: ["llmGenerate-2", "nanoBanana-3", "output-4"] },
-      label: "Run 2 changed nodes",
-      nodeIds: ["llmGenerate-2", "nanoBanana-3", "output-4"],
+      scope: { kind: "nodes", nodeIds: ["nanoBanana-3", "output-4"] },
+      label: `Run ${GENERATE}`,
+      nodeIds: ["nanoBanana-3", "output-4"],
     });
   });
 

@@ -190,7 +190,7 @@ export class GraphDraft {
   nextGroupSuffix: number;
   /** Refs defined by earlier calls this turn, still resolvable in later ones. */
   refs = new Map<string, string>();
-  /** Nodes this turn's calls created or changed (settings, wiring), without the ones removed since. */
+  /** Nodes this turn's calls created, set up or wired something into, without the ones removed since. */
   readonly changedNodeIds = new Set<string>();
   /** A call this turn replaced the whole canvas. */
   canvasReplaced = false;
@@ -270,7 +270,7 @@ export class GraphDraft {
     }
     for (const [ref, id] of tx.refs) this.refs.set(ref, id);
     this.selectedNodeIds = this.selectedNodeIds.filter((id) => this.nodes.has(id));
-    for (const id of [...tx.createdIds, ...tx.touchedIds]) this.changedNodeIds.add(id);
+    for (const id of tx.changedIds) this.changedNodeIds.add(id);
     for (const id of this.changedNodeIds) if (!this.nodes.has(id)) this.changedNodeIds.delete(id);
   }
 }
@@ -316,6 +316,8 @@ export class DraftTransaction {
   private readonly emptiedByRemoval = new Set<string>();
   private readonly deferred: Array<() => void> = [];
   private readonly touched = new Set<string>();
+  /** Nodes whose output this call may change: created, set up, or fed by a wire it added or removed. */
+  private readonly changed = new Set<string>();
   /** Edges already broken (a missing handle, a mistyped Switch output) before this call: left alone. */
   private readonly preexistingBroken: Set<string>;
   /** Router/Switch edges already dormant before this call. */
@@ -340,6 +342,10 @@ export class DraftTransaction {
 
   get touchedIds(): string[] {
     return [...this.touched].filter((id) => this.nodes.has(id));
+  }
+
+  get changedIds(): string[] {
+    return [...this.changed].filter((id) => this.nodes.has(id));
   }
 
   // -------------------------------------------------------------------------
@@ -512,6 +518,7 @@ export class DraftTransaction {
     this.addOps.set(id, op);
     this.log.created.push({ id, type, ...(ref ? { ref } : {}) });
     this.touched.add(id);
+    this.changed.add(id);
     if (ref) this.refs.set(ref, id);
 
     if (input.position) {
@@ -1120,6 +1127,7 @@ export class DraftTransaction {
     this.emitUpdate(node.id, outcome.patch);
     this.recordChanges(node.id, outcome);
     this.touched.add(node.id);
+    this.changed.add(node.id);
     if (node.type === "splitGrid" && "template" in outcome.patch) this.ensureGridRouter(node, cellsInto(settings), where);
     if (outcome.handlesMayChange && (node.type === "generateVideo" || node.type === "generate3d" || node.type === "generateAudio")) {
       this.remapSchemaEdges(node, before);
@@ -1193,6 +1201,7 @@ export class DraftTransaction {
     this.log.addedEdges.push(edge);
     this.touched.add(edge.source);
     this.touched.add(edge.target);
+    this.changed.add(edge.target);
   }
 
   /**
@@ -1209,6 +1218,7 @@ export class DraftTransaction {
     if (added !== -1) this.log.addedEdges.splice(added, 1);
     else this.log.removedEdges.push({ edge, ...(reason ? { reason } : {}) });
     this.touched.add(edge.target);
+    this.changed.add(edge.target);
 
     // A Switch forgets its type when its input goes (the node does the same).
     const target = this.nodes.get(edge.target);
