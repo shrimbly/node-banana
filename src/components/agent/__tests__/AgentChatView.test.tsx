@@ -292,6 +292,8 @@ describe("AgentChatView", () => {
     expect(screen.queryByRole("textbox", { name: "Message the agent" })).not.toBeInTheDocument();
     // Nothing to send yet: the view holds the focus, so its keys still work.
     expect(document.activeElement).toBe(view());
+    fireEvent.keyDown(view(), { key: "c" });
+    expect(useAssetStore.getState().appView).toBe("canvas");
   });
 
   describe("sidebar", () => {
@@ -544,26 +546,111 @@ describe("AgentChatView", () => {
   });
 
   describe("keys", () => {
-    it("goes back to the canvas on a bare C outside a text field", async () => {
+    /** A button in the tab strip: outside the view, where the window's keys still reach it. */
+    function stripButton() {
+      const button = document.createElement("button");
+      document.body.append(button);
+      return button;
+    }
+    afterEach(() => {
+      for (const button of document.body.querySelectorAll(":scope > button")) button.remove();
+    });
+
+    it("goes back to the canvas on a bare C from the sidebar, the header or the tab strip", async () => {
       render(<Harness />);
       const textarea = await waitForComposer();
+      const inSidebar = within(sidebar()).getByRole("button", { name: "Collapse sidebar" });
 
       fireEvent.keyDown(textarea, { key: "c" });
       expect(useAssetStore.getState().appView).toBe("chat");
-      fireEvent.keyDown(view(), { key: "c", metaKey: true });
+      fireEvent.keyDown(inSidebar, { key: "c", metaKey: true });
       expect(useAssetStore.getState().appView).toBe("chat");
-      fireEvent.keyDown(view(), { key: "C", shiftKey: true });
+      fireEvent.keyDown(inSidebar, { key: "C", shiftKey: true });
       expect(useAssetStore.getState().appView).toBe("chat");
 
-      fireEvent.keyDown(view(), { key: "c" });
+      fireEvent.keyDown(inSidebar, { key: "c" });
+      expect(useAssetStore.getState().appView).toBe("canvas");
+
+      act(() => useAssetStore.setState({ appView: "chat" }));
+      fireEvent.keyDown(screen.getByRole("button", { name: "Open canvas" }), { key: "c" });
+      expect(useAssetStore.getState().appView).toBe("canvas");
+
+      act(() => useAssetStore.setState({ appView: "chat" }));
+      fireEvent.keyDown(stripButton(), { key: "c" });
       expect(useAssetStore.getState().appView).toBe("canvas");
     });
 
-    it("hears a bare C when the focus has dropped out of the view", async () => {
+    it("goes to Assets on a bare A, as the strip's toggle says", async () => {
       render(<Harness />);
       await waitForComposer();
-      fireEvent.keyDown(document.body, { key: "c" });
-      expect(useAssetStore.getState().appView).toBe("canvas");
+      fireEvent.keyDown(within(sidebar()).getByRole("button", { name: "Collapse sidebar" }), { key: "a" });
+      expect(useAssetStore.getState().appView).toBe("assets");
+    });
+
+    it("never hands a C it acted on to a canvas listener added after its own", async () => {
+      render(<Harness />);
+      await waitForComposer();
+      // The canvas re-adds its window listener whenever its nodes change (a chat run, an agent
+      // edit), which puts it after the view's; it opens the chat on a bare C once it is shown.
+      const canvasKeys = (event: KeyboardEvent) => {
+        if (event.key === "c" && useAssetStore.getState().appView === "canvas") useAssetStore.getState().setAppView("chat");
+      };
+      window.addEventListener("keydown", canvasKeys);
+      try {
+        fireEvent.keyDown(stripButton(), { key: "c" });
+        expect(useAssetStore.getState().appView).toBe("canvas");
+      } finally {
+        window.removeEventListener("keydown", canvasKeys);
+      }
+    });
+
+    it("starts a message with a letter typed in the transcript, on the view or after the focus dropped to the page", async () => {
+      const conversation = savedConversation();
+      conversation.messages[1]!.parts.unshift({
+        type: "dynamic-tool",
+        toolName: "edit_workflow",
+        toolCallId: "call-1",
+        state: "output-available",
+        input: {},
+        output: { ok: true, summary: "Added 2 nodes" },
+      } as AgentUIMessage["parts"][number]);
+      localStorage.setItem(AGENT_HISTORY_KEY, JSON.stringify([conversation]));
+      render(<Harness />);
+      const textarea = await waitForComposer();
+      fireEvent.click(within(sidebar()).getByRole("button", { name: /^Hero film/ }));
+      await screen.findByText("Built the hero film.");
+      const toolRow = within(screen.getByRole("log")).getByRole("button", { name: /Added 2 nodes/ });
+
+      // "can you…" after pressing a card's button, clicking the transcript, or a button that went away.
+      for (const target of [toolRow, view(), document.body]) {
+        target.focus();
+        for (const key of ["c", "a", "C"]) {
+          fireEvent.keyDown(target, { key, shiftKey: key === "C" });
+          expect(useAssetStore.getState().appView).toBe("chat");
+          expect(document.activeElement).toBe(textarea);
+          target.focus();
+        }
+      }
+    });
+
+    it("leaves Space to the focused button: it presses it rather than starting a message", async () => {
+      const conversation = savedConversation();
+      conversation.messages[1]!.parts.unshift({
+        type: "dynamic-tool",
+        toolName: "edit_workflow",
+        toolCallId: "call-1",
+        state: "output-available",
+        input: {},
+        output: { ok: true, summary: "Added 2 nodes" },
+      } as AgentUIMessage["parts"][number]);
+      localStorage.setItem(AGENT_HISTORY_KEY, JSON.stringify([conversation]));
+      render(<Harness />);
+      await waitForComposer();
+      fireEvent.click(within(sidebar()).getByRole("button", { name: /^Hero film/ }));
+      const toolRow = await within(await screen.findByRole("log")).findByRole("button", { name: /Added 2 nodes/ });
+      toolRow.focus();
+      fireEvent.keyDown(toolRow, { key: " " });
+      expect(document.activeElement).toBe(toolRow);
     });
 
     it("leaves a C typed into an open menu to the menu", async () => {

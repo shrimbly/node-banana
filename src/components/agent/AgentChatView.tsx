@@ -37,23 +37,55 @@ function isTypingTarget(target: EventTarget | null): boolean {
 }
 
 /**
- * The view's own keys, once nothing closer has taken them: bare C goes back
- * to the canvas and ? shows the shortcuts. Never while typing, nor while a
- * menu or a dialog is up (their letters are theirs). Escape is not one of
- * them: the view is left on purpose, never by dismissing something.
+ * Where a letter is the start of a message: the transcript and its cards,
+ * the column around the message box, the view itself (a click on the text
+ * focuses it), or the page, where the focus lands when a pressed button goes
+ * away. Not the sidebar, the header or the tab strip: there C and A are the
+ * ways out.
  */
-function handleChatViewKey(event: KeyboardEvent): void {
+function inReadingArea(target: EventTarget | null, root: HTMLElement | null): boolean {
+  if (target === document.body || target === document.documentElement || target === root) return true;
+  return target instanceof Element && !!root?.contains(target) && target.closest("[data-chat-reading]") !== null;
+}
+
+/**
+ * The view's keys, on window in the capture phase, so they are the view's
+ * alone: the canvas listens on window too and re-adds its listener whenever
+ * its nodes change, which would put it after this one and let it answer a C
+ * that has just shown it by opening the chat again. A letter typed in the
+ * reading area goes to the message box. ? shows the shortcuts. From the
+ * sidebar, the header or the tab strip (or anywhere while there is no
+ * message box), bare C goes back to the canvas and A to Assets. Never while
+ * typing, nor while a menu or a dialog is up (their letters are theirs).
+ * Escape is not one of them: the view is left on purpose, never by
+ * dismissing something.
+ */
+function handleChatViewKey(event: KeyboardEvent, root: HTMLElement | null, composer: HTMLTextAreaElement | null): void {
   if (event.defaultPrevented || useAssetStore.getState().appView !== "chat") return;
   if (event.metaKey || event.ctrlKey || event.altKey) return;
   if (isTypingTarget(event.target)) return;
   if (event.target instanceof Element && event.target.closest('[role="menu"], [role="listbox"], [role="dialog"]')) return;
   if (document.querySelector('[role="menu"], [role="listbox"], [data-dialog-overlay]')) return;
-  if (event.key.toLowerCase() === "c" && !event.shiftKey) {
+  const own = () => {
     event.preventDefault();
-    if (!event.repeat) useAssetStore.getState().setAppView("canvas");
-  } else if (event.key === "?") {
-    event.preventDefault();
+    event.stopImmediatePropagation();
+  };
+  if (event.key === "?") {
+    own();
     useWorkflowStore.getState().setShortcutsDialogOpen(true);
+    return;
+  }
+  // One character, but not Space (it presses the focused button). The message box takes
+  // the focus before the key's default action, so the character lands in it.
+  if (composer && event.key.length === 1 && event.key !== " " && inReadingArea(event.target, root)) {
+    event.stopImmediatePropagation();
+    composer.focus({ preventScroll: true });
+    return;
+  }
+  const key = event.key.toLowerCase();
+  if ((key === "c" || key === "a") && !event.shiftKey) {
+    own();
+    if (!event.repeat) useAssetStore.getState().setAppView(key === "c" ? "canvas" : "assets");
   }
 }
 
@@ -149,10 +181,11 @@ export function AgentChatView() {
     composerWasShown.current = composerShown;
   }, [composerShown, focusInput]);
 
-  // Keys pressed with the focus outside the view (on the page, in the tab strip) still reach it.
+  // Also hears keys pressed with the focus outside the view (on the page, in the tab strip).
   useEffect(() => {
-    window.addEventListener("keydown", handleChatViewKey);
-    return () => window.removeEventListener("keydown", handleChatViewKey);
+    const onKey = (event: KeyboardEvent) => handleChatViewKey(event, rootRef.current, textareaRef.current);
+    window.addEventListener("keydown", onKey, { capture: true });
+    return () => window.removeEventListener("keydown", onKey, { capture: true });
   }, []);
 
   const handleKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -163,9 +196,7 @@ export function AgentChatView() {
       // workflow, so ⌘S saves the live one, as the desktop app's File › Save does from here.
       event.preventDefault();
       requestSave("shortcut");
-      return;
     }
-    handleChatViewKey(event.nativeEvent);
   }, []);
 
   // Files dropped on the view would otherwise be opened by the browser in place of the app.
@@ -398,7 +429,7 @@ export function AgentChatView() {
           />
           <main className="relative flex min-w-0 flex-1 flex-col">
             <AgentChatHeader scrolled={hasMessages && scrolled} busy={busy} menu={menu} onOpenCanvas={openCanvas} />
-            <div className={cn("flex min-h-0 flex-1 flex-col", !hasMessages && "overflow-y-auto")}>
+            <div data-chat-reading="" className={cn("flex min-h-0 flex-1 flex-col", !hasMessages && "overflow-y-auto")}>
               {top}
               {dock}
               {suggestions}
