@@ -639,10 +639,13 @@ export function withLineBreaks(text: string): string {
 
 /**
  * A text output (an LLM's reply) as markdown, with copy. Past about twelve
- * lines it folds, fading out, behind "Show more".
+ * lines it folds, fading out, behind "Show more". A text the record had to
+ * shorten copies whole from `fullText` (the node's, while it holds it), else
+ * says it is shortened.
  */
-export function RunTextCard({ output }: { output: AgentRunOutput }) {
+export function RunTextCard({ output, fullText }: { output: AgentRunOutput; fullText?: string }) {
   const text = output.text ?? "";
+  const meta = [output.model, output.truncated && !fullText ? "Shortened" : undefined].filter(Boolean).join(" · ");
   const bodyRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
@@ -660,7 +663,7 @@ export function RunTextCard({ output }: { output: AgentRunOutput }) {
 
   return (
     <div data-run-text={output.id} className={cn(ROW_FRAME, "flex flex-col pt-1 pr-1 pb-2 pl-3")}>
-      <RowHeading handle="text" title={output.nodeTitle} meta={output.model} action={<CardCopyButton value={text} label="Copy text" />} />
+      <RowHeading handle="text" title={output.nodeTitle} meta={meta} action={<CardCopyButton value={fullText ?? text} label="Copy text" />} />
       <div
         ref={bodyRef}
         className={cn(

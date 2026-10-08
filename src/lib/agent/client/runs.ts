@@ -447,8 +447,9 @@ function nodeOutputs(record: AgentRunRecord, nodesById: ReadonlyMap<string, Work
     const data = nodeData(node);
     const base = { nodeId: id, nodeTitle: nodeTitle(node), nodeType: node.type as NodeType };
     let index = 0;
-    for (const text of textOutputs(node)) {
-      outputs.push({ ...base, id: `${id}:${index++}`, kind: "text", text: capText(text, RUN_TEXT_LIMIT) });
+    for (const text of nodeTextOutputs(node)) {
+      const kept = capText(text, RUN_TEXT_LIMIT);
+      outputs.push({ ...base, id: `${id}:${index++}`, kind: "text", text: kept, ...(kept !== text ? { truncated: true as const } : {}) });
     }
     if (withAsset.has(id) || !LIVE_MEDIA_TYPES.has(node.type as NodeType)) continue;
     for (const [field, kind] of LIVE_MEDIA_FIELDS) {
@@ -467,7 +468,8 @@ const LIVE_MEDIA_FIELDS: ReadonlyArray<[string, AgentRunOutput["kind"]]> = [
   ["output3dUrl", "model3d"],
 ];
 
-function textOutputs(node: WorkflowNode): string[] {
+/** The text a node holds as its result: an LLM's reply, a Comfy app's text outputs. */
+export function nodeTextOutputs(node: WorkflowNode): string[] {
   const data = nodeData(node);
   if (node.type === "llmGenerate") return typeof data.outputText === "string" && data.outputText ? [data.outputText] : [];
   if (node.type !== "comfyApp") return [];

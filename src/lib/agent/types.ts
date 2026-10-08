@@ -507,6 +507,8 @@ export interface AgentRunOutput {
   height?: number;
   /** Text outputs (LLM), capped. */
   text?: string;
+  /** The text was cut to the cap: the whole of it is only on the node. */
+  truncated?: true;
   /** The model that ran, and the resolved prompt, when known. */
   model?: string;
   prompt?: string;

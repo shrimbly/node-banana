@@ -175,7 +175,7 @@ describe("chat run records", () => {
         model: "Nano Banana",
         prompt: "a fox in the snow",
       },
-      { id: "llm-1:0", nodeId: "llm-1", nodeTitle: "LLM Generate", nodeType: "llmGenerate", kind: "text", text: expect.any(String) },
+      { id: "llm-1:0", nodeId: "llm-1", nodeTitle: "LLM Generate", nodeType: "llmGenerate", kind: "text", text: expect.any(String), truncated: true },
     ]);
     expect(done.outputs[1].text).toHaveLength(RUN_TEXT_LIMIT);
     // Never media bytes.

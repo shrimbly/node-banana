@@ -243,6 +243,40 @@ describe("AgentRunResults outputs", () => {
     expect(card).toHaveTextContent("Tagline: *bold flavour");
   });
 
+  it("copies a shortened text whole while its node still holds it, and says when it can't", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const whole = `${"word ".repeat(1200)}the end`;
+    const shortened: AgentRunOutput = {
+      id: "llm:0",
+      nodeId: "llm",
+      nodeTitle: "LLM Generate",
+      nodeType: "llmGenerate",
+      kind: "text",
+      text: `${whole.slice(0, 3999)}…`,
+      truncated: true,
+    };
+    useWorkflowStore.setState({ nodes: [node("llm", "llmGenerate", { outputText: whole })] });
+    const { container, unmount } = renderCard(record({ ranNodeIds: ["llm"], outputs: [shortened] }));
+    const card = () => container.querySelector('[data-run-text="llm:0"]') as HTMLElement;
+    expect(card()).not.toHaveTextContent("Shortened");
+    await act(async () => {
+      fireEvent.click(within(card()).getByRole("button", { name: "Copy text" }));
+    });
+    expect(writeText).toHaveBeenLastCalledWith(whole);
+    unmount();
+
+    // The node now holds another reply: what the record kept is all there is.
+    useWorkflowStore.setState({ nodes: [node("llm", "llmGenerate", { outputText: "Something else" })] });
+    const again = renderCard(record({ ranNodeIds: ["llm"], outputs: [shortened] }));
+    const other = again.container.querySelector('[data-run-text="llm:0"]') as HTMLElement;
+    expect(other).toHaveTextContent("Shortened");
+    await act(async () => {
+      fireEvent.click(within(other).getByRole("button", { name: "Copy text" }));
+    });
+    expect(writeText).toHaveBeenLastCalledWith(shortened.text);
+  });
+
   it("folds a long text output behind Show more", () => {
     const text: AgentRunOutput = { id: "llm:0", nodeId: "llm", nodeTitle: "LLM Generate", nodeType: "llmGenerate", kind: "text", text: "A line.\n\n".repeat(30) };
     const { unmount } = renderCard(record({ outputs: [text] }));

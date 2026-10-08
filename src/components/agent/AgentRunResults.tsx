@@ -17,7 +17,7 @@ import { MediaViewer, type MediaViewerAction, type MediaViewerItem } from "@/com
 import { cn } from "@/components/agent/lib/utils";
 import { assetFileUrl } from "@/lib/assets/client/api";
 import { NODE_TITLES } from "@/lib/nodes/handles";
-import { MAX_RUN_OUTPUTS, chatRunBlockedReason, rerunChatRun, stopChatRun, useLatestRun } from "@/lib/agent/client/runs";
+import { MAX_RUN_OUTPUTS, chatRunBlockedReason, nodeTextOutputs, rerunChatRun, stopChatRun, useLatestRun } from "@/lib/agent/client/runs";
 import type { AgentRunOutput, AgentRunRecord, AgentRunStatus } from "@/lib/agent/types";
 import { useAssetStore } from "@/store/assetStore";
 import { useWorkflowStore, type WorkflowStore } from "@/store/workflowStore";
@@ -148,15 +148,24 @@ const NO_SOURCES: Readonly<Record<string, string>> = Object.freeze({});
 /**
  * The nodes' own media for the record's outputs, by output id, while its tab
  * is open: what a live output shows, and what a missing library file falls
- * back to. Strings only, so a shallow compare keeps the card still.
+ * back to; and the whole of a shortened text while its node still holds it.
+ * Strings only, so a shallow compare keeps the card still.
  */
 export function liveSources(record: AgentRunRecord, state: Pick<WorkflowStore, "activeTabId" | "nodes">): Readonly<Record<string, string>> {
   if (state.activeTabId !== record.tabId) return NO_SOURCES;
   const nodes = new Map(state.nodes.map((node) => [node.id, node] as const));
   const sources: Record<string, string> = {};
   for (const output of record.outputs) {
+    const node = nodes.get(output.nodeId);
+    if (output.kind === "text") {
+      // The node's text still starts with what the record kept (less its "…"): it is the same reply.
+      const kept = output.truncated && output.text ? output.text.slice(0, -1) : undefined;
+      const whole = kept && node ? nodeTextOutputs(node).find((text) => text.startsWith(kept)) : undefined;
+      if (whole) sources[output.id] = whole;
+      continue;
+    }
     const field = LIVE_FIELDS[output.kind];
-    const value = field ? (nodes.get(output.nodeId)?.data as Record<string, unknown> | undefined)?.[field] : undefined;
+    const value = field ? (node?.data as Record<string, unknown> | undefined)?.[field] : undefined;
     if (typeof value === "string" && value) sources[output.id] = value;
   }
   return sources;
@@ -403,7 +412,7 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
             <PendingAudioRow key={entry.key} pending={entry} />
           ))}
           {texts.map((output) => (
-            <RunTextCard key={output.id} output={output} />
+            <RunTextCard key={output.id} output={output} fullText={sources[output.id]} />
           ))}
           {pendingTexts.map((entry) => (
             <PendingTextCard key={entry.key} pending={entry} />
