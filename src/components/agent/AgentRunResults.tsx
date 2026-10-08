@@ -399,8 +399,10 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
             <CardIconButton
               label={stopMode === "after" ? "Stop after this run" : stopMode === "stopping" ? "Stop now" : "Stop"}
               onClick={stopChatRun}
+              className="[&_svg]:size-3"
             >
-              <SquareIcon {...AGENT_ICON} />
+              {/* Filled, as the composer's stop: an outline square reads as a checkbox (and is the "stopped" status). */}
+              <SquareIcon aria-hidden="true" strokeWidth={0} className="fill-current" />
             </CardIconButton>
           )}
           {transcript && (

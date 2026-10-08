@@ -169,7 +169,11 @@ describe("AgentRunResults while running", () => {
       vi.advanceTimersByTime(2_000);
     });
     expect(screen.getByText("7s")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+    // A filled square, as the composer's stop: an outline one reads as a checkbox.
+    const stop = screen.getByRole("button", { name: "Stop" });
+    expect(stop.querySelector("svg")).toHaveClass("fill-current");
+    expect(stop.querySelector("svg")).toHaveAttribute("stroke-width", "0");
+    fireEvent.click(stop);
     expect(requestStop).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Run again" })).not.toBeInTheDocument();
   });
