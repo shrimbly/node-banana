@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { PanelLeftCloseIcon, PanelLeftOpenIcon, SparklesIcon, SquarePenIcon, Trash2Icon } from "lucide-react";
 import { ChromeIconButton } from "@/components/ChromeIconButton";
 import { CHROME_ICON_BUTTON, CHROME_ICON_BUTTON_SIZE } from "@/components/chromeStyles";
@@ -121,6 +121,9 @@ export const AgentChatSidebar = memo(function AgentChatSidebar(props: AgentChatS
 /** Marks the open sidebar's collapse button and the rail's expand button. */
 const TOGGLE_ATTRIBUTE = "data-sidebar-toggle";
 
+/** How often the open sidebar's times and day groups are brought up to date. */
+const CLOCK_TICK_MS = 60_000;
+
 function OpenSidebar({
   onCollapsedChange,
   conversations,
@@ -140,8 +143,14 @@ function OpenSidebar({
   const [query, setQuery] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  // The view can stay open for hours without a turn: "Just now" ages, and midnight moves the groups.
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), CLOCK_TICK_MS);
+    return () => clearInterval(timer);
+  }, []);
   const visible = useMemo(() => filterConversations(conversations, query), [conversations, query]);
-  const groups = useMemo(() => groupConversations(visible), [visible]);
+  const groups = useMemo(() => groupConversations(visible, now), [visible, now]);
 
   const handleSearchKey = (event: KeyboardEvent<HTMLInputElement>) => {
     // Escape empties the search; it never leaves the view.
@@ -232,6 +241,7 @@ function OpenSidebar({
                     conversation={conversation}
                     current={conversation.id === currentId}
                     locked={locked}
+                    now={now}
                     onOpen={onOpen}
                     onDelete={remove}
                   />
@@ -258,17 +268,19 @@ function ConversationRow({
   conversation,
   current,
   locked,
+  now,
   onOpen,
   onDelete,
 }: {
   conversation: AgentConversation;
   current: boolean;
   locked: boolean;
+  now: number;
   onOpen: (conversation: AgentConversation) => void;
   onDelete: (conversation: AgentConversation) => void;
 }) {
   const label = conversationLabel(conversation);
-  const meta = [conversation.workflowName, relativeTime(conversation.updatedAt)].filter(Boolean).join(" · ");
+  const meta = [conversation.workflowName, relativeTime(conversation.updatedAt, now)].filter(Boolean).join(" · ");
   const waits = locked && !current;
   return (
     <li className="group/row relative">

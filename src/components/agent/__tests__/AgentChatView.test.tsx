@@ -45,10 +45,13 @@ vi.mock("@/components/agent/AgentRunCard", async (importOriginal) => {
 
 import { AgentChatView } from "@/components/agent/AgentChatView";
 import {
+  AgentChatSidebar,
   CHAT_SIDEBAR_KEY,
   filterConversations,
   groupConversations,
+  type AgentChatSidebarProps,
 } from "@/components/agent/AgentChatSidebar";
+import { relativeTime } from "@/components/agent/AgentHistory";
 import { AgentSessionProvider } from "@/components/agent/AgentSession";
 import { describeSwitcherTab } from "@/components/agent/AgentWorkflowSwitcher";
 import { useToast } from "@/components/Toast";
@@ -749,6 +752,59 @@ describe("groupConversations", () => {
       ["Older", 1],
     ]);
     expect(groupConversations([at(new Date(2026, 9, 8, 8))], now).map((group) => group.label)).toEqual(["Today"]);
+  });
+});
+
+describe("relativeTime", () => {
+  const now = new Date(2026, 9, 8, 10, 0).getTime();
+
+  it("counts minutes and hours within today", () => {
+    expect(relativeTime(now - 20_000, now)).toBe("Just now");
+    expect(relativeTime(new Date(2026, 9, 8, 9, 48).getTime(), now)).toBe("12 min ago");
+    expect(relativeTime(new Date(2026, 9, 8, 0, 30).getTime(), now)).toBe("9 h ago");
+  });
+
+  it("says Yesterday by the calendar, the way the sidebar files its rows", () => {
+    // 40 minutes ago, but before midnight.
+    const justAfterMidnight = new Date(2026, 9, 8, 0, 10).getTime();
+    expect(relativeTime(new Date(2026, 9, 7, 23, 30).getTime(), justAfterMidnight)).toBe("Yesterday");
+    expect(relativeTime(new Date(2026, 9, 7, 8, 0).getTime(), now)).toBe("Yesterday");
+    // 35 hours ago is the day before yesterday: filed under "Previous 7 days", so a date.
+    expect(relativeTime(new Date(2026, 9, 6, 23, 0).getTime(), now)).toBe(
+      new Date(2026, 9, 6).toLocaleDateString(undefined, { day: "numeric", month: "short" }),
+    );
+  });
+});
+
+describe("AgentChatSidebar", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("keeps its times current while the view stays open", () => {
+    vi.useFakeTimers({ now: new Date(2026, 9, 8, 23, 58), toFake: ["Date", "setInterval", "clearInterval"] });
+    const props: AgentChatSidebarProps = {
+      collapsed: false,
+      onCollapsedChange: () => {},
+      conversations: [savedConversation({ id: "c-1", summary: "Hero film", workflowName: "Espresso", updatedAt: Date.now() })],
+      currentId: "other",
+      locked: false,
+      canStartNewChat: true,
+      onNewChat: () => {},
+      onOpen: () => {},
+      onDelete: () => {},
+      harness: "claude",
+      neutral: false,
+      readiness: { kind: "loading" },
+      attention: false,
+    };
+    render(<AgentChatSidebar {...props} />);
+    expect(within(sidebar()).getByRole("button", { name: /^Hero film/ })).toHaveTextContent("Espresso · Just now");
+
+    act(() => vi.advanceTimersByTime(3 * 60_000));
+    // Past midnight now: yesterday's, under Yesterday.
+    const yesterday = within(sidebar()).getByRole("group", { name: "Yesterday" });
+    expect(within(yesterday).getByRole("button", { name: /^Hero film/ })).toHaveTextContent("Espresso · Yesterday");
   });
 });
 

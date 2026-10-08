@@ -5,14 +5,22 @@ import { cn } from "@/components/agent/lib/utils";
 import { conversationLabel, type AgentConversation } from "@/lib/agent/client/history";
 import { HARNESS_LABELS } from "@/lib/agent/client/readiness";
 
-/** "Just now", "12 min ago", "3 h ago", "Yesterday", then a date. */
+/**
+ * "Just now", "12 min ago", "3 h ago" within today, "Yesterday", then a date.
+ * The days are the calendar's, as the chat view's sidebar groups them.
+ */
 export function relativeTime(then: number, now = Date.now()): string {
-  const minutes = Math.floor((now - then) / 60_000);
-  if (minutes < 1) return "Just now";
-  if (minutes < 60) return `${minutes} min ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours} h ago`;
-  if (hours < 48) return "Yesterday";
+  const today = new Date(now);
+  today.setHours(0, 0, 0, 0);
+  if (then >= today.getTime()) {
+    const minutes = Math.floor((now - then) / 60_000);
+    if (minutes < 1) return "Just now";
+    if (minutes < 60) return `${minutes} min ago`;
+    return `${Math.floor(minutes / 60)} h ago`;
+  }
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (then >= yesterday.getTime()) return "Yesterday";
   const date = new Date(then);
   const sameYear = date.getFullYear() === new Date(now).getFullYear();
   return date.toLocaleDateString(undefined, { day: "numeric", month: "short", ...(sameYear ? {} : { year: "numeric" }) });
