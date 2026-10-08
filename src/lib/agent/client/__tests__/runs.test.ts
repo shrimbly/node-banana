@@ -16,6 +16,14 @@ vi.mock("@/lib/assets/client/recorder", async (importOriginal) => ({
     return () => assetListeners.delete(listener);
   },
 }));
+const posterListeners = vi.hoisted(() => new Set<(assetId: string) => void>());
+vi.mock("@/lib/assets/client/poster", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/assets/client/poster")>()),
+  onPosterReady: (listener: (assetId: string) => void) => {
+    posterListeners.add(listener);
+    return () => posterListeners.delete(listener);
+  },
+}));
 vi.mock("@/utils/logger", () => ({
   logger: {
     info: vi.fn(),
@@ -301,6 +309,23 @@ describe("chat run records", () => {
     // Seen once, kept once.
     asset({ id: "a-one", runId: "r-run-1", nodeId: "gen-1" });
     expect(record(started.id).outputs).toHaveLength(2);
+  });
+
+  it("marks a video's poster once the recorder has stored it, after reporting the asset", () => {
+    resetStore([node("vid-1", "generateVideo", { status: "idle" })]);
+    beginRun("r-run-1");
+    const started = track();
+    setNode("vid-1", { status: "loading" });
+    asset({ id: "a-clip", runId: "r-run-1", nodeId: "vid-1", nodeType: "generateVideo", kind: "video" });
+    setNode("vid-1", { status: "complete" });
+    endRun();
+    expect(record(started.id).outputs[0].hasPoster).toBeUndefined();
+
+    const before = useAgentRuns.getState().records;
+    for (const listener of posterListeners) listener("a-unrelated");
+    expect(useAgentRuns.getState().records).toBe(before);
+    for (const listener of posterListeners) listener("a-clip");
+    expect(record(started.id).outputs[0]).toMatchObject({ assetId: "a-clip", hasPoster: true });
   });
 
   it("finds the latest record for an anchor", () => {

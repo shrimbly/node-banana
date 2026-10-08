@@ -13,6 +13,7 @@
  */
 
 import { create } from "zustand";
+import { onPosterReady } from "@/lib/assets/client/poster";
 import { onAssetRecorded } from "@/lib/assets/client/recorder";
 import type { AssetView, RecordAssetResult } from "@/lib/assets/types";
 import { NODE_TITLES } from "@/lib/nodes/handles";
@@ -670,4 +671,22 @@ useAgentRuns.subscribe((state, previous) => {
   saveTimer = setTimeout(flushAgentRuns, SAVE_DELAY_MS);
 });
 
-if (typeof window !== "undefined") window.addEventListener("pagehide", () => flushAgentRuns());
+/** A video's poster was stored (the recorder makes it after reporting the asset): its outputs show it from now on. */
+function markPosterReady(assetId: string): void {
+  const waiting = (output: AgentRunOutput) => output.assetId === assetId && output.kind === "video" && !output.hasPoster;
+  useAgentRuns.setState((state) => {
+    if (!state.records.some((record) => record.outputs.some(waiting))) return state;
+    return {
+      records: state.records.map((record) =>
+        record.outputs.some(waiting)
+          ? { ...record, outputs: record.outputs.map((output) => (waiting(output) ? { ...output, hasPoster: true } : output)) }
+          : record,
+      ),
+    };
+  });
+}
+
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", () => flushAgentRuns());
+  onPosterReady(markPosterReady);
+}
