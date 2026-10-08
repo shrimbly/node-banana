@@ -29,6 +29,20 @@ vi.mock("@/utils/logger", () => ({
   },
 }));
 
+/** The real Run card, counted: a finished message's cards must not re-render while the user types. */
+const cardRenders = vi.hoisted(() => ({ count: 0 }));
+vi.mock("@/components/agent/AgentRunCard", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/agent/AgentRunCard")>();
+  const { createElement } = await import("react");
+  return {
+    ...actual,
+    AgentRunCard: (props: Parameters<typeof actual.AgentRunCard>[0]) => {
+      cardRenders.count++;
+      return createElement(actual.AgentRunCard, props);
+    },
+  };
+});
+
 import { AgentChatView } from "@/components/agent/AgentChatView";
 import {
   CHAT_SIDEBAR_KEY,
@@ -249,6 +263,26 @@ describe("AgentChatView", () => {
     expect(await within(transcript).findByText("All set.")).toBeInTheDocument();
     // The billing line stays under the docked box.
     expect(screen.getByText(/Runs on your paid Claude subscription's usage limits/)).toBeInTheDocument();
+  });
+
+  it("leaves finished messages and their cards alone while the user types", async () => {
+    const conversation = savedConversation();
+    conversation.messages[1]!.parts.push({
+      type: "data-run-offer",
+      id: "run-offer",
+      data: { offerId: "offer-1", primary: { scope: { kind: "all" }, label: "Run workflow", nodeIds: [] }, alternatives: [] },
+    } as AgentUIMessage["parts"][number]);
+    localStorage.setItem(AGENT_HISTORY_KEY, JSON.stringify([conversation]));
+    render(<Harness />);
+    const textarea = await waitForComposer();
+    fireEvent.click(within(sidebar()).getByRole("button", { name: /^Hero film/ }));
+    await screen.findByText("Built the hero film.");
+
+    const before = cardRenders.count;
+    expect(before).toBeGreaterThan(0);
+    for (const text of ["m", "ma", "mak", "make"]) fireEvent.change(textarea, { target: { value: text } });
+    expect(textarea).toHaveValue("make");
+    expect(cardRenders.count).toBe(before);
   });
 
   it("shows the sign-in card in the main column while the harness is signed out", async () => {

@@ -414,6 +414,13 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
   }, [busy]);
   const dismissAlreadySignedIn = useCallback(() => setAlreadySignedIn(null), []);
 
+  // Read when a sign-in starts, not watched: the transcript's notices hold startSignIn,
+  // and a new one per streamed token would re-render every finished message.
+  const messagesRef = useRef(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+  const startSignInFlow = signIn.start;
   const startSignIn = useCallback(
     async (target: AgentHarnessId, noticeCode?: AgentErrorCode) => {
       // A notice's "Sign in" may name the other harness: switch to it first.
@@ -425,14 +432,14 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
       // From the card, or from that turn's not_signed_in notice; an older notice
       // whose turn was followed by a working one doesn't force.
       const force =
-        (noticeCode === undefined || noticeCode === "not_signed_in") && latestTurnRejectedSignIn(messages, target);
-      const attempt = await signIn.start(target, force ? { force: true } : {});
+        (noticeCode === undefined || noticeCode === "not_signed_in") && latestTurnRejectedSignIn(messagesRef.current, target);
+      const attempt = await startSignInFlow(target, force ? { force: true } : {});
       if (attempt.state === "already_signed_in") {
         setAlreadySignedIn({ harness: target, message: attempt.message });
         void refreshStatus(target);
       }
     },
-    [harness, busy, setHarness, signIn, refreshStatus, messages],
+    [harness, busy, setHarness, startSignInFlow, refreshStatus],
   );
   const pickHarness = useCallback(
     (target: AgentHarnessId, action: AgentChooserAction) => {

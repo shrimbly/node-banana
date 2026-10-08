@@ -28,6 +28,20 @@ vi.mock("@/utils/logger", () => ({
   },
 }));
 
+/** The real Run card, counted: a finished message's cards must not re-render while the user types. */
+const cardRenders = vi.hoisted(() => ({ count: 0 }));
+vi.mock("@/components/agent/AgentRunCard", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/agent/AgentRunCard")>();
+  const { createElement } = await import("react");
+  return {
+    ...actual,
+    AgentRunCard: (props: Parameters<typeof actual.AgentRunCard>[0]) => {
+      cardRenders.count++;
+      return createElement(actual.AgentRunCard, props);
+    },
+  };
+});
+
 import { AgentPanel, type AgentPanelProps } from "@/components/agent/AgentPanel";
 import { AgentSessionProvider, useAgentPresence, type AgentPresence } from "@/components/agent/AgentSession";
 import { useToast } from "@/components/Toast";
@@ -241,6 +255,25 @@ describe("AgentPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /check again/i }));
     await waitForComposer();
     expect(onPresenceChange).toHaveBeenLastCalledWith({ harness: "codex", harnessChosen: true, attention: false });
+  });
+
+  it("leaves finished messages and their cards alone while the user types", async () => {
+    const offer = { offerId: "offer-1", primary: { scope: { kind: "all" }, label: "Run workflow", nodeIds: [] }, alternatives: [] };
+    const chunks: Array<Record<string, unknown>> = replyChunks({ text: "Built it." });
+    chunks.splice(chunks.length - 2, 0, { type: "data-run-offer", id: "run-offer", data: offer });
+    chatChunks.push(chunks);
+    renderPanel();
+    const textarea = await waitForComposer();
+    fireEvent.change(textarea, { target: { value: "Build it" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await screen.findByText("Built it.");
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument());
+
+    const before = cardRenders.count;
+    expect(before).toBeGreaterThan(0);
+    for (const text of ["m", "ma", "mak", "make"]) fireEvent.change(textarea, { target: { value: text } });
+    expect(textarea).toHaveValue("make");
+    expect(cardRenders.count).toBe(before);
   });
 
   it("shows the empty state with suggestions once the harness is ready", async () => {

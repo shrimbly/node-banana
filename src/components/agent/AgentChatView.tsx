@@ -23,6 +23,7 @@ import { AgentChatSidebar, loadChatSidebarCollapsed, saveChatSidebarCollapsed } 
 import { AgentChooserCard } from "./AgentChooserCard";
 import { AgentComposer } from "./AgentComposer";
 import { AgentBillingNote, AgentConversation, AgentPageIntro, AgentSuggestionCards, PAGE_COLUMN } from "./AgentConversation";
+import type { AgentNoticeSignIn } from "./AgentNotice";
 import { useAgentSession } from "./AgentSession";
 import { AgentAlreadySignedInHint, AgentSignInCard, AgentSignedInBanner, type AgentBlockedReadiness } from "./AgentSignInCard";
 import { AgentSurfaceProvider } from "./AgentSurface";
@@ -212,6 +213,8 @@ export function AgentChatView() {
     },
     [chat, setDraft, focusInput],
   );
+  // Stable, so a finished message (memoised) skips the re-render for every streamed token and keystroke.
+  const noticeSignIn = useCallback<AgentNoticeSignIn>((target, noticeCode) => void startSignIn(target, noticeCode), [startSignIn]);
 
   const neutral = mode !== "harness";
   const menu = useMemo<AgentChatHeaderProps["menu"]>(
@@ -271,7 +274,7 @@ export function AgentChatView() {
         error={chat.error}
         onRetry={retry}
         onDismissError={dismissError}
-        onSignIn={(target, noticeCode) => void startSignIn(target, noticeCode)}
+        onSignIn={noticeSignIn}
         onScrolledChange={setScrolled}
       />
     );

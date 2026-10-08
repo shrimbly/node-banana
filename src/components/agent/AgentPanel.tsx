@@ -23,6 +23,7 @@ import type { AgentConversation as SavedConversation } from "@/lib/agent/client/
 import { AgentComposer } from "./AgentComposer";
 import { AgentHistory } from "./AgentHistory";
 import { AgentBillingNote, AgentConversation, AgentEmptyState } from "./AgentConversation";
+import type { AgentNoticeSignIn } from "./AgentNotice";
 import { AgentPanelHeader } from "./AgentPanelHeader";
 import { useAgentSession } from "./AgentSession";
 import { AgentAlreadySignedInHint, AgentSignInCard, AgentSignedInBanner, type AgentBlockedReadiness } from "./AgentSignInCard";
@@ -195,6 +196,8 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom }: AgentPa
     chat.clearError();
     focusInput();
   }, [chat, focusInput]);
+  // Stable, so a finished message (memoised) skips the re-render for every streamed token and keystroke.
+  const noticeSignIn = useCallback<AgentNoticeSignIn>((target, noticeCode) => void startSignIn(target, noticeCode), [startSignIn]);
 
   // --- Render -----------------------------------------------------------------
   const hasMessages = messages.length > 0;
@@ -235,7 +238,7 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom }: AgentPa
         error={chat.error}
         onRetry={retry}
         onDismissError={dismissError}
-        onSignIn={(target, noticeCode) => void startSignIn(target, noticeCode)}
+        onSignIn={noticeSignIn}
       />
     );
   } else if (mode === "checking") {
