@@ -25,6 +25,9 @@ export interface AgentConversation {
   updatedAt: number;
   /** The workflow open when it was last used. */
   workflowName?: string;
+  /** That workflow's tab (reopening the conversation brings it back while it is still open) and id. */
+  tabId?: string;
+  workflowId?: string;
   harness?: AgentHarnessId;
   messages: AgentUIMessage[];
 }

@@ -12,7 +12,14 @@ import {
 export interface UseAgentHistoryResult {
   conversations: AgentConversation[];
   /** Adds or updates the conversation with this id (its summary is read from the messages). */
-  record: (entry: { id: string; messages: AgentUIMessage[]; workflowName?: string; harness?: AgentHarnessId }) => void;
+  record: (entry: {
+    id: string;
+    messages: AgentUIMessage[];
+    workflowName?: string;
+    tabId?: string;
+    workflowId?: string;
+    harness?: AgentHarnessId;
+  }) => void;
   remove: (id: string) => void;
 }
 
@@ -20,7 +27,7 @@ export interface UseAgentHistoryResult {
 export function useAgentHistory(): UseAgentHistoryResult {
   const [conversations, setConversations] = useState<AgentConversation[]>(loadConversations);
 
-  const record = useCallback<UseAgentHistoryResult["record"]>(({ id, messages, workflowName, harness }) => {
+  const record = useCallback<UseAgentHistoryResult["record"]>(({ id, messages, workflowName, tabId, workflowId, harness }) => {
     if (messages.length === 0) return;
     setConversations((previous) => {
       const existing = previous.find((conversation) => conversation.id === id);
@@ -35,6 +42,8 @@ export function useAgentHistory(): UseAgentHistoryResult {
         messages,
         ...(summary ? { summary } : {}),
         ...((workflowName ?? existing?.workflowName) ? { workflowName: workflowName ?? existing?.workflowName } : {}),
+        ...((tabId ?? existing?.tabId) ? { tabId: tabId ?? existing?.tabId } : {}),
+        ...((workflowId ?? existing?.workflowId) ? { workflowId: workflowId ?? existing?.workflowId } : {}),
         ...((harness ?? existing?.harness) ? { harness: harness ?? existing?.harness } : {}),
       };
       return saveConversations([entry, ...previous.filter((conversation) => conversation.id !== id)]);
