@@ -205,7 +205,8 @@ interface AssetStoreState {
   undoStack: UndoEntry[];
 
   setAppView: (view: AppView) => void;
-  toggleAppView: () => void;
+  /** Shows `view` (Assets when none is named), or the canvas when it is already shown. */
+  toggleAppView: (view?: Exclude<AppView, "canvas">) => void;
 
   setFilters: (patch: Partial<AssetFilters>) => void;
   setSearch: (q: string) => void;
@@ -801,7 +802,7 @@ export const useAssetStore = create<AssetStoreState>((set, get) => {
       if (get().appView === view) return;
       set({ appView: view, popover: null });
     },
-    toggleAppView: () => get().setAppView(get().appView === "assets" ? "canvas" : "assets"),
+    toggleAppView: (view = "assets") => get().setAppView(get().appView === view ? "canvas" : view),
 
     setFilters: (patch) => {
       // A selection belongs to the Library view it was made in: Trash and
