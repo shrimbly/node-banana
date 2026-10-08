@@ -357,11 +357,22 @@ export function AgentChatView() {
   }
 
   const inlineSignIn = hasMessages && mode === "harness" && !composerShown;
+  // A past conversation opened before any harness was picked, with none able to answer:
+  // the chooser (or the first check) goes where the message box would.
+  const dockChoice = hasMessages && mode !== "harness";
   const dock =
-    composerShown || inlineSignIn ? (
-      <div className={cn(PAGE_COLUMN, "relative z-[1] shrink-0", inlineSignIn && "pb-4")}>
+    composerShown || inlineSignIn || dockChoice ? (
+      <div className={cn(PAGE_COLUMN, "relative z-[1] shrink-0", !composerShown && "pb-4")}>
         {alreadySignedInHint && <div className="pb-3">{alreadySignedInHint}</div>}
-        {composerShown ? (
+        {dockChoice ? (
+          mode === "chooser" ? (
+            <div className="border-t fade-rule">
+              <AgentChooserCard readiness={readiness} onPick={pickHarness} onCheckAgain={() => void checkAgain()} checking={checking} />
+            </div>
+          ) : (
+            <AgentSignInCard harness={harness} readiness={{ kind: "loading" }} variant="inline" eyebrow="Agent" onSignIn={() => {}} onCheckAgain={() => {}} />
+          )
+        ) : composerShown ? (
           <AgentComposer
             status={chat.status}
             busy={busy}

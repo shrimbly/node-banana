@@ -348,7 +348,19 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom }: AgentPa
             />
           </div>
         )}
-        {historyOpen || mode !== "harness" ? null : ready || busy ? (
+        {historyOpen ? null : mode !== "harness" ? (
+          // A reopened chat before any harness was picked, with none able to answer: the
+          // chooser (or the first check) where the message box goes.
+          hasMessages &&
+          (mode === "chooser" ? (
+            // Capped like the inline sign-in card, so the transcript keeps some room.
+            <div className="max-h-[65%] shrink-0 overflow-y-auto border-t fade-rule">
+              <AgentChooserCard readiness={readiness} onPick={pickHarness} onCheckAgain={() => void checkAgain()} checking={checking} />
+            </div>
+          ) : (
+            <AgentSignInCard harness={harness} readiness={{ kind: "loading" }} variant="inline" eyebrow="Agent" onSignIn={() => {}} onCheckAgain={() => {}} />
+          ))
+        ) : ready || busy ? (
           <AgentComposer
             status={chat.status}
             busy={busy}

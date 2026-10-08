@@ -296,6 +296,22 @@ describe("AgentChatView", () => {
     expect(useAssetStore.getState().appView).toBe("canvas");
   });
 
+  it("offers the harness chooser under an opened conversation while no harness can answer yet", async () => {
+    // Never picked (the first open settled on one), and neither can run now.
+    localStorage.setItem(AGENT_SETTINGS_KEY, JSON.stringify({ harness: "claude", models: {} }));
+    statuses.claude = harnessStatus("claude", { signedIn: false, billing: "none" });
+    statuses.codex = harnessStatus("codex", { signedIn: false, billing: "none" });
+    localStorage.setItem(AGENT_HISTORY_KEY, JSON.stringify([savedConversation()]));
+    render(<Harness />);
+    await screen.findByTestId("agent-chooser");
+
+    fireEvent.click(within(sidebar()).getByRole("button", { name: /^Hero film/ }));
+    expect(await screen.findByText("Built the hero film.")).toBeInTheDocument();
+    // Where the message box goes, rather than nothing at all.
+    expect(screen.getByTestId("agent-chooser")).toBeInTheDocument();
+    expect(screen.getByRole("log").compareDocumentPosition(screen.getByTestId("agent-chooser"))).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+  });
+
   it("puts the cursor back in the message box when the signed-in banner is dismissed", async () => {
     statuses.claude = harnessStatus("claude", { signedIn: false, billing: "none", signIn: { state: "pending" } });
     render(<Harness />);

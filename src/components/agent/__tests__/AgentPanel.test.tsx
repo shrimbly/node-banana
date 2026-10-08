@@ -47,6 +47,7 @@ import { AgentSessionProvider, useAgentPresence, type AgentPresence } from "@/co
 import { useToast } from "@/components/Toast";
 import { buildAgentSnapshot } from "@/lib/agent/graph/snapshot";
 import { useWorkflowStore } from "@/store/workflowStore";
+import { AGENT_HISTORY_KEY } from "@/lib/agent/client/history";
 import { AGENT_SETTINGS_KEY } from "@/lib/agent/client/settings";
 import { AGENT_STATUS_POLL_MS } from "@/lib/agent/client/useAgentStatus";
 
@@ -567,6 +568,36 @@ describe("AgentPanel", () => {
     expect(await screen.findByText("Changed the ratio.")).toBeInTheDocument();
     expect(chatBodies[1].id).toBe(chatBodies[0].id);
     expect(chatBodies[1].sessionId).toBe("session-1");
+  });
+
+  it("offers the harness chooser under a reopened chat while no harness can answer yet", async () => {
+    // Never picked (the first open settled on one), and neither can run now.
+    localStorage.setItem(AGENT_SETTINGS_KEY, JSON.stringify({ harness: "claude", models: {} }));
+    statuses.claude = harnessStatus("claude", { signedIn: false, billing: "none" });
+    statuses.codex = harnessStatus("codex", { signedIn: false, billing: "none" });
+    localStorage.setItem(
+      AGENT_HISTORY_KEY,
+      JSON.stringify([
+        {
+          id: "chat-saved",
+          createdAt: 1,
+          updatedAt: Date.now(),
+          summary: "Hero film",
+          messages: [
+            { id: "u-1", role: "user", parts: [{ type: "text", text: "Build a hero film" }] },
+            { id: "a-1", role: "assistant", parts: [{ type: "text", text: "Built the hero film." }] },
+          ],
+        },
+      ]),
+    );
+    renderPanel();
+    await screen.findByTestId("agent-chooser");
+
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Hero film/ }));
+    expect(await screen.findByText("Built the hero film.")).toBeInTheDocument();
+    // Where the message box goes, rather than nothing at all.
+    expect(screen.getByTestId("agent-chooser")).toBeInTheDocument();
   });
 
   it("renders a notice inline with a sign-in action", async () => {
