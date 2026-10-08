@@ -19,7 +19,7 @@ vi.mock("@/utils/downloadMedia", () => ({ downloadMedia: download }));
 import { AgentTranscriptActionsProvider, type AgentTranscriptActions } from "@/components/agent/AgentSession";
 import { AgentSurfaceProvider, type AgentSurface } from "@/components/agent/AgentSurface";
 import { AgentRunResults, fixRequestMessage, formatElapsed, pendingOutputs } from "@/components/agent/AgentRunResults";
-import { MEDIA_RETRY_MS, withLineBreaks } from "@/components/agent/AgentRunMedia";
+import { gridColumns, LONE_TILE_MAX_HEIGHT, MEDIA_RETRY_MS, withLineBreaks } from "@/components/agent/AgentRunMedia";
 import type { AgentRunOutput, AgentRunRecord } from "@/lib/agent/types";
 import { useAssetStore } from "@/store/assetStore";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -322,23 +322,29 @@ describe("AgentRunResults outputs", () => {
     const { container, unmount } = renderCard(record({ outputs: [image("img-1")] }));
     const frame = container.querySelector('[data-run-media="lone"] > div') as HTMLElement;
     expect(frame.style.aspectRatio).toBe(`${1600 / 900}`);
-    expect(frame.style.maxWidth).toBe(`${Math.round(260 * (1600 / 900))}px`);
+    expect(LONE_TILE_MAX_HEIGHT.window).toBe(240);
+    expect(frame.style.maxWidth).toBe(`${Math.round(240 * (1600 / 900))}px`);
     // Shown large, so the file rather than the thumbnail.
     expect(frame.querySelector("img")).toHaveAttribute("src", "/api/assets/img-1/file");
     unmount();
 
     const page = renderCard(record({ outputs: [image("img-1")] }), { surface: "page" });
     const pageFrame = page.container.querySelector('[data-run-media="lone"] > div') as HTMLElement;
-    expect(pageFrame.style.maxWidth).toBe(`${Math.round(420 * (1600 / 900))}px`);
+    expect(pageFrame.style.maxWidth).toBe(`${Math.round(LONE_TILE_MAX_HEIGHT.page * (1600 / 900))}px`);
   });
 
-  it("lays five or more out in three columns on the page and two in the window", () => {
+  it("lays five or more out in four columns on the page and three in the window", () => {
     const outputs = ["1", "2", "3", "4", "5"].map((id) => image(`img-${id}`));
     const page = renderCard(record({ outputs }), { surface: "page" });
-    expect(page.container.querySelector('[data-run-media="grid"]')).toHaveAttribute("data-columns", "3");
+    expect(page.container.querySelector('[data-run-media="grid"]')).toHaveAttribute("data-columns", "4");
     page.unmount();
     const window = renderCard(record({ outputs }));
-    expect(window.container.querySelector('[data-run-media="grid"]')).toHaveAttribute("data-columns", "2");
+    expect(window.container.querySelector('[data-run-media="grid"]')).toHaveAttribute("data-columns", "3");
+  });
+
+  it("keeps a run's grid to a row or two: up to four across on the page, three in the window", () => {
+    expect([2, 3, 4, 5, 9].map((count) => gridColumns(count, "page"))).toEqual([2, 3, 4, 4, 4]);
+    expect([2, 3, 4, 5, 9].map((count) => gridColumns(count, "window"))).toEqual([2, 3, 2, 3, 3]);
   });
 
   it("keeps playing and showing a run's files when the node makes something new", () => {

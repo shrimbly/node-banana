@@ -249,11 +249,23 @@ export interface RunMediaGridProps {
 }
 
 /** The tallest a lone tile gets: it keeps its shape and never fills the column. */
-export const LONE_TILE_MAX_HEIGHT: Record<AgentSurface, number> = { page: 420, window: 260 };
+export const LONE_TILE_MAX_HEIGHT: Record<AgentSurface, number> = { page: 360, window: 240 };
 
 /**
- * One output large, keeping its shape; two to four in two columns; more in
- * three on the page (two in the window). Grid cells share the first known
+ * How many columns a grid of `count` (two or more) outputs takes: on the
+ * page, one row of up to four, then rows of four; the window's narrow column
+ * takes three at most, with four as two rows of two.
+ */
+export function gridColumns(count: number, surface: AgentSurface): 2 | 3 | 4 {
+  if (surface === "page") return Math.min(Math.max(count, 2), 4) as 2 | 3 | 4;
+  return count === 4 ? 2 : (Math.min(Math.max(count, 2), 3) as 2 | 3);
+}
+
+const GRID_COLUMNS: Record<2 | 3 | 4, string> = { 2: "grid-cols-2", 3: "grid-cols-3", 4: "grid-cols-4" };
+
+/**
+ * One output large, keeping its shape; more in a grid (see gridColumns), so a
+ * run's results stay a row or two tall. Grid cells share the first known
  * shape, so a row of 16:9 frames isn't cropped square.
  */
 export function RunMediaGrid({ items, liveSources, surface, onOpen, onShowNode }: RunMediaGridProps) {
@@ -266,11 +278,11 @@ export function RunMediaGrid({ items, liveSources, surface, onOpen, onShowNode }
       </div>
     );
   }
-  const columns = items.length <= 4 ? 2 : surface === "page" ? 3 : 2;
+  const columns = gridColumns(items.length, surface);
   const known = items.map((item) => (item.output ? outputAspect(item.output) : item.pending.aspect)).find((aspect) => aspect !== undefined);
   const aspect = Math.min(16 / 9, Math.max(3 / 4, known ?? 1));
   return (
-    <div data-run-media="grid" data-columns={columns} className={cn("grid gap-1", columns === 3 ? "grid-cols-3" : "grid-cols-2")}>
+    <div data-run-media="grid" data-columns={columns} className={cn("grid gap-1", GRID_COLUMNS[columns])}>
       {items.map((item) => (
         <VisualTile key={item.key} item={item} liveSrc={liveSources[item.key]} aspect={aspect} onOpen={onOpen} onShowNode={onShowNode} />
       ))}
