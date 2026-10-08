@@ -170,6 +170,8 @@ const GENERATOR_TYPES: ReadonlySet<NodeType> = new Set<NodeType>(["nanoBanana", 
 const MEDIA_GENERATOR_TYPES: ReadonlySet<NodeType> = new Set<NodeType>(["nanoBanana", "generateVideo", "generate3d", "generateAudio"]);
 const LOOP_COUNT_DEFAULT = 3;
 const LOOP_COUNT_MAX = 100;
+/** Node fields no run reads: setting only these changes no output. */
+const COSMETIC_FIELDS: ReadonlySet<string> = new Set(["customTitle", "comment"]);
 
 export class GraphDraft {
   nodes: Map<string, DraftNode>;
@@ -1127,7 +1129,7 @@ export class DraftTransaction {
     this.emitUpdate(node.id, outcome.patch);
     this.recordChanges(node.id, outcome);
     this.touched.add(node.id);
-    this.changed.add(node.id);
+    if (Object.keys(outcome.patch).some((field) => !COSMETIC_FIELDS.has(field))) this.changed.add(node.id);
     if (node.type === "splitGrid" && "template" in outcome.patch) this.ensureGridRouter(node, cellsInto(settings), where);
     if (outcome.handlesMayChange && (node.type === "generateVideo" || node.type === "generate3d" || node.type === "generateAudio")) {
       this.remapSchemaEdges(node, before);

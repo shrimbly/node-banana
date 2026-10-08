@@ -207,6 +207,17 @@ describe("runOffer", () => {
     expect(viewer.runOffer!()).toBeNull();
   });
 
+  it("offers nothing for a new title or comment, which change no output", async () => {
+    const renamed = runtimeFor(chain());
+    expect((await call(renamed, "update_node", { node: "nanoBanana-3", title: "Hero" })).ok).toBe(true);
+    expect((await call(renamed, "update_node", { node: "llmGenerate-2", settings: { comment: "writes the prompt" } })).ok).toBe(true);
+    expect(renamed.runOffer!()).toBeNull();
+
+    const retuned = runtimeFor(chain());
+    await call(retuned, "update_node", { node: "nanoBanana-3", title: "Hero", settings: { aspectRatio: "16:9" } });
+    expect(retuned.runOffer!()?.primary).toMatchObject({ label: "Run Hero", nodeIds: ["nanoBanana-3", "output-4"] });
+  });
+
   it("counts the node a new wire feeds as changed", async () => {
     const rewired = runtimeFor(chain());
     await call(rewired, "edit_workflow", {
