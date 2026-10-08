@@ -423,6 +423,23 @@ describe("AgentChatView", () => {
       expect(screen.getByRole("log")).not.toBe(first);
     });
 
+    it("says so when a conversation's own workflow can't be switched to right now", async () => {
+      const own = store().activeTabId;
+      useWorkflowStore.setState({ workflowName: "Hero", nodes: [promptNode("p1")] });
+      expect(store().newTab()).not.toBeNull();
+      const live = store().activeTabId;
+      localStorage.setItem(AGENT_HISTORY_KEY, JSON.stringify([savedConversation({ tabId: own, workflowName: "Hero" })]));
+      render(<Harness />);
+      await waitForComposer();
+      act(() => useWorkflowStore.setState({ isRunning: true }));
+
+      fireEvent.click(within(sidebar()).getByRole("button", { name: /^Hero film/ }));
+      expect(await screen.findByText("Built the hero film.")).toBeInTheDocument();
+      // It opens, but carries on in the live workflow: the user is told rather than left to find out.
+      expect(store().activeTabId).toBe(live);
+      expect(useToast.getState().message).toBe("Couldn't switch to this chat's workflow. Wait for the run to finish.");
+    });
+
     it("deletes a conversation only once confirmed", async () => {
       localStorage.setItem(AGENT_HISTORY_KEY, JSON.stringify([savedConversation()]));
       const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);

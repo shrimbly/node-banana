@@ -388,8 +388,12 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
       // Its workflow first, when that tab is still open: the conversation carries on against it.
       const store = useWorkflowStore.getState();
       const { tabId } = conversation;
-      if (tabId && tabId !== store.activeTabId && store.tabs.some((tab) => tab.id === tabId) && !store.tabsBusyReason()) {
-        store.switchTab(tabId);
+      if (tabId && tabId !== store.activeTabId && store.tabs.some((tab) => tab.id === tabId)) {
+        // Held by a run or a save: it opens anyway, and the next turn works in the live
+        // workflow, so the user is told rather than left to find out from the agent.
+        const refusal = store.tabsBusyReason();
+        if (refusal) useToast.getState().show(`Couldn't switch to this chat's workflow. ${refusal}.`, "warning");
+        else store.switchTab(tabId);
       }
       openSavedChat(conversation);
     },
