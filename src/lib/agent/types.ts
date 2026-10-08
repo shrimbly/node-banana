@@ -490,7 +490,7 @@ export interface AgentRunOffer {
 
 /** One output a chat-started run produced, held as ids and text (never media bytes). */
 export interface AgentRunOutput {
-  /** Stable key: the asset id, else `${nodeId}:${index}`. */
+  /** Stable key: the asset id, else `${nodeId}:${index}` (kept by an asset that replaces a live output). */
   id: string;
   nodeId: string;
   /** The node's title or display name when the run ended. */

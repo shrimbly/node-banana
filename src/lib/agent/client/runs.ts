@@ -492,10 +492,16 @@ function attachAsset(watcher: Watcher, { asset }: RecordAssetResult): void {
   if (record.outputs.some((output) => output.assetId === asset.id)) return;
   const output = assetOutput(asset, record.runs > 1 ? (asset.batch ? asset.batch.index - 1 : runIndex) : undefined, watcher);
   updateRecord(record.id, (current) => {
-    // The library caught up with a node shown live so far: the asset replaces it.
-    const rest = current.outputs.filter((entry) => !(entry.live && entry.nodeId === output.nodeId && entry.kind === output.kind));
     const ranNodeIds = current.ranNodeIds.includes(output.nodeId) ? current.ranNodeIds : [...current.ranNodeIds, output.nodeId];
-    return { ...current, ranNodeIds, outputs: capOutputs([...rest, output]) };
+    // The library caught up with a node shown live so far: the asset takes its place and id, so
+    // its tile, the grid's order and an open viewer stay put.
+    const live = current.outputs.findIndex((entry) => entry.live && entry.nodeId === output.nodeId && entry.kind === output.kind);
+    if (live >= 0) {
+      const outputs = [...current.outputs];
+      outputs[live] = { ...output, id: current.outputs[live].id };
+      return { ...current, ranNodeIds, outputs };
+    }
+    return { ...current, ranNodeIds, outputs: capOutputs([...current.outputs, output]) };
   });
 }
 

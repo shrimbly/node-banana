@@ -271,13 +271,36 @@ describe("chat run records", () => {
       { id: "gen-1:0", nodeId: "gen-1", nodeTitle: "Generate Image", nodeType: "nanoBanana", kind: "image", live: true },
     ]);
 
-    // The recorder finishes the upload after the run.
+    // The recorder finishes the upload after the run: the asset takes the live output's place and id.
     asset({ id: "a-late", runId: "r-run-1", nodeId: "gen-1" });
-    expect(record(started.id).outputs.map((output) => output.id)).toEqual(["a-late"]);
+    expect(record(started.id).outputs.map((output) => [output.id, output.assetId, output.live])).toEqual([["gen-1:0", "a-late", undefined]]);
 
     vi.advanceTimersByTime(LATE_ASSET_MS + 1);
     asset({ id: "a-too-late", runId: "r-run-1", nodeId: "gen-1" });
-    expect(record(started.id).outputs.map((output) => output.id)).toEqual(["a-late"]);
+    expect(record(started.id).outputs.map((output) => output.assetId)).toEqual(["a-late"]);
+  });
+
+  it("keeps the outputs' order when a late asset replaces a live one", () => {
+    resetStore([node("gen-1", "nanoBanana", { status: "idle" }), node("gen-2", "nanoBanana", { status: "idle" })]);
+    beginRun("r-run-1");
+    const started = track();
+    for (const id of ["gen-1", "gen-2"]) {
+      setNode(id, { status: "loading" });
+      setNode(id, { status: "complete", outputImage: "data:image/png;base64,AAAA" });
+    }
+    endRun();
+    expect(record(started.id).outputs.map((output) => output.id)).toEqual(["gen-1:0", "gen-2:0"]);
+
+    // The first node's upload lands last: a tile (or the viewer) on it stays where it was.
+    asset({ id: "a-two", runId: "r-run-1", nodeId: "gen-2" });
+    asset({ id: "a-one", runId: "r-run-1", nodeId: "gen-1" });
+    expect(record(started.id).outputs.map((output) => [output.id, output.assetId])).toEqual([
+      ["gen-1:0", "a-one"],
+      ["gen-2:0", "a-two"],
+    ]);
+    // Seen once, kept once.
+    asset({ id: "a-one", runId: "r-run-1", nodeId: "gen-1" });
+    expect(record(started.id).outputs).toHaveLength(2);
   });
 
   it("finds the latest record for an anchor", () => {
