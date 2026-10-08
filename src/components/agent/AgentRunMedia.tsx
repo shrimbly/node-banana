@@ -618,6 +618,26 @@ export function PendingAudioRow({ pending }: { pending: PendingOutput }) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Keeps an LLM reply's own line breaks (a poem, a list of taglines): markdown
+ * would join single newlines into one paragraph. Each newline outside a fenced
+ * code block becomes a hard break.
+ */
+export function withLineBreaks(text: string): string {
+  let fenced = false;
+  const lines = text.split("\n");
+  return lines
+    .map((line, index) => {
+      if (/^\s*(```|~~~)/.test(line)) {
+        fenced = !fenced;
+        return line;
+      }
+      const next = lines[index + 1];
+      return !fenced && line.trim() && next !== undefined && next.trim() ? `${line.trimEnd()}  ` : line;
+    })
+    .join("\n");
+}
+
+/**
  * A text output (an LLM's reply) as markdown, with copy. Past about twelve
  * lines it folds, fading out, behind "Show more".
  */
@@ -649,7 +669,7 @@ export function RunTextCard({ output }: { output: AgentRunOutput }) {
           folded && "[mask-image:linear-gradient(to_bottom,#000_calc(100%_-_2.5rem),transparent)]",
         )}
       >
-        <MessageResponse>{text}</MessageResponse>
+        <MessageResponse>{withLineBreaks(text)}</MessageResponse>
       </div>
       {(overflows || expanded) && (
         <button

@@ -19,7 +19,7 @@ vi.mock("@/utils/downloadMedia", () => ({ downloadMedia: download }));
 import { AgentTranscriptActionsProvider, type AgentTranscriptActions } from "@/components/agent/AgentSession";
 import { AgentSurfaceProvider, type AgentSurface } from "@/components/agent/AgentSurface";
 import { AgentRunResults, fixRequestMessage, formatElapsed } from "@/components/agent/AgentRunResults";
-import { MEDIA_RETRY_MS } from "@/components/agent/AgentRunMedia";
+import { MEDIA_RETRY_MS, withLineBreaks } from "@/components/agent/AgentRunMedia";
 import type { AgentRunOutput, AgentRunRecord } from "@/lib/agent/types";
 import { useAssetStore } from "@/store/assetStore";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -393,5 +393,16 @@ describe("AgentRunResults outcomes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Run again" }));
     expect(runBatch).toHaveBeenCalledWith({ kind: "nodes", nodeIds: ["gen"] }, 2);
     expect(screen.getByRole("alert")).toHaveTextContent("The run didn't start");
+  });
+});
+
+describe("withLineBreaks", () => {
+  it("keeps a reply's single line breaks as hard breaks", () => {
+    expect(withLineBreaks("Golden crescent ripe,\nfreckled sweetness\nsummer")).toBe("Golden crescent ripe,  \nfreckled sweetness  \nsummer");
+  });
+
+  it("leaves paragraph breaks and fenced code alone", () => {
+    expect(withLineBreaks("One\n\nTwo")).toBe("One\n\nTwo");
+    expect(withLineBreaks("```\na = 1\nb = 2\n```\nafter")).toBe("```\na = 1\nb = 2\n```\nafter");
   });
 });
