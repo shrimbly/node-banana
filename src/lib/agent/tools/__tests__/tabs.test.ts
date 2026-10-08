@@ -188,7 +188,8 @@ describe("save_workflow", () => {
     const saved = await call(workspace(), "save_workflow", {});
     expect(saved).toMatchObject({ ok: true, ops: [], tabId: "tab-a", workspace: { op: "save" }, summary: "Saving Fox portraits" });
     expect(saved.text).toContain('Saving "Fox portraits" into its project folder.');
-    expect(saved.text).toContain("It saves in the user's browser, after your earlier edits; the next message's list of open workflows shows whether it is saved.");
+    expect(saved.text).toContain("The app saves it now, after your earlier edits, and tells the user itself if the save fails.");
+    expect(saved.text).toContain("don't ask them to check");
     const renamed = await call(workspace(), "save_workflow", { name: "Wolf portraits" });
     expect(renamed.workspace).toEqual({ op: "save" });
     expect(renamed.text).toContain("It keeps its name: saving never renames a workflow.");

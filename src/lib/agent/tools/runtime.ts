@@ -313,7 +313,9 @@ class TurnWorkspace {
     const draft = this.draft;
     const given = requestedName?.trim().slice(0, TAB_NAME_MAX) || undefined;
     const current = draft.workflowName ?? tab?.name;
-    const after = "It saves in the user's browser, after your earlier edits; the next message's list of open workflows shows whether it is saved.";
+    // The browser saves it and tells the user itself if that fails: the model only says what it saved.
+    const after =
+      "The app saves it now, after your earlier edits, and tells the user itself if the save fails. Tell the user it is saved (as what); don't ask them to check.";
     if (tab?.saved) {
       const kept = given && given !== current ? " It keeps its name: saving never renames a workflow." : "";
       return {
