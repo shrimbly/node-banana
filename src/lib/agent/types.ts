@@ -201,7 +201,7 @@ export interface AgentToolResult {
   summary: string;
   /** Canvas changes to apply in the browser, in order. Empty for read-only tools and failures. */
   ops: AgentGraphOp[];
-  /** Nodes worth bringing into view after the ops are applied. */
+  /** Nodes worth bringing into view after the ops are applied. A run's are the nodes it runs, in run order. */
   focusNodeIds?: string[];
   /** A tab or save step for the browser instead of canvas edits (`ops` is empty). */
   workspace?: AgentWorkspaceOp;

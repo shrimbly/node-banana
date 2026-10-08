@@ -1537,6 +1537,27 @@ describe("run_workflow", () => {
     expect(from.ops).toEqual([{ op: "run", scope: { kind: "from", nodeId: "llmGenerate-2" }, runs: 1 }]);
   });
 
+  it("names the nodes the run runs, in run order", async () => {
+    // A second branch, prompt-5 → nanoBanana-6, and a locked group holding prompt-7 → nanoBanana-8.
+    const state = chain();
+    state.nodes.push(
+      storeNode("prompt-5", "prompt", { x: 0, y: 600 }, { prompt: "a cat" }),
+      storeNode("nanoBanana-6", "nanoBanana", { x: 400, y: 600 }),
+      storeNode("prompt-7", "prompt", { x: 0, y: 900 }, { prompt: "a hare" }, { groupId: "g1" }),
+      storeNode("nanoBanana-8", "nanoBanana", { x: 400, y: 900 }, {}, { groupId: "g1" }),
+    );
+    state.edges.push(storeEdge("prompt-5", "text", "nanoBanana-6", "text"), storeEdge("prompt-7", "text", "nanoBanana-8", "text"));
+    state.groups = { g1: { id: "g1", name: "Hares", color: "neutral", locked: true } };
+
+    const all = await call(runtimeFor(state), "run_workflow", { scope: "all" });
+    expect(all.focusNodeIds).toEqual(["prompt-1", "prompt-5", "llmGenerate-2", "nanoBanana-6", "nanoBanana-3", "output-4"]);
+    const nodes = await call(runtimeFor(state), "run_workflow", { scope: "nodes", nodeIds: ["nanoBanana-3", "llmGenerate-2"] });
+    expect(nodes.focusNodeIds).toEqual(["llmGenerate-2", "nanoBanana-3"]);
+    // A run from a node runs its level and every later one, the other branch's generator too.
+    const from = await call(runtimeFor(state), "run_workflow", { scope: "from", node: "llmGenerate-2" });
+    expect(from.focusNodeIds).toEqual(["llmGenerate-2", "nanoBanana-6", "nanoBanana-3", "output-4"]);
+  });
+
   it("refuses nodes fed by a node with no output yet, and names the node to include", async () => {
     const runtime = runtimeFor(chain(false));
     const refused = await call(runtime, "run_workflow", { scope: "nodes", nodeIds: ["nanoBanana-3"] });

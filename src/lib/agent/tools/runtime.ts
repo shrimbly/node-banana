@@ -866,7 +866,10 @@ function runWorkflow(draft: GraphDraft, args: Args<typeof runWorkflowShape>, alr
     `Started a run of ${what}${runs > 1 ? `, ${runs} times one after another` : ""}. It runs on the user's canvas after your edits; you do not see its results in this turn.`,
     "Tell the user briefly what you started. The canvas in their next message shows each node's status, error and output: report how it went from that, never before.",
   ].join("\n");
-  return { ok: true, text, summary: clip(summary), ops: [{ op: "run", scope, runs }] };
+  // What runs, for the chat's placeholders and Show on canvas: a "from" run
+  // runs every later level, not only what it leads to.
+  const planned = new Set(scope.kind === "from" ? [...ran].filter(unlocked) : checked);
+  return { ok: true, text, summary: clip(summary), ops: [{ op: "run", scope, runs }], focusNodeIds: levelOrder(draft).filter((id) => planned.has(id)) };
 }
 
 /**

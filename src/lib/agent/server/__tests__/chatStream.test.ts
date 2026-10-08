@@ -651,12 +651,13 @@ describe("createAgentChatStream: tool calls", () => {
     expect(statusLines(chunks)).toContain("Reading the canvas…");
   });
 
-  it("sends a run as an ops batch, saying the run is starting while the call is written", async () => {
+  it("sends a run as an ops batch, with the nodes it runs, saying the run is starting while the call is written", async () => {
     const started: AgentToolResult = {
       ok: true,
       text: "Started a run of the whole workflow (2 nodes).",
       summary: "Running the workflow",
       ops: [{ op: "run", scope: { kind: "all" }, runs: 1 }],
+      focusNodeIds: ["prompt-1", "nanoBanana-2"],
     };
     const { runtime } = fakeRuntime({ run_workflow: started });
     const { harness } = fakeHarness(async function* (params) {
@@ -669,9 +670,12 @@ describe("createAgentChatStream: tool calls", () => {
 
     expect(statusLines(chunks)).toContain("Starting the run…");
     const batch = chunks.find((chunk) => chunk.type === "data-graph-ops") as { data: AgentGraphOpBatch } | undefined;
-    expect(batch?.data).toMatchObject({ ops: started.ops, summary: "Running the workflow" });
-    expect(batch?.data).not.toHaveProperty("focusNodeIds");
-    expect(partsOfType(message, "dynamic-tool")[0]).toMatchObject({ title: "Run workflow", output: { ok: true, summary: "Running the workflow" } });
+    // The browser's placeholders read them; a run-only batch applies no edit, so nothing is brought into view.
+    expect(batch?.data).toMatchObject({ ops: started.ops, summary: "Running the workflow", focusNodeIds: ["prompt-1", "nanoBanana-2"] });
+    expect(partsOfType(message, "dynamic-tool")[0]).toMatchObject({
+      title: "Run workflow",
+      output: { ok: true, summary: "Running the workflow", nodeIds: ["prompt-1", "nanoBanana-2"] },
+    });
   });
 
   it("sends a tab step as a batch of its own, and names the tab on every batch and card", async () => {
