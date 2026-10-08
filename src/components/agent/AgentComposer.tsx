@@ -334,7 +334,8 @@ export function AgentComposer({
             ? "relative z-[1] rounded-[24px] squircle border border-white/[0.06] bg-card dark:bg-card " +
               "shadow-[0_1px_2px_rgba(0,0,0,0.25),0_12px_32px_-12px_rgba(0,0,0,0.5)] " +
               "has-disabled:bg-card has-disabled:opacity-100 dark:has-disabled:bg-card " +
-              "transition-[border-color] duration-[120ms] has-[[data-slot=input-group-control]:focus-visible]:border-white/[0.12]"
+              "transition-[border-color] duration-[120ms] has-[[data-slot=input-group-control]:focus-visible]:border-white/[0.12] " +
+              "has-[[data-slot=input-group-control]:focus-visible]:ring-0"
             : "relative z-[1] rounded-[10px] squircle border-0 bg-well shadow-well dark:bg-well " +
               "has-disabled:bg-well has-disabled:opacity-100 dark:has-disabled:bg-well " +
               "has-[[data-slot=input-group-control]:focus-visible]:ring-1 has-[[data-slot=input-group-control]:focus-visible]:ring-white/15"
