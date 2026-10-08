@@ -67,7 +67,7 @@ export function AgentConversation({
           return (
             <Fragment key={message.id}>
               {switchedTo && <HarnessDivider harness={switchedTo} />}
-              <AgentMessage message={message} streaming={streaming} onSignIn={onSignIn} />
+              <AgentMessage message={message} streaming={streaming} latest={index === messages.length - 1} onSignIn={onSignIn} />
               {stopped && (
                 <p className={cn("font-mono text-[10px] leading-4 uppercase tracking-eyebrow text-ink-3", page ? "-mt-5" : "-mt-3")}>
                   Stopped

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { AgentMessage } from "@/components/agent/AgentMessage";
 import { AgentTranscriptActionsProvider, type AgentTranscriptActions } from "@/components/agent/AgentSession";
+import { AgentSurfaceProvider } from "@/components/agent/AgentSurface";
 import { useAgentRuns } from "@/lib/agent/client/runs";
 import type { AgentRunOffer, AgentRunRecord, AgentUIMessage } from "@/lib/agent/types";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -57,6 +58,62 @@ type Part = AgentUIMessage["parts"][number];
 function reply(parts: Part[]): AgentUIMessage {
   return { id: "a2", role: "assistant", parts };
 }
+
+describe("AgentMessage copy", () => {
+  const writeText = vi.fn<(text: string) => Promise<void>>();
+  beforeEach(() => {
+    writeText.mockReset().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  });
+
+  const answer = reply([
+    { type: "text", text: "Here is the prompt:", state: "done" },
+    toolPart("edit_workflow", "call-edit", { ok: true, summary: "Set the prompt" }),
+    { type: "text", text: "**A fox at dusk**, 35mm, soft rim light.\n", state: "done" },
+  ]);
+
+  it("copies a finished reply's text as markdown, leaving its tool rows and cards out", async () => {
+    render(<AgentMessage message={answer} streaming={false} />);
+    await act(async () => fireEvent.click(screen.getByRole("button", { name: "Copy reply" })));
+    expect(writeText).toHaveBeenCalledWith("Here is the prompt:\n\n**A fox at dusk**, 35mm, soft rim light.");
+    expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
+  });
+
+  it("offers no copy while the reply streams, nor under a reply with no text", () => {
+    const { rerender } = render(<AgentMessage message={answer} streaming />);
+    expect(screen.queryByRole("button", { name: "Copy reply" })).not.toBeInTheDocument();
+    rerender(<AgentMessage message={reply([toolPart("edit_workflow", "call-edit", { ok: true, summary: "Added" })])} streaming={false} />);
+    expect(screen.queryByRole("button", { name: "Copy reply" })).not.toBeInTheDocument();
+    rerender(<AgentMessage message={{ id: "u1", role: "user", parts: [{ type: "text", text: "hi" }] }} streaming={false} />);
+    expect(screen.queryByRole("button", { name: "Copy reply" })).not.toBeInTheDocument();
+  });
+
+  it("stays quiet until the reply is hovered or the button focused, and always shows on touch", () => {
+    render(<AgentMessage message={answer} streaming={false} />);
+    const row = screen.getByRole("button", { name: "Copy reply" }).closest("[data-message-actions]")!;
+    expect(row.className).toContain("opacity-0");
+    expect(row.className).toContain("group-hover/message:opacity-100");
+    expect(row.className).toContain("focus-within:opacity-100");
+    expect(row.className).toContain("pointer-coarse:opacity-100");
+  });
+
+  it("shows under the latest reply on the page, as chat apps do", () => {
+    const { rerender } = render(
+      <AgentSurfaceProvider value="page">
+        <AgentMessage message={answer} streaming={false} latest />
+      </AgentSurfaceProvider>,
+    );
+    const row = () => screen.getByRole("button", { name: "Copy reply" }).closest("[data-message-actions]")!;
+    expect(row().className).not.toContain("opacity-0");
+    // An earlier one, once another reply follows: on hover again.
+    rerender(
+      <AgentSurfaceProvider value="page">
+        <AgentMessage message={answer} streaming={false} latest={false} />
+      </AgentSurfaceProvider>,
+    );
+    expect(row().className).toContain("opacity-0");
+  });
+});
 
 function toolPart(toolName: string, toolCallId: string, output: unknown): Part {
   return { type: "dynamic-tool", toolName, toolCallId, state: "output-available", input: { scope: "all" }, output } as Part;
