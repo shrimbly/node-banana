@@ -8,6 +8,7 @@ import {
   saveConversations,
   type AgentConversation,
 } from "./history";
+import { forgetChatRuns } from "./runs";
 
 export interface UseAgentHistoryResult {
   conversations: AgentConversation[];
@@ -52,6 +53,7 @@ export function useAgentHistory(): UseAgentHistoryResult {
 
   const remove = useCallback((id: string) => {
     setConversations((previous) => saveConversations(previous.filter((conversation) => conversation.id !== id)));
+    forgetChatRuns(id);
   }, []);
 
   return { conversations, record, remove };
