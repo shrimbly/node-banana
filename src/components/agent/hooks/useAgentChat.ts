@@ -262,7 +262,7 @@ export function useAgentChat({
             result.skipped.join("\n"),
           );
       }
-      if (result.runRefused) useToast.getState().show(`The agent's run didn't start: ${result.runRefused}`, "warning");
+      if (result.runRefused) useToast.getState().show(`The agent's run didn't start: ${lowerFirst(result.runRefused)}`, "warning");
       const run = applying.ops.find((op) => op.op === "run");
       if (result.runStarted && run) {
         trackStartedRun({

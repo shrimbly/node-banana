@@ -415,15 +415,19 @@ describe("applyAgentGraphOps", () => {
   describe("a run the batch asks for", () => {
     const originalRunBatch = useWorkflowStore.getState().runBatch;
     const runBatch = vi.fn<(scope: RunScope, count?: number) => Promise<void>>();
+    /** As the real one: the first run is going before runBatch first awaits. */
+    const startRun = async () => {
+      useWorkflowStore.setState({ isRunning: true });
+    };
 
     beforeEach(() => {
       runBatch.mockReset();
-      runBatch.mockResolvedValue(undefined);
+      runBatch.mockImplementation(startRun);
       useWorkflowStore.setState({ runBatch, isRunning: false, batch: null });
     });
 
     afterEach(() => {
-      useWorkflowStore.setState({ runBatch: originalRunBatch, isRunning: false, batch: null });
+      useWorkflowStore.setState({ runBatch: originalRunBatch, isRunning: false, batch: null, desktopConnected: true });
     });
 
     it("starts through runBatch once the batch's edits are on the canvas, outside its undo step", () => {
@@ -431,6 +435,7 @@ describe("applyAgentGraphOps", () => {
       let canvasWhenStarted: string[] = [];
       runBatch.mockImplementation(async () => {
         canvasWhenStarted = useWorkflowStore.getState().nodes.map((node) => node.id);
+        await startRun();
       });
 
       const result = useWorkflowStore.getState().applyAgentGraphOps(
@@ -487,6 +492,23 @@ describe("applyAgentGraphOps", () => {
       expect(run.runStarted).toBe(true);
       expect(run).not.toHaveProperty("runRefused");
       expect(runBatch).toHaveBeenCalledWith({ kind: "all" }, 3);
+    });
+
+    it("says the run didn't start when the canvas refused it at once, with the canvas's reason", () => {
+      seed([promptNode("prompt-1")]);
+      // The real runBatch: a batch of three is set up before its first run is refused.
+      useWorkflowStore.setState({ runBatch: originalRunBatch, desktopConnected: false });
+      const offline = useWorkflowStore.getState().applyAgentGraphOps(batch([{ op: "run", scope: { kind: "all" }, runs: 3 }]));
+      expect(offline).toEqual({
+        applied: 0,
+        skipped: [],
+        runRefused: "Local server disconnected. Use Help → Restart Local Server to reconnect.",
+      });
+
+      useWorkflowStore.setState({ runBatch, batch: null, desktopConnected: true });
+      runBatch.mockImplementation(async () => {});
+      const refused = useWorkflowStore.getState().applyAgentGraphOps(batch([{ op: "run", scope: { kind: "all" }, runs: 1 }]));
+      expect(refused).toEqual({ applied: 0, skipped: [], runRefused: "the canvas refused it" });
     });
   });
 });

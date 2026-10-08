@@ -878,6 +878,8 @@ function startAgentRun(get: () => WorkflowStore, run: ApplyGraphOpsResult["run"]
   // The turn saw an idle canvas; a run started since then (the user pressed Run) wins.
   if (get().isRunning || get().batch) return { runRefused: "a run is already going" };
   void get().runBatch(run.scope, run.runs);
+  // The first run is going before runBatch first awaits: nothing running now means it was refused.
+  if (!get().isRunning) return { runRefused: executionRefusal(get().desktopConnected) ?? "the canvas refused it" };
   return { runStarted: true };
 }
 
@@ -996,11 +998,16 @@ function applyTabSnapshot(
   get().recomputeDimmedNodes();
 }
 
-/** Explain blocked run attempts instead of silently dropping node-button clicks. */
-function canStartExecution(connected: boolean): boolean {
-  const reason = !desktopCredentialsReady()
+/** Why no run can start right now, or null. */
+function executionRefusal(connected: boolean): string | null {
+  return !desktopCredentialsReady()
     ? "Provider keys are still loading. Wait for setup to finish before running."
     : !connected ? "Local server disconnected. Use Help → Restart Local Server to reconnect." : null;
+}
+
+/** Explain blocked run attempts instead of silently dropping node-button clicks. */
+function canStartExecution(connected: boolean): boolean {
+  const reason = executionRefusal(connected);
   if (!reason) return true;
   logger.warn('workflow.start', reason);
   useToast.getState().show(reason, "warning");

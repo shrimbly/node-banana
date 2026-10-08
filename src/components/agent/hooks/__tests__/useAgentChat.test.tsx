@@ -723,6 +723,30 @@ describe("useAgentChat: the turn's tab and save steps", () => {
       useWorkflowStore.setState({ applyAgentGraphOps: original });
     }
   });
+
+  it("says why, and records nothing, when the canvas refuses the run", async () => {
+    useWorkflowStore.setState({ desktopConnected: false });
+    try {
+      const { stream } = await startTurn();
+      await act(async () => {
+        push(stream, {
+          batchId: "run",
+          toolCallId: "call-run",
+          summary: "Running the workflow ×3",
+          ops: [{ op: "run", scope: { kind: "all" }, runs: 3 }],
+        });
+        await sleep(30);
+      });
+      expect(toastShow).toHaveBeenLastCalledWith(
+        "The agent's run didn't start: local server disconnected. Use Help → Restart Local Server to reconnect.",
+        "warning",
+      );
+      expect(trackStartedRun).not.toHaveBeenCalled();
+      stream.end();
+    } finally {
+      useWorkflowStore.setState({ desktopConnected: true });
+    }
+  });
 });
 
 describe("useAgentChat: steps still pending when the turn ends", () => {

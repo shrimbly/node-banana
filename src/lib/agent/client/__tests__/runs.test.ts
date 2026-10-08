@@ -400,6 +400,16 @@ describe("startOfferRun", () => {
       ok: false,
       reason: "The run didn't start",
     });
+    // A batch is set up before its first run is refused; it clears itself a moment later.
+    runBatch.mockImplementationOnce(() => {
+      useWorkflowStore.setState({ batch: { id: "batch-1", index: 1, count: 3, stopping: false } });
+      return Promise.resolve();
+    });
+    expect(startOfferRun({ chatId: "chat-1", offer: current, option: current.alternatives[0], runs: 3 })).toEqual({
+      ok: false,
+      reason: "The run didn't start",
+    });
+    useWorkflowStore.setState({ batch: null });
     expect(useAgentRuns.getState().records).toEqual([]);
   });
 

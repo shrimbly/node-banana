@@ -130,8 +130,9 @@ export function startChatRun(input: StartChatRunInput): StartChatRunResult {
   const runs = clampRunCount(input.runs);
   void store.runBatch(scope, runs);
   const after = useWorkflowStore.getState();
-  // runBatch starts synchronously; nothing going now means it refused (offline, nothing to run).
-  if (!after.isRunning && !after.batch) return { ok: false, reason: "The run didn't start" };
+  // The first run is going before runBatch first awaits; nothing running now means it was
+  // refused (offline, nothing to run). A batch set up for it clears itself a moment later.
+  if (!after.isRunning) return { ok: false, reason: "The run didn't start" };
   const present = new Set(store.nodes.map((node) => node.id));
   const record = trackStartedRun({
     chatId: input.chatId,
