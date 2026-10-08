@@ -193,8 +193,17 @@ describe("agent end to end (scripted harness, real bridge, runtime, prompts and 
     // UI parts: a titled dynamic tool with the summary, text either side, the session.
     const tool = turn1.message.parts.find((part) => part.type === "dynamic-tool");
     expect(tool).toMatchObject({ type: "dynamic-tool", toolName: "create_workflow", title: "Create workflow", state: "output-available" });
-    expect((tool as { output: { ok: boolean; summary: string } }).output).toEqual({ ok: true, summary: expect.stringMatching(/3 nodes/) });
-    expect(turn1.message.parts.map((part) => part.type)).toEqual(["data-agent-session", "text", "dynamic-tool", "text"]);
+    expect((tool as { output: { ok: boolean; summary: string } }).output).toEqual({
+      ok: true,
+      summary: expect.stringMatching(/3 nodes/),
+      nodeIds: ["prompt-ag1", "nanoBanana-ag2", "output-ag3"],
+    });
+    // Built from an empty canvas and not run: the reply ends with a Run button for the whole workflow.
+    expect(turn1.message.parts.map((part) => part.type)).toEqual(["data-agent-session", "text", "dynamic-tool", "text", "data-run-offer"]);
+    expect(turn1.message.parts.at(-1)).toMatchObject({
+      id: "run-offer",
+      data: { primary: { scope: { kind: "all" }, label: "Run workflow", nodeIds: ["prompt-ag1", "nanoBanana-ag2", "output-ag3"] }, alternatives: [] },
+    });
 
     // The ops landed on the store: prompt → nanoBanana → output on valid handles.
     expect(turn1.batches).toHaveLength(1);

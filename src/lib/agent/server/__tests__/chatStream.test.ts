@@ -30,12 +30,16 @@ import {
 } from "../chatStream";
 import type {
   AgentChatRequestBody,
+  AgentGraphOp,
   AgentGraphOpBatch,
   AgentHarness,
   AgentHarnessStatus,
+  AgentRunOffer,
+  AgentSnapshotNode,
   AgentToolDefinition,
   AgentToolResult,
   AgentToolRuntime,
+  AgentToolUIOutput,
   AgentUIMessage,
   AgentWorkflowSnapshot,
   HarnessEvent,
@@ -90,6 +94,14 @@ const definitions: AgentToolDefinition[] = [
   { name: "get_workflow", title: "Read workflow", description: "Read the canvas.", inputShape: {}, readOnly: true },
   { name: "edit_workflow", title: "Edit workflow", description: "Change the canvas.", inputShape: {}, readOnly: false },
   { name: "run_workflow", title: "Run workflow", description: "Start a run.", inputShape: {}, readOnly: false },
+];
+
+/** With the tab tools too, as the real runtime has them. */
+const workspaceDefinitions: AgentToolDefinition[] = [
+  ...definitions,
+  { name: "switch_workflow", title: "Switch workflow", description: "Switch tabs.", inputShape: {}, readOnly: false },
+  { name: "new_workflow", title: "New workflow", description: "Open a tab.", inputShape: {}, readOnly: false },
+  { name: "save_workflow", title: "Save workflow", description: "Save the tab.", inputShape: {}, readOnly: false },
 ];
 
 function fakeRuntime(results: Record<string, AgentToolResult | Error>) {
@@ -400,6 +412,26 @@ describe("createAgentChatStream: what the harness is given", () => {
     await run({ harness, body: requestBody({ workflow }), createToolRuntime });
 
     expect(createToolRuntime).toHaveBeenCalledWith(workflow, expect.objectContaining({ providerKeys: {} }));
+    expect(createToolRuntime.mock.calls[0]).toHaveLength(2);
+    expect((createToolRuntime.mock.calls[0] as unknown[])[1]).not.toHaveProperty("tabs");
+  });
+
+  it("gives the runtime and the turn prompt the open tabs", async () => {
+    const { harness, turns } = fakeHarness(() => emit());
+    const createToolRuntime = vi.fn(() => fakeRuntime({}).runtime);
+    const buildTurnPrompt = vi.fn(({ userText }: { userText: string }) => userText);
+    const tabs = [
+      { id: "tab-a", active: true as const, nodeCount: 0 },
+      { id: "tab-b", name: "Cats", nodeCount: 1 },
+    ];
+    const parkedWorkflows = { "tab-b": { ...emptyWorkflow, tabId: "tab-b" } };
+    const workflow = { ...emptyWorkflow, tabId: "tab-a" };
+
+    await run({ harness, body: requestBody({ workflow, tabs, parkedWorkflows }), createToolRuntime, buildTurnPrompt });
+
+    expect(createToolRuntime).toHaveBeenCalledWith(workflow, expect.objectContaining({ tabs, parkedWorkflows }));
+    expect(buildTurnPrompt).toHaveBeenCalledWith({ userText: "add a prompt node", snapshot: workflow, tabs });
+    expect(turns).toHaveLength(1);
   });
 
   it("keeps provider keys inside the tool runtime: none reaches the harness, the stream or a log", async () => {
@@ -642,6 +674,134 @@ describe("createAgentChatStream: tool calls", () => {
     expect(partsOfType(message, "dynamic-tool")[0]).toMatchObject({ title: "Run workflow", output: { ok: true, summary: "Running the workflow" } });
   });
 
+  it("sends a tab step as a batch of its own, and names the tab on every batch and card", async () => {
+    const switched: AgentToolResult = {
+      ok: true,
+      text: 'Switched to "Haiku" (tab-b).',
+      summary: "Switched to Haiku",
+      ops: [],
+      workspace: { op: "switchTab", tabId: "tab-b" },
+      tabId: "tab-b",
+    };
+    const read: AgentToolResult = { ok: true, text: "1 node", summary: "Read the workflow (1 nodes)", ops: [], tabId: "tab-b" };
+    const edit: AgentToolResult = { ...addPromptResult, tabId: "tab-b" };
+    const { runtime } = fakeRuntime({ switch_workflow: switched, get_workflow: read, edit_workflow: edit });
+    const { harness } = fakeHarness(async function* (params) {
+      await params.tools.execute("switch_workflow", { tab: "tab-b" });
+      await params.tools.execute("get_workflow", {});
+      await params.tools.execute("edit_workflow", {});
+      yield* emit();
+    });
+
+    const { chunks, message } = await run({ harness, createToolRuntime: () => ({ ...runtime, definitions: workspaceDefinitions }) });
+
+    const batches = chunksOfType(chunks, "data-graph-ops").map((chunk) => chunk.data);
+    expect(batches).toEqual([
+      { batchId: expect.stringMatching(/^ops_/), toolCallId: expect.any(String), ops: [], summary: "Switched to Haiku", workspace: { op: "switchTab", tabId: "tab-b" }, tabId: "tab-b" },
+      expect.objectContaining({ ops: addPromptResult.ops, tabId: "tab-b", focusNodeIds: ["prompt-ag1"] }),
+    ]);
+    expect(batches[1]).not.toHaveProperty("workspace");
+    expect(partsOfType(message, "dynamic-tool").map((part) => part.output)).toEqual([
+      { ok: true, summary: "Switched to Haiku", tabId: "tab-b" },
+      { ok: true, summary: "Read the workflow (1 nodes)", tabId: "tab-b" },
+      { ok: true, summary: "Added 1 node", tabId: "tab-b", nodeIds: ["prompt-ag1"] },
+    ]);
+  });
+
+  it("gives a card the nodes its ops created or changed when the result names no focus", async () => {
+    const ops: AgentGraphOp[] = [
+      { op: "removeNode", id: "prompt-1" },
+      { op: "updateNode", id: "nanoBanana-2", data: { aspectRatio: "16:9" } },
+      { op: "addEdge", id: "e1", source: "prompt-ag1", sourceHandle: "text", target: "nanoBanana-2", targetHandle: "text" },
+      { op: "addEdge", id: "e2", source: "prompt-1", sourceHandle: "text", target: "output-3", targetHandle: "text" },
+      ...Array.from({ length: 60 }, (_, i): AgentGraphOp => ({ op: "moveNode", id: `output-${i + 10}`, position: { x: i, y: 0 } })),
+    ];
+    const { runtime } = fakeRuntime({ edit_workflow: { ok: true, text: "Done.", summary: "Updated the canvas", ops } });
+    const { harness } = fakeHarness(async function* (params) {
+      await params.tools.execute("edit_workflow", {});
+      yield* emit();
+    });
+
+    const { message } = await run({ harness, createToolRuntime: () => runtime });
+
+    const output = partsOfType(message, "dynamic-tool")[0].output as AgentToolUIOutput;
+    expect(output.nodeIds).toHaveLength(50);
+    // Removed nodes are not shown; the rest in the order the ops name them.
+    expect(output.nodeIds!.slice(0, 5)).toEqual(["nanoBanana-2", "prompt-ag1", "output-3", "output-10", "output-11"]);
+    expect(output).not.toHaveProperty("tabId");
+  });
+
+  it("says what each tab tool is doing while its call is written", async () => {
+    const results: Record<string, AgentToolResult> = {};
+    for (const name of ["switch_workflow", "new_workflow", "save_workflow"]) results[name] = { ok: true, text: "ok", summary: "ok", ops: [] };
+    const { runtime } = fakeRuntime(results);
+    const { harness } = fakeHarness(async function* (params) {
+      for (const name of ["switch_workflow", "new_workflow", "save_workflow"]) {
+        yield { type: "tool-pending", toolName: `mcp__node_banana__${name}` };
+        await params.tools.execute(name, {});
+      }
+    });
+
+    const { chunks } = await run({ harness, createToolRuntime: () => ({ ...runtime, definitions: workspaceDefinitions }) });
+
+    expect(statusLines(chunks).filter(Boolean)).toEqual(["Fallooning…", "Switching workflows…", "Opening a new workflow…", "Saving the workflow…"]);
+  });
+
+  it("keeps a tab step between the edits around it, with the real runtime", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const flare: ProviderModel = { id: "gpt-image-2.5-flare", name: "GPT Image 2.5 Flare", description: "OpenAI image generation.", provider: "openai", capabilities: ["text-to-image"] };
+    const modelSource: ModelSource = {
+      async listModels() {
+        await gate;
+        return { ok: true, models: [flare], providers: { openai: { success: true, count: 1 } }, availableProviders: ["openai"], cached: false };
+      },
+      async getModelSchema() {
+        await gate;
+        return { ok: true, parameters: [], inputs: [{ name: "prompt", type: "text", required: true, label: "Prompt" }], cached: false };
+      },
+    };
+    const node = (id: string, type: AgentSnapshotNode["type"]): AgentSnapshotNode => ({ id, type, position: { x: 0, y: 0 }, width: 300, height: 300, data: {} });
+    const body = requestBody({
+      workflow: { ...emptyWorkflow, tabId: "tab-a", nodes: [node("nanoBanana-1", "nanoBanana")] },
+      tabs: [
+        { id: "tab-a", name: "Posters", active: true, nodeCount: 1 },
+        { id: "tab-b", name: "Haiku", nodeCount: 1 },
+      ],
+      parkedWorkflows: { "tab-b": { ...emptyWorkflow, tabId: "tab-b", workflowName: "Haiku", nodes: [node("llmGenerate-7", "llmGenerate")] } },
+    });
+    const { harness } = fakeHarness(async function* (params) {
+      const calls = [
+        params.tools.execute("update_node", { node: "nanoBanana-1", settings: { model: "gpt-image-2.5-flare" } }),
+        params.tools.execute("switch_workflow", { tab: "tab-b" }),
+        params.tools.execute("update_node", { node: "llmGenerate-7", title: "Poet" }),
+      ];
+      await sleep(20);
+      release();
+      const results = await Promise.all(calls);
+      expect(results.map((result) => [result.ok, result.tabId])).toEqual([
+        [true, "tab-a"],
+        [true, "tab-b"],
+        [true, "tab-b"],
+      ]);
+      yield* emit();
+    });
+
+    const { chunks } = await run({
+      harness,
+      body,
+      providerKeys: { openai: "sk-test" },
+      createToolRuntime: (snapshot, options) => createAgentToolRuntime(snapshot, { ...options, modelSource }),
+    });
+
+    const batches = chunksOfType(chunks, "data-graph-ops").map((chunk) => chunk.data);
+    expect(batches.map((batch) => [batch.tabId, batch.workspace?.op ?? batch.ops.map((op) => `${op.op} ${"id" in op ? op.id : ""}`).join()])).toEqual([
+      ["tab-a", "updateNode nanoBanana-1"],
+      ["tab-b", "switchTab"],
+      ["tab-b", "updateNode llmGenerate-7"],
+    ]);
+  });
+
   it("writes text the harness queued before a tool call ahead of the tool card", async () => {
     // A harness whose tool call arrives on its own path (an MCP handler, a
     // JSON-RPC request) while text is still waiting in its event queue.
@@ -700,6 +860,97 @@ describe("createAgentChatStream: tool calls", () => {
     ]);
     expect(chunksOfType(chunks, "text-start")).toHaveLength(2);
     expect(chunksOfType(chunks, "text-end")).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Run offer
+// ---------------------------------------------------------------------------
+
+describe("createAgentChatStream: run offer", () => {
+  const offer: AgentRunOffer = {
+    offerId: "offer_1",
+    tabId: "tab-a",
+    primary: { scope: { kind: "all" }, label: "Run workflow", nodeIds: ["prompt-ag1", "nanoBanana-ag2"] },
+    alternatives: [],
+  };
+  const offering = (runOffer: () => AgentRunOffer | null) => ({ ...fakeRuntime({ edit_workflow: addPromptResult }).runtime, runOffer: vi.fn(runOffer) });
+  const editThenSay = (text = "Built it.") =>
+    fakeHarness(async function* (params) {
+      await params.tools.execute("edit_workflow", {});
+      yield { type: "text-delta", id: "t", delta: text };
+    });
+
+  it("ends the reply with the runtime's Run offer as a persisted part", async () => {
+    const runtime = offering(() => offer);
+    const { harness } = editThenSay();
+
+    const { chunks, message } = await run({ harness, createToolRuntime: () => runtime });
+
+    expect(runtime.runOffer).toHaveBeenCalledTimes(1);
+    expect(types(chunks).slice(-3)).toEqual(["text-end", "data-run-offer", "finish"]);
+    expect(chunksOfType(chunks, "data-run-offer")[0]).toEqual({ type: "data-run-offer", id: "run-offer", data: offer });
+    expect(message.parts.map((part) => part.type)).toEqual(["dynamic-tool", "text", "data-run-offer"]);
+    expect(message.parts.at(-1)).toMatchObject({ id: "run-offer", data: offer });
+    expect(chunks.at(-1)).toMatchObject({ type: "finish", finishReason: "stop" });
+  });
+
+  it("writes nothing when there is nothing to offer, or the offer fails", async () => {
+    for (const runOffer of [() => null, () => { throw new Error("offer exploded"); }]) {
+      const { harness } = editThenSay();
+      const { chunks } = await run({ harness, createToolRuntime: () => offering(runOffer) });
+      expect(types(chunks)).not.toContain("data-run-offer");
+      expect(chunks.at(-1)).toMatchObject({ type: "finish", finishReason: "stop" });
+    }
+    expect(logger.error).toHaveBeenCalledWith("api.error", "Agent run offer failed", expect.anything(), expect.any(Error));
+  });
+
+  it("offers nothing when the turn was stopped or reported an error", async () => {
+    const stopped = offering(() => offer);
+    const controller = new AbortController();
+    const { harness: stopping } = fakeHarness(async function* (params) {
+      await params.tools.execute("edit_workflow", {});
+      yield { type: "text-delta", id: "t", delta: "Working" };
+      controller.abort();
+      await waitForAbort(params.signal);
+    });
+    const aborted = await run({ harness: stopping, signal: controller.signal, createToolRuntime: () => stopped });
+    expect(types(aborted.chunks)).not.toContain("data-run-offer");
+    expect(stopped.runOffer).not.toHaveBeenCalled();
+
+    const failing = offering(() => offer);
+    const { harness: erroring } = fakeHarness(async function* (params) {
+      await params.tools.execute("edit_workflow", {});
+      yield { type: "error", code: "usage_limit", message: "You hit your plan's limit." };
+    });
+    const errored = await run({ harness: erroring, createToolRuntime: () => failing });
+    expect(types(errored.chunks)).not.toContain("data-run-offer");
+    expect(failing.runOffer).not.toHaveBeenCalled();
+  });
+
+  it("asks the real runtime: a workflow built from an empty canvas gets a Run workflow button", async () => {
+    const { harness } = fakeHarness(async function* (params) {
+      await params.tools.execute("create_workflow", {
+        nodes: [
+          { ref: "p", type: "prompt", settings: { prompt: "a fox" } },
+          { ref: "g", type: "nanoBanana" },
+        ],
+        connections: [{ from: "p", to: "g" }],
+      });
+      yield* emit();
+    });
+
+    const { message } = await run({
+      harness,
+      body: requestBody({ workflow: { ...emptyWorkflow, tabId: "tab-a" }, tabs: [{ id: "tab-a", active: true, nodeCount: 0 }] }),
+      createToolRuntime: (snapshot, options) => createAgentToolRuntime(snapshot, options),
+    });
+
+    expect(message.parts.at(-1)).toMatchObject({
+      type: "data-run-offer",
+      id: "run-offer",
+      data: { tabId: "tab-a", primary: { scope: { kind: "all" }, label: "Run workflow", nodeIds: ["prompt-ag1", "nanoBanana-ag2"] }, alternatives: [] },
+    });
   });
 });
 
@@ -1165,6 +1416,44 @@ describe("parseAgentChatRequest", () => {
     expect(odd.ok).toBe(true);
     expect(odd.ok && odd.body.workflow.running).toBeUndefined();
   });
+  it("passes the open tabs, the live tab's id and the parked snapshots through", () => {
+    const result = parseAgentChatRequest({
+      ...valid(),
+      workflow: { ...valid().workflow, tabId: "tab-a" },
+      tabs: [
+        { id: "tab-a", name: "Fox", active: true, nodeCount: 1, saved: true, unsaved: false },
+        { id: "tab-b", name: null, active: false, nodeCount: 0 },
+      ],
+      parkedWorkflows: { "tab-b": { nodes: [], edges: [], workflowName: "Cats" } },
+    });
+    if (!result.ok) throw new Error(result.message);
+    expect(result.body.workflow.tabId).toBe("tab-a");
+    expect(result.body.tabs).toEqual([
+      { id: "tab-a", name: "Fox", active: true, nodeCount: 1, saved: true },
+      { id: "tab-b", nodeCount: 0 },
+    ]);
+    expect(Object.keys(result.body.tabs![1])).toEqual(["id", "nodeCount"]);
+    // Parsed like the live snapshot, defaults included.
+    expect(result.body.parkedWorkflows).toEqual({ "tab-b": { nodes: [], edges: [], groups: [], selectedNodeIds: [], workflowName: "Cats" } });
+  });
+
+  it("runs the turn without a tab list it cannot read, and drops parked snapshots that do not parse", () => {
+    for (const tabs of ["tab-a", [{ id: "tab-a" }], [{ id: "", nodeCount: 1 }], [{ id: "tab-a", nodeCount: -1 }]]) {
+      const result = parseAgentChatRequest({ ...valid(), tabs, parkedWorkflows: "nope" });
+      if (!result.ok) throw new Error(result.message);
+      expect(result.body, JSON.stringify(tabs)).not.toHaveProperty("tabs");
+      expect(result.body).not.toHaveProperty("parkedWorkflows");
+    }
+    const parked = parseAgentChatRequest({
+      ...valid(),
+      parkedWorkflows: { "tab-b": { nodes: [{ id: "n" }], edges: [] }, "tab-c": { nodes: [], edges: [] }, "": { nodes: [], edges: [] } },
+    });
+    expect(parked.ok && Object.keys(parked.body.parkedWorkflows ?? {})).toEqual(["tab-c"]);
+    const oddId = parseAgentChatRequest({ ...valid(), workflow: { ...valid().workflow, tabId: 7 } });
+    expect(oddId.ok).toBe(true);
+    expect(oddId.ok && oddId.body.workflow.tabId).toBeUndefined();
+  });
+
   it("accepts the panel's request and normalises optional fields", () => {
     const result = parseAgentChatRequest({ ...valid(), model: "", sessionId: null, trigger: "submit-message" });
 
@@ -1173,6 +1462,10 @@ describe("parseAgentChatRequest", () => {
     expect(result.body).not.toHaveProperty("model");
     expect(result.body).not.toHaveProperty("sessionId");
     expect(result.body).not.toHaveProperty("trigger");
+    // An older panel sends no tabs: the request means what it always did.
+    expect(result.body).not.toHaveProperty("tabs");
+    expect(result.body).not.toHaveProperty("parkedWorkflows");
+    expect(result.body.workflow).not.toHaveProperty("tabId");
     expect(result.body.harness).toBe("codex");
     expect(result.body.workflow.edges[0]).toMatchObject({ sourceHandle: null, targetHandle: "text" });
     expect(result.body.workflow.nodes[0].content).toEqual({ text: "a cat" });
