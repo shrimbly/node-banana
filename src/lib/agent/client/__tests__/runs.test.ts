@@ -35,11 +35,13 @@ import {
   AGENT_RUNS_KEY,
   LATE_ASSET_MS,
   RUN_TEXT_LIMIT,
+  chatRunBlockedReason,
   flushAgentRuns,
   forgetChatRuns,
   latestRunFor,
   loadAgentRuns,
   plannedRunNodeIds,
+  rerunChatRun,
   startOfferRun,
   stopChatRun,
   trackStartedRun,
@@ -456,6 +458,28 @@ describe("startOfferRun", () => {
     });
     useWorkflowStore.setState({ batch: null });
     expect(useAgentRuns.getState().records).toEqual([]);
+  });
+
+  it("refuses a whole-workflow run once none of the nodes it was offered for is on the canvas", () => {
+    // The tab's canvas was cleared and something else built in it since the offer.
+    const stale = offer({ primary: { scope: { kind: "all" }, label: "Run workflow", nodeIds: ["old-1", "old-2"] }, alternatives: [] });
+    expect(chatRunBlockedReason({ scope: { kind: "all" }, plannedNodeIds: stale.primary.nodeIds })).toBe(
+      "The nodes it would run are no longer on the canvas",
+    );
+    expect(startOfferRun({ chatId: "chat-1", offer: stale, option: stale.primary, runs: 1 })).toEqual({
+      ok: false,
+      reason: "The nodes it would run are no longer on the canvas",
+    });
+    expect(runBatch).not.toHaveBeenCalled();
+
+    const record = track({ scope: { kind: "all" }, plannedNodeIds: ["old-1"] });
+    expect(rerunChatRun(record)).toEqual({ ok: false, reason: "The nodes it would run are no longer on the canvas" });
+    expect(runBatch).not.toHaveBeenCalled();
+
+    // One of them is still there: the workflow runs, edits and all.
+    const kept = offer({ primary: { scope: { kind: "all" }, label: "Run workflow", nodeIds: ["old-1", "gen-1"] }, alternatives: [] });
+    expect(startOfferRun({ chatId: "chat-1", offer: kept, option: kept.primary, runs: 1 })).toMatchObject({ ok: true });
+    expect(runBatch).toHaveBeenCalledWith({ kind: "all" }, 1);
   });
 
   it("switches to the offer's tab first, and refuses when that tab was closed", () => {

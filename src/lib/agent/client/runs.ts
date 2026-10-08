@@ -67,6 +67,11 @@ export interface ChatRunTarget {
   /** The tab to run in; another tab is switched to first. Absent: the live tab. */
   tabId?: string;
   scope: RunScope;
+  /**
+   * The nodes it was planned for (an offer's nodeIds, a record's
+   * plannedNodeIds): a whole-workflow run with none of them left is refused.
+   */
+  plannedNodeIds?: readonly string[];
 }
 
 export interface StartChatRunInput extends ChatRunTarget {
@@ -100,13 +105,17 @@ export function chatRunBlockedReason(
     if (busy) return busy;
     nodes = tab.snapshot.nodes;
   }
-  return scopeOnCanvas(target.scope, nodes) ? null : NODES_GONE;
+  return scopeOnCanvas(target.scope, nodes, target.plannedNodeIds) ? null : NODES_GONE;
 }
 
 /** The scope with the nodes no longer on the canvas left out; null when nothing of it is left. */
-function scopeOnCanvas(scope: RunScope, nodes: readonly WorkflowNode[]): RunScope | null {
+function scopeOnCanvas(scope: RunScope, nodes: readonly WorkflowNode[], plannedNodeIds: readonly string[] = []): RunScope | null {
   const present = new Set(nodes.map((node) => node.id));
-  if (scope.kind === "all") return nodes.length > 0 ? scope : null;
+  if (scope.kind === "all") {
+    // None of the nodes it was planned for is left: what the tab holds now is another workflow.
+    if (plannedNodeIds.length > 0 && !plannedNodeIds.some((id) => present.has(id))) return null;
+    return nodes.length > 0 ? scope : null;
+  }
   if (scope.kind === "from") return present.has(scope.nodeId) ? scope : null;
   const nodeIds = scope.nodeIds.filter((id) => present.has(id));
   return nodeIds.length > 0 ? { kind: "nodes", nodeIds } : null;
@@ -157,7 +166,7 @@ export function startChatRun(input: StartChatRunInput): StartChatRunResult {
     if (!store.switchTab(input.tabId)) return { ok: false, reason: store.tabsBusyReason() ?? TAB_CLOSED };
   }
   const store = useWorkflowStore.getState();
-  const scope = scopeOnCanvas(input.scope, store.nodes);
+  const scope = scopeOnCanvas(input.scope, store.nodes, input.plannedNodeIds);
   if (!scope) return { ok: false, reason: NODES_GONE };
   const runs = clampRunCount(input.runs);
   void store.runBatch(scope, runs);
