@@ -173,6 +173,7 @@ Returns `{ images: string[], text: string | null }`.
 - `H` - Stack selected nodes horizontally
 - `V` - Stack selected nodes vertically
 - `G` - Arrange selected nodes in grid
+- `C` - Show or hide the full-page agent chat (bare C, outside a text field)
 - `A` - Show or hide the Assets view (bare A; Shift+letters add nodes). In Assets: arrows, Enter, Space, `Cmd/Ctrl + A`, Delete (Trash), `Cmd/Ctrl + Z` (undo the last asset action), `F` (fullscreen detail), Esc
 - `?` - Show keyboard shortcuts
 
@@ -397,6 +398,25 @@ Runs: when the user asks, `run_workflow` starts one (scope `nodes`, `all` or
 snapshot says `running`, or when a node the run reads from holds nothing. Its
 `run` op starts through `runBatch` after the call's edits, outside undo; the
 model reports the outcome from the next message's node `status` and `error`.
+A turn that builds or changes runnable nodes without running them ends with a
+persisted `data-run-offer` part (`runtime.runOffer()`): the chat's Run card,
+scoped to the whole workflow, a group, or the changed nodes and what they feed.
+
+Chat view: the Chat toggle at the head of the tab strip (bare `C`) shows the
+full-page chat (`appView === "chat"`, `AgentChatView`). It and the floating
+window are two surfaces of one session (`AgentSessionProvider` in page.tsx;
+`useAgentSession`, and `useAgentPresence` for chrome that must not re-render
+per token; `useAgentSurface` sizes the transcript). Runs the chat starts (the
+Run card, or the agent's `run_workflow`) are followed as `AgentRunRecord`s in
+`src/lib/agent/client/runs.ts`: progress, then outputs as asset ids and text,
+never media bytes, shown as results cards with the full-screen viewer.
+
+Tabs: each request carries every open tab (`tabs`, `parkedWorkflows`); the
+runtime keeps a draft per tab and `switch_workflow`, `new_workflow` and
+`save_workflow` emit workspace steps (`AgentWorkspaceOp`) that `useAgentChat`
+applies in stream order with the graph batches (each batch names its
+`tabId`). The turn's own tab changes never stop it; a user's still do. A first
+save goes into the Node Banana folder by name (`saveLiveWorkflow`).
 
 | Purpose | Location |
 |---------|----------|
@@ -407,6 +427,8 @@ model reports the outcome from the next message's node `status` and `error`.
 | Harnesses (Claude Agent SDK, codex app-server), env, billing checks | `src/lib/agent/server/` |
 | UI message stream bridge | `src/lib/agent/server/chatStream.ts` |
 | Panel, button, sign-in card | `src/components/agent/`, `src/lib/agent/client/` |
+| Shared session, full-page chat, Run and results cards | `src/components/agent/AgentSession.tsx`, `AgentChatView.tsx`, `AgentRunCard.tsx`, `AgentRunResults.tsx` |
+| Chat-started runs, saves, request | `src/lib/agent/client/runs.ts`, `save.ts`, `request.ts` |
 | Chat UI kit (Vercel AI Elements + radix-nova primitives, scoped theme) | `src/components/ai-elements/`, `src/components/agent/ui/`, `src/app/agent-theme.css` |
 
 The agent routes only answer requests the server vouches for: `server.js`
@@ -545,7 +567,9 @@ All routes in `src/app/api/`:
 - `node-banana-edge-appearance` - User default for connection line style and appearance (thickness, faded opacity, gradient, loading pulse)
 - `node-banana-comfy-apps` - Saved Comfy nodes (workflow + contract + settings)
 - `node-banana-agent-settings` - Agent harness, and model and thinking-effort choice per harness
-- `node-banana-agent-conversations` - Agent chat history (messages, the agent's summary, workflow name; newest 50, size-capped)
+- `node-banana-agent-conversations` - Agent chat history (messages, the agent's summary, workflow name, tab and id; newest 50, size-capped)
+- `node-banana-agent-runs` - Runs the agent chat started and their outputs (asset ids and text; newest 100)
+- `node-banana-agent-chat-sidebar` - The chat view's sidebar collapsed or open
 - `node-banana-assets-tile-size` - Assets view tile size (S/M/L)
 - `node-banana-assets-rail-open` - Which filter groups in the Assets rail are open
 - `node-banana-assets-first-run-shown` - The one-time "Saved to …" hint after the first recorded asset has been shown
