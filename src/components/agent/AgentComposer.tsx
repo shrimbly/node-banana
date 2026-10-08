@@ -31,6 +31,7 @@ import {
 import { MenuSectionLabel, menuItemClass, menuSurfaceClass } from "@/components/ui/Menu";
 import { isImeKeyEvent } from "@/lib/agent/client/keyboard";
 import { AGENT_POPOVER_LAYER } from "./AgentChrome";
+import { useAgentSurface } from "./AgentSurface";
 import type { AgentQueuedMessage } from "./hooks/useAgentChat";
 
 export interface AgentComposerNote {
@@ -96,12 +97,15 @@ function EffortPicker({
   effort,
   defaultEffort,
   disabled,
+  page,
   onChange,
 }: {
   efforts: string[];
   effort: string;
   defaultEffort?: string;
   disabled: boolean;
+  /** Sized for the chat view's composer: as tall as its send button. */
+  page: boolean;
   onChange: (effort: string) => void;
 }) {
   return (
@@ -110,7 +114,9 @@ function EffortPicker({
         disabled={disabled}
         aria-label={`Thinking effort: ${effortLabel(effort)}`}
         className={cn(
-          "flex h-7 shrink-0 items-center gap-1 self-end rounded-lg squircle px-2 text-[12px] leading-4 text-neutral-400 outline-none",
+          "flex shrink-0 items-center gap-1 self-end rounded-lg squircle text-neutral-400 outline-none",
+          // Size and leading together: in the class merge a later font size drops an earlier leading.
+          page ? "h-8 px-2.5 text-[13px] leading-4" : "h-7 px-2 text-[12px] leading-4",
           "transition-colors duration-[120ms] hover:bg-white/[0.06] hover:text-neutral-200 data-[state=open]:bg-white/[0.08] data-[state=open]:text-neutral-200",
           "focus-visible:ring-2 focus-visible:ring-selection disabled:opacity-40 disabled:hover:bg-transparent",
         )}
@@ -166,12 +172,14 @@ const queuedIconButtonClass =
 function QueuedMessages({
   queued,
   held,
+  page,
   onEdit,
   onRemove,
   onSendNow,
 }: {
   queued: AgentQueuedMessage[];
   held: boolean;
+  page: boolean;
   onEdit?: (id: string) => void;
   onRemove?: (id: string) => void;
   onSendNow?: () => void;
@@ -179,11 +187,14 @@ function QueuedMessages({
   return (
     <section
       aria-label={`Queued messages (${queued.length})`}
-      // The well overlaps the flap's last 10px, so its rounded top corners sit on the flap.
-      className="relative z-0 -mb-2.5 rounded-t-[10px] squircle border border-b-0 border-white/6 bg-black/15 pb-3.5 pt-1 text-[12px] leading-4"
+      // The well overlaps the flap by its own corner radius, so its rounded top corners sit on the flap.
+      className={cn(
+        "relative z-0 squircle border border-b-0 border-white/6 bg-black/15",
+        page ? "-mb-6 rounded-t-[20px] pb-7 pt-1.5 text-[13px] leading-5" : "-mb-2.5 rounded-t-[10px] pb-3.5 pt-1 text-[12px] leading-4",
+      )}
     >
       {held && onSendNow && (
-        <div className="flex h-7 items-center gap-2 pl-3 pr-1.5 text-neutral-400">
+        <div className={cn("flex items-center gap-2 text-neutral-400", page ? "h-8 pl-4 pr-2" : "h-7 pl-3 pr-1.5")}>
           <span className="flex-1">Paused · these wait for you</span>
           <button
             type="button"
@@ -199,7 +210,10 @@ function QueuedMessages({
         {queued.map((entry) => (
           <li
             key={entry.id}
-            className="group/queued mx-1 flex h-7 items-center gap-1 rounded-md squircle pl-2 pr-0.5 text-neutral-400 transition-colors duration-[120ms] hover:bg-white/5 focus-within:bg-white/5"
+            className={cn(
+              "group/queued flex items-center gap-1 rounded-md squircle text-neutral-400 transition-colors duration-[120ms] hover:bg-white/5 focus-within:bg-white/5",
+              page ? "mx-2 h-8 pl-2 pr-1" : "mx-1 h-7 pl-2 pr-0.5",
+            )}
           >
             <span className="min-w-0 flex-1 truncate" title={entry.text}>
               {entry.text}
@@ -266,6 +280,8 @@ export function AgentComposer({
   onRemoveQueued,
   onSendQueuedNow,
 }: AgentComposerProps) {
+  // The chat view's composer is the page's one control: larger type, a roomier box, the same behaviour.
+  const page = useAgentSurface() === "page";
   const [ownDraft, setOwnDraft] = useState("");
   const parentKeepsDraft = parentDraft !== undefined && onDraftChange !== undefined;
   const draft = parentKeepsDraft ? parentDraft : ownDraft;
@@ -293,12 +309,13 @@ export function AgentComposer({
   );
 
   return (
-    // The minimal well, 8px inside the window's edge.
-    <div className="shrink-0 p-2">
+    // The minimal well, 8px inside the window's edge; on the page, the column places it.
+    <div className={page ? "shrink-0" : "shrink-0 p-2"}>
       {queued.length > 0 && (
         <QueuedMessages
           queued={queued}
           held={queueHeld && !busy}
+          page={page}
           onEdit={onEditQueued}
           onRemove={onRemoveQueued}
           onSendNow={onSendQueuedNow}
@@ -310,10 +327,17 @@ export function AgentComposer({
         // shadcn fades the whole group when anything in it is disabled (the empty-draft send
         // button): the well stays put and only that control dims.
         // relative z-[1]: it sits over the queue's flap.
+        // On the page the box is raised off the canvas colour instead (card-coloured, a hairline):
+        // a recess would vanish into a page that dark.
         groupClassName={
-          "relative z-[1] rounded-[10px] squircle border-0 bg-well shadow-well dark:bg-well " +
-          "has-disabled:bg-well has-disabled:opacity-100 dark:has-disabled:bg-well " +
-          "has-[[data-slot=input-group-control]:focus-visible]:ring-1 has-[[data-slot=input-group-control]:focus-visible]:ring-white/15"
+          page
+            ? "relative z-[1] rounded-[24px] squircle border border-white/[0.06] bg-card dark:bg-card " +
+              "shadow-[0_1px_2px_rgba(0,0,0,0.25),0_12px_32px_-12px_rgba(0,0,0,0.5)] " +
+              "has-disabled:bg-card has-disabled:opacity-100 dark:has-disabled:bg-card " +
+              "transition-[border-color] duration-[120ms] has-[[data-slot=input-group-control]:focus-visible]:border-white/[0.12]"
+            : "relative z-[1] rounded-[10px] squircle border-0 bg-well shadow-well dark:bg-well " +
+              "has-disabled:bg-well has-disabled:opacity-100 dark:has-disabled:bg-well " +
+              "has-[[data-slot=input-group-control]:focus-visible]:ring-1 has-[[data-slot=input-group-control]:focus-visible]:ring-white/15"
         }
       >
         <PromptInputBody>
@@ -327,10 +351,14 @@ export function AgentComposer({
             onPaste={pasteTextOnly}
             placeholder={busy ? "Queue a message…" : "Describe a workflow, or a change to this one…"}
             aria-label="Message the agent"
-            className="max-h-40 min-h-11 px-3 pb-1 pt-2.5 text-[13px] leading-5 text-neutral-100 placeholder:text-neutral-500 md:text-[13px]"
+            className={
+              page
+                ? "max-h-[min(40vh,320px)] min-h-[52px] px-4 pb-1 pt-3.5 text-[15px] leading-6 text-neutral-100 placeholder:text-neutral-500 md:text-[15px]"
+                : "max-h-40 min-h-11 px-3 pb-1 pt-2.5 text-[13px] leading-5 text-neutral-100 placeholder:text-neutral-500 md:text-[13px]"
+            }
           />
         </PromptInputBody>
-        <PromptInputFooter className="gap-2 pb-2 pl-3 pr-2 pt-0">
+        <PromptInputFooter className={page ? "gap-2 pb-2.5 pl-4 pr-2.5 pt-1" : "gap-2 pb-2 pl-3 pr-2 pt-0"}>
           {/* Context chips (selection, harness switch) share the row with send. */}
           <div className="flex min-w-0 flex-1 flex-wrap gap-1.5">
             {notes.map((note) => (
@@ -338,7 +366,10 @@ export function AgentComposer({
                 key={note.key}
                 data-note={note.kind}
                 title={note.title ?? note.text}
-                className="inline-flex h-[22px] min-w-0 max-w-full items-center gap-1.5 rounded-md squircle bg-white/[0.07] pl-[7px] pr-2 text-[11px] leading-4 text-neutral-300 has-[button[aria-label]]:pr-1"
+                className={cn(
+                  "inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-md squircle bg-white/[0.07] pl-[7px] pr-2 text-neutral-300 has-[button[aria-label]]:pr-1",
+                  page ? "h-6 text-[12px] leading-4" : "h-[22px] text-[11px] leading-4",
+                )}
               >
                 {note.kind === "selection" ? (
                   <SquareDashedMousePointerIcon className="size-3 shrink-0 text-neutral-400" aria-hidden="true" strokeWidth={1.75} />
@@ -378,6 +409,7 @@ export function AgentComposer({
               effort={effort}
               defaultEffort={defaultEffort}
               disabled={busy}
+              page={page}
               onChange={onEffortChange}
             />
           )}
@@ -387,9 +419,10 @@ export function AgentComposer({
             onStop={onStop}
             disabled={!busy && !draft.trim()}
             className={
-              "size-[30px] shrink-0 self-end rounded-full bg-neutral-200 text-neutral-900 transition-[background-color,color,transform] duration-[120ms] " +
+              "shrink-0 self-end rounded-full bg-neutral-200 text-neutral-900 transition-[background-color,color,transform] duration-[120ms] " +
               "hover:bg-white active:not-aria-[haspopup]:translate-y-0 active:scale-[0.96] " +
-              "focus-visible:ring-2 focus-visible:ring-selection focus-visible:ring-offset-2 focus-visible:ring-offset-well " +
+              "focus-visible:ring-2 focus-visible:ring-selection focus-visible:ring-offset-2 " +
+              (page ? "size-8 focus-visible:ring-offset-card " : "size-[30px] focus-visible:ring-offset-well ") +
               "disabled:bg-white/8 disabled:text-neutral-500 disabled:opacity-100"
             }
           />
