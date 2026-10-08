@@ -440,7 +440,7 @@ describe("applyAgentGraphOps", () => {
         ]),
       );
 
-      expect(result).toEqual({ applied: 1, skipped: [] });
+      expect(result).toEqual({ applied: 1, skipped: [], runStarted: true });
       expect(runBatch).toHaveBeenCalledTimes(1);
       expect(runBatch).toHaveBeenCalledWith({ kind: "nodes", nodeIds: ["llmGenerate-ag1"] }, 2);
       expect(canvasWhenStarted).toEqual(["prompt-1", "llmGenerate-ag1"]);
@@ -454,7 +454,7 @@ describe("applyAgentGraphOps", () => {
     it("leaves undo history and the unsaved flag alone for a batch that only runs", () => {
       seed([promptNode("prompt-1")]);
       const result = useWorkflowStore.getState().applyAgentGraphOps(batch([{ op: "run", scope: { kind: "all" }, runs: 1 }]));
-      expect(result).toEqual({ applied: 0, skipped: [] });
+      expect(result).toEqual({ applied: 0, skipped: [], runStarted: true });
       expect(runBatch).toHaveBeenCalledWith({ kind: "all" }, 1);
       expect(useWorkflowStore.getState().canUndo).toBe(false);
       expect(useWorkflowStore.getState().hasUnsavedChanges).toBe(false);
@@ -473,7 +473,20 @@ describe("applyAgentGraphOps", () => {
       useWorkflowStore.setState({ isRunning: false, batch: { id: "batch-1", index: 1, count: 3, stopping: false } });
       const between = useWorkflowStore.getState().applyAgentGraphOps(batch([{ op: "run", scope: { kind: "all" }, runs: 1 }]));
       expect(between.runRefused).toBe("a run is already going");
+      expect(between).not.toHaveProperty("runStarted");
       expect(runBatch).not.toHaveBeenCalled();
+    });
+
+    it("says the run started only for a batch that started one, so the chat can follow it", () => {
+      seed([promptNode("prompt-1")]);
+      const edit = useWorkflowStore.getState().applyAgentGraphOps(batch([{ op: "updateNode", id: "prompt-1", data: { prompt: "changed" } }]));
+      expect(edit).not.toHaveProperty("runStarted");
+      expect(edit).not.toHaveProperty("runRefused");
+
+      const run = useWorkflowStore.getState().applyAgentGraphOps(batch([{ op: "run", scope: { kind: "all" }, runs: 3 }]));
+      expect(run.runStarted).toBe(true);
+      expect(run).not.toHaveProperty("runRefused");
+      expect(runBatch).toHaveBeenCalledWith({ kind: "all" }, 3);
     });
   });
 });
