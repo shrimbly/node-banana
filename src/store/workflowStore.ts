@@ -2847,9 +2847,13 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         },
         runOnce,
         // A hard Stop clears the batch; a pause edge, or a canvas replaced
-        // under the batch, ends it too.
+        // under the batch, ends it too. Selected nodes never pause: a pause
+        // the canvas holds is an earlier run's resume point.
         keepGoing: () =>
-          ours() && !get().batch?.stopping && !get().pausedAtNodeId && get().canvasGeneration === canvasGeneration,
+          ours() &&
+          !get().batch?.stopping &&
+          (scope.kind === "nodes" || !get().pausedAtNodeId) &&
+          get().canvasGeneration === canvasGeneration,
       });
     } finally {
       if (ours()) set({ batch: null });

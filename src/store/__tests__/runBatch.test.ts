@@ -172,6 +172,16 @@ describe("runBatch", () => {
     expect(useWorkflowStore.getState().batch).toBeNull();
   });
 
+  it("repeats selected nodes past a pause the canvas was already at, and keeps its resume point", async () => {
+    setupGraph();
+    useWorkflowStore.setState({ pausedAtNodeId: "o" });
+    const { starts, unsubscribe } = watchRuns();
+    await useWorkflowStore.getState().runBatch({ kind: "nodes", nodeIds: ["p"] }, 3);
+    unsubscribe();
+    expect(starts).toHaveLength(3);
+    expect(useWorkflowStore.getState().pausedAtNodeId).toBe("o");
+  });
+
   it("ignores a second batch while one is going", async () => {
     setupGraph();
     useWorkflowStore.getState().setRunCount(2);

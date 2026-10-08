@@ -204,6 +204,17 @@ describe("chat run records", () => {
     expect(record(started.id).status).toBe("paused");
   });
 
+  it("is not paused by a pause the canvas was already at, which a nodes run leaves alone", () => {
+    useWorkflowStore.setState({ pausedAtNodeId: "llm-1" });
+    beginRun();
+    const started = track({ scope: { kind: "nodes", nodeIds: ["gen-1"] } });
+    setNode("gen-1", { status: "loading" });
+    setNode("gen-1", { status: "complete" });
+    endRun();
+    expect(record(started.id).status).toBe("done");
+    expect(useWorkflowStore.getState().pausedAtNodeId).toBe("llm-1");
+  });
+
   it("ends stopped when Stop was pressed, or nodes were left loading", () => {
     beginRun();
     const first = track();

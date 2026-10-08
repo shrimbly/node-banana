@@ -285,6 +285,10 @@ interface Watcher {
   controller: AbortController | null;
   lastBatch: RunBatch | null;
   stopRequested: boolean;
+  /** The canvas's pause point as last seen; a run of selected nodes leaves an earlier one in place. */
+  pausedAt: string | null;
+  /** The run paused at a pause edge while it was followed. */
+  paused: boolean;
   leftTab: boolean;
   finalized: boolean;
   unsubscribeStore: (() => void) | null;
@@ -307,6 +311,8 @@ function watch(record: AgentRunRecord): void {
     controller: null,
     lastBatch: null,
     stopRequested: false,
+    pausedAt: state.pausedAtNodeId,
+    paused: false,
     leftTab: false,
     finalized: false,
     unsubscribeStore: null,
@@ -338,6 +344,10 @@ function observe(watcher: Watcher): void {
     if (state.batch) {
       watcher.lastBatch = state.batch;
       if (state.batch.stopping) watcher.stopRequested = true;
+    }
+    if (state.pausedAtNodeId !== watcher.pausedAt) {
+      watcher.pausedAt = state.pausedAtNodeId;
+      if (state.pausedAtNodeId) watcher.paused = true;
     }
   }
 
@@ -399,7 +409,7 @@ function finalize(watcher: Watcher): void {
   const aborted = !!watcher.controller?.signal.aborted && typeof watcher.controller.signal.reason === "string";
   let status: AgentRunStatus;
   if (record.errors.length > 0) status = "failed";
-  else if (onTab && state.pausedAtNodeId) status = "paused";
+  else if (onTab && watcher.paused) status = "paused";
   else if (!watcher.seen || !onTab || watcher.stopRequested || aborted || leftLoading || endedEarly) status = "stopped";
   else status = "done";
 
