@@ -311,7 +311,7 @@ export function useAgentChat({
       if (step.op === "switchTab" && useWorkflowStore.getState().activeTabId === step.tabId) return;
       const what = step.op === "switchTab" ? "switch workflows" : "open a new workflow";
       const refusal = await whenTabsFree();
-      if (refusal === "stale") return;
+      if (refusal === "stale" || haltedTurnRef.current === turn) return;
       if (refusal) {
         haltTurn(turn, chatId, `Stopped the agent: it couldn't ${what} (${lowerFirst(refusal)})`);
         return;
@@ -521,7 +521,11 @@ export function useAgentChat({
   }, [busy, beginTurn, showOpeningLine, regenerate]);
 
   const newChat = useCallback(() => {
-    if (busy) void chat.stop();
+    if (busy) {
+      // What the interrupted turn still has queued belongs to the conversation being left.
+      haltedTurnRef.current = turnRef.current;
+      void chat.stop();
+    }
     clearQueue();
     beginTurn();
     setStoppedMessageIds(new Set());

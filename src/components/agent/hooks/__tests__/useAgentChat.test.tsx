@@ -839,4 +839,30 @@ describe("useAgentChat: steps still pending when the turn ends", () => {
     expect(trackStartedRun).not.toHaveBeenCalled();
     for (const stream of streams) stream.end();
   });
+
+  it("New chat mid-turn drops the old turn's remaining steps, a switch already waiting included", async () => {
+    const { tabA, tabB } = twoTabs();
+    const { result, streams } = await busyChat();
+    useWorkflowStore.setState({ isSaving: true });
+    await act(async () => {
+      push(streams[0], step("switch", { op: "switchTab", tabId: tabB }, tabB));
+      push(streams[0], edit("in-b", tabB));
+      push(streams[0], { ...runAll, tabId: tabB });
+      await sleep(30);
+    });
+
+    act(() => result.current.newChat());
+    await act(async () => {
+      useWorkflowStore.setState({ isSaving: false });
+      await sleep(200);
+    });
+
+    const state = useWorkflowStore.getState();
+    expect(state.activeTabId).toBe(tabA);
+    expect(nodeIds()).not.toContain("prompt-in-b");
+    expect(state.tabs.find((tab) => tab.id === tabB)?.snapshot?.nodes.map((node) => node.id)).not.toContain("prompt-in-b");
+    expect(runBatch).not.toHaveBeenCalled();
+    expect(toastShow).not.toHaveBeenCalled();
+    for (const stream of streams) stream.end();
+  });
 });
