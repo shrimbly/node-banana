@@ -9,6 +9,8 @@ import { AGENT_CHAT_API } from "@/lib/agent/client/api";
 import { countRenderedParts } from "@/lib/agent/client/messages";
 import { HARNESS_LABELS } from "@/lib/agent/client/readiness";
 import { agentProviderHeaders, buildAgentChatRequestBody, whenProviderKeysReady } from "@/lib/agent/client/request";
+import { trackStartedRun } from "@/lib/agent/client/runs";
+import { saveLiveWorkflow } from "@/lib/agent/client/save";
 import { AGENT_OPENING_STATUS } from "@/lib/agent/types";
 import type {
   AgentDataParts,
@@ -17,9 +19,14 @@ import type {
   AgentMessageMetadata,
   AgentUIMessage,
   AgentWorkflowSnapshot,
+  AgentWorkspaceOp,
 } from "@/lib/agent/types";
 
 type AgentDataPart = DataUIPart<AgentDataParts>;
+
+/** How long a tab step waits for a save or a media write to finish before it gives up. */
+const TAB_WAIT_MS = 10_000;
+const TAB_POLL_MS = 100;
 
 export interface AgentStatusLine {
   text: string;
@@ -96,7 +103,10 @@ interface ChatCallbacks {
  * A turn belongs to the canvas it was sent from. When another workflow is
  * opened (or the canvas cleared) mid-turn, the turn is stopped and any of its
  * edits still arriving are dropped: their node ids meant the old canvas, and
- * applying them would silently rewrite the new one.
+ * applying them would silently rewrite the new one. The turn's own tab steps
+ * (switching to an open workflow, opening a new one) move it along instead;
+ * batches apply one after another in stream order, each step (a save
+ * included) finished before the next.
  */
 export function useAgentChat({
   harness,
@@ -124,10 +134,16 @@ export function useAgentChat({
   const [turnsFinished, setTurnsFinished] = useState(0);
   const releasedTurnRef = useRef(0);
   const queueIdRef = useRef(0);
-  // The store's canvasGeneration the current turn was sent from.
+  // The store's canvasGeneration the current turn was sent from (or its own last tab step moved it to).
   const turnGenerationRef = useRef(useWorkflowStore.getState().canvasGeneration);
+  // The canvas the queued messages were written about.
+  const queueGenerationRef = useRef(turnGenerationRef.current);
   // The user pressed stop on the current turn: a run it asked for must not start after that.
   const turnStoppedRef = useRef(false);
+  // Bumped per turn; a turn whose step was refused drops the rest of its batches.
+  const turnRef = useRef(0);
+  const haltedTurnRef = useRef(-1);
+  const stepsRef = useRef<Promise<void>>(Promise.resolve());
 
   const callbacksRef = useRef<ChatCallbacks | null>(null);
 
@@ -142,7 +158,19 @@ export function useAgentChat({
             effort: currentEffort,
             getViewport: readViewport,
           } = requestRef.current;
-          const { nodes, edges, groups, workflowName, canvasGeneration, isRunning, batch } = useWorkflowStore.getState();
+          const {
+            nodes,
+            edges,
+            groups,
+            workflowName,
+            canvasGeneration,
+            isRunning,
+            batch,
+            tabs,
+            activeTabId,
+            hasUnsavedChanges,
+            saveDirectoryPath,
+          } = useWorkflowStore.getState();
           // The snapshot below is this generation's canvas: the turn's edits only fit it.
           turnGenerationRef.current = canvasGeneration;
           const body = buildAgentChatRequestBody({
@@ -154,6 +182,7 @@ export function useAgentChat({
             // Between the runs of a batch isRunning is briefly false; the batch is still going.
             canvas: { nodes, edges, groups, workflowName, running: isRunning || batch !== null },
             viewport: readViewport(),
+            strip: { tabs, activeTabId, hasUnsavedChanges, saveDirectoryPath },
           });
           // The user's provider keys, so the agent can search and set models
           // from every provider they have one for (read after any desktop
@@ -191,35 +220,143 @@ export function useAgentChat({
   activeChatRef.current = chat;
   const { messages, status, error, sendMessage, stop, regenerate, clearError } = useChat<AgentUIMessage>({ chat });
 
-  const applyBatch = useCallback((batch: AgentGraphOpBatch) => {
-    // Planned against a canvas that has since been replaced (checked per batch:
-    // chunks already buffered still arrive after the turn is stopped).
-    if (useWorkflowStore.getState().canvasGeneration !== turnGenerationRef.current) return;
-    // Edits buffered before a stop still land; a run would spend the user's credits after they said stop.
-    const applying = turnStoppedRef.current ? { ...batch, ops: batch.ops.filter((op) => op.op !== "run") } : batch;
-    let result: { applied: number; skipped: string[]; runRefused?: string };
-    try {
-      result = useWorkflowStore.getState().applyAgentGraphOps(applying);
-    } catch (applyError) {
-      const detail = applyError instanceof Error ? applyError.message : String(applyError);
-      console.error("[agent] applying canvas changes failed", applyError);
-      useToast.getState().show("Couldn't apply the agent's changes to the canvas", "error", false, detail);
-      return;
-    }
-    if (result.skipped.length > 0) {
-      const count = result.skipped.length;
-      useToast
-        .getState()
-        .show(
-          `${count} agent change${count === 1 ? "" : "s"} couldn't be applied — the canvas changed meanwhile`,
-          "warning",
-          false,
-          result.skipped.join("\n"),
-        );
-    }
-    if (result.runRefused) useToast.getState().show(`The agent's run didn't start: ${result.runRefused}`, "warning");
-    if (result.applied > 0) handlersRef.current.onBatchApplied?.(batch);
+  /** Stops the turn after one of its steps was refused: what follows assumed it had happened. */
+  const haltTurn = useCallback((turn: number, chatId: string, message: string) => {
+    haltedTurnRef.current = turn;
+    useToast.getState().show(message, "warning");
+    if (activeChatRef.current?.id === chatId) void activeChatRef.current.stop();
   }, []);
+
+  /** Canvas edits (and a run) for the live tab. */
+  const applyGraphBatch = useCallback(
+    (batch: AgentGraphOpBatch, turn: number, chatId: string) => {
+      const store = useWorkflowStore.getState();
+      if (batch.tabId && batch.tabId !== store.activeTabId) {
+        haltTurn(turn, chatId, "Stopped the agent: its changes were for a workflow that isn't the open tab");
+        return;
+      }
+      // Edits buffered before a stop still land; a run would spend the user's credits after they said stop.
+      const applying = turnStoppedRef.current ? { ...batch, ops: batch.ops.filter((op) => op.op !== "run") } : batch;
+      let result: ReturnType<typeof store.applyAgentGraphOps>;
+      try {
+        result = store.applyAgentGraphOps(applying);
+      } catch (applyError) {
+        const detail = applyError instanceof Error ? applyError.message : String(applyError);
+        console.error("[agent] applying canvas changes failed", applyError);
+        useToast.getState().show("Couldn't apply the agent's changes to the canvas", "error", false, detail);
+        return;
+      }
+      if (result.skipped.length > 0) {
+        const count = result.skipped.length;
+        useToast
+          .getState()
+          .show(
+            `${count} agent change${count === 1 ? "" : "s"} couldn't be applied — the canvas changed meanwhile`,
+            "warning",
+            false,
+            result.skipped.join("\n"),
+          );
+      }
+      if (result.runRefused) useToast.getState().show(`The agent's run didn't start: ${result.runRefused}`, "warning");
+      const run = applying.ops.find((op) => op.op === "run");
+      if (result.runStarted && run) {
+        trackStartedRun({
+          chatId,
+          anchor: { toolCallId: batch.toolCallId },
+          label: batch.summary,
+          scope: run.scope,
+          runs: run.runs,
+          tabId: useWorkflowStore.getState().activeTabId,
+          plannedNodeIds: run.scope.kind === "nodes" ? run.scope.nodeIds : [],
+        });
+      }
+      if (result.applied > 0) handlersRef.current.onBatchApplied?.(batch);
+    },
+    [haltTurn],
+  );
+
+  /**
+   * Waits while only a save or a media write keeps tabs from changing (a run
+   * refuses at once). The reason it gave up, or null when tabs may change;
+   * "stale" when the canvas was replaced meanwhile.
+   */
+  const whenTabsFree = useCallback(async (): Promise<string | null | "stale"> => {
+    const generation = turnGenerationRef.current;
+    const deadline = Date.now() + TAB_WAIT_MS;
+    for (;;) {
+      const state = useWorkflowStore.getState();
+      if (state.canvasGeneration !== generation) return "stale";
+      if (state.isRunning || state.batch) return "Wait for the run to finish";
+      const busy = state.tabsBusyReason();
+      if (!busy) return null;
+      if (Date.now() >= deadline) return busy;
+      await new Promise((resolve) => setTimeout(resolve, TAB_POLL_MS));
+    }
+  }, []);
+
+  /** A switch, a new tab or a save, as the agent's switch_workflow / new_workflow / save_workflow asked. */
+  const applyWorkspaceStep = useCallback(
+    async (batch: AgentGraphOpBatch, step: AgentWorkspaceOp, turn: number, chatId: string) => {
+      if (step.op === "save") {
+        if (batch.tabId && batch.tabId !== useWorkflowStore.getState().activeTabId) {
+          haltTurn(turn, chatId, "Stopped the agent: the workflow it meant to save isn't the open tab");
+          return;
+        }
+        const saved = await saveLiveWorkflow(step.name);
+        if (saved.ok) useToast.getState().show(`Saved ${saved.name}`, "info");
+        else useToast.getState().show(saved.reason, "warning");
+        return;
+      }
+      if (step.op === "switchTab" && useWorkflowStore.getState().activeTabId === step.tabId) return;
+      const what = step.op === "switchTab" ? "switch workflows" : "open a new workflow";
+      const refusal = await whenTabsFree();
+      if (refusal === "stale") return;
+      if (refusal) {
+        haltTurn(turn, chatId, `Stopped the agent: it couldn't ${what} (${lowerFirst(refusal)})`);
+        return;
+      }
+      const store = useWorkflowStore.getState();
+      const done =
+        step.op === "switchTab"
+          ? store.switchTab(step.tabId)
+          : store.newTab({ id: step.tabId, ...(step.name ? { name: step.name } : {}) }) !== null;
+      if (!done) {
+        const reason =
+          store.tabsBusyReason() ?? (step.op === "switchTab" ? "that workflow is no longer open" : "the tab couldn't be opened");
+        haltTurn(turn, chatId, `Stopped the agent: it couldn't ${what} (${lowerFirst(reason)})`);
+        return;
+      }
+      // The turn's own tab change: it and the queue carry on, on the canvas it brought in.
+      const generation = useWorkflowStore.getState().canvasGeneration;
+      turnGenerationRef.current = generation;
+      queueGenerationRef.current = generation;
+    },
+    [haltTurn, whenTabsFree],
+  );
+
+  const applyStep = useCallback(
+    async (batch: AgentGraphOpBatch, turn: number, chatId: string) => {
+      if (haltedTurnRef.current === turn) return;
+      // Planned against a canvas that has since been replaced (checked per batch:
+      // chunks already buffered still arrive after the turn is stopped).
+      if (useWorkflowStore.getState().canvasGeneration !== turnGenerationRef.current) return;
+      if (batch.workspace) await applyWorkspaceStep(batch, batch.workspace, turn, chatId);
+      else applyGraphBatch(batch, turn, chatId);
+    },
+    [applyGraphBatch, applyWorkspaceStep],
+  );
+
+  /** Queues a batch behind the ones before it, so a tab or save step finishes before the next batch applies. */
+  const applyBatch = useCallback(
+    (batch: AgentGraphOpBatch) => {
+      const turn = turnRef.current;
+      const chatId = activeChatRef.current?.id ?? "";
+      stepsRef.current = stepsRef.current
+        .then(() => applyStep(batch, turn, chatId))
+        .catch((stepError) => console.error("[agent] applying a step failed", stepError));
+    },
+    [applyStep],
+  );
 
   callbacksRef.current = {
     onData: (part) => {
@@ -264,6 +401,7 @@ export function useAgentChat({
     // compares a new turn against the previous turn's canvas.
     turnGenerationRef.current = useWorkflowStore.getState().canvasGeneration;
     turnStoppedRef.current = false;
+    turnRef.current += 1;
     setStatusLine(null);
   }, []);
 
@@ -282,7 +420,6 @@ export function useAgentChat({
   }, []);
 
   // Queued messages were written about the canvas that was open: a new one drops them.
-  const queueGenerationRef = useRef(canvasGeneration);
   useEffect(() => {
     if (canvasGeneration === queueGenerationRef.current) return;
     queueGenerationRef.current = canvasGeneration;
@@ -429,4 +566,8 @@ export function useAgentChat({
     chatId: chat.id,
     openConversation,
   };
+}
+
+function lowerFirst(text: string): string {
+  return text.charAt(0).toLowerCase() + text.slice(1);
 }
