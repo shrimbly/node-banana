@@ -724,3 +724,119 @@ describe("useAgentChat: the turn's tab and save steps", () => {
     }
   });
 });
+
+describe("useAgentChat: steps still pending when the turn ends", () => {
+  /** Every request gets its own stream and signal; turn n is streams[n]. */
+  function fakeTurns() {
+    const streams: ReturnType<typeof controlledStream>[] = [];
+    const bodies: Array<{ workflow?: { tabId?: string } }> = [];
+    const signals: AbortSignal[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const stream = controlledStream();
+        if (init.signal) {
+          stream.abortWith(init.signal);
+          signals.push(init.signal);
+        }
+        streams.push(stream);
+        bodies.push(JSON.parse(String(init.body)));
+        return stream.response;
+      }),
+    );
+    return { streams, bodies, signals };
+  }
+
+  async function busyChat() {
+    const turns = fakeTurns();
+    const hook = renderHook(() =>
+      useAgentChat({ harness: "claude", getViewport: () => ({ x: 0, y: 0, width: 800, height: 600, zoom: 1 }) }),
+    );
+    act(() => {
+      hook.result.current.send("first");
+    });
+    await waitFor(() => expect(turns.streams).toHaveLength(1));
+    turns.streams[0].push({ type: "start", messageId: "assistant-1" });
+    await waitFor(() => expect(hook.result.current.busy).toBe(true));
+    return { ...hook, ...turns };
+  }
+
+  const push = (stream: ReturnType<typeof controlledStream>, batch: AgentGraphOpBatch) =>
+    stream.push({ type: "data-graph-ops", data: batch, transient: true });
+  const step = (batchId: string, workspace: AgentGraphOpBatch["workspace"], tabId?: string): AgentGraphOpBatch => ({
+    batchId,
+    toolCallId: `call-${batchId}`,
+    summary: batchId,
+    ops: [],
+    workspace,
+    ...(tabId ? { tabId } : {}),
+  });
+  const edit = (batchId: string, tabId?: string): AgentGraphOpBatch => ({
+    batchId,
+    toolCallId: `call-${batchId}`,
+    summary: batchId,
+    ops: [{ op: "addNode", id: `prompt-${batchId}`, nodeType: "prompt", position: { x: 0, y: 0 }, data: { prompt: batchId } }],
+    ...(tabId ? { tabId } : {}),
+  });
+  const runAll: AgentGraphOpBatch = {
+    batchId: "run",
+    toolCallId: "call-run",
+    summary: "Running the workflow",
+    ops: [{ op: "run", scope: { kind: "all" }, runs: 1 }],
+  };
+  const nodeIds = () => useWorkflowStore.getState().nodes.map((node) => node.id);
+  /** Two tabs, A live. */
+  function twoTabs() {
+    const tabA = useWorkflowStore.getState().activeTabId;
+    const tabB = useWorkflowStore.getState().newTab()!;
+    useWorkflowStore.getState().switchTab(tabA);
+    return { tabA, tabB };
+  }
+
+  const originalRunBatch = useWorkflowStore.getState().runBatch;
+  const runBatch = vi.fn(async () => {});
+
+  beforeEach(async () => {
+    toastShow.mockClear();
+    saveLiveWorkflow.mockReset();
+    trackStartedRun.mockReset();
+    runBatch.mockClear();
+    const store = useWorkflowStore.getState();
+    useWorkflowStore.setState({ tabs: [{ id: store.activeTabId, snapshot: null }], isRunning: false, isSaving: false, batch: null, runBatch });
+    useWorkflowStore.getState().clearWorkflow();
+    await act(() => useWorkflowStore.getState().loadWorkflow(workflow("wf-A", "A", "a cat")));
+  });
+
+  afterEach(() => {
+    useWorkflowStore.setState({ isRunning: false, isSaving: false, runBatch: originalRunBatch });
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ["sends again", (chat: ReturnType<typeof useAgentChat>) => chat.send("and another")],
+    ["starts a new chat", (chat: ReturnType<typeof useAgentChat>) => chat.newChat()],
+  ])("never starts a run asked for before Stop, even once the user %s", async (_what, next) => {
+    let finishSave!: (result: { ok: true; name: string; path: string }) => void;
+    saveLiveWorkflow.mockImplementation(() => new Promise((resolve) => (finishSave = resolve)));
+    const { result, streams } = await busyChat();
+    await act(async () => {
+      push(streams[0], step("save", { op: "save", name: "Fox" }));
+      push(streams[0], runAll);
+      await sleep(30);
+    });
+
+    act(() => result.current.stop());
+    await waitFor(() => expect(result.current.busy).toBe(false));
+    act(() => {
+      next(result.current);
+    });
+    await act(async () => {
+      finishSave({ ok: true, name: "Fox", path: "/lib/Fox" });
+      await sleep(30);
+    });
+
+    expect(runBatch).not.toHaveBeenCalled();
+    expect(trackStartedRun).not.toHaveBeenCalled();
+    for (const stream of streams) stream.end();
+  });
+});

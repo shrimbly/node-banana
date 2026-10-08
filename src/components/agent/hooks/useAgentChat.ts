@@ -138,10 +138,11 @@ export function useAgentChat({
   const turnGenerationRef = useRef(useWorkflowStore.getState().canvasGeneration);
   // The canvas the queued messages were written about.
   const queueGenerationRef = useRef(turnGenerationRef.current);
-  // The user pressed stop on the current turn: a run it asked for must not start after that.
-  const turnStoppedRef = useRef(false);
   // Bumped per turn; a turn whose step was refused drops the rest of its batches.
   const turnRef = useRef(0);
+  // Turns the user pressed stop on: a run they asked for must not start after that,
+  // even when it is still queued behind a step once a later turn has begun.
+  const stoppedTurnsRef = useRef(new Set<number>());
   const haltedTurnRef = useRef(-1);
   const stepsRef = useRef<Promise<void>>(Promise.resolve());
 
@@ -236,7 +237,7 @@ export function useAgentChat({
         return;
       }
       // Edits buffered before a stop still land; a run would spend the user's credits after they said stop.
-      const applying = turnStoppedRef.current ? { ...batch, ops: batch.ops.filter((op) => op.op !== "run") } : batch;
+      const applying = stoppedTurnsRef.current.has(turn) ? { ...batch, ops: batch.ops.filter((op) => op.op !== "run") } : batch;
       let result: ReturnType<typeof store.applyAgentGraphOps>;
       try {
         result = store.applyAgentGraphOps(applying);
@@ -400,7 +401,6 @@ export function useAgentChat({
     // Also stamped when the request is built; set now so the check below never
     // compares a new turn against the previous turn's canvas.
     turnGenerationRef.current = useWorkflowStore.getState().canvasGeneration;
-    turnStoppedRef.current = false;
     turnRef.current += 1;
     setStatusLine(null);
   }, []);
@@ -557,7 +557,7 @@ export function useAgentChat({
     takeQueued,
     sendQueuedNow,
     stop: () => {
-      turnStoppedRef.current = true;
+      stoppedTurnsRef.current.add(turnRef.current);
       void stop();
     },
     retry,
