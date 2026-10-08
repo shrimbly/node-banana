@@ -160,6 +160,21 @@ describe("AgentMessage runs", () => {
     expect(within(screen.getByRole("button", { name: /Edit workflow/ })).getByText("Done")).toBeInTheDocument();
   });
 
+  it("shows a tool row's actions in place of its status on a touch screen, where nothing hovers", () => {
+    render(
+      <AgentTranscriptActionsProvider value={transcript()}>
+        <AgentMessage
+          message={reply([toolPart("edit_workflow", "call-edit", { ok: true, summary: "Added 2 nodes", nodeIds: ["gen"] })])}
+          streaming={false}
+        />
+      </AgentTranscriptActionsProvider>,
+    );
+    // An invisible button over "Done" would still take the tap meant for the row.
+    const actions = screen.getByRole("button", { name: "Show on canvas" }).closest("[data-tool-actions]")!;
+    expect(actions.className).toContain("pointer-coarse:opacity-100");
+    expect(within(screen.getByRole("button", { name: /Edit workflow/ })).getByText("Done").className).toContain("pointer-coarse:opacity-0");
+  });
+
   it("leaves Show on canvas out without the agent session", () => {
     render(
       <AgentMessage

@@ -126,7 +126,7 @@ export const ToolHeader = ({
           state={state}
           className={
             actions
-              ? "transition-opacity duration-[120ms] group-hover/tool-row:opacity-0 group-has-[[data-tool-actions]:focus-within]/tool-row:opacity-0 motion-reduce:transition-none"
+              ? "transition-opacity duration-[120ms] group-hover/tool-row:opacity-0 group-has-[[data-tool-actions]:focus-within]/tool-row:opacity-0 pointer-coarse:opacity-0 motion-reduce:transition-none"
               : undefined
           }
         />
@@ -139,10 +139,12 @@ export const ToolHeader = ({
   return (
     <div className="group/tool-row relative">
       {trigger}
-      {/* Centred on the title's line, its right edge on the status's. */}
+      {/* Centred on the title's line, its right edge on the status's. Nothing hovers on a
+          touch screen: there the actions always show in the status's place, since even
+          invisible they would take the tap meant for the row. */}
       <div
         data-tool-actions=""
-        className="absolute top-1.5 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-[120ms] focus-within:opacity-100 group-hover/tool-row:opacity-100 motion-reduce:transition-none"
+        className="absolute top-1.5 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-[120ms] focus-within:opacity-100 group-hover/tool-row:opacity-100 pointer-coarse:opacity-100 motion-reduce:transition-none"
       >
         {actions}
       </div>
