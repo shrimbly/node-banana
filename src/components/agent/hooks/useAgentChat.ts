@@ -228,7 +228,8 @@ export function useAgentChat({
   const haltTurn = useCallback((turn: number, chatId: string, message: string) => {
     haltedTurnRef.current = turn;
     useToast.getState().show(message, "warning");
-    if (activeChatRef.current?.id === chatId) void activeChatRef.current.stop();
+    // A turn that already ended has nothing left to stop; the one running now is another's.
+    if (turn === turnRef.current && activeChatRef.current?.id === chatId) void activeChatRef.current.stop();
   }, []);
 
   /** Canvas edits (and a run) for the live tab. */

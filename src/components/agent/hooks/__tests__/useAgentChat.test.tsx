@@ -899,4 +899,33 @@ describe("useAgentChat: steps still pending when the turn ends", () => {
     expect(toastShow).not.toHaveBeenCalled();
     streams[1].end();
   });
+
+  it("a step refused after its turn ended stops nothing but that turn", async () => {
+    const { tabA, tabB } = twoTabs();
+    const { result, streams, signals } = await busyChat();
+    useWorkflowStore.setState({ isSaving: true });
+    act(() => {
+      result.current.send("then make it blue");
+    });
+    await act(async () => {
+      push(streams[0], step("switch", { op: "switchTab", tabId: tabB }, tabB));
+      streams[0].push({ type: "finish" });
+      streams[0].end();
+      await sleep(50);
+    });
+
+    // The tab closes while the switch waits: the switch is refused once the save ends.
+    await act(async () => {
+      useWorkflowStore.setState((state) => ({ tabs: state.tabs.filter((tab) => tab.id !== tabB), isSaving: false }));
+      await sleep(200);
+    });
+    expect(toastShow).toHaveBeenCalledWith("Stopped the agent: it couldn't switch workflows (that workflow is no longer open)", "warning");
+    expect(useWorkflowStore.getState().activeTabId).toBe(tabA);
+
+    // The queued message's turn goes on.
+    await waitFor(() => expect(streams).toHaveLength(2));
+    expect(signals[1].aborted).toBe(false);
+    expect(result.current.busy).toBe(true);
+    streams[1].end();
+  });
 });
