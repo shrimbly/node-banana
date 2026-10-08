@@ -120,6 +120,29 @@ describe("runOffer", () => {
     expect(offer?.alternatives).toEqual([{ scope: { kind: "all" }, label: "Run whole workflow", nodeIds: expect.arrayContaining(ALL_CHAIN) }]);
   });
 
+  it("offers the changed nodes alone when another node of their group can't run yet", async () => {
+    // nanoBanana-9 also reads an Image Input with no upload.
+    const state = withGroup();
+    state.nodes.push(storeNode("imageInput-7", "imageInput", { x: 0, y: 1100 }, {}, { groupId: "group-1" }));
+    state.edges.push(storeEdge("imageInput-7", "image", "nanoBanana-9", "image"));
+    const runtime = runtimeFor(state);
+    await call(runtime, "update_node", { node: "prompt-5", settings: { prompt: "a hero shot at dusk" } });
+    expect(runtime.runOffer!()).toMatchObject({
+      primary: { scope: { kind: "nodes", nodeIds: ["prompt-5", "nanoBanana-6"] }, label: "Run 2 changed nodes", nodeIds: ["prompt-5", "nanoBanana-6"] },
+      alternatives: [],
+    });
+
+    // The same when the group is the whole canvas.
+    const alone = withGroup();
+    alone.nodes = alone.nodes.filter((node) => node.groupId === "group-1");
+    alone.edges = alone.edges.filter((edge) => !ALL_CHAIN.includes(edge.source));
+    alone.nodes.push(storeNode("imageInput-7", "imageInput", { x: 0, y: 1100 }, {}, { groupId: "group-1" }));
+    alone.edges.push(storeEdge("imageInput-7", "image", "nanoBanana-9", "image"));
+    const whole = runtimeFor(alone);
+    await call(whole, "update_node", { node: "prompt-5", settings: { prompt: "a hero shot at dusk" } });
+    expect(whole.runOffer!()?.primary).toMatchObject({ scope: { kind: "nodes", nodeIds: ["prompt-5", "nanoBanana-6"] } });
+  });
+
   it("offers the whole workflow when the changes reach every node", async () => {
     const runtime = runtimeFor(chain());
     await call(runtime, "update_node", { node: "prompt-1", settings: { prompt: "write an image prompt about a wolf" } });

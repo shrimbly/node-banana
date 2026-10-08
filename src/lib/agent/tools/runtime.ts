@@ -872,9 +872,9 @@ function runWorkflow(draft: GraphDraft, args: Args<typeof runWorkflowShape>, alr
 /**
  * The Run button for what this turn built or changed in `draft`: the changed
  * nodes and everything they feed (outside locked groups), widened to their
- * group when they all sit in one, or the whole workflow when the turn built
- * it from empty or the narrower run would find an input empty. Null when no
- * generator would run, or when even the whole workflow can't run yet.
+ * group when they all sit in one and it can run, or the whole workflow when
+ * the turn built it from empty or no narrower run can. Null when no generator
+ * would run, or when nothing that includes the changes can run yet.
  */
 function buildRunOffer(draft: GraphDraft, tabId: string | undefined): AgentRunOffer | null {
   const changed = [...draft.changedNodeIds].filter((id) => draft.nodes.has(id));
@@ -897,31 +897,29 @@ function buildRunOffer(draft: GraphDraft, tabId: string | undefined): AgentRunOf
   });
 
   const builtFromEmpty = draft.initialNodeIds.size === 0 || draft.canvasReplaced;
-  const narrower = builtFromEmpty ? null : changedScope(draft, affected, order, runnable.length);
-  if (narrower && emptyInputs(draft, narrower.nodeIds, new Set(narrower.nodeIds)).length === 0) {
-    return offer(narrower, wholeReady ? [whole("Run whole workflow")] : []);
+  for (const narrower of builtFromEmpty ? [] : changedScopes(draft, affected, order)) {
+    // As many nodes as the whole workflow runs: that is the whole workflow, offered below.
+    const isWhole = narrower.nodeIds.length >= runnable.length;
+    if (isWhole && wholeReady) break;
+    if (!isWhole && emptyInputs(draft, narrower.nodeIds, new Set(narrower.nodeIds)).length === 0) {
+      return offer(narrower, wholeReady ? [whole("Run whole workflow")] : []);
+    }
   }
   return wholeReady ? offer(whole("Run workflow"), []) : null;
 }
 
-/**
- * The affected nodes as a "nodes" run: their group's when they all sit in
- * one, else themselves. Null when that is every node the whole workflow runs.
- */
-function changedScope(draft: GraphDraft, affected: ReadonlySet<string>, order: string[], runnableCount: number): AgentRunOption | null {
+/** The affected nodes as "nodes" runs, widest first: their group's when they all sit in one, then themselves. */
+function changedScopes(draft: GraphDraft, affected: ReadonlySet<string>, order: string[]): AgentRunOption[] {
+  const scope = (nodeIds: string[], label: string): AgentRunOption => ({ scope: { kind: "nodes", nodeIds }, label: clip(label), nodeIds });
+  const scopes: AgentRunOption[] = [];
   const groupIds = new Set([...affected].map((id) => draft.getNode(id)?.groupId));
   const group = groupIds.size === 1 ? draft.getGroup([...groupIds][0]) : undefined;
-  const members = group ? new Set([...draft.nodes.values()].filter((node) => node.groupId === group.id).map((node) => node.id)) : affected;
-  const nodeIds = order.filter((id) => members.has(id));
-  if (nodeIds.length >= runnableCount) return null;
+  if (group) scopes.push(scope(order.filter((id) => draft.getNode(id)!.groupId === group.id), `Run ${group.name}`));
+  const nodeIds = order.filter((id) => affected.has(id));
   // Viewers run but make nothing: the label names what does the work.
   const working = nodeIds.map((id) => draft.getNode(id)!).filter((node) => NODE_CATALOG[node.type].outputs.length > 0);
-  const label = group
-    ? `Run ${group.name}`
-    : working.length === 1
-      ? `Run ${nodeName(working[0])}`
-      : `Run ${working.length || nodeIds.length} changed nodes`;
-  return { scope: { kind: "nodes", nodeIds }, label: clip(label), nodeIds };
+  scopes.push(scope(nodeIds, working.length === 1 ? `Run ${nodeName(working[0])}` : `Run ${working.length || nodeIds.length} changed nodes`));
+  return scopes;
 }
 
 /** Every node in run order: by dependency level, as executeWorkflow orders the graph (loop edges left out). */
