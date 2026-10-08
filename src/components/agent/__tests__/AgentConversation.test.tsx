@@ -8,8 +8,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import type { AgentUIMessage } from "@/lib/agent/types";
 
-const stick = vi.hoisted(() => ({ props: [] as Array<Record<string, unknown>> }));
+const stick = vi.hoisted(() => ({ props: [] as Array<Record<string, unknown>>, scrolls: [] as unknown[][] }));
 
+/** The real scroller, with the options it was given and its scrollToBottom calls recorded. */
 vi.mock("use-stick-to-bottom", async (importOriginal) => {
   const actual = await importOriginal<typeof import("use-stick-to-bottom")>();
   const { createElement } = await import("react");
@@ -20,7 +21,20 @@ vi.mock("use-stick-to-bottom", async (importOriginal) => {
     },
     actual.StickToBottom,
   );
-  return { ...actual, StickToBottom };
+  const recorded = new WeakMap<object, (...args: unknown[]) => unknown>();
+  const useStickToBottomContext = () => {
+    const context = actual.useStickToBottomContext();
+    let scrollToBottom = recorded.get(context.scrollToBottom);
+    if (!scrollToBottom) {
+      scrollToBottom = (...args: unknown[]) => {
+        stick.scrolls.push(args);
+        return (context.scrollToBottom as (...inner: unknown[]) => unknown)(...args);
+      };
+      recorded.set(context.scrollToBottom, scrollToBottom);
+    }
+    return { ...context, scrollToBottom };
+  };
+  return { ...actual, StickToBottom, useStickToBottomContext };
 });
 
 import { AgentConversation, type AgentConversationProps } from "@/components/agent/AgentConversation";
@@ -59,6 +73,7 @@ const lastOptions = () => stick.props[stick.props.length - 1]!;
 describe("AgentConversation scrolling", () => {
   beforeEach(() => {
     stick.props = [];
+    stick.scrolls = [];
   });
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -77,6 +92,21 @@ describe("AgentConversation scrolling", () => {
     render(<AgentConversation {...props([user("u1", "Make a film"), assistant("a1", "Built it.")])} />);
     expect(lastOptions().initial).toBe("instant");
     expect(lastOptions().resize).toBe("instant");
+  });
+
+  it("brings the user's own message into view when they send one, even from scrolled up", () => {
+    const history = [user("u1", "Make a film"), assistant("a1", "Built it.")];
+    const { rerender } = render(<AgentConversation {...props(history)} />);
+    // Opening a conversation is not a send.
+    expect(stick.scrolls).toEqual([]);
+
+    rerender(<AgentConversation {...props([...history, user("u2", "Make it warmer")])} busy />);
+    expect(stick.scrolls).toEqual([["instant"]]);
+
+    // The reply then streams in under it; the scroller follows it by itself.
+    const streaming: AgentUIMessage = { id: "a2", role: "assistant", parts: [{ type: "text", text: "Warm", state: "streaming" } as Part] };
+    rerender(<AgentConversation {...props([...history, user("u2", "Make it warmer"), streaming])} busy />);
+    expect(stick.scrolls).toEqual([["instant"]]);
   });
 
   it("shows the progress line still, without its sweeping band, under reduced motion", () => {

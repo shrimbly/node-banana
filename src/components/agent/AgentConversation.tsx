@@ -109,6 +109,7 @@ export function AgentConversation({
       )}
       <ConversationScrollButton className={page ? "bottom-4" : undefined} />
       <StayPinnedWhenShrunk />
+      <ScrollToSentMessage messages={messages} />
       {onScrolledChange && <ReportScrolled onChange={onScrolledChange} />}
     </Conversation>
   );
@@ -165,6 +166,24 @@ export function StayPinnedWhenShrunk() {
     return () => observer.disconnect();
   }, [scrollRef, scrollToBottom]);
 
+  return null;
+}
+
+/**
+ * Brings the user's own message into view as they send it (typed, queued, a
+ * suggestion or a card's "Ask the agent"), even from scrolled up: the
+ * scroller only follows while pinned, so the bubble and the reply would grow
+ * below the fold. Pinned again, it follows the reply. Opening a conversation
+ * is not a send: the count starts from the one it mounted with.
+ */
+function ScrollToSentMessage({ messages }: { messages: readonly AgentUIMessage[] }) {
+  const { scrollToBottom } = useStickToBottomContext();
+  const seen = useRef(messages.length);
+  useEffect(() => {
+    const grew = messages.length > seen.current;
+    seen.current = messages.length;
+    if (grew && messages[messages.length - 1]?.role === "user") void scrollToBottom("instant");
+  }, [messages, scrollToBottom]);
   return null;
 }
 
