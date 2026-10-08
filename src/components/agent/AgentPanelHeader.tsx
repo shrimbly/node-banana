@@ -13,9 +13,10 @@ import { MenuDivider, MenuSectionLabel, menuItemClass, menuSurfaceClass } from "
 import { HARNESS_LABELS, readinessTone, type AgentReadiness } from "@/lib/agent/client/readiness";
 import { AGENT_HARNESS_IDS, type AgentHarnessId, type AgentModelOption } from "@/lib/agent/types";
 import { AGENT_ICON, AGENT_POPOVER_LAYER, PanelIconButton, StatusDot } from "./AgentChrome";
+import { useAgentSurface } from "./AgentSurface";
 import { HarnessIcon } from "./HarnessIcon";
 
-export interface AgentPanelHeaderProps {
+export interface AgentModelMenuProps {
   harness: AgentHarnessId;
   readiness: Record<AgentHarnessId, AgentReadiness>;
   /** No harness chosen yet (first open, checking or the chooser): the trigger reads "Agent". */
@@ -28,6 +29,11 @@ export interface AgentPanelHeaderProps {
   modelsFallback?: boolean;
   model?: string;
   onModelChange: (model: string) => void;
+  /** Which edge of the trigger the menu lines up with: "start" under the window's left corner, "end" at the page header's right. */
+  align?: "start" | "end";
+}
+
+export interface AgentPanelHeaderProps extends Omit<AgentModelMenuProps, "align"> {
   canStartNewChat: boolean;
   onNewChat: () => void;
   /** The history list is showing in place of the conversation. */
@@ -37,13 +43,13 @@ export interface AgentPanelHeaderProps {
 }
 
 /** Something is wrong with the harness: the only state the header marks (ready and still-checking show nothing). */
-function hasIssue(readiness: AgentReadiness): boolean {
+export function hasIssue(readiness: AgentReadiness): boolean {
   const tone = readinessTone(readiness);
   return tone === "attention" || tone === "blocked";
 }
 
 /** The right-hand note on each harness row: its plan when ready, otherwise what's wrong. */
-function describeReadiness(readiness: AgentReadiness): string {
+export function describeReadiness(readiness: AgentReadiness): string {
   switch (readiness.kind) {
     case "loading":
       return "Checking…";
@@ -83,7 +89,13 @@ function RowCheck({ checked }: { checked: boolean }) {
   );
 }
 
-export function AgentPanelHeader({
+/**
+ * Which harness answers and on which model: the harness mark, its name and
+ * the model, opening the harnesses (with what each needs) and the models the
+ * chosen one offers. The window's header and the chat view's header both
+ * carry it.
+ */
+export function AgentModelMenu({
   harness,
   neutral = false,
   readiness,
@@ -93,99 +105,111 @@ export function AgentPanelHeader({
   modelsFallback = false,
   model,
   onModelChange,
-  canStartNewChat,
-  onNewChat,
-  historyOpen,
-  onToggleHistory,
-  onClose,
-}: AgentPanelHeaderProps) {
+  align = "start",
+}: AgentModelMenuProps) {
+  const page = useAgentSurface() === "page";
   const modelLabel = models.find((option) => option.id === model)?.label;
   const issue = !neutral && hasIssue(readiness[harness]);
   const triggerLabel = neutral ? "Agent" : [HARNESS_LABELS[harness], modelLabel].filter(Boolean).join(", ");
 
   return (
-    <div className="flex h-10 shrink-0 items-center gap-2 border-b fade-rule px-1.5">
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger
-          aria-label={`${triggerLabel}${issue ? ` (${describeReadiness(readiness[harness])})` : ""}. Change agent or model`}
-          className={cn(
-            "flex h-7 min-w-0 items-center gap-1.5 rounded-lg squircle px-1.5 text-[13px] leading-4 outline-none",
-            "transition-colors duration-[120ms] hover:bg-white/[0.06] data-[state=open]:bg-white/[0.08]",
-            "focus-visible:ring-2 focus-visible:ring-selection",
-          )}
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger
+        aria-label={`${triggerLabel}${issue ? ` (${describeReadiness(readiness[harness])})` : ""}. Change agent or model`}
+        className={cn(
+          "flex min-w-0 items-center gap-1.5 rounded-lg squircle text-[13px] leading-4 outline-none",
+          // The page header's controls are 32px; the window's 28px.
+          page ? "h-8 px-2" : "h-7 px-1.5",
+          "transition-colors duration-[120ms] hover:bg-white/[0.06] data-[state=open]:bg-white/[0.08]",
+          "focus-visible:ring-2 focus-visible:ring-selection",
+        )}
+      >
+        {neutral ? (
+          <SparklesIcon className="size-4 shrink-0 text-neutral-400" {...AGENT_ICON} />
+        ) : (
+          <HarnessIcon harness={harness} />
+        )}
+        <span className="shrink-0 font-semibold text-neutral-100">{neutral ? "Agent" : HARNESS_LABELS[harness]}</span>
+        {issue && <StatusDot tone="blocked" />}
+        {!neutral && modelLabel && <span className="truncate text-neutral-400">{modelLabel}</span>}
+        <ChevronDownIcon className="size-4 shrink-0 text-neutral-400" {...AGENT_ICON} />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align={align}
+        sideOffset={6}
+        className={cn(
+          menuSurfaceClass,
+          AGENT_POPOVER_LAYER,
+          "w-64 bg-card p-1 text-neutral-300 shadow-menu ring-0",
+        )}
+      >
+        <MenuSectionLabel className="px-2.5 pb-1 pt-1.5">Run with</MenuSectionLabel>
+        <DropdownMenuRadioGroup
+          value={harness}
+          onValueChange={(next) => onHarnessChange(next as AgentHarnessId)}
         >
-          {neutral ? (
-            <SparklesIcon className="size-4 shrink-0 text-neutral-400" {...AGENT_ICON} />
-          ) : (
-            <HarnessIcon harness={harness} />
-          )}
-          <span className="shrink-0 font-semibold text-neutral-100">{neutral ? "Agent" : HARNESS_LABELS[harness]}</span>
-          {issue && <StatusDot tone="blocked" />}
-          {!neutral && modelLabel && <span className="truncate text-neutral-400">{modelLabel}</span>}
-          <ChevronDownIcon className="size-4 shrink-0 text-neutral-400" {...AGENT_ICON} />
-        </DropdownMenuTrigger>
-        <DropdownMenuContent
-          align="start"
-          sideOffset={6}
-          className={cn(
-            menuSurfaceClass,
-            AGENT_POPOVER_LAYER,
-            "w-64 bg-card p-1 text-neutral-300 shadow-menu ring-0",
-          )}
-        >
-          <MenuSectionLabel className="px-2.5 pb-1 pt-1.5">Run with</MenuSectionLabel>
-          <DropdownMenuRadioGroup
-            value={harness}
-            onValueChange={(next) => onHarnessChange(next as AgentHarnessId)}
-          >
-            {AGENT_HARNESS_IDS.map((id) => {
-              const note = switchDisabled && id !== harness ? "Stop the reply first" : describeReadiness(readiness[id]);
-              return (
+          {AGENT_HARNESS_IDS.map((id) => {
+            const note = switchDisabled && id !== harness ? "Stop the reply first" : describeReadiness(readiness[id]);
+            return (
+              <DropdownMenuRadioItem
+                key={id}
+                value={id}
+                disabled={switchDisabled && id !== harness}
+                aria-label={HARNESS_LABELS[id]}
+                className={MENU_ROW}
+              >
+                <HarnessIcon harness={id} className="size-3.5" />
+                <span className="flex-1 truncate">{HARNESS_LABELS[id]}</span>
+                {hasIssue(readiness[id]) && <StatusDot tone="blocked" />}
+                {note && (
+                  <span className="font-mono text-[10px] uppercase tracking-eyebrow text-ink-3">{note}</span>
+                )}
+                <RowCheck checked={id === harness} />
+              </DropdownMenuRadioItem>
+            );
+          })}
+        </DropdownMenuRadioGroup>
+        {models.length > 0 && (
+          <>
+            <MenuDivider className="my-1 border-white/[0.08]" />
+            <MenuSectionLabel className="px-2.5 pb-1 pt-1">Model</MenuSectionLabel>
+            {modelsFallback && (
+              <p className="px-2.5 pb-1 text-[11px] leading-4 text-ink-3">
+                Couldn&apos;t read your models. Showing defaults.
+              </p>
+            )}
+            <DropdownMenuRadioGroup value={model} onValueChange={onModelChange}>
+              {models.map((option) => (
                 <DropdownMenuRadioItem
-                  key={id}
-                  value={id}
-                  disabled={switchDisabled && id !== harness}
-                  aria-label={HARNESS_LABELS[id]}
+                  key={option.id}
+                  value={option.id}
+                  disabled={switchDisabled}
+                  title={option.description}
                   className={MENU_ROW}
                 >
-                  <HarnessIcon harness={id} className="size-3.5" />
-                  <span className="flex-1 truncate">{HARNESS_LABELS[id]}</span>
-                  {hasIssue(readiness[id]) && <StatusDot tone="blocked" />}
-                  {note && (
-                    <span className="font-mono text-[10px] uppercase tracking-eyebrow text-ink-3">{note}</span>
-                  )}
-                  <RowCheck checked={id === harness} />
+                  <span className="flex-1 truncate">{option.label}</span>
+                  <RowCheck checked={option.id === model} />
                 </DropdownMenuRadioItem>
-              );
-            })}
-          </DropdownMenuRadioGroup>
-          {models.length > 0 && (
-            <>
-              <MenuDivider className="my-1 border-white/[0.08]" />
-              <MenuSectionLabel className="px-2.5 pb-1 pt-1">Model</MenuSectionLabel>
-              {modelsFallback && (
-                <p className="px-2.5 pb-1 text-[11px] leading-4 text-ink-3">
-                  Couldn&apos;t read your models. Showing defaults.
-                </p>
-              )}
-              <DropdownMenuRadioGroup value={model} onValueChange={onModelChange}>
-                {models.map((option) => (
-                  <DropdownMenuRadioItem
-                    key={option.id}
-                    value={option.id}
-                    disabled={switchDisabled}
-                    title={option.description}
-                    className={MENU_ROW}
-                  >
-                    <span className="flex-1 truncate">{option.label}</span>
-                    <RowCheck checked={option.id === model} />
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+              ))}
+            </DropdownMenuRadioGroup>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+export function AgentPanelHeader({
+  canStartNewChat,
+  onNewChat,
+  historyOpen,
+  onToggleHistory,
+  onClose,
+  ...menu
+}: AgentPanelHeaderProps) {
+  return (
+    <div className="flex h-10 shrink-0 items-center gap-2 border-b fade-rule px-1.5">
+      <AgentModelMenu {...menu} />
 
       <div className="ml-auto flex items-center gap-0.5">
         <PanelIconButton label={historyOpen ? "Back to chat" : "History"} onClick={onToggleHistory} open={historyOpen}>
