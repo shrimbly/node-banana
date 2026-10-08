@@ -163,7 +163,8 @@ describe("AgentRunResults while running", () => {
     const requestStop = vi.fn();
     useWorkflowStore.setState({ isRunning: true, requestStop });
     renderCard(record({ status: "running", startedAt: Date.now() - 5_000, finishedAt: undefined }));
-    expect(screen.getByText("5s")).toBeInTheDocument();
+    // The transcript is a live log: the time ticks quietly, not once a second in a screen reader.
+    expect(screen.getByText("5s")).toHaveAttribute("aria-live", "off");
     act(() => {
       vi.advanceTimersByTime(2_000);
     });

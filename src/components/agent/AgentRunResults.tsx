@@ -359,7 +359,12 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
         <h3 id={headingId} className={cn("min-w-0 truncate font-medium text-neutral-100", page ? "text-sm leading-5" : "text-[13px] leading-5")}>
           {heading}
         </h3>
-        {meta && <span className="shrink-0 text-xs leading-4 tabular-nums text-ink-3">{meta}</span>}
+        {/* The transcript is a live log: the time ticks without being read out each second (the end is announced below). */}
+        {meta && (
+          <span aria-live="off" className="shrink-0 text-xs leading-4 tabular-nums text-ink-3">
+            {meta}
+          </span>
+        )}
         <div className="ml-auto flex shrink-0 items-center gap-0.5">
           {running && (
             <CardIconButton
