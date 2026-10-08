@@ -865,4 +865,38 @@ describe("useAgentChat: steps still pending when the turn ends", () => {
     expect(toastShow).not.toHaveBeenCalled();
     for (const stream of streams) stream.end();
   });
+
+  it("sends the next turn once the last one's steps have landed, describing the tab they left live", async () => {
+    const { tabB } = twoTabs();
+    const { result, streams, bodies, signals } = await busyChat();
+    useWorkflowStore.setState({ isSaving: true });
+    act(() => {
+      result.current.send("then make it blue");
+    });
+    await act(async () => {
+      push(streams[0], step("switch", { op: "switchTab", tabId: tabB }, tabB));
+      streams[0].push({ type: "finish" });
+      streams[0].end();
+      await sleep(50);
+    });
+    // The switch still waits for the save: the queued message waits with it.
+    expect(streams).toHaveLength(1);
+
+    await act(async () => {
+      useWorkflowStore.setState({ isSaving: false });
+      await sleep(200);
+    });
+    await waitFor(() => expect(streams).toHaveLength(2));
+    expect(bodies[1].workflow?.tabId).toBe(tabB);
+
+    await act(async () => {
+      streams[1].push({ type: "start", messageId: "assistant-2" });
+      push(streams[1], edit("blue", tabB));
+      await sleep(30);
+    });
+    expect(nodeIds()).toContain("prompt-blue");
+    expect(signals[1].aborted).toBe(false);
+    expect(toastShow).not.toHaveBeenCalled();
+    streams[1].end();
+  });
 });

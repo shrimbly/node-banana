@@ -153,6 +153,9 @@ export function useAgentChat({
       new DefaultChatTransport<AgentUIMessage>({
         api: AGENT_CHAT_API,
         prepareSendMessagesRequest: async ({ id, messages, headers }) => {
+          // The previous turn's queued steps (a tab switch waiting on a save) land
+          // first: the request describes the canvas they leave live.
+          await stepsRef.current;
           const {
             harness: currentHarness,
             model: currentModel,
