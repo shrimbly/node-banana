@@ -66,8 +66,17 @@ describe("buildAgentSystemPrompt", () => {
     // Raised from 13k when every generator gained model + modelParameters and the model rule grew,
     // then from 13.5k for the rule that keeps the user's stated preferences standing,
     // then from 14k for the rule that makes "this style" mean the selection,
-    // then from 14.25k for what to run when the user asks for a run.
-    expect(prompt.length).toBeLessThan(14_500);
+    // then from 14.25k for what to run when the user asks for a run,
+    // then from 14.5k for the chat's Run button and the open workflows (Claude 14,845, Codex 15,039).
+    expect(prompt.length).toBeLessThan(15_000);
+  });
+
+  it("points at the chat's Run button, and teaches the open workflows and their tools", () => {
+    expect(prompt).toContain("switch_workflow, new_workflow, save_workflow");
+    expect(prompt).toContain("What you build or change and leave unrun gets a Run button under your reply: point the user there, not to the canvas's Run button.");
+    expect(prompt).toContain("Each open workflow is a tab; the <canvas> block lists them when there are several, and your tools work in the live one.");
+    expect(prompt).toContain("new_workflow opens an empty one: use it, not replaceCanvas, when the user asks for a new workflow and the live one holds other work");
+    expect(prompt).toContain("save_workflow saves the live one, only when asked.");
   });
 
   it("runs only when asked, picks what to run from the conversation, and reports from the canvas", () => {
@@ -168,6 +177,39 @@ describe("buildTurnPrompt", () => {
     expect(running.split("\n")[1]).toBe("A run is in progress: nodes with status loading are running now, and results may still change.");
     expect(running).toContain("status loading");
     expect(describeCanvas(snapshotOf(state))).not.toContain("A run is in progress");
+  });
+
+  it("lists the open workflows when there are several, and names the live one", () => {
+    const state = { nodes: [storeNode("prompt-1", "prompt", { x: 0, y: 0 }, { prompt: "a fox" })], edges: [] };
+    const tabs = [
+      { id: "tab-1", name: "Fox portraits", active: true as const, nodeCount: 1, saved: true as const, unsaved: true as const },
+      { id: "tab-2", nodeCount: 0 },
+      { id: "tab-3", name: "Cats", nodeCount: 12, saved: true as const },
+    ];
+    const text = buildTurnPrompt({ userText: "hi", snapshot: snapshotOf(state, { workflowName: "Fox portraits" }), tabs });
+    expect(text).toBe(
+      [
+        "<canvas>",
+        "Open workflows (tabs, in order; your tool calls work in the live one):",
+        '- tab-1 "Fox portraits" (live): 1 node, saved, with unsaved changes',
+        "- tab-2 untitled: 0 nodes, never saved",
+        '- tab-3 "Cats": 12 nodes, saved',
+        "",
+        "The live workflow, tab-1:",
+        'Workflow "Fox portraits": 1 node, 0 connections.',
+        "Nodes:",
+        '- prompt-1 prompt (Prompt) — prompt: "a fox"',
+        "Connections: none.",
+        "</canvas>",
+        "",
+        "<user>",
+        "hi",
+        "</user>",
+      ].join("\n"),
+    );
+    // One tab, the live one: nothing to list.
+    expect(describeCanvas(snapshotOf(state), [tabs[0]])).not.toContain("Open workflows");
+    expect(describeCanvas(emptySnapshot(), [{ ...tabs[0], nodeCount: 0 }, tabs[1]])).toContain("The live workflow, tab-1:\nThe canvas is empty.");
   });
 
   it("says when the canvas is empty", () => {
