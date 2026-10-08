@@ -157,10 +157,13 @@ describe("AgentMessage runs", () => {
     fireEvent.click(buttons[0]);
     expect(actions.showOnCanvas).toHaveBeenCalledWith({ tabId: "tab-a", nodeIds: ["gen", "out"] });
     expect(screen.queryByText("Input")).not.toBeInTheDocument();
-    expect(within(screen.getByRole("button", { name: /Edit workflow/ })).getByText("Done")).toBeInTheDocument();
+    // One line: the name, then what came of it; a finished call shows no status, only says it to screen readers.
+    const row = screen.getByRole("button", { name: /Edit workflow/ });
+    expect(row).toHaveTextContent(/^Edit workflowAdded 2 nodesDone$/);
+    expect(within(row).getByText("Done")).toHaveClass("sr-only");
   });
 
-  it("shows a tool row's actions in place of its status on a touch screen, where nothing hovers", () => {
+  it("always shows a tool row's actions on a touch screen, where nothing hovers", () => {
     render(
       <AgentTranscriptActionsProvider value={transcript()}>
         <AgentMessage
@@ -169,10 +172,8 @@ describe("AgentMessage runs", () => {
         />
       </AgentTranscriptActionsProvider>,
     );
-    // An invisible button over "Done" would still take the tap meant for the row.
     const actions = screen.getByRole("button", { name: "Show on canvas" }).closest("[data-tool-actions]")!;
     expect(actions.className).toContain("pointer-coarse:opacity-100");
-    expect(within(screen.getByRole("button", { name: /Edit workflow/ })).getByText("Done").className).toContain("pointer-coarse:opacity-0");
   });
 
   it("leaves Show on canvas out without the agent session", () => {
@@ -183,5 +184,18 @@ describe("AgentMessage runs", () => {
       />,
     );
     expect(screen.queryByRole("button", { name: "Show on canvas" })).not.toBeInTheDocument();
+  });
+});
+
+describe("AgentMessage tool rows", () => {
+  it("marks a running call with a dot and a failed one in red, at the end of its line", () => {
+    const running = { type: "dynamic-tool", toolName: "edit_workflow", toolCallId: "call-run", state: "input-available", input: {} } as Part;
+    const failed = toolPart("run_workflow", "call-fail", { ok: false, summary: "Inputs not ready" });
+    render(<AgentMessage message={reply([running, failed])} streaming />);
+    const [first, second] = screen.getAllByRole("button", { name: /workflow/ });
+    expect(within(first).getByText("Running")).toHaveClass("sr-only");
+    expect(first.querySelector('[data-agent-tool-status="input-available"] .animate-ping')).toBeInTheDocument();
+    expect(within(second).getByText("Inputs not ready")).toHaveClass("text-red-400");
+    expect(second.querySelector('[data-agent-tool-status="output-error"] .bg-error')).toBeInTheDocument();
   });
 });

@@ -72,11 +72,9 @@ function AgentToolRow({ part }: { part: DynamicToolUIPart }) {
   );
 }
 
-/** Consecutive tool calls read as one ruled list, like a settings page's rows. */
+/** Consecutive tool calls as a compact list, one line each. */
 function ToolRows({ children }: { children: ReactNode }) {
-  return (
-    <div className="flex flex-col divide-y border-y fade-rule *:fade-rule">{children}</div>
-  );
+  return <div className="flex flex-col">{children}</div>;
 }
 
 /**

@@ -31,11 +31,11 @@ export type ToolPart = ToolUIPart | DynamicToolUIPart;
 
 export type ToolHeaderProps = {
   title?: string;
-  /** The result or error, one line under the title. */
+  /** The result or error, after the title on the same line. */
   summary?: ReactNode;
   /**
    * Small buttons at the row's right edge, outside the toggle (a click on one
-   * never opens the row). They show over the status on hover or focus.
+   * never opens the row). They show on hover or focus, always on touch.
    */
   actions?: ReactNode;
   className?: string;
@@ -58,19 +58,16 @@ const statusLabels: Record<ToolPart["state"], string> = {
   "output-error": "Failed",
 };
 
-/** Mono status eyebrow. A dot only where it says something: running (pulsing ink), failed (red). */
+/**
+ * The status only where it says something: a pulsing dot while the call
+ * runs, a red one when it failed. A finished call shows nothing; screen
+ * readers hear the word either way.
+ */
 export const ToolStatus = ({ state, className }: { state: ToolPart["state"]; className?: string }) => {
   const running = state === "input-available" || state === "input-streaming";
   const failed = state === "output-error" || state === "output-denied";
   return (
-    <span
-      data-agent-tool-status={state}
-      className={cn(
-        "inline-flex shrink-0 items-center gap-1.5 font-mono text-[10px] uppercase leading-4 tracking-eyebrow",
-        running || failed ? "text-neutral-300" : "text-ink-3",
-        className
-      )}
-    >
+    <span data-agent-tool-status={state} className={cn("inline-flex shrink-0 items-center", className)}>
       {running && (
         <span aria-hidden="true" className="relative flex size-1.5">
           <span className="absolute inline-flex size-full animate-ping rounded-full bg-neutral-300 opacity-60 motion-reduce:animate-none" />
@@ -78,13 +75,18 @@ export const ToolStatus = ({ state, className }: { state: ToolPart["state"]; cla
         </span>
       )}
       {failed && <span aria-hidden="true" className="size-1.5 rounded-full bg-error" />}
-      {statusLabels[state]}
+      <span className="sr-only">{statusLabels[state]}</span>
     </span>
   );
 };
 
 export const getStatusBadge = (status: ToolPart["state"]) => <ToolStatus state={status} />;
 
+/**
+ * One line per call: its name, then what came of it (an error in red), then
+ * its status mark while it runs or after it failed. Marks sit at the end, so
+ * nothing moves when a call finishes; the chevron shows on hover and while open.
+ */
 export const ToolHeader = ({
   className,
   title,
@@ -97,41 +99,28 @@ export const ToolHeader = ({
 }: ToolHeaderProps) => {
   const derivedName =
     type === "dynamic-tool" ? toolName : type.split("-").slice(1).join("-");
+  const failed = state === "output-error" || state === "output-denied";
 
   const trigger = (
     <CollapsibleTrigger
       className={cn(
-        // Text sits 8px in from the message column; the hover wash reaches 6px past it.
-        "-mx-1.5 flex w-[calc(100%+12px)] flex-col rounded-md squircle py-2 pr-1.5 pl-3.5 text-left transition-colors duration-[120ms] hover:bg-white/5",
+        // Text sits on the message's edge; the hover wash reaches 6px past it.
+        "-mx-1.5 flex min-h-7 w-[calc(100%+12px)] items-center gap-1.5 rounded-md squircle px-1.5 py-1 text-left text-[13px] leading-[18px] transition-colors duration-[120ms] hover:bg-white/5",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
-        // The wash stays while the pointer is on an action, which sits over the row.
-        actions ? "group-hover/tool-row:bg-white/5" : undefined,
+        // Room for the actions at the end, and the wash stays while the pointer is on one.
+        actions ? "pr-9 group-hover/tool-row:bg-white/5" : undefined,
         className
       )}
       {...props}
     >
-      <span className="flex w-full items-center gap-3">
-        {/* The chevron follows the title: open/closed reads where the eye already is. */}
-        <span className="flex min-w-0 flex-1 items-center gap-1">
-          <span className="min-w-0 truncate font-medium text-[13px] text-neutral-100 leading-5">
-            {title ?? derivedName}
-          </span>
-          <ChevronRightIcon
-            aria-hidden="true"
-            strokeWidth={1.75}
-            className="size-3.5 shrink-0 text-neutral-500 transition-transform duration-150 group-data-[state=open]/tool:rotate-90"
-          />
-        </span>
-        <ToolStatus
-          state={state}
-          className={
-            actions
-              ? "transition-opacity duration-[120ms] group-hover/tool-row:opacity-0 group-has-[[data-tool-actions]:focus-within]/tool-row:opacity-0 pointer-coarse:opacity-0 motion-reduce:transition-none"
-              : undefined
-          }
-        />
-      </span>
-      {summary && <span className="text-neutral-400 text-xs leading-[18px]">{summary}</span>}
+      <span className="max-w-full shrink-0 truncate font-medium text-neutral-300">{title ?? derivedName}</span>
+      {summary && <span className={cn("min-w-0 truncate", failed ? "text-red-400" : "text-ink-3")}>{summary}</span>}
+      <ToolStatus state={state} className="ml-0.5" />
+      <ChevronRightIcon
+        aria-hidden="true"
+        strokeWidth={1.75}
+        className="size-3.5 shrink-0 text-neutral-500 opacity-0 transition-[opacity,transform] duration-150 group-hover/tool:opacity-100 group-focus-visible/tool:opacity-100 group-data-[state=open]/tool:rotate-90 group-data-[state=open]/tool:opacity-100 motion-reduce:transition-none"
+      />
     </CollapsibleTrigger>
   );
   if (!actions) return trigger;
@@ -139,12 +128,10 @@ export const ToolHeader = ({
   return (
     <div className="group/tool-row relative">
       {trigger}
-      {/* Centred on the title's line, its right edge on the status's. Nothing hovers on a
-          touch screen: there the actions always show in the status's place, since even
-          invisible they would take the tap meant for the row. */}
+      {/* Centred on the line, at its right edge. Nothing hovers on a touch screen: there they always show. */}
       <div
         data-tool-actions=""
-        className="absolute top-1.5 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-[120ms] focus-within:opacity-100 group-hover/tool-row:opacity-100 pointer-coarse:opacity-100 motion-reduce:transition-none"
+        className="absolute top-1/2 right-0 flex -translate-y-1/2 items-center gap-0.5 opacity-0 transition-opacity duration-[120ms] focus-within:opacity-100 group-hover/tool-row:opacity-100 pointer-coarse:opacity-100 motion-reduce:transition-none"
       >
         {actions}
       </div>
