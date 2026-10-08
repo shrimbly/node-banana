@@ -9,7 +9,7 @@ import { AGENT_CHAT_API } from "@/lib/agent/client/api";
 import { countRenderedParts } from "@/lib/agent/client/messages";
 import { HARNESS_LABELS } from "@/lib/agent/client/readiness";
 import { agentProviderHeaders, buildAgentChatRequestBody, whenProviderKeysReady } from "@/lib/agent/client/request";
-import { trackStartedRun } from "@/lib/agent/client/runs";
+import { plannedRunNodeIds, trackStartedRun } from "@/lib/agent/client/runs";
 import { saveLiveWorkflow } from "@/lib/agent/client/save";
 import { AGENT_OPENING_STATUS } from "@/lib/agent/types";
 import type {
@@ -263,16 +263,17 @@ export function useAgentChat({
           );
       }
       if (result.runRefused) useToast.getState().show(`The agent's run didn't start: ${lowerFirst(result.runRefused)}`, "warning");
-      const run = applying.ops.find((op) => op.op === "run");
-      if (result.runStarted && run) {
+      if (result.runStarted && result.run) {
+        const live = useWorkflowStore.getState();
         trackStartedRun({
           chatId,
           anchor: { toolCallId: batch.toolCallId },
           label: batch.summary,
-          scope: run.scope,
-          runs: run.runs,
-          tabId: useWorkflowStore.getState().activeTabId,
-          plannedNodeIds: run.scope.kind === "nodes" ? run.scope.nodeIds : [],
+          scope: result.run.scope,
+          runs: result.run.runs,
+          tabId: live.activeTabId,
+          // run_workflow's batch names the nodes the agent checked.
+          plannedNodeIds: plannedRunNodeIds(result.run.scope, live, batch.focusNodeIds),
         });
       }
       if (result.applied > 0) handlersRef.current.onBatchApplied?.(batch);

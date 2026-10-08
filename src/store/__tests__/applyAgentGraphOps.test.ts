@@ -445,7 +445,12 @@ describe("applyAgentGraphOps", () => {
         ]),
       );
 
-      expect(result).toEqual({ applied: 1, skipped: [], runStarted: true });
+      expect(result).toEqual({
+        applied: 1,
+        skipped: [],
+        runStarted: true,
+        run: { scope: { kind: "nodes", nodeIds: ["llmGenerate-ag1"] }, runs: 2 },
+      });
       expect(runBatch).toHaveBeenCalledTimes(1);
       expect(runBatch).toHaveBeenCalledWith({ kind: "nodes", nodeIds: ["llmGenerate-ag1"] }, 2);
       expect(canvasWhenStarted).toEqual(["prompt-1", "llmGenerate-ag1"]);
@@ -459,7 +464,7 @@ describe("applyAgentGraphOps", () => {
     it("leaves undo history and the unsaved flag alone for a batch that only runs", () => {
       seed([promptNode("prompt-1")]);
       const result = useWorkflowStore.getState().applyAgentGraphOps(batch([{ op: "run", scope: { kind: "all" }, runs: 1 }]));
-      expect(result).toEqual({ applied: 0, skipped: [], runStarted: true });
+      expect(result).toEqual({ applied: 0, skipped: [], runStarted: true, run: { scope: { kind: "all" }, runs: 1 } });
       expect(runBatch).toHaveBeenCalledWith({ kind: "all" }, 1);
       expect(useWorkflowStore.getState().canUndo).toBe(false);
       expect(useWorkflowStore.getState().hasUnsavedChanges).toBe(false);
@@ -492,6 +497,25 @@ describe("applyAgentGraphOps", () => {
       expect(run.runStarted).toBe(true);
       expect(run).not.toHaveProperty("runRefused");
       expect(runBatch).toHaveBeenCalledWith({ kind: "all" }, 3);
+    });
+
+    it("hands back the run it started as the live canvas allowed it, for the chat's record", () => {
+      seed([promptNode("prompt-1")]);
+      // The applier leaves out a node the user deleted meanwhile.
+      applyGraphOpsMock.mockImplementationOnce((state: ApplyGraphOpsState, ops: AgentGraphOp[], deps: ApplyGraphOpsDeps) => ({
+        ...fakeApplyGraphOps(state, ops, deps),
+        run: { scope: { kind: "nodes", nodeIds: ["prompt-1"] }, runs: 2 },
+      }));
+      const result = useWorkflowStore
+        .getState()
+        .applyAgentGraphOps(batch([{ op: "run", scope: { kind: "nodes", nodeIds: ["prompt-1", "gone-1"] }, runs: 2 }]));
+      expect(result.run).toEqual({ scope: { kind: "nodes", nodeIds: ["prompt-1"] }, runs: 2 });
+      expect(runBatch).toHaveBeenCalledWith({ kind: "nodes", nodeIds: ["prompt-1"] }, 2);
+
+      useWorkflowStore.setState({ isRunning: false });
+      runBatch.mockImplementationOnce(async () => {});
+      const refused = useWorkflowStore.getState().applyAgentGraphOps(batch([{ op: "run", scope: { kind: "all" }, runs: 1 }]));
+      expect(refused).not.toHaveProperty("run");
     });
 
     it("says the run didn't start when the canvas refused it at once, with the canvas's reason", () => {

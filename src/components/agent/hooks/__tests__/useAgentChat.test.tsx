@@ -12,7 +12,10 @@ vi.mock("@/components/Toast", () => ({ useToast: { getState: () => ({ show: toas
 const saveLiveWorkflow = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/agent/client/save", () => ({ saveLiveWorkflow }));
 const trackStartedRun = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/agent/client/runs", () => ({ trackStartedRun }));
+vi.mock("@/lib/agent/client/runs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/agent/client/runs")>()),
+  trackStartedRun,
+}));
 vi.mock("@/utils/logger", () => ({
   logger: {
     info: vi.fn(),
@@ -695,9 +698,18 @@ describe("useAgentChat: the turn's tab and save steps", () => {
     stream.end();
   });
 
-  it("records the run a batch started, under its tool call", async () => {
+  it("records the run a batch started, under its tool call, as the canvas allowed it", async () => {
     const original = useWorkflowStore.getState().applyAgentGraphOps;
-    useWorkflowStore.setState({ applyAgentGraphOps: vi.fn(() => ({ applied: 0, skipped: [], runStarted: true as const })) });
+    // The user deleted a node mid-turn: the store left it out of the run it started.
+    useWorkflowStore.setState((state) => ({ nodes: state.nodes.filter((node) => node.id !== "nanoBanana-2") }));
+    useWorkflowStore.setState({
+      applyAgentGraphOps: vi.fn(() => ({
+        applied: 0,
+        skipped: [],
+        runStarted: true as const,
+        run: { scope: { kind: "nodes" as const, nodeIds: ["prompt-1"] }, runs: 2 },
+      })),
+    });
     try {
       const { result, stream } = await startTurn();
       await act(async () => {
@@ -706,6 +718,7 @@ describe("useAgentChat: the turn's tab and save steps", () => {
           toolCallId: "call-run",
           summary: "Run 2 nodes",
           ops: [{ op: "run", scope: { kind: "nodes", nodeIds: ["prompt-1", "nanoBanana-2"] }, runs: 2 }],
+          focusNodeIds: ["prompt-1", "nanoBanana-2"],
         });
         await sleep(30);
       });
@@ -713,11 +726,31 @@ describe("useAgentChat: the turn's tab and save steps", () => {
         chatId: result.current.chatId,
         anchor: { toolCallId: "call-run" },
         label: "Run 2 nodes",
-        scope: { kind: "nodes", nodeIds: ["prompt-1", "nanoBanana-2"] },
+        scope: { kind: "nodes", nodeIds: ["prompt-1"] },
         runs: 2,
         tabId: useWorkflowStore.getState().activeTabId,
-        plannedNodeIds: ["prompt-1", "nanoBanana-2"],
+        plannedNodeIds: ["prompt-1"],
       });
+      stream.end();
+    } finally {
+      useWorkflowStore.setState({ applyAgentGraphOps: original });
+    }
+  });
+
+  it("plans a whole-workflow run's nodes from the canvas when the batch names none", async () => {
+    const original = useWorkflowStore.getState().applyAgentGraphOps;
+    useWorkflowStore.setState({
+      applyAgentGraphOps: vi.fn(() => ({ applied: 0, skipped: [], runStarted: true as const, run: { scope: { kind: "all" as const }, runs: 1 } })),
+    });
+    try {
+      const { stream } = await startTurn();
+      await act(async () => {
+        push(stream, { batchId: "run", toolCallId: "call-run", summary: "Running the workflow", ops: [{ op: "run", scope: { kind: "all" }, runs: 1 }] });
+        await sleep(30);
+      });
+      expect(trackStartedRun).toHaveBeenCalledWith(
+        expect.objectContaining({ scope: { kind: "all" }, runs: 1, plannedNodeIds: ["prompt-1", "nanoBanana-2"] }),
+      );
       stream.end();
     } finally {
       useWorkflowStore.setState({ applyAgentGraphOps: original });

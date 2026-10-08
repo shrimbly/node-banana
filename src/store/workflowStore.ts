@@ -554,9 +554,16 @@ export interface WorkflowStore {
    * Applies one batch of resolved canvas changes from the agent as a single
    * undo step. Ops that no longer fit the live canvas are skipped and
    * returned with reasons. A run the batch asks for starts after its edits,
-   * outside the undo step; `runRefused` says why it did not.
+   * outside the undo step; `runRefused` says why it did not. `run` is the run
+   * that started, as the live canvas allowed it (nodes deleted meanwhile left out).
    */
-  applyAgentGraphOps: (batch: AgentGraphOpBatch) => { applied: number; skipped: string[]; runRefused?: string; runStarted?: true };
+  applyAgentGraphOps: (batch: AgentGraphOpBatch) => {
+    applied: number;
+    skipped: string[];
+    runRefused?: string;
+    runStarted?: true;
+    run?: { scope: RunScope; runs: number };
+  };
   /**
    * Bumped whenever a different canvas replaces the live one (loadWorkflow,
    * clearWorkflow, a tab switch). An agent turn remembers the generation it
@@ -873,14 +880,17 @@ function splitGridsToBuild(ops: AgentGraphOpBatch["ops"]): string[] {
  * entry point. Not awaited: the batch's edits are already in, and the run
  * goes on after the agent's turn.
  */
-function startAgentRun(get: () => WorkflowStore, run: ApplyGraphOpsResult["run"]): { runRefused?: string; runStarted?: true } {
+function startAgentRun(
+  get: () => WorkflowStore,
+  run: ApplyGraphOpsResult["run"],
+): Pick<ReturnType<WorkflowStore["applyAgentGraphOps"]>, "runRefused" | "runStarted" | "run"> {
   if (!run) return {};
   // The turn saw an idle canvas; a run started since then (the user pressed Run) wins.
   if (get().isRunning || get().batch) return { runRefused: "a run is already going" };
   void get().runBatch(run.scope, run.runs);
   // The first run is going before runBatch first awaits: nothing running now means it was refused.
   if (!get().isRunning) return { runRefused: executionRefusal(get().desktopConnected) ?? "the canvas refused it" };
-  return { runStarted: true };
+  return { runStarted: true, run };
 }
 
 function pushUndoCheckpoint(

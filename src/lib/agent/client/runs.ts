@@ -113,6 +113,38 @@ function scopeOnCanvas(scope: RunScope, nodes: readonly WorkflowNode[]): RunScop
 }
 
 /**
+ * The nodes a run of `scope` is expected to run on this canvas, for the
+ * card's placeholders: `checked` (what the agent validated) when it sent it,
+ * else every node outside a locked group for "all", the node and everything
+ * it feeds for "from", the scope's own for "nodes". Only those on the canvas.
+ */
+export function plannedRunNodeIds(
+  scope: RunScope,
+  canvas: Pick<WorkflowStore, "nodes" | "edges" | "groups">,
+  checked?: readonly string[],
+): string[] {
+  const present = new Set(canvas.nodes.map((node) => node.id));
+  return (checked ?? scopeNodeIds(scope, canvas)).filter((id) => present.has(id));
+}
+
+function scopeNodeIds(scope: RunScope, { nodes, edges, groups }: Pick<WorkflowStore, "nodes" | "edges" | "groups">): readonly string[] {
+  if (scope.kind === "nodes") return scope.nodeIds;
+  const unlocked = (node: WorkflowNode) => !(node.groupId && groups[node.groupId]?.locked);
+  if (scope.kind === "all") return nodes.filter(unlocked).map((node) => node.id);
+  const reached = new Set([scope.nodeId]);
+  const queue = [scope.nodeId];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    for (const edge of edges) {
+      if (edge.source !== id || edge.data?.isLoop || reached.has(edge.target)) continue;
+      reached.add(edge.target);
+      queue.push(edge.target);
+    }
+  }
+  return nodes.filter((node) => reached.has(node.id) && unlocked(node)).map((node) => node.id);
+}
+
+/**
  * Starts a run from the chat (switching to its tab first when it is not the
  * live one) and records it under `anchor`. Run again is another call with
  * the same anchor: the card shows the newest record.
