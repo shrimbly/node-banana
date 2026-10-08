@@ -26,6 +26,23 @@ export function readToolOutput(output: unknown): AgentToolUIOutput | null {
   return { ok, summary: typeof summary === "string" ? summary : "" };
 }
 
+/** A run_workflow call: the results of the run it started show under the tool rows. */
+export function isRunWorkflowPart(part: Pick<DynamicToolUIPart, "toolName">): boolean {
+  return part.toolName.replace(MCP_PREFIX, "") === "run_workflow";
+}
+
+/** What a finished call's "Show on canvas" brings into view: the nodes it changed, in the tab it worked in. */
+export function toolCanvasTarget(
+  part: Pick<DynamicToolUIPart, "state" | "output">,
+): { tabId?: string; nodeIds: string[] } | null {
+  if (part.state !== "output-available" || !part.output || typeof part.output !== "object") return null;
+  const { ok, tabId, nodeIds } = part.output as { ok?: unknown; tabId?: unknown; nodeIds?: unknown };
+  if (ok !== true || !Array.isArray(nodeIds)) return null;
+  const ids = nodeIds.filter((id): id is string => typeof id === "string" && id.length > 0);
+  if (ids.length === 0) return null;
+  return typeof tabId === "string" && tabId ? { tabId, nodeIds: ids } : { nodeIds: ids };
+}
+
 /** A completed call the tool rejected (`ok: false`) reads as an error in the UI. */
 export function toolDisplayState(part: Pick<DynamicToolUIPart, "state" | "output">): DynamicToolUIPart["state"] {
   if (part.state === "output-available" && readToolOutput(part.output)?.ok === false) {
@@ -51,6 +68,7 @@ export function isRenderedPart(part: AgentMessagePart): boolean {
       return part.text.trim().length > 0;
     case "dynamic-tool":
     case "data-agent-notice":
+    case "data-run-offer":
       return true;
     default:
       return false;

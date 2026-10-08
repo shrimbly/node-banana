@@ -7,9 +7,11 @@ import {
   findHarnessSwitches,
   hasVisibleParts,
   humanizeToolName,
+  isRunWorkflowPart,
   latestTurnRejectedSignIn,
   readToolOutput,
   selectionLabel,
+  toolCanvasTarget,
   toolDisplayState,
   toolDisplayTitle,
   toolSummaryLine,
@@ -72,6 +74,24 @@ describe("tool display", () => {
     expect(toolSummaryLine(tool({ state: "output-error", errorText: "Bad handle" }))).toBe("Bad handle");
     expect(toolSummaryLine(tool({ state: "input-available" }))).toBeNull();
   });
+
+  it("knows a run_workflow call, with or without the MCP prefix", () => {
+    expect(isRunWorkflowPart({ toolName: "run_workflow" })).toBe(true);
+    expect(isRunWorkflowPart({ toolName: "mcp__node_banana__run_workflow" })).toBe(true);
+    expect(isRunWorkflowPart({ toolName: "edit_workflow" })).toBe(false);
+  });
+
+  it("reads where Show on canvas goes: a finished call's nodes, and its tab", () => {
+    const done = (output: unknown) => tool({ state: "output-available", output });
+    expect(toolCanvasTarget(done({ ok: true, summary: "", tabId: "tab-a", nodeIds: ["n1", "n2"] }))).toEqual({
+      tabId: "tab-a",
+      nodeIds: ["n1", "n2"],
+    });
+    expect(toolCanvasTarget(done({ ok: true, summary: "", nodeIds: ["n1", 7, ""] }))).toEqual({ nodeIds: ["n1"] });
+    expect(toolCanvasTarget(done({ ok: true, summary: "", nodeIds: [] }))).toBeNull();
+    expect(toolCanvasTarget(done({ ok: false, summary: "", nodeIds: ["n1"] }))).toBeNull();
+    expect(toolCanvasTarget(tool({ state: "input-available" }))).toBeNull();
+  });
 });
 
 describe("rendered parts", () => {
@@ -94,6 +114,15 @@ describe("rendered parts", () => {
     ]);
     expect(countRenderedParts([user(), message])).toBe(4);
     expect(countRenderedParts([message, user("u2")])).toBe(0);
+  });
+
+  it("draws the Run card", () => {
+    const offer = {
+      type: "data-run-offer",
+      id: "run-offer",
+      data: { offerId: "o1", primary: { scope: { kind: "all" }, label: "Run workflow", nodeIds: [] }, alternatives: [] },
+    } as Part;
+    expect(hasVisibleParts(assistant([offer]))).toBe(true);
   });
 });
 

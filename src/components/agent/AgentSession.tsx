@@ -172,8 +172,25 @@ export interface AgentPresenceValue {
   presence: AgentPresence;
 }
 
+/**
+ * What the transcript's cards do with the session (an offer's Run, "Show on
+ * canvas", "Ask the agent to fix it"). It changes once per turn, not with
+ * every streamed token, so a card reading it stays still while a reply streams.
+ */
+export interface AgentTranscriptActions {
+  /** The conversation runs started from the transcript belong to. */
+  chatId: string;
+  /** Message the agent; queued while a turn runs. */
+  send: (text: string) => boolean;
+  showOnCanvas: (target?: AgentCanvasTarget) => boolean;
+}
+
 const AgentSessionContext = createContext<AgentSessionValue | null>(null);
 const AgentPresenceContext = createContext<AgentPresenceValue | null>(null);
+const AgentTranscriptContext = createContext<AgentTranscriptActions | null>(null);
+
+/** The session provides it; a transcript rendered on its own (a test) may provide its own. */
+export const AgentTranscriptActionsProvider = AgentTranscriptContext.Provider;
 
 /** Notices that mean the harness status is stale. */
 const STATUS_NOTICE_CODES = new Set<AgentDataParts["agent-notice"]["code"]>([
@@ -518,6 +535,10 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
   );
 
   const presenceValue = useMemo<AgentPresenceValue>(() => ({ busy, presence }), [busy, presence]);
+  const transcriptActions = useMemo<AgentTranscriptActions>(
+    () => ({ chatId, send, showOnCanvas }),
+    [chatId, send, showOnCanvas],
+  );
   const value: AgentSessionValue = {
     harness,
     setHarness,
@@ -561,7 +582,9 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
 
   return (
     <AgentPresenceContext.Provider value={presenceValue}>
-      <AgentSessionContext.Provider value={value}>{children}</AgentSessionContext.Provider>
+      <AgentSessionContext.Provider value={value}>
+        <AgentTranscriptContext.Provider value={transcriptActions}>{children}</AgentTranscriptContext.Provider>
+      </AgentSessionContext.Provider>
     </AgentPresenceContext.Provider>
   );
 }
@@ -571,6 +594,11 @@ export function useAgentSession(): AgentSessionValue {
   const session = useContext(AgentSessionContext);
   if (!session) throw new Error("useAgentSession must be used inside <AgentSessionProvider> (mounted by src/app/page.tsx)");
   return session;
+}
+
+/** The transcript cards' session actions, or null outside AgentSessionProvider (the cards then leave them out). */
+export function useAgentTranscriptActions(): AgentTranscriptActions | null {
+  return useContext(AgentTranscriptContext);
 }
 
 /**

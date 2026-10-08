@@ -33,6 +33,11 @@ export type ToolHeaderProps = {
   title?: string;
   /** The result or error, one line under the title. */
   summary?: ReactNode;
+  /**
+   * Small buttons at the row's right edge, outside the toggle (a click on one
+   * never opens the row). They show over the status on hover or focus.
+   */
+  actions?: ReactNode;
   className?: string;
 } & (
   | { type: ToolUIPart["type"]; state: ToolUIPart["state"]; toolName?: never }
@@ -54,7 +59,7 @@ const statusLabels: Record<ToolPart["state"], string> = {
 };
 
 /** Mono status eyebrow. A dot only where it says something: running (pulsing ink), failed (red). */
-export const ToolStatus = ({ state }: { state: ToolPart["state"] }) => {
+export const ToolStatus = ({ state, className }: { state: ToolPart["state"]; className?: string }) => {
   const running = state === "input-available" || state === "input-streaming";
   const failed = state === "output-error" || state === "output-denied";
   return (
@@ -62,7 +67,8 @@ export const ToolStatus = ({ state }: { state: ToolPart["state"] }) => {
       data-agent-tool-status={state}
       className={cn(
         "inline-flex shrink-0 items-center gap-1.5 font-mono text-[10px] uppercase leading-4 tracking-eyebrow",
-        running || failed ? "text-neutral-300" : "text-ink-3"
+        running || failed ? "text-neutral-300" : "text-ink-3",
+        className
       )}
     >
       {running && (
@@ -83,6 +89,7 @@ export const ToolHeader = ({
   className,
   title,
   summary,
+  actions,
   type,
   state,
   toolName,
@@ -91,12 +98,14 @@ export const ToolHeader = ({
   const derivedName =
     type === "dynamic-tool" ? toolName : type.split("-").slice(1).join("-");
 
-  return (
+  const trigger = (
     <CollapsibleTrigger
       className={cn(
         // Text sits 8px in from the message column; the hover wash reaches 6px past it.
         "-mx-1.5 flex w-[calc(100%+12px)] flex-col rounded-md squircle py-2 pr-1.5 pl-3.5 text-left transition-colors duration-[120ms] hover:bg-white/5",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
+        // The wash stays while the pointer is on an action, which sits over the row.
+        actions ? "group-hover/tool-row:bg-white/5" : undefined,
         className
       )}
       {...props}
@@ -113,10 +122,31 @@ export const ToolHeader = ({
             className="size-3.5 shrink-0 text-neutral-500 transition-transform duration-150 group-data-[state=open]/tool:rotate-90"
           />
         </span>
-        <ToolStatus state={state} />
+        <ToolStatus
+          state={state}
+          className={
+            actions
+              ? "transition-opacity duration-[120ms] group-hover/tool-row:opacity-0 group-has-[[data-tool-actions]:focus-within]/tool-row:opacity-0 motion-reduce:transition-none"
+              : undefined
+          }
+        />
       </span>
       {summary && <span className="text-neutral-400 text-xs leading-[18px]">{summary}</span>}
     </CollapsibleTrigger>
+  );
+  if (!actions) return trigger;
+
+  return (
+    <div className="group/tool-row relative">
+      {trigger}
+      {/* Centred on the title's line, its right edge on the status's. */}
+      <div
+        data-tool-actions=""
+        className="absolute top-1.5 right-0 flex items-center gap-0.5 opacity-0 transition-opacity duration-[120ms] focus-within:opacity-100 group-hover/tool-row:opacity-100 motion-reduce:transition-none"
+      >
+        {actions}
+      </div>
+    </div>
   );
 };
 
