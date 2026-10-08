@@ -235,6 +235,14 @@ describe("AgentRunResults outputs", () => {
     expect(within(text).getByRole("button", { name: "Copy text" })).toBeInTheDocument();
   });
 
+  it("shows a finished text as written, without closing its stray markers", () => {
+    const text: AgentRunOutput = { id: "llm:0", nodeId: "llm", nodeTitle: "LLM Generate", nodeType: "llmGenerate", kind: "text", text: "Tagline: *bold flavour" };
+    const { container } = renderCard(record({ outputs: [text] }));
+    const card = container.querySelector('[data-run-text="llm:0"]') as HTMLElement;
+    expect(card.querySelector("em")).toBeNull();
+    expect(card).toHaveTextContent("Tagline: *bold flavour");
+  });
+
   it("folds a long text output behind Show more", () => {
     const text: AgentRunOutput = { id: "llm:0", nodeId: "llm", nodeTitle: "LLM Generate", nodeType: "llmGenerate", kind: "text", text: "A line.\n\n".repeat(30) };
     const { unmount } = renderCard(record({ outputs: [text] }));

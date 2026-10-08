@@ -669,7 +669,8 @@ export function RunTextCard({ output }: { output: AgentRunOutput }) {
           folded && "[mask-image:linear-gradient(to_bottom,#000_calc(100%_-_2.5rem),transparent)]",
         )}
       >
-        <MessageResponse>{withLineBreaks(text)}</MessageResponse>
+        {/* Finished text: nothing to repair as it streams, so a stray "*" stays a "*". */}
+        <MessageResponse parseIncompleteMarkdown={false}>{withLineBreaks(text)}</MessageResponse>
       </div>
       {(overflows || expanded) && (
         <button
