@@ -170,7 +170,8 @@ function OpenSidebar({
       className="flex min-h-0 shrink-0 flex-col border-r border-white/[0.06] bg-pane"
       style={{ width: CHAT_SIDEBAR_WIDTH }}
     >
-      <div className="flex h-[52px] shrink-0 items-center gap-2 pl-4 pr-2.5">
+      {/* The marks at the head and foot line up with the rows' text, 20px in. */}
+      <div className="flex h-[52px] shrink-0 items-center gap-2 pl-5 pr-2.5">
         <SidebarMark harness={harness} neutral={neutral} />
         <h2 className="font-display text-[15px] font-semibold leading-5 tracking-[-0.01em] text-neutral-100">Chats</h2>
         <div className="ml-auto">
@@ -344,7 +345,7 @@ function SidebarFoot({
       ? [plan && capitalise(plan), modelLabel].filter(Boolean).join(" · ")
       : describeReadiness(readiness);
   return (
-    <div className="flex shrink-0 items-center gap-2.5 border-t border-white/[0.06] px-4 py-3">
+    <div className="flex shrink-0 items-center gap-2.5 border-t border-white/[0.06] py-3 pl-5 pr-4">
       <SidebarMark harness={harness} neutral={neutral} className="size-5" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-[13px] font-medium leading-5 text-neutral-200">{name}</p>
