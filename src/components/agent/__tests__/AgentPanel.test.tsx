@@ -322,6 +322,14 @@ describe("AgentPanel", () => {
     await waitForComposer();
     // Once: who is in.
     expect(await screen.findByTestId("agent-signed-in-banner")).toHaveTextContent("Signed in to Claude Code as me@example.com · max");
+
+    // Dismissed, it leaves the cursor in the message box, not on the page (where keys are canvas shortcuts).
+    const textarea = await waitForComposer();
+    await waitFor(() => expect(document.activeElement).toBe(textarea));
+    const dismiss = within(screen.getByTestId("agent-signed-in-banner")).getByRole("button", { name: "Dismiss" });
+    dismiss.focus();
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(document.activeElement).toBe(textarea));
   });
 
   it("opens Codex's sign-in page and shows its device code", async () => {

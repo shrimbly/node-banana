@@ -336,7 +336,10 @@ export function AgentChatView() {
                 email={harnessStatus?.account?.email}
                 plan={harnessStatus?.account?.plan}
                 model={modelOption?.label}
-                onDismiss={dismissSignedInBanner}
+                onDismiss={() => {
+                  dismissSignedInBanner();
+                  focusInput();
+                }}
               />
             </div>
           )}

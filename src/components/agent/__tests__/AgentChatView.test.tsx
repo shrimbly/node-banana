@@ -296,6 +296,23 @@ describe("AgentChatView", () => {
     expect(useAssetStore.getState().appView).toBe("canvas");
   });
 
+  it("puts the cursor back in the message box when the signed-in banner is dismissed", async () => {
+    statuses.claude = harnessStatus("claude", { signedIn: false, billing: "none", signIn: { state: "pending" } });
+    render(<Harness />);
+    const checkNow = await screen.findByRole("button", { name: /check now/i });
+    statuses.claude = harnessStatus("claude");
+    fireEvent.click(checkNow);
+    const textarea = await waitForComposer();
+    await waitFor(() => expect(document.activeElement).toBe(textarea));
+
+    const dismiss = within(await screen.findByTestId("agent-signed-in-banner")).getByRole("button", { name: "Dismiss" });
+    dismiss.focus();
+    fireEvent.click(dismiss);
+    expect(screen.queryByTestId("agent-signed-in-banner")).not.toBeInTheDocument();
+    // Not left on the page, where the next keys would be read as shortcuts.
+    await waitFor(() => expect(document.activeElement).toBe(textarea));
+  });
+
   describe("sidebar", () => {
     it("lists past conversations by day, with the workflow and when", async () => {
       const now = new Date();
