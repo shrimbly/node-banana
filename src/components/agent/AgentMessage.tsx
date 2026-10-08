@@ -7,6 +7,7 @@ import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-e
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import { Tool, ToolContent, ToolHeader, ToolInput } from "@/components/ai-elements/tool";
 import { LocateFixedIcon } from "lucide-react";
+import { cn } from "@/components/agent/lib/utils";
 import {
   isRenderedPart,
   isRunWorkflowPart,
@@ -22,6 +23,7 @@ import { AgentRunCard } from "./AgentRunCard";
 import { CardIconButton } from "./AgentRunMedia";
 import { AgentToolRunResults } from "./AgentRunResults";
 import { useAgentTranscriptActions } from "./AgentSession";
+import { useAgentSurface } from "./AgentSurface";
 
 export interface AgentMessageProps {
   message: AgentUIMessage;
@@ -78,18 +80,27 @@ function ToolRows({ children }: { children: ReactNode }) {
 }
 
 /**
+ * The chat view's sizes: 15px reading text, the user's turn in a rounder,
+ * roomier bubble. The variant classes match MessageContent's own, so they replace them.
+ */
+const PAGE_USER_BUBBLE =
+  "text-[15px] leading-[26px] group-[.is-user]:rounded-[20px] group-[.is-user]:px-4 group-[.is-user]:py-2.5";
+const PAGE_ASSISTANT_TEXT = "text-[15px] leading-[26px]";
+
+/**
  * One chat message: user text in a bubble; for the agent, text, reasoning,
  * tool calls (then the results of runs they started), notices and the Run card, in order.
  */
 export const AgentMessage = memo(function AgentMessage({ message, streaming, onSignIn }: AgentMessageProps) {
+  const page = useAgentSurface() === "page";
   if (message.role === "user") {
     const text = message.parts
       .filter((part) => part.type === "text")
       .map((part) => part.text)
       .join("\n");
     return (
-      <Message from="user" className="max-w-[85%]">
-        <MessageContent className="whitespace-pre-wrap break-words">
+      <Message from="user" className={page ? "max-w-[80%]" : "max-w-[85%]"}>
+        <MessageContent className={cn("whitespace-pre-wrap break-words", page && PAGE_USER_BUBBLE)}>
           {text}
         </MessageContent>
       </Message>
@@ -119,7 +130,11 @@ export const AgentMessage = memo(function AgentMessage({ message, streaming, onS
     switch (part.type) {
       case "text":
         blocks.push(
-          <MessageResponse key={key} isAnimating={streaming && part.state === "streaming"}>
+          <MessageResponse
+            key={key}
+            isAnimating={streaming && part.state === "streaming"}
+            className={page ? "space-y-4" : undefined}
+          >
             {part.text}
           </MessageResponse>,
         );
@@ -145,7 +160,7 @@ export const AgentMessage = memo(function AgentMessage({ message, streaming, onS
 
   return (
     <Message from="assistant" className="max-w-full">
-      <MessageContent className="w-full gap-3">{blocks}</MessageContent>
+      <MessageContent className={cn("w-full", page ? `gap-4 ${PAGE_ASSISTANT_TEXT}` : "gap-3")}>{blocks}</MessageContent>
     </Message>
   );
 });
