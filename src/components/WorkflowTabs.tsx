@@ -1,8 +1,9 @@
 "use client";
 
 import { LibraryBig, MessagesSquare, Plus, X } from "lucide-react";
-import { useEffect, useMemo, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useId, useMemo, type MouseEvent, type ReactNode } from "react";
 import { useOnViewportChange, useReactFlow } from "@xyflow/react";
+import { useAgentPresence } from "@/components/agent/AgentSession";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { useAssetStore } from "@/store/assetStore";
 import { useShallow } from "zustand/shallow";
@@ -35,6 +36,9 @@ const SHOWN_VIEW_CLASS = `${SHOWN_TAB_SHAPE} bg-pane`;
  */
 export function WorkflowTabs() {
   const appView = useAssetStore((state) => state.appView);
+  // A turn running, or a harness that can't run one until the user acts: a dot on the Chat toggle
+  const { busy: agentBusy, presence } = useAgentPresence();
+  const agentStatus: ViewToggleStatus | null = agentBusy ? "working" : presence.attention ? "attention" : null;
   const setAppView = useAssetStore((state) => state.setAppView);
   const toggleAppView = useAssetStore((state) => state.toggleAppView);
   const {
@@ -112,6 +116,7 @@ export function WorkflowTabs() {
         icon={<MessagesSquare size={14} strokeWidth={1.75} />}
         shown={appView === "chat"}
         onToggle={() => toggleAppView("chat")}
+        status={agentStatus}
       />
       <ViewToggle
         label="Assets"
@@ -210,10 +215,19 @@ export function WorkflowTabs() {
   );
 }
 
+/** What a view entry's dot says: its view is busy (pulsing ink), or needs the user (amber). */
+type ViewToggleStatus = "working" | "attention";
+
+const VIEW_STATUS_TEXT: Record<ViewToggleStatus, string> = {
+  working: "The agent is working",
+  attention: "The agent needs attention",
+};
+
 /**
  * A leading entry that shows a view over every workflow in place of the
  * canvas: just its icon until the view is up, then the icon, its label and
- * the shown-tab look. A second press goes back to the canvas.
+ * the shown-tab look. A second press goes back to the canvas. A `status`
+ * puts a 6px dot on the icon's top-right corner.
  */
 function ViewToggle({
   label,
@@ -221,20 +235,25 @@ function ViewToggle({
   icon,
   shown,
   onToggle,
+  status = null,
 }: {
   label: string;
   shortcut: string;
   icon: ReactNode;
   shown: boolean;
   onToggle: () => void;
+  status?: ViewToggleStatus | null;
 }) {
+  const statusId = useId();
+  const title = shown ? `Back to the canvas (${shortcut})` : `${label} (${shortcut})`;
   return (
     <button
       type="button"
       aria-pressed={shown}
       onClick={onToggle}
       aria-label={label}
-      title={shown ? `Back to the canvas (${shortcut})` : `${label} (${shortcut})`}
+      aria-describedby={status ? statusId : undefined}
+      title={status ? `${title} · ${VIEW_STATUS_TEXT[status]}` : title}
       className={`relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-t-lg text-xs whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
         shown ? `${SHOWN_VIEW_CLASS} px-3` : "w-[34px] justify-center text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
       }`}
@@ -245,7 +264,27 @@ function ViewToggle({
           <TabEar side="right" fill="var(--color-pane)" />
         </>
       )}
-      {icon}
+      <span className="relative flex">
+        {icon}
+        {status && (
+          // Ringed in the colour behind it, so it reads as cut out of the icon's corner
+          <span
+            data-view-status={status}
+            aria-hidden
+            className={`absolute -top-[3px] -right-[3px] flex size-1.5 rounded-full ring-2 ${shown ? "ring-pane" : "ring-[#0f0f0f]"}`}
+          >
+            {status === "working" && (
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-neutral-200 opacity-60 motion-reduce:animate-none" />
+            )}
+            <span className={`relative inline-flex size-1.5 rounded-full ${status === "working" ? "bg-neutral-200" : "bg-amber-400"}`} />
+          </span>
+        )}
+      </span>
+      {status && (
+        <span id={statusId} hidden>
+          {VIEW_STATUS_TEXT[status]}
+        </span>
+      )}
       {shown && label}
     </button>
   );

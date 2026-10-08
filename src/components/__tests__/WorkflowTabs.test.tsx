@@ -25,6 +25,13 @@ vi.mock("@/store/workflowStore", () => ({
   }, { getState: () => mockUseWorkflowStore((s: unknown) => s) }),
 }));
 
+/** What the page's agent session tells the strip: a turn running, a harness that needs the user. */
+const agentPresence = vi.hoisted(() => ({
+  busy: false,
+  presence: { harness: "claude" as const, harnessChosen: true, attention: false },
+}));
+vi.mock("@/components/agent/AgentSession", () => ({ useAgentPresence: () => agentPresence }));
+
 const parked = (name: string | null, hasUnsavedChanges = false) =>
   ({ workflowName: name, hasUnsavedChanges }) as unknown as NonNullable<WorkflowTab["snapshot"]>;
 
@@ -264,7 +271,11 @@ describe("WorkflowTabs", () => {
 
   describe("Chat entry", () => {
     beforeEach(() => useAssetStore.setState({ appView: "canvas" }));
-    afterEach(() => useAssetStore.setState({ appView: "canvas" }));
+    afterEach(() => {
+      useAssetStore.setState({ appView: "canvas" });
+      agentPresence.busy = false;
+      agentPresence.presence.attention = false;
+    });
 
     const chat = () => screen.getByRole("button", { name: "Chat" });
 
@@ -341,6 +352,55 @@ describe("WorkflowTabs", () => {
       useAssetStore.setState({ appView: "chat" });
       fireEvent.click(screen.getByRole("button", { name: "Close Product shots" }));
       expect(useAssetStore.getState().appView).toBe("canvas");
+    });
+
+    const dot = () => chat().querySelector("[data-view-status]");
+
+    it("carries no dot while the agent is idle and ready", () => {
+      render(<WorkflowTabs />);
+      expect(dot()).toBeNull();
+      expect(chat()).not.toHaveAttribute("aria-describedby");
+      expect(chat()).toHaveAttribute("title", "Chat (C)");
+    });
+
+    it("pulses a dot on its icon while a turn runs, shown or not, and says so", () => {
+      agentPresence.busy = true;
+      const { rerender } = render(<WorkflowTabs />);
+      expect(dot()).toHaveAttribute("data-view-status", "working");
+      expect(dot()!.querySelector(".animate-ping")).not.toBeNull();
+      expect(dot()!.className).toContain("ring-[#0f0f0f]");
+      expect(chat()).toHaveAccessibleDescription("The agent is working");
+      expect(chat()).toHaveAttribute("title", "Chat (C) · The agent is working");
+
+      act(() => useAssetStore.setState({ appView: "chat" }));
+      rerender(<WorkflowTabs />);
+      expect(dot()).toHaveAttribute("data-view-status", "working");
+      // Cut out of the sidebar's colour once the toggle takes the shown look
+      expect(dot()!.className).toContain("ring-pane");
+      // The name stays the plain label
+      expect(screen.getByRole("button", { name: "Chat" })).toBe(chat());
+    });
+
+    it("shows a still amber dot when the harness needs the user and no turn runs", () => {
+      agentPresence.presence.attention = true;
+      render(<WorkflowTabs />);
+      expect(dot()).toHaveAttribute("data-view-status", "attention");
+      expect(dot()!.querySelector(".animate-ping")).toBeNull();
+      expect(dot()!.querySelector(".bg-amber-400")).not.toBeNull();
+      expect(chat()).toHaveAccessibleDescription("The agent needs attention");
+    });
+
+    it("lets a running turn win over the attention dot", () => {
+      agentPresence.busy = true;
+      agentPresence.presence.attention = true;
+      render(<WorkflowTabs />);
+      expect(dot()).toHaveAttribute("data-view-status", "working");
+    });
+
+    it("never puts the dot on Assets", () => {
+      agentPresence.busy = true;
+      render(<WorkflowTabs />);
+      expect(screen.getByRole("button", { name: "Assets" }).querySelector("[data-view-status]")).toBeNull();
     });
   });
 
