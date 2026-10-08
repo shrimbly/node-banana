@@ -5,7 +5,15 @@ import type { DynamicToolUIPart } from "ai";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { Tool, ToolContent, ToolHeader, ToolInput } from "@/components/ai-elements/tool";
+import {
+  Tool,
+  ToolContent,
+  ToolGroup,
+  ToolGroupContent,
+  ToolGroupTrigger,
+  ToolHeader,
+  ToolInput,
+} from "@/components/ai-elements/tool";
 import { LocateFixedIcon } from "lucide-react";
 import { cn } from "@/components/agent/lib/utils";
 import {
@@ -14,6 +22,7 @@ import {
   toolCanvasTarget,
   toolDisplayState,
   toolDisplayTitle,
+  toolGroupSummary,
   toolSummaryLine,
 } from "@/lib/agent/client/messages";
 import type { AgentUIMessage } from "@/lib/agent/types";
@@ -72,9 +81,39 @@ function AgentToolRow({ part }: { part: DynamicToolUIPart }) {
   );
 }
 
-/** Consecutive tool calls as a compact list, one line each. */
-function ToolRows({ children }: { children: ReactNode }) {
-  return <div className="flex flex-col">{children}</div>;
+interface ToolCall {
+  key: string;
+  part: DynamicToolUIPart;
+}
+
+/**
+ * Consecutive tool calls folded under one line: how many and what came of
+ * them, or the call still running, shimmering. Opens to a line per call.
+ */
+function AgentToolGroup({ calls }: { calls: ToolCall[] }) {
+  const { label, running, result, failed } = toolGroupSummary(calls.map((call) => call.part));
+  return (
+    <ToolGroup>
+      <ToolGroupTrigger
+        label={
+          running ? (
+            <Shimmer as="span" duration={1}>
+              {running}
+            </Shimmer>
+          ) : (
+            label
+          )
+        }
+        summary={running ? null : result}
+        failed={running ? null : failed}
+      />
+      <ToolGroupContent>
+        {calls.map(({ key, part }) => (
+          <AgentToolRow key={key} part={part} />
+        ))}
+      </ToolGroupContent>
+    </ToolGroup>
+  );
 }
 
 /**
@@ -106,13 +145,13 @@ export const AgentMessage = memo(function AgentMessage({ message, streaming, onS
     );
   }
 
-  // Runs of tool calls are drawn together; everything else in order, one per part.
+  // Runs of tool calls fold together; everything else in order, one per part.
   const blocks: ReactNode[] = [];
-  let toolRun: ReactNode[] = [];
-  // The runs those calls started: their results follow the list.
+  let toolRun: ToolCall[] = [];
+  // The runs those calls started: their results follow the folded line, always in view.
   let runCalls: string[] = [];
   const flushTools = () => {
-    if (toolRun.length) blocks.push(<ToolRows key={`tools-${blocks.length}`}>{toolRun}</ToolRows>);
+    if (toolRun.length) blocks.push(<AgentToolGroup key={`tools-${blocks.length}`} calls={toolRun} />);
     for (const toolCallId of runCalls) blocks.push(<AgentToolRunResults key={`run-${toolCallId}`} toolCallId={toolCallId} />);
     toolRun = [];
     runCalls = [];
@@ -121,7 +160,7 @@ export const AgentMessage = memo(function AgentMessage({ message, streaming, onS
     if (!isRenderedPart(part)) return;
     const key = `${message.id}-${index}`;
     if (part.type === "dynamic-tool") {
-      toolRun.push(<AgentToolRow key={key} part={part} />);
+      toolRun.push({ key, part });
       if (isRunWorkflowPart(part)) runCalls.push(part.toolCallId);
       return;
     }

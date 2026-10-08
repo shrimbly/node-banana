@@ -58,6 +58,57 @@ export function toolSummaryLine(part: DynamicToolUIPart): string | null {
   return null;
 }
 
+/** "Added 3 nodes" → "added 3 nodes", to follow "Used 2 tools · ". Leaves "LLM …" alone. */
+function lowerFirst(text: string): string {
+  return /^[A-Z][a-z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text;
+}
+
+const isFailedState = (state: DynamicToolUIPart["state"]) => state === "output-error" || state === "output-denied";
+
+export interface ToolGroupSummary {
+  /** "Used 3 tools". */
+  label: string;
+  /** The call still running, by title ("Edit workflow…"): the folded line names it while it works. */
+  running: string | null;
+  /** What came of the calls: the canvas change, else a lone call's result, else the run started. */
+  result: string | null;
+  /** "1 failed", when a call failed or the tool refused it. */
+  failed: string | null;
+}
+
+/** The folded line over a run of tool calls. */
+export function toolGroupSummary(parts: readonly DynamicToolUIPart[]): ToolGroupSummary {
+  const label = `Used ${parts.length} tool${parts.length === 1 ? "" : "s"}`;
+  const runningPart = parts.findLast((part) => part.state === "input-streaming" || part.state === "input-available");
+  const failedCount = parts.filter((part) => isFailedState(toolDisplayState(part))).length;
+  const failed = failedCount === 0 ? null : parts.length === 1 ? "failed" : `${failedCount} failed`;
+
+  let result: string | null = null;
+  const edits = parts.flatMap((part) => {
+    const target = toolCanvasTarget(part);
+    return target ? [{ part, target }] : [];
+  });
+  if (edits.length === 1) {
+    result = toolSummaryLine(edits[0].part);
+  } else if (edits.length > 1) {
+    // Several edits: the nodes they touched between them, each once.
+    const nodes = new Set(edits.flatMap(({ target }) => target.nodeIds.map((id) => `${target.tabId ?? ""}:${id}`)));
+    result = `changed ${nodes.size} node${nodes.size === 1 ? "" : "s"}`;
+  } else if (parts.length === 1) {
+    result = isFailedState(toolDisplayState(parts[0])) ? null : toolSummaryLine(parts[0]);
+  } else {
+    const run = parts.findLast((part) => isRunWorkflowPart(part) && toolDisplayState(part) === "output-available");
+    result = run ? toolSummaryLine(run) : null;
+  }
+
+  return {
+    label,
+    running: runningPart ? `${toolDisplayTitle(runningPart)}…` : null,
+    result: result ? lowerFirst(result) : null,
+    failed,
+  };
+}
+
 type AgentMessagePart = AgentUIMessage["parts"][number];
 
 /** Whether a part draws anything (Claude streams empty reasoning parts when thinking is hidden). */

@@ -7,15 +7,71 @@ import {
 } from "@/components/agent/ui/collapsible";
 import { cn } from "@/components/agent/lib/utils";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
-import { ChevronRightIcon } from "lucide-react";
+import { ChevronRightIcon, WrenchIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { isValidElement } from "react";
 
 /**
- * A tool call as a ruled row, in the split dialogs' language: the title, a
- * mono status eyebrow at the right, the one-line result under it, and the
- * call's input in a mono well when opened. Restyled from AI Elements' card.
+ * Tool calls, quietly: a turn's run of calls folds under one line ("Used 3
+ * tools · updated 4 nodes") that opens to a line per call on a thin rail; a
+ * call opens to its input in a mono well. Restyled from AI Elements' card.
  */
+
+export type ToolGroupProps = ComponentProps<typeof Collapsible>;
+
+export const ToolGroup = ({ className, ...props }: ToolGroupProps) => (
+  <Collapsible
+    data-agent-tool-group=""
+    className={cn("group/tools not-prose flex w-full flex-col", className)}
+    {...props}
+  />
+);
+
+export type ToolGroupTriggerProps = ComponentProps<typeof CollapsibleTrigger> & {
+  /** "Used 3 tools", or the call still running. */
+  label: ReactNode;
+  /** What came of the calls, after the label. */
+  summary?: ReactNode;
+  /** "1 failed", in red at the end. */
+  failed?: ReactNode;
+};
+
+/** The folded line: a wrench, the label, then the summary in fainter ink, and a chevron that turns when open. */
+export const ToolGroupTrigger = ({ className, label, summary, failed, ...props }: ToolGroupTriggerProps) => (
+  <CollapsibleTrigger
+    className={cn(
+      // Sized to its text; the wrench sits on the message's edge and the hover wash reaches 6px past it.
+      "-mx-1.5 flex min-h-7 w-fit max-w-[calc(100%+12px)] items-center gap-1.5 rounded-md squircle px-1.5 py-1 text-left text-[13px] text-ink-3 leading-[18px] transition-colors duration-[120ms] hover:bg-white/5",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
+      className
+    )}
+    {...props}
+  >
+    <WrenchIcon aria-hidden="true" strokeWidth={1.75} className="size-3.5 shrink-0" />
+    <span className="shrink-0">{label}</span>
+    {summary && <span className="min-w-0 truncate text-neutral-500">· {summary}</span>}
+    {failed && <span className="shrink-0 text-red-400">· {failed}</span>}
+    <ChevronRightIcon
+      aria-hidden="true"
+      strokeWidth={1.75}
+      className="size-3.5 shrink-0 transition-transform duration-150 group-data-[state=open]/tools:rotate-90 motion-reduce:transition-none"
+    />
+  </CollapsibleTrigger>
+);
+
+export type ToolGroupContentProps = ComponentProps<typeof CollapsibleContent>;
+
+/** The calls on a hairline rail under the wrench, their text in line with the label's. */
+export const ToolGroupContent = ({ className, ...props }: ToolGroupContentProps) => (
+  <CollapsibleContent
+    className={cn(
+      "mt-0.5 ml-1.5 flex flex-col border-white/[0.08] border-l pl-[13px] outline-none",
+      "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=open]:animate-in motion-reduce:animate-none",
+      className
+    )}
+    {...props}
+  />
+);
 
 export type ToolProps = ComponentProps<typeof Collapsible>;
 

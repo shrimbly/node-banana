@@ -14,6 +14,7 @@ import {
   toolCanvasTarget,
   toolDisplayState,
   toolDisplayTitle,
+  toolGroupSummary,
   toolSummaryLine,
   turnIndicatorText,
 } from "../messages";
@@ -91,6 +92,53 @@ describe("tool display", () => {
     expect(toolCanvasTarget(done({ ok: true, summary: "", nodeIds: [] }))).toBeNull();
     expect(toolCanvasTarget(done({ ok: false, summary: "", nodeIds: ["n1"] }))).toBeNull();
     expect(toolCanvasTarget(tool({ state: "input-available" }))).toBeNull();
+  });
+});
+
+describe("toolGroupSummary", () => {
+  const done = (toolName: string, output: unknown, toolCallId = toolName) =>
+    tool({ toolName, toolCallId, state: "output-available", output });
+  const read = done("get_workflow", { ok: true, summary: "Read the workflow (3 nodes)" });
+
+  it("counts the calls and says what the one edit did, to follow the count", () => {
+    const edit = done("edit_workflow", { ok: true, summary: "Updated 4 nodes", nodeIds: ["a", "b", "c", "d"] });
+    expect(toolGroupSummary([read, edit])).toEqual({ label: "Used 2 tools", running: null, result: "updated 4 nodes", failed: null });
+  });
+
+  it("counts the nodes several edits touched between them, each once and per tab", () => {
+    const create = done("create_workflow", { ok: true, summary: "Added 3 nodes", tabId: "t1", nodeIds: ["a", "b", "c"] }, "c1");
+    const edit = done("edit_workflow", { ok: true, summary: "Updated 2 nodes", tabId: "t1", nodeIds: ["b", "c"] }, "c2");
+    const other = done("edit_workflow", { ok: true, summary: "Updated 1 node", tabId: "t2", nodeIds: ["a"] }, "c3");
+    expect(toolGroupSummary([create, edit, other]).result).toBe("changed 4 nodes");
+  });
+
+  it("gives a lone call's own result, and nothing for reads alone", () => {
+    expect(toolGroupSummary([read])).toMatchObject({ label: "Used 1 tool", result: "read the workflow (3 nodes)" });
+    expect(toolGroupSummary([read, done("search_models", { ok: true, summary: "Found 4 models" })]).result).toBeNull();
+  });
+
+  it("falls back to the run a call started", () => {
+    const run = done("mcp__node_banana__run_workflow", { ok: true, summary: "Started the workflow" });
+    expect(toolGroupSummary([read, run]).result).toBe("started the workflow");
+  });
+
+  it("keeps a capital that starts a name", () => {
+    expect(toolGroupSummary([done("edit_workflow", { ok: true, summary: "LLM prompt set", nodeIds: ["a"] })]).result).toBe(
+      "LLM prompt set",
+    );
+  });
+
+  it("counts failed and refused calls", () => {
+    const refused = done("run_workflow", { ok: false, summary: "Inputs not ready" });
+    const errored = tool({ toolCallId: "e", state: "output-error", errorText: "Bad handle" });
+    expect(toolGroupSummary([read, refused, errored]).failed).toBe("2 failed");
+    expect(toolGroupSummary([refused])).toMatchObject({ result: null, failed: "failed" });
+  });
+
+  it("names the call still running", () => {
+    const running = tool({ toolCallId: "r", title: "Edit workflow", state: "input-available" });
+    expect(toolGroupSummary([read, running]).running).toBe("Edit workflow…");
+    expect(toolGroupSummary([read]).running).toBeNull();
   });
 });
 

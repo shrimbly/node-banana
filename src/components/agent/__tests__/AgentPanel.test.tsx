@@ -474,6 +474,9 @@ describe("AgentPanel", () => {
     fireEvent.keyDown(textarea, { key: "Enter" });
 
     expect(await screen.findByText("Added a prompt node.")).toBeInTheDocument();
+    const tools = screen.getByRole("button", { name: /Used 1 tool/ });
+    expect(tools).toHaveTextContent("added 1 node");
+    fireEvent.click(tools);
     expect(screen.getByText("Edit workflow")).toBeInTheDocument();
     expect(screen.getByText("Added 1 node")).toBeInTheDocument();
 

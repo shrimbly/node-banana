@@ -672,7 +672,7 @@ describe("AgentChatView", () => {
       const textarea = await waitForComposer();
       fireEvent.click(within(sidebar()).getByRole("button", { name: /^Hero film/ }));
       await screen.findByText("Built the hero film.");
-      const toolRow = within(screen.getByRole("log")).getByRole("button", { name: /Added 2 nodes/ });
+      const toolRow = within(screen.getByRole("log")).getByRole("button", { name: /Used 1 tool/ });
 
       // "can you…" after pressing a card's button, clicking the transcript, or a button that went away.
       for (const target of [toolRow, view(), document.body]) {
@@ -700,7 +700,7 @@ describe("AgentChatView", () => {
       render(<Harness />);
       await waitForComposer();
       fireEvent.click(within(sidebar()).getByRole("button", { name: /^Hero film/ }));
-      const toolRow = await within(await screen.findByRole("log")).findByRole("button", { name: /Added 2 nodes/ });
+      const toolRow = await within(await screen.findByRole("log")).findByRole("button", { name: /Used 1 tool/ });
       toolRow.focus();
       fireEvent.keyDown(toolRow, { key: " " });
       expect(document.activeElement).toBe(toolRow);

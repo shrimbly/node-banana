@@ -90,6 +90,11 @@ function runRecord(): AgentRunRecord {
   };
 }
 
+/** Opens the folded line over a turn's tool calls. */
+function openTools(name: RegExp = /Used \d+ tools?/) {
+  fireEvent.click(screen.getByRole("button", { name }));
+}
+
 function transcript(): AgentTranscriptActions {
   return { chatId: "chat-1", send: vi.fn(() => true), showOnCanvas: vi.fn(() => true), busy: false };
 }
@@ -132,8 +137,8 @@ describe("AgentMessage runs", () => {
 
     act(() => useAgentRuns.setState({ records: [runRecord()] }));
     const results = screen.getByRole("group", { name: "Ran the workflow" });
-    const rows = container.querySelector("[data-agent-tool]")!.parentElement!;
-    // After the tool list, before the text that followed the calls.
+    const rows = container.querySelector("[data-agent-tool-group]")!;
+    // After the folded tool calls, in view without opening them, before the text that followed the calls.
     expect(rows.compareDocumentPosition(results) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(results.compareDocumentPosition(screen.getByText("Running it now.")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -151,6 +156,9 @@ describe("AgentMessage runs", () => {
         />
       </AgentTranscriptActionsProvider>,
     );
+    // Folded until opened.
+    expect(screen.queryByRole("button", { name: "Show on canvas" })).not.toBeInTheDocument();
+    openTools();
     // Only on the call that names nodes.
     const buttons = screen.getAllByRole("button", { name: "Show on canvas" });
     expect(buttons).toHaveLength(1);
@@ -172,6 +180,7 @@ describe("AgentMessage runs", () => {
         />
       </AgentTranscriptActionsProvider>,
     );
+    openTools();
     const actions = screen.getByRole("button", { name: "Show on canvas" }).closest("[data-tool-actions]")!;
     expect(actions.className).toContain("pointer-coarse:opacity-100");
   });
@@ -183,16 +192,53 @@ describe("AgentMessage runs", () => {
         streaming={false}
       />,
     );
+    openTools();
     expect(screen.queryByRole("button", { name: "Show on canvas" })).not.toBeInTheDocument();
   });
 });
 
 describe("AgentMessage tool rows", () => {
+  it("folds a turn's calls under one line, Used N tools and what came of them, opening to a line each", () => {
+    render(
+      <AgentMessage
+        message={reply([
+          toolPart("get_workflow", "call-read", { ok: true, summary: "Read the workflow (3 nodes)" }),
+          toolPart("edit_workflow", "call-edit", { ok: true, summary: "Updated 4 nodes", nodeIds: ["a", "b", "c", "d"] }),
+          { type: "text", text: "Updated all four prompts.", state: "done" },
+        ])}
+        streaming={false}
+      />,
+    );
+    const folded = screen.getByRole("button", { name: /Used 2 tools/ });
+    expect(folded).toHaveTextContent(/^Used 2 tools· updated 4 nodes$/);
+    expect(folded).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText("Read the workflow (3 nodes)")).not.toBeInTheDocument();
+
+    fireEvent.click(folded);
+    expect(folded).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /Get workflow/ })).toHaveTextContent(/^Get workflowRead the workflow \(3 nodes\)Done$/);
+    expect(screen.getByRole("button", { name: /Edit workflow/ })).toBeInTheDocument();
+  });
+
+  it("names the call still running in place of the count, and counts failures in red", () => {
+    const running = { type: "dynamic-tool", toolName: "edit_workflow", toolCallId: "call-run", state: "input-available", input: {} } as Part;
+    const failed = toolPart("run_workflow", "call-fail", { ok: false, summary: "Inputs not ready" });
+    const { rerender } = render(<AgentMessage message={reply([failed, running])} streaming />);
+    expect(screen.getByRole("button", { name: /Edit workflow…/ })).toHaveTextContent(/^Edit workflow…$/);
+
+    const finished = toolPart("edit_workflow", "call-run", { ok: true, summary: "Updated 1 node", nodeIds: ["gen"] });
+    rerender(<AgentMessage message={reply([failed, finished])} streaming={false} />);
+    const folded = screen.getByRole("button", { name: /Used 2 tools/ });
+    expect(folded).toHaveTextContent(/^Used 2 tools· updated 1 node· 1 failed$/);
+    expect(within(folded).getByText("· 1 failed")).toHaveClass("text-red-400");
+  });
+
   it("marks a running call with a dot and a failed one in red, at the end of its line", () => {
     const running = { type: "dynamic-tool", toolName: "edit_workflow", toolCallId: "call-run", state: "input-available", input: {} } as Part;
     const failed = toolPart("run_workflow", "call-fail", { ok: false, summary: "Inputs not ready" });
-    render(<AgentMessage message={reply([running, failed])} streaming />);
-    const [first, second] = screen.getAllByRole("button", { name: /workflow/ });
+    const { container } = render(<AgentMessage message={reply([running, failed])} streaming />);
+    openTools(/Edit workflow…/);
+    const [first, second] = container.querySelectorAll<HTMLElement>("[data-agent-tool] button");
     expect(within(first).getByText("Running")).toHaveClass("sr-only");
     expect(first.querySelector('[data-agent-tool-status="input-available"] .animate-ping')).toBeInTheDocument();
     expect(within(second).getByText("Inputs not ready")).toHaveClass("text-red-400");
