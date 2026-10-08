@@ -27,6 +27,7 @@ import { getProviderCatalog, type CatalogFetcher, type CatalogStatus } from "./c
 import { startDeadline } from "./deadline";
 import { comfyRouterBoundModels, comfyRouterProviderModels } from "./comfyRouter/catalog";
 import { isValidReplicateModelId } from "./ids";
+import { awaitFalCooldown, noteFalRateLimit } from "./falSchema";
 import type { ProviderKeys } from "./keys";
 
 // API base URLs
@@ -1256,7 +1257,16 @@ async function fetchFalModels(
       url += `&cursor=${encodeURIComponent(cursor)}`;
     }
 
-    const response = await fetch(url, { headers, signal });
+    // The list pages through the same rate-limited API as the schemas: a
+    // 429 holds every request to it for the delay it names, then the page
+    // is asked for again, twice.
+    await awaitFalCooldown(signal);
+    let response = await fetch(url, { headers, signal });
+    for (let retry = 0; response.status === 429 && retry < 2; retry++) {
+      noteFalRateLimit(response);
+      await awaitFalCooldown(signal);
+      response = await fetch(url, { headers, signal });
+    }
 
     if (!response.ok) {
       throw new Error(`fal.ai API error: ${response.status}`);
