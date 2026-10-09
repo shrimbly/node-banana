@@ -4,8 +4,8 @@
  * user's words with the live canvas.
  */
 
-import type { AgentHarnessId, AgentWorkflowSnapshot } from "./types";
-import { compactCatalog, describeWorkflow } from "./graph/describe";
+import type { AgentHarnessId, AgentTabSummary, AgentWorkflowSnapshot } from "./types";
+import { compactCatalog, describeTabs, describeWorkflow } from "./graph/describe";
 import { GraphDraft } from "./graph/draft";
 import { SHORTEST_TEXT_VIEW } from "./graph/scrub";
 import { AGENT_TOOL_DEFINITIONS } from "./tools/definitions";
@@ -38,7 +38,7 @@ export function buildAgentSystemPrompt(opts: { harness: AgentHarnessId }): strin
 - Common chains: Prompt → Generate Image → Output. Image Input + Prompt → Generate Image (edit a photo). Prompt → LLM Generate → Generate Image (an LLM writes the image prompt; that Prompt holds the LLM's whole instruction plus the user's idea, e.g. "Write one detailed image-generation prompt (subject, setting, composition, lighting, style) for: <idea>. Reply with only the prompt." LLM Generate has no system prompt, and node comments never reach any model). Prompt "cat, dog, bird" → Array (delimiter ",") → several Generate Image nodes, one item each; the Array's delimiter must match the list's separator (default "*"). Generate Image → Generate Video with a Veo image-to-video model → Output.
 - Media comes from the user's uploads (Image/Audio/Video Input nodes) or from generators. You cannot provide files.
 - New nodes start with the user's saved model and settings (model, aspect ratio, resolution, LLM), which may differ from the built-in defaults. API keys are added by the user in Settings → Providers (or .env), never in a node.
-- Nothing runs until the user presses Run. You never run or generate anything yourself, and never claim to have.
+- Nothing runs until the user presses Run or asks you to run it. Then run the nodes you added or changed in this conversation if what feeds them holds its output; run everything if they ask, you built it all in this conversation, or inputs are missing; or from the node they name. Results arrive with their next message: report them from its canvas, and look at them with view_outputs before you judge them or change the workflow to fix them. What you build or change and leave unrun gets a Run button under your reply if it can run as it stands: point the user there, not to the canvas's Run button; if an upload or text is missing there is none, so say what to fill in, then to press Run on the canvas. The button covers only the workflow you end in: for changes left in another tab, say which and to press Run on its canvas.
 - A group is a named, coloured box (neutral, blue, green, purple, orange or red) around related nodes. A node is in at most one group; a locked group's nodes do not run. Boxes follow their nodes: you never size or place one.
 
 # Node types
@@ -58,21 +58,26 @@ ${compactCatalog()}
 10. When only content is missing (which subjects, items or wording), build now with sensible placeholder content and say which node to edit (e.g. "replace the animals in prompt-ag1"). Ask one short question only when the structure is unclear or the change would destroy work (see rule 7).
 11. Group a workflow with distinct stages or branches (e.g. "Scene set" feeding "Hero film", or one branch per variation): one group per stage, named for what it makes, each in a different colour (create_workflow groups, or the group operation for nodes already there). Do not group a workflow of 2-3 nodes, or regroup the user's nodes, unless asked.
 12. Name the conversation for the user's chat history in your first reply (a short summary, alongside your other tool calls), and again only if it moves on to a clearly different task.
-13. Preferences the user states (node models and settings, prompt style or language, layout) hold for the rest of the conversation until they change them: apply them unprompted, ahead of the saved defaults.`;
+13. Preferences the user states (node models and settings, prompt style or language, layout) hold for the rest of the conversation until they change them: apply them unprompted, ahead of the saved defaults.
+14. Each open workflow is a tab; the <canvas> block lists them when there are several, and your tools work in the live one. switch_workflow moves to another; new_workflow opens an empty one: use it, not replaceCanvas, when the user asks for a new workflow and the live one holds other work. save_workflow saves the live one: save a workflow you built from scratch once it is built, named for what it makes, unless the user said not to; save other work only when asked.`;
 }
 
 /** This turn's prompt: the user's words plus the current canvas (and selection) described compactly. */
-export function buildTurnPrompt(opts: { userText: string; snapshot: AgentWorkflowSnapshot }): string {
-  return `<canvas>\n${describeCanvas(opts.snapshot)}\n</canvas>\n\n<user>\n${opts.userText}\n</user>`;
+export function buildTurnPrompt(opts: { userText: string; snapshot: AgentWorkflowSnapshot; tabs?: AgentTabSummary[] }): string {
+  return `<canvas>\n${describeCanvas(opts.snapshot, opts.tabs)}\n</canvas>\n\n<user>\n${opts.userText}\n</user>`;
 }
 
-/** The canvas block for a turn: compact, truncated for large canvases. */
-export function describeCanvas(snapshot: AgentWorkflowSnapshot | undefined): string {
+/**
+ * The canvas block for a turn: compact, truncated for large canvases. With
+ * other workflows open, it starts with the list of tabs and names the live one.
+ */
+export function describeCanvas(snapshot: AgentWorkflowSnapshot | undefined, tabs?: readonly AgentTabSummary[]): string {
   const draft = new GraphDraft(snapshot ?? { nodes: [], edges: [], groups: [], selectedNodeIds: [] });
-  if (draft.nodes.size === 0) return "The canvas is empty.";
-  let text = describeWorkflow(draft, { detail: "summary", maxNodes: CANVAS_MAX_NODES, textPreview: CANVAS_TEXT_PREVIEW });
+  let text = draft.nodes.size === 0 ? "The canvas is empty." : describeWorkflow(draft, { detail: "summary", maxNodes: CANVAS_MAX_NODES, textPreview: CANVAS_TEXT_PREVIEW });
   if (text.length > CANVAS_MAX_CHARS) {
     text = `${text.slice(0, CANVAS_MAX_CHARS)}\n… (canvas description cut here; call get_workflow for the rest)`;
   }
-  return text;
+  const live = tabs?.find((tab) => tab.active);
+  if (!tabs || tabs.length === 0 || (tabs.length === 1 && live)) return text;
+  return `${describeTabs(tabs)}\n\nThe live workflow${live ? `, ${live.id}` : ""}:\n${text}`;
 }

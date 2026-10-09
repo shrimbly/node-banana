@@ -43,4 +43,27 @@ describe("fitHistory", () => {
     expect(JSON.stringify(first)).not.toContain("xxxx");
     expect(second.id).toBe("small");
   });
+
+  it("keeps one map per built workflow when it compacts, on the call that built it, as the turn left it", () => {
+    const graph = (count: number) => ({ nodes: Array.from({ length: count }, (_, i) => ["prompt", i * 400, 0, 320, 220]), edges: [] });
+    const tool = (toolName: string, id: string, count: number, input: unknown = {}) => ({
+      type: "dynamic-tool",
+      toolName,
+      toolCallId: id,
+      state: "output-available",
+      input,
+      output: { ok: true, summary: "", tabId: "tab-a", graph: graph(count) },
+    });
+    const built = conversation("built", 2, [
+      user("u", "build it"),
+      {
+        id: "a",
+        role: "assistant",
+        parts: [tool("create_workflow", "c1", 2, { workflow: "x".repeat(5_000) }), tool("edit_workflow", "e1", 3), tool("edit_workflow", "e2", 4)],
+      } as AgentUIMessage,
+    ]);
+    const [kept] = fitHistory([built], 4_000);
+    const outputs = (kept.messages[1].parts as Array<{ output: { graph?: { nodes: unknown[] } } }>).map((part) => part.output.graph?.nodes.length);
+    expect(outputs).toEqual([4, undefined, undefined]);
+  });
 });

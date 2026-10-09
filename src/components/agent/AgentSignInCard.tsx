@@ -39,6 +39,8 @@ export interface AgentSignInCardProps {
   variant?: "full" | "inline";
   /** The checking card's eyebrow when no harness is chosen yet ("Agent"). */
   eyebrow?: string;
+  /** Classes after the variant's own: a host that caps the card itself lifts the inline cap. */
+  className?: string;
 }
 
 /**
@@ -74,6 +76,7 @@ export function AgentSignInCard({
   onCancelSignIn,
   variant = "full",
   eyebrow,
+  className,
 }: AgentSignInCardProps) {
   const label = HARNESS_LABELS[harness];
   const { plan, account, runsOn, signInNote } = HARNESS_BILLING_COPY[harness];
@@ -335,6 +338,7 @@ export function AgentSignInCard({
           ? "min-h-0 flex-1 gap-5 px-4 pb-6 pt-5"
           : // Under a conversation: capped and scrolling on its own, so the transcript keeps some room.
             "max-h-[65%] shrink-0 gap-3.5 overflow-y-auto border-t fade-rule p-4",
+        className,
       )}
     >
       {content}

@@ -10,6 +10,10 @@ import {
   tabToActivateAfterClose,
   anyWorkflowTabUnsaved,
   isWorkflowTabPristine,
+  claimTabId,
+  createTabId,
+  emptyWorkflowTabSnapshot,
+  markTabIdsUsed,
   type WorkflowTab,
 } from "../utils/workflowTabs";
 import type { WorkflowNode } from "@/types";
@@ -321,6 +325,102 @@ describe("workflow tabs (store)", () => {
   });
 });
 
+describe("tabs the agent names (newTab with an id and a name)", () => {
+  // Used ids are remembered for the page's life, so every test takes its own
+  let count = 0;
+  const freshId = () => `tab-agtest${(count += 1)}-${Math.random().toString(36).slice(2, 8)}`;
+  const emptySnapshot = (workflowName: string | null = null) => ({
+    ...emptyWorkflowTabSnapshot({ edgeStyle: "angular", edgeAppearance: store().edgeAppearance, useExternalImageStorage: true }),
+    workflowName,
+  });
+
+  afterEach(() => { delete (window as { nodeBananaDesktop?: unknown }).nodeBananaDesktop; });
+  beforeEach(() => {
+    resetTabs();
+  });
+
+  it("opens the tab under the id asked for", () => {
+    const firstId = store().activeTabId;
+    const id = freshId();
+
+    expect(store().newTab({ id })).toBe(id);
+
+    expect(store().activeTabId).toBe(id);
+    expect(store().tabs.map((tab) => tab.id)).toEqual([firstId, id]);
+    expect(store().tabs[1].snapshot).toBeNull();
+  });
+
+  it.each(["", "agent-1", "tab-", "tab-two words", "tab-a/b", "tab-é", `tab-${"x".repeat(101)}`])(
+    "refuses the malformed id %j and opens nothing",
+    (id) => {
+      const before = store().tabs;
+      expect(store().newTab({ id })).toBeNull();
+      expect(store().tabs).toBe(before);
+    },
+  );
+
+  it("never hands an id out twice, even once its tab has closed", () => {
+    const id = freshId();
+    store().newTab({ id });
+    expect(store().newTab({ id })).toBeNull();
+    expect(store().tabs).toHaveLength(2);
+
+    expect(store().closeTab(id)).toBe(true);
+    expect(store().newTab({ id })).toBeNull();
+    expect(store().tabs).toHaveLength(1);
+  });
+
+  it("refuses an id the page made itself", () => {
+    expect(store().newTab({ id: store().activeTabId })).toBeNull();
+    const made = store().newTab();
+    expect(made).not.toBeNull();
+    store().closeTab(made!);
+    expect(store().newTab({ id: made! })).toBeNull();
+  });
+
+  it("refuses the ids of a restored desktop session, open or closed since", () => {
+    const [live, parked] = [freshId(), freshId()];
+    store().restoreDesktopSession(
+      [
+        { id: live, snapshot: emptySnapshot("Live") },
+        { id: parked, snapshot: emptySnapshot("Parked") },
+      ],
+      live,
+    );
+    expect(store().newTab({ id: parked })).toBeNull();
+    expect(store().newTab({ id: live })).toBeNull();
+
+    expect(store().closeTab(parked)).toBe(true);
+    expect(store().newTab({ id: parked })).toBeNull();
+  });
+
+  it("does not use an id up when it refuses for being busy", () => {
+    const id = freshId();
+    useWorkflowStore.setState({ isRunning: true });
+    expect(store().newTab({ id })).toBeNull();
+
+    useWorkflowStore.setState({ isRunning: false });
+    expect(store().newTab({ id })).toBe(id);
+  });
+
+  it("names the new, unsaved workflow, trimmed, and parks the name with its tab", () => {
+    const firstId = store().activeTabId;
+    const id = store().newTab({ id: freshId(), name: "  Product shots  " });
+
+    expect(store().workflowName).toBe("Product shots");
+    expect(store().saveDirectoryPath).toBeNull();
+    expect(summarizeWorkflowTabs(store().tabs, store().activeTabId, store()).at(-1)).toMatchObject({ id, name: "Product shots" });
+
+    store().switchTab(firstId);
+    expect(store().tabs.find((tab) => tab.id === id)?.snapshot?.workflowName).toBe("Product shots");
+  });
+
+  it("leaves a blank name untitled", () => {
+    store().newTab({ name: "   " });
+    expect(store().workflowName).toBeNull();
+  });
+});
+
 describe("workflow tabs (pure helpers)", () => {
   const snapshot = (name: string | null, unsaved = false) =>
     ({ workflowName: name, hasUnsavedChanges: unsaved }) as unknown as NonNullable<WorkflowTab["snapshot"]>;
@@ -357,6 +457,21 @@ describe("workflow tabs (pure helpers)", () => {
     expect(anyWorkflowTabUnsaved(tabs, { hasUnsavedChanges: true })).toBe(true);
     tabs[0].snapshot!.hasUnsavedChanges = true;
     expect(anyWorkflowTabUnsaved(tabs, { hasUnsavedChanges: false })).toBe(true);
+  });
+
+  it("claims a well-formed tab id once, and never one the page made or restored", () => {
+    const id = `tab-claim-${Math.random().toString(36).slice(2, 10)}`;
+    expect(claimTabId(id)).toBe(true);
+    expect(claimTabId(id)).toBe(false);
+
+    expect(claimTabId(createTabId())).toBe(false);
+
+    const restored = `tab-restored-${Math.random().toString(36).slice(2, 10)}`;
+    markTabIdsUsed([restored]);
+    expect(claimTabId(restored)).toBe(false);
+
+    expect(claimTabId("restored")).toBe(false);
+    expect(claimTabId(`tab-${"y".repeat(100)}`)).toBe(true);
   });
 
   it("calls a tab pristine only with no nodes, no name and no edits", () => {

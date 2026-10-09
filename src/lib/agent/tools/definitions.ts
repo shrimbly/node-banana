@@ -18,6 +18,11 @@ export const TOOL_NAMES = {
   arrangeWorkflow: "arrange_workflow",
   nameConversation: "name_conversation",
   getPromptGuide: "get_prompt_guide",
+  runWorkflow: "run_workflow",
+  switchWorkflow: "switch_workflow",
+  newWorkflow: "new_workflow",
+  saveWorkflow: "save_workflow",
+  viewOutputs: "view_outputs",
 } as const;
 
 export type AgentToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
@@ -177,6 +182,20 @@ export const nameConversationShape = {
     .describe('3-6 words naming what the conversation is about, sentence case, no final period, e.g. "Espresso hero film workflow".'),
 };
 
+export const viewOutputsShape = {
+  nodeIds: z
+    .array(z.string())
+    .optional()
+    .describe("The nodes whose results to look at (ids, or refs from this turn). Omit for every node that has one."),
+  takes: z
+    .number()
+    .int()
+    .min(1)
+    .max(4)
+    .optional()
+    .describe("Results per node: 1 (the default) is the one it shows; up to 4 adds its other recent takes, newest first, to compare runs."),
+};
+
 export const getPromptGuideShape = {
   node: z
     .string()
@@ -196,6 +215,30 @@ export const getPromptGuideShape = {
     .string()
     .optional()
     .describe("llmGenerate prompt-writer only: the node type the LLM's prompt is for, e.g. nanoBanana."),
+};
+
+export const runWorkflowShape = {
+  scope: z
+    .enum(["nodes", "all", "from"])
+    .describe('"nodes": only nodeIds, fed by the outputs the nodes before them already hold. "all": the whole workflow, as the Run button does. "from": node and everything after it, and every other node at its depth or later (other branches too, as Run from on the canvas does), fed by the outputs the nodes before it hold.'),
+  nodeIds: z.array(z.string()).optional().describe('scope "nodes": the nodes to run (ids, or refs from this turn).'),
+  node: z.string().optional().describe('scope "from": the node to start from (an id, or a ref from this turn).'),
+  runs: z.number().optional().describe("How many runs, one after another (1-50, default 1). Only when the user asked for several."),
+};
+
+export const switchWorkflowShape = {
+  tab: z.string().describe("The open workflow to work in: its tab id from the canvas block's list of open workflows, or its exact name."),
+};
+
+export const newWorkflowShape = {
+  name: z.string().optional().describe('A short name for what the new workflow will make, e.g. "Fox portraits".'),
+};
+
+export const saveWorkflowShape = {
+  name: z
+    .string()
+    .optional()
+    .describe("The project name for a workflow never saved before (required when it has no name). Ignored once it has been saved: a save never renames."),
 };
 
 export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
@@ -262,6 +305,46 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     description:
       "How to write a strong prompt for one node: the parts it needs in order, the length, rules, a weak and a strong example, notes from the chosen model's own listing, and prompting notes the user saved for that model. Call it before you write or rewrite the prompt that feeds a generator or LLM Generate, once per node type and model in this conversation; pass the node when it exists.",
     inputShape: getPromptGuideShape,
+  },
+  {
+    name: TOOL_NAMES.viewOutputs,
+    title: "Review outputs",
+    readOnly: true,
+    description:
+      "Look at the images the nodes generated, as the user sees them, each captioned with its node, model and prompt. Use it before judging results (quality, consistency, matching the brief) or changing a workflow to fix them, and say what you saw. A video shows its first frame only; audio, 3D models and uploaded images cannot be viewed. Shows what the nodes held when the user sent this message: a run you start this turn is not in it. At most 12 images per call; one call shows them all, so don't repeat it for the same nodes.",
+    inputShape: viewOutputsShape,
+  },
+  {
+    name: TOOL_NAMES.runWorkflow,
+    title: "Run workflow",
+    readOnly: false,
+    description:
+      "Start a run on the user's canvas, as their Run button does: generators call their models and spend the user's credits. Only when the user asks to run, try or generate. Call it last, after this turn's edits, and once per turn. scope \"nodes\" with the nodes you added or changed when every node feeding them holds its output; \"all\" for the whole workflow; \"from\" a node the user names. Refused while a run is going, and for nodes whose inputs have no output yet (the error says which to include). One run in the user's own workflow starts at once; more than one run, or a run in another tab, waits for the user to press Run under your reply. The run happens after this call: you do not see its results in this turn. The next message's canvas shows each node's status, error and output.",
+    inputShape: runWorkflowShape,
+  },
+  {
+    name: TOOL_NAMES.switchWorkflow,
+    title: "Switch workflow",
+    readOnly: false,
+    description:
+      "Make another open workflow (tab) the live one, as clicking its tab does: the user's canvas shows it, and your later tool calls this turn read and edit it. Returns its nodes. Refused while a run is going and after you started one.",
+    inputShape: switchWorkflowShape,
+  },
+  {
+    name: TOOL_NAMES.newWorkflow,
+    title: "New workflow",
+    readOnly: false,
+    description:
+      "Open an empty workflow in a new tab and make it the live one; the current workflow stays open in its own tab. Your later tool calls this turn build in the new one. Refused while a run is going and after you started one.",
+    inputShape: newWorkflowShape,
+  },
+  {
+    name: TOOL_NAMES.saveWorkflow,
+    title: "Save workflow",
+    readOnly: false,
+    description:
+      "Save the live workflow as the user's Save does: into its project folder, or, the first time, as a new project named `name` (else its current name) in the Node Banana folder. When the user asks, and once you have built a new workflow from scratch (unless they said not to). The save happens in the user's browser after this call, following your edits before it.",
+    inputShape: saveWorkflowShape,
   },
   {
     name: TOOL_NAMES.nameConversation,

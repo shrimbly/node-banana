@@ -115,6 +115,23 @@ describe("runBatch", () => {
     expect(starts).toHaveLength(2);
   });
 
+  it("runs a count it is given instead of the saved one, and leaves the saved one alone", async () => {
+    setupGraph();
+    useWorkflowStore.getState().setRunCount(5);
+    useWorkflowStore.setState({ hasUnsavedChanges: false });
+    const { starts, unsubscribe } = watchRuns();
+    await useWorkflowStore.getState().runBatch({ kind: "all" }, 2);
+    await useWorkflowStore.getState().runBatch({ kind: "all" }, 1);
+    unsubscribe();
+    expect(starts).toEqual([
+      { index: 1, count: 2 },
+      { index: 2, count: 2 },
+      { index: null, count: null },
+    ]);
+    expect(useWorkflowStore.getState().runCount).toBe(5);
+    expect(useWorkflowStore.getState().hasUnsavedChanges).toBe(false);
+  });
+
   it("first Stop lets the current run finish, then ends the batch", async () => {
     setupGraph();
     useWorkflowStore.getState().setRunCount(5);
@@ -153,6 +170,16 @@ describe("runBatch", () => {
     expect(starts).toHaveLength(1);
     expect(useWorkflowStore.getState().pausedAtNodeId).toBe("o");
     expect(useWorkflowStore.getState().batch).toBeNull();
+  });
+
+  it("repeats selected nodes past a pause the canvas was already at, and keeps its resume point", async () => {
+    setupGraph();
+    useWorkflowStore.setState({ pausedAtNodeId: "o" });
+    const { starts, unsubscribe } = watchRuns();
+    await useWorkflowStore.getState().runBatch({ kind: "nodes", nodeIds: ["p"] }, 3);
+    unsubscribe();
+    expect(starts).toHaveLength(3);
+    expect(useWorkflowStore.getState().pausedAtNodeId).toBe("o");
   });
 
   it("ignores a second batch while one is going", async () => {

@@ -45,6 +45,7 @@ import type {
   AgentHarnessStatus,
   AgentSignInOptions,
   AgentSignInStart,
+  AgentToolResult,
   AgentToolRuntime,
   HarnessEvent,
   HarnessTurnParams,
@@ -188,6 +189,17 @@ function sharedSignIn(): ClaudeSignIn {
 
 /* ── tools ─────────────────────────────────────────────────────── */
 
+/** A tool result as MCP content: its text, then each image after its caption. */
+export function claudeToolContent(result: AgentToolResult) {
+  return [
+    { type: "text" as const, text: result.text },
+    ...(result.images ?? []).flatMap((image) => [
+      { type: "text" as const, text: image.caption },
+      { type: "image" as const, data: image.data, mimeType: image.mime },
+    ]),
+  ];
+}
+
 /** Our tool runtime as in-process MCP tools for the SDK. */
 export function buildClaudeTools(runtime: AgentToolRuntime) {
   return runtime.definitions.map((definition) =>
@@ -197,7 +209,7 @@ export function buildClaudeTools(runtime: AgentToolRuntime) {
       definition.inputShape,
       async (args) => {
         const result = await executeTool(runtime, definition.name, args);
-        return { content: [{ type: "text" as const, text: result.text }], isError: !result.ok };
+        return { content: claudeToolContent(result), isError: !result.ok };
       },
       {
         annotations: {

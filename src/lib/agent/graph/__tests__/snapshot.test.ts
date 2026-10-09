@@ -93,6 +93,15 @@ describe("buildAgentSnapshot", () => {
     expect(snapshot.nodes[0].data.outputItems).toEqual(["a", "b"]);
   });
 
+  it("says a run is going only when one is", () => {
+    const nodes = [storeNode("llm-1", "llmGenerate", { x: 0, y: 0 }, { status: "loading" })];
+    const running = buildAgentSnapshot({ nodes, edges: [], groups: {}, running: true });
+    expect(running.running).toBe(true);
+    expect(running.nodes[0].status).toBe("loading");
+    expect("running" in buildAgentSnapshot({ nodes, edges: [], groups: {}, running: false })).toBe(false);
+    expect("running" in buildAgentSnapshot({ nodes, edges: [], groups: {} })).toBe(false);
+  });
+
   it("sends each group's box and lock state (review C8)", () => {
     const snapshot = buildAgentSnapshot({
       nodes: [storeNode("prompt-1", "prompt", { x: 0, y: 0 }, {}, { groupId: "g1" })],
@@ -218,5 +227,52 @@ describe("buildAgentSnapshot", () => {
     const measuredOnly = storeNode("nanoBanana-3", "nanoBanana", { x: 0, y: 0 }, {}, { width: undefined, style: undefined, measured: { width: 333, height: 452.4 } });
     const snapshot = buildAgentSnapshot({ nodes: [rendered, resized, measuredOnly], edges: [], groups: {} });
     expect(snapshot.nodes.map((n) => [n.width, n.height])).toEqual([[320, 244], [500, 220], [333, 452]]);
+  });
+});
+
+describe("node outputs", () => {
+  const item = (assetId?: string) => ({ id: `item-${assetId ?? "none"}`, ...(assetId ? { assetId } : {}), timestamp: 1, prompt: "p", model: "m" });
+
+  it("names the result a node shows, then its newest others, by library id only", () => {
+    const node = storeNode("nanoBanana-1", "nanoBanana", { x: 0, y: 0 }, {
+      outputImage: "data:image/png;base64,AAAA",
+      imageHistory: [item("a-new"), item(), item("b"), item("c-shown"), item("d"), item("e")],
+      selectedHistoryIndex: 3,
+    });
+    const snapshot = buildAgentSnapshot({ nodes: [node], edges: [] });
+    expect(snapshot.nodes[0].outputs).toEqual([
+      { assetId: "c-shown", kind: "image", current: true },
+      { assetId: "a-new", kind: "image", newest: true },
+      { assetId: "b", kind: "image" },
+      { assetId: "d", kind: "image" },
+    ]);
+    expect(containsMedia(snapshot)).toBe(false);
+  });
+
+  it("shows none of them once the node's output is cleared, though its carousel stays", () => {
+    const node = storeNode("nanoBanana-1", "nanoBanana", { x: 0, y: 0 }, {
+      outputImage: null,
+      imageHistory: [item("a"), item("b")],
+      selectedHistoryIndex: 0,
+    });
+    expect(buildAgentSnapshot({ nodes: [node], edges: [] }).nodes[0].outputs).toEqual([
+      { assetId: "a", kind: "image", newest: true },
+      { assetId: "b", kind: "image" },
+    ]);
+  });
+
+  it("reads video and audio carousels, and leaves out a node with none", () => {
+    const video = storeNode("generateVideo-1", "generateVideo", { x: 0, y: 0 }, {
+      outputVideo: "https://example.com/v1.mp4",
+      videoHistory: [item("v1"), item("v2")],
+      selectedVideoHistoryIndex: 0,
+    });
+    const prompt = storeNode("prompt-1", "prompt", { x: 0, y: 0 }, { prompt: "a cat" });
+    const snapshot = buildAgentSnapshot({ nodes: [video, prompt], edges: [] });
+    expect(snapshot.nodes[0].outputs).toEqual([
+      { assetId: "v1", kind: "video", current: true, newest: true },
+      { assetId: "v2", kind: "video" },
+    ]);
+    expect(snapshot.nodes[1]).not.toHaveProperty("outputs");
   });
 });

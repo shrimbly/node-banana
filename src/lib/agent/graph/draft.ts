@@ -76,6 +76,8 @@ export interface DraftNode extends GraphNodeLike {
   error?: string | null;
   /** The canvas has not measured the node: its height is an estimate, redone when its settings change. */
   heightEstimated?: boolean;
+  /** Its results in the asset library, from the snapshot: what view_outputs looks at. */
+  outputs?: AgentSnapshotNode["outputs"];
 }
 
 export type DraftEdge = GraphEdgeLike;
@@ -170,6 +172,8 @@ const GENERATOR_TYPES: ReadonlySet<NodeType> = new Set<NodeType>(["nanoBanana", 
 const MEDIA_GENERATOR_TYPES: ReadonlySet<NodeType> = new Set<NodeType>(["nanoBanana", "generateVideo", "generate3d", "generateAudio"]);
 const LOOP_COUNT_DEFAULT = 3;
 const LOOP_COUNT_MAX = 100;
+/** Node fields no run reads: setting only these changes no output. */
+const COSMETIC_FIELDS: ReadonlySet<string> = new Set(["customTitle", "comment"]);
 
 export class GraphDraft {
   nodes: Map<string, DraftNode>;
@@ -182,12 +186,20 @@ export class GraphDraft {
   selectedNodeIds: string[];
   viewport: AgentWorkflowSnapshot["viewport"];
   workflowName?: string;
+  /** The store's workflowId when the turn began, if it had one. */
+  readonly workflowId?: string;
+  /** A run was going on the canvas when the turn began. */
+  readonly running: boolean;
   /** Next base36 suffix for `${type}-ag${suffix}` ids. */
   nextSuffix: number;
   /** Next base36 suffix for `group-ag${suffix}` ids. */
   nextGroupSuffix: number;
   /** Refs defined by earlier calls this turn, still resolvable in later ones. */
   refs = new Map<string, string>();
+  /** Nodes this turn's calls created, set up or wired something into, without the ones removed since. */
+  readonly changedNodeIds = new Set<string>();
+  /** A call this turn replaced the whole canvas. */
+  canvasReplaced = false;
   readonly options: Required<Omit<GraphDraftOptions, "models">> & Pick<GraphDraftOptions, "models">;
 
   constructor(snapshot: AgentWorkflowSnapshot, options: GraphDraftOptions = {}) {
@@ -214,6 +226,7 @@ export class GraphDraft {
         ...(node.status ? { status: node.status } : {}),
         ...(node.error ? { error: node.error } : {}),
         ...(node.heightEstimated ? { heightEstimated: true } : {}),
+        ...(Array.isArray(node.outputs) && node.outputs.length > 0 ? { outputs: node.outputs.map((output) => ({ ...output })) } : {}),
       });
     }
     this.edges = (Array.isArray(snapshot?.edges) ? snapshot.edges : [])
@@ -230,6 +243,8 @@ export class GraphDraft {
     this.selectedNodeIds = (Array.isArray(snapshot?.selectedNodeIds) ? snapshot.selectedNodeIds : []).filter((id) => this.nodes.has(id));
     this.viewport = isRecord(snapshot?.viewport) ? { ...snapshot.viewport } : undefined;
     this.workflowName = typeof snapshot?.workflowName === "string" ? snapshot.workflowName : undefined;
+    this.workflowId = typeof snapshot?.workflowId === "string" && snapshot.workflowId ? snapshot.workflowId : undefined;
+    this.running = snapshot?.running === true;
     this.nextSuffix = nextAgentSuffix([...this.nodes.keys()]);
     this.nextGroupSuffix = nextAgentSuffix(this.groups.map((g) => g.id));
     this.initialNodeIds = new Set(this.nodes.keys());
@@ -257,9 +272,14 @@ export class GraphDraft {
     this.groups = tx.groups;
     this.nextSuffix = tx.nextSuffix;
     this.nextGroupSuffix = tx.nextGroupSuffix;
-    if (tx.cleared) this.refs.clear();
+    if (tx.cleared) {
+      this.refs.clear();
+      this.canvasReplaced = true;
+    }
     for (const [ref, id] of tx.refs) this.refs.set(ref, id);
     this.selectedNodeIds = this.selectedNodeIds.filter((id) => this.nodes.has(id));
+    for (const id of tx.changedIds) this.changedNodeIds.add(id);
+    for (const id of this.changedNodeIds) if (!this.nodes.has(id)) this.changedNodeIds.delete(id);
   }
 }
 
@@ -304,6 +324,8 @@ export class DraftTransaction {
   private readonly emptiedByRemoval = new Set<string>();
   private readonly deferred: Array<() => void> = [];
   private readonly touched = new Set<string>();
+  /** Nodes whose output this call may change: created, set up, or fed by a wire it added or removed. */
+  private readonly changed = new Set<string>();
   /** Edges already broken (a missing handle, a mistyped Switch output) before this call: left alone. */
   private readonly preexistingBroken: Set<string>;
   /** Router/Switch edges already dormant before this call. */
@@ -328,6 +350,10 @@ export class DraftTransaction {
 
   get touchedIds(): string[] {
     return [...this.touched].filter((id) => this.nodes.has(id));
+  }
+
+  get changedIds(): string[] {
+    return [...this.changed].filter((id) => this.nodes.has(id));
   }
 
   // -------------------------------------------------------------------------
@@ -500,6 +526,7 @@ export class DraftTransaction {
     this.addOps.set(id, op);
     this.log.created.push({ id, type, ...(ref ? { ref } : {}) });
     this.touched.add(id);
+    this.changed.add(id);
     if (ref) this.refs.set(ref, id);
 
     if (input.position) {
@@ -1108,6 +1135,7 @@ export class DraftTransaction {
     this.emitUpdate(node.id, outcome.patch);
     this.recordChanges(node.id, outcome);
     this.touched.add(node.id);
+    if (Object.keys(outcome.patch).some((field) => !COSMETIC_FIELDS.has(field))) this.changed.add(node.id);
     if (node.type === "splitGrid" && "template" in outcome.patch) this.ensureGridRouter(node, cellsInto(settings), where);
     if (outcome.handlesMayChange && (node.type === "generateVideo" || node.type === "generate3d" || node.type === "generateAudio")) {
       this.remapSchemaEdges(node, before);
@@ -1181,6 +1209,7 @@ export class DraftTransaction {
     this.log.addedEdges.push(edge);
     this.touched.add(edge.source);
     this.touched.add(edge.target);
+    this.changed.add(edge.target);
   }
 
   /**
@@ -1197,6 +1226,7 @@ export class DraftTransaction {
     if (added !== -1) this.log.addedEdges.splice(added, 1);
     else this.log.removedEdges.push({ edge, ...(reason ? { reason } : {}) });
     this.touched.add(edge.target);
+    this.changed.add(edge.target);
 
     // A Switch forgets its type when its input goes (the node does the same).
     const target = this.nodes.get(edge.target);

@@ -3,7 +3,7 @@
  */
 
 import type { DynamicToolUIPart } from "ai";
-import type { AgentHarnessId, AgentToolUIOutput, AgentUIMessage } from "../types";
+import type { AgentGraphPreview, AgentHarnessId, AgentToolUIOutput, AgentUIMessage } from "../types";
 
 const MCP_PREFIX = /^mcp__[^_]+(?:_[^_]+)*__/;
 
@@ -26,6 +26,88 @@ export function readToolOutput(output: unknown): AgentToolUIOutput | null {
   return { ok, summary: typeof summary === "string" ? summary : "" };
 }
 
+/** A run_workflow call: the results of the run it started show under the tool rows. */
+export function isRunWorkflowPart(part: Pick<DynamicToolUIPart, "toolName">): boolean {
+  return part.toolName.replace(MCP_PREFIX, "") === "run_workflow";
+}
+
+/** A create_workflow call: the full-page chat draws the workflow it built. */
+export function isCreateWorkflowPart(part: Pick<DynamicToolUIPart, "toolName">): boolean {
+  return part.toolName.replace(MCP_PREFIX, "") === "create_workflow";
+}
+
+const isCount = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
+
+/** The workflow a finished call left, in miniature (its output's `graph`); null when it carries none, or a malformed one. */
+export function toolGraphPreview(part: Pick<DynamicToolUIPart, "state" | "output">): AgentGraphPreview | null {
+  if (part.state !== "output-available" || !part.output || typeof part.output !== "object") return null;
+  const { ok, graph } = part.output as { ok?: unknown; graph?: Partial<AgentGraphPreview> };
+  if (ok !== true || !graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges) || graph.nodes.length === 0) return null;
+  const nodesOk = graph.nodes.every(
+    (node) => Array.isArray(node) && node.length === 5 && typeof node[0] === "string" && node.slice(1).every(isCount),
+  );
+  const edgesOk = graph.edges.every(
+    (edge) =>
+      Array.isArray(edge) && edge.length === 2 && edge.every((end) => Number.isInteger(end) && end >= 0 && end < graph.nodes!.length),
+  );
+  if (!nodesOk || !edgesOk) return null;
+  return {
+    ...(typeof graph.name === "string" && graph.name.trim() ? { name: graph.name.trim() } : {}),
+    nodes: graph.nodes,
+    edges: graph.edges,
+  };
+}
+
+/** A tool output without the map of the workflow it built. */
+export function outputWithoutGraph(output: unknown): unknown {
+  if (!output || typeof output !== "object" || !("graph" in output)) return output;
+  const rest = { ...(output as Record<string, unknown>) };
+  delete rest.graph;
+  return rest;
+}
+
+export interface BuiltWorkflow {
+  tabId?: string;
+  graph: AgentGraphPreview;
+}
+
+/**
+ * The workflows a reply built, one per tab, by the create_workflow call that
+ * built each: drawn as the reply's last edit to that tab left it.
+ */
+export function builtWorkflows(parts: AgentUIMessage["parts"]): Map<string, BuiltWorkflow> {
+  const byCall = new Map<string, BuiltWorkflow>();
+  const byTab = new Map<string, BuiltWorkflow>();
+  for (const part of parts) {
+    if (part.type !== "dynamic-tool") continue;
+    const graph = toolGraphPreview(part);
+    if (!graph) continue;
+    const tabId = (part.output as { tabId?: unknown }).tabId;
+    const key = typeof tabId === "string" ? tabId : "";
+    const built = byTab.get(key);
+    if (built) {
+      built.graph = graph;
+    } else if (isCreateWorkflowPart(part)) {
+      const entry: BuiltWorkflow = { ...(key ? { tabId: key } : {}), graph };
+      byTab.set(key, entry);
+      byCall.set(part.toolCallId, entry);
+    }
+  }
+  return byCall;
+}
+
+/** What a finished call's "Show on canvas" brings into view: the nodes it changed, in the tab it worked in. */
+export function toolCanvasTarget(
+  part: Pick<DynamicToolUIPart, "state" | "output">,
+): { tabId?: string; nodeIds: string[] } | null {
+  if (part.state !== "output-available" || !part.output || typeof part.output !== "object") return null;
+  const { ok, tabId, nodeIds } = part.output as { ok?: unknown; tabId?: unknown; nodeIds?: unknown };
+  if (ok !== true || !Array.isArray(nodeIds)) return null;
+  const ids = nodeIds.filter((id): id is string => typeof id === "string" && id.length > 0);
+  if (ids.length === 0) return null;
+  return typeof tabId === "string" && tabId ? { tabId, nodeIds: ids } : { nodeIds: ids };
+}
+
 /** A completed call the tool rejected (`ok: false`) reads as an error in the UI. */
 export function toolDisplayState(part: Pick<DynamicToolUIPart, "state" | "output">): DynamicToolUIPart["state"] {
   if (part.state === "output-available" && readToolOutput(part.output)?.ok === false) {
@@ -41,6 +123,57 @@ export function toolSummaryLine(part: DynamicToolUIPart): string | null {
   return null;
 }
 
+/** "Added 3 nodes" → "added 3 nodes", to follow "Used 2 tools · ". Leaves "LLM …" alone. */
+function lowerFirst(text: string): string {
+  return /^[A-Z][a-z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text;
+}
+
+const isFailedState = (state: DynamicToolUIPart["state"]) => state === "output-error" || state === "output-denied";
+
+export interface ToolGroupSummary {
+  /** "Used 3 tools". */
+  label: string;
+  /** The call still running, by title ("Edit workflow…"): the folded line names it while it works. */
+  running: string | null;
+  /** What came of the calls: the canvas change, else a lone call's result, else the run started. */
+  result: string | null;
+  /** "1 failed", when a call failed or the tool refused it. */
+  failed: string | null;
+}
+
+/** The folded line over a run of tool calls. */
+export function toolGroupSummary(parts: readonly DynamicToolUIPart[]): ToolGroupSummary {
+  const label = `Used ${parts.length} tool${parts.length === 1 ? "" : "s"}`;
+  const runningPart = parts.findLast((part) => part.state === "input-streaming" || part.state === "input-available");
+  const failedCount = parts.filter((part) => isFailedState(toolDisplayState(part))).length;
+  const failed = failedCount === 0 ? null : parts.length === 1 ? "failed" : `${failedCount} failed`;
+
+  let result: string | null = null;
+  const edits = parts.flatMap((part) => {
+    const target = toolCanvasTarget(part);
+    return target ? [{ part, target }] : [];
+  });
+  if (edits.length === 1) {
+    result = toolSummaryLine(edits[0].part);
+  } else if (edits.length > 1) {
+    // Several edits: the nodes they touched between them, each once.
+    const nodes = new Set(edits.flatMap(({ target }) => target.nodeIds.map((id) => `${target.tabId ?? ""}:${id}`)));
+    result = `changed ${nodes.size} node${nodes.size === 1 ? "" : "s"}`;
+  } else if (parts.length === 1) {
+    result = isFailedState(toolDisplayState(parts[0])) ? null : toolSummaryLine(parts[0]);
+  } else {
+    const run = parts.findLast((part) => isRunWorkflowPart(part) && toolDisplayState(part) === "output-available");
+    result = run ? toolSummaryLine(run) : null;
+  }
+
+  return {
+    label,
+    running: runningPart ? `${toolDisplayTitle(runningPart)}…` : null,
+    result: result ? lowerFirst(result) : null,
+    failed,
+  };
+}
+
 type AgentMessagePart = AgentUIMessage["parts"][number];
 
 /** Whether a part draws anything (Claude streams empty reasoning parts when thinking is hidden). */
@@ -51,6 +184,7 @@ export function isRenderedPart(part: AgentMessagePart): boolean {
       return part.text.trim().length > 0;
     case "dynamic-tool":
     case "data-agent-notice":
+    case "data-run-offer":
       return true;
     default:
       return false;

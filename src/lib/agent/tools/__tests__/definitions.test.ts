@@ -13,7 +13,7 @@ describe("tool definitions", () => {
       expect(definition.title.length).toBeGreaterThan(0);
       expect(definition.description.length).toBeGreaterThan(80);
     }
-    expect(AGENT_TOOL_DEFINITIONS.filter((d) => d.readOnly).map((d) => d.name)).toEqual(["get_workflow", "describe_node_types", "search_models", "get_prompt_guide", "name_conversation"]);
+    expect(AGENT_TOOL_DEFINITIONS.filter((d) => d.readOnly).map((d) => d.name)).toEqual(["get_workflow", "describe_node_types", "search_models", "get_prompt_guide", "view_outputs", "name_conversation"]);
   });
 
   it.each(AGENT_TOOL_DEFINITIONS.map((d) => [d.name, d] as const))("%s converts to an object JSON Schema (Codex dynamic tools)", (_name, definition) => {
@@ -66,6 +66,24 @@ describe("tool definitions", () => {
     expect(schema.properties.groups.items.type).toBe("object");
     expect(schema.properties.groups.items.required).toEqual(["name", "nodes"]);
     expect(Object.keys(schema.properties.groups.items.properties)).toEqual(["name", "color", "nodes"]);
+  });
+
+  it("gives run_workflow a flat scope with its node fields and a run count", () => {
+    const run = AGENT_TOOL_DEFINITIONS.find((d) => d.name === "run_workflow")!;
+    expect(run.readOnly).toBe(false);
+    const schema = z.toJSONSchema(z.object(run.inputShape)) as unknown as {
+      required?: string[];
+      properties: Record<string, { type?: string; enum?: string[]; description?: string }>;
+    };
+    expect(schema.required).toEqual(["scope"]);
+    expect(schema.properties.scope.enum).toEqual(["nodes", "all", "from"]);
+    expect(Object.keys(schema.properties)).toEqual(["scope", "nodeIds", "node", "runs"]);
+    expect(schema.properties.runs.description).toContain("default 1");
+    // When to run, and that results arrive only with the next message.
+    expect(run.description).toContain("Only when the user asks to run");
+    expect(run.description).toContain("Call it last, after this turn's edits, and once per turn");
+    expect(run.description).toContain("Refused while a run is going");
+    expect(run.description).toContain("you do not see its results in this turn");
   });
 
   it("are the runtime's definitions", () => {

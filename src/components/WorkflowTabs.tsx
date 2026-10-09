@@ -1,8 +1,9 @@
 "use client";
 
-import { LibraryBig, Plus, X } from "lucide-react";
-import { useEffect, useMemo, type MouseEvent } from "react";
+import { LibraryBig, MessagesSquare, Plus, X } from "lucide-react";
+import { useEffect, useId, useMemo, type MouseEvent, type ReactNode } from "react";
 import { useOnViewportChange, useReactFlow } from "@xyflow/react";
+import { useAgentPresence } from "@/components/agent/AgentSession";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { useAssetStore } from "@/store/assetStore";
 import { useShallow } from "zustand/shallow";
@@ -15,8 +16,8 @@ const SHOWN_TAB_SHAPE =
 /** The shown tab: canvas-coloured, so it reads as part of the canvas. */
 const SHOWN_TAB_CLASS = `${SHOWN_TAB_SHAPE} bg-canvas-bg`;
 
-/** The shown Assets entry: the colour of the Assets rail it sits over. */
-const SHOWN_ASSETS_CLASS = `${SHOWN_TAB_SHAPE} bg-pane`;
+/** A shown view entry (the chat, Assets): the colour of the view's left rail it sits over. */
+const SHOWN_VIEW_CLASS = `${SHOWN_TAB_SHAPE} bg-pane`;
 
 /**
  * Open workflows as browser-style tabs across the top of the window. The bar
@@ -26,16 +27,20 @@ const SHOWN_ASSETS_CLASS = `${SHOWN_TAB_SHAPE} bg-pane`;
  * in flight, because the store holds only the live workflow's execution state.
  * Each tab also remembers its pan and zoom.
  *
- * The Assets entry leads the strip, as an icon until Assets is shown, when
- * it takes its label. It is a toggle button, not a tab (it is
- * a view over every workflow, not one of them), and takes the shown-tab look
- * while the Assets view is up. That look is styling only: which workflow
+ * The chat and Assets entries lead the strip, each an icon until its view
+ * is shown, when it takes its label. They are toggle buttons, not tabs (each
+ * is a view over every workflow, not one of them), and take the shown-tab
+ * look while their view is up. That look is styling only: which workflow
  * tab is live, and what the busy state blocks, never changes with it. Any
  * workflow tab, the plus and closing a tab all go back to the canvas.
  */
 export function WorkflowTabs() {
-  const assetsShown = useAssetStore((state) => state.appView === "assets");
+  const appView = useAssetStore((state) => state.appView);
+  // A turn running, or a harness that can't run one until the user acts: a dot on the Chat toggle
+  const { busy: agentBusy, presence } = useAgentPresence();
+  const agentStatus: ViewToggleStatus | null = agentBusy ? "working" : presence.attention ? "attention" : null;
   const setAppView = useAssetStore((state) => state.setAppView);
+  const toggleAppView = useAssetStore((state) => state.toggleAppView);
   const {
     tabs,
     activeTabId,
@@ -94,7 +99,7 @@ export function WorkflowTabs() {
   };
 
   // The live tab looks shown only while the canvas is what is shown
-  const shownIndex = assetsShown ? -1 : summaries.findIndex((tab) => tab.isActive);
+  const shownIndex = appView === "canvas" ? summaries.findIndex((tab) => tab.isActive) : -1;
 
   return (
     <div
@@ -105,32 +110,27 @@ export function WorkflowTabs() {
       // fixed (modals, menus) still stacks above
       className="workflow-tabs relative z-[1] flex h-[38px] min-w-0 shrink-0 items-end bg-[#0f0f0f] pl-3 pr-2"
     >
-      <button
-        type="button"
-        aria-pressed={assetsShown}
-        onClick={() => setAppView(assetsShown ? "canvas" : "assets")}
-        aria-label="Assets"
-        title={assetsShown ? "Back to the canvas (A)" : "Assets (A)"}
-        className={`relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-t-lg text-xs whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-          assetsShown ? `${SHOWN_ASSETS_CLASS} px-3` : "w-[34px] justify-center text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
-        }`}
-      >
-        {assetsShown && (
-          <>
-            <TabEar side="left" fill="var(--color-pane)" />
-            <TabEar side="right" fill="var(--color-pane)" />
-          </>
-        )}
-        <LibraryBig size={14} strokeWidth={1.75} />
-        {/* Closed, the entry is just its icon; the label shows while Assets is up */}
-        {assetsShown && "Assets"}
-      </button>
+      <ViewToggle
+        label="Chat"
+        shortcut="C"
+        icon={<MessagesSquare size={14} strokeWidth={1.75} />}
+        shown={appView === "chat"}
+        onToggle={() => toggleAppView("chat")}
+        status={agentStatus}
+      />
+      <ViewToggle
+        label="Assets"
+        shortcut="A"
+        icon={<LibraryBig size={14} strokeWidth={1.75} />}
+        shown={appView === "assets"}
+        onToggle={() => toggleAppView("assets")}
+      />
       {summaries.map((tab, index) => {
         const name = tab.name ?? "Untitled";
         const shown = index === shownIndex;
-        // The entry before this one: the previous tab, or the Assets button.
-        // The first tab never draws a hairline: nothing divides it from the Assets icon.
-        const previousShown = index > 0 ? index - 1 === shownIndex : assetsShown;
+        // Only between two workflow tabs neither of which is shown: the first
+        // tab never draws one, nothing divides it from the view icons
+        const hairline = index > 0 && !shown && index - 1 !== shownIndex;
         return (
           <div
             key={tab.id}
@@ -154,8 +154,7 @@ export function WorkflowTabs() {
                 <TabEar side="right" />
               </>
             )}
-            {/* Hairline between two neighbours neither of which is shown */}
-            {!shown && !previousShown && index > 0 && (
+            {hairline && (
               <span aria-hidden className="absolute top-[7px] bottom-[7px] -left-px w-px bg-neutral-800" />
             )}
             <button
@@ -213,6 +212,81 @@ export function WorkflowTabs() {
         <Plus size={14} strokeWidth={2.25} />
       </button>
     </div>
+  );
+}
+
+/** What a view entry's dot says: its view is busy (pulsing ink), or needs the user (amber). */
+type ViewToggleStatus = "working" | "attention";
+
+const VIEW_STATUS_TEXT: Record<ViewToggleStatus, string> = {
+  working: "The agent is working",
+  attention: "The agent needs attention",
+};
+
+/**
+ * A leading entry that shows a view over every workflow in place of the
+ * canvas: just its icon until the view is up, then the icon, its label and
+ * the shown-tab look. A second press goes back to the canvas. A `status`
+ * puts a 6px dot on the icon's top-right corner.
+ */
+function ViewToggle({
+  label,
+  shortcut,
+  icon,
+  shown,
+  onToggle,
+  status = null,
+}: {
+  label: string;
+  shortcut: string;
+  icon: ReactNode;
+  shown: boolean;
+  onToggle: () => void;
+  status?: ViewToggleStatus | null;
+}) {
+  const statusId = useId();
+  const title = shown ? `Back to the canvas (${shortcut})` : `${label} (${shortcut})`;
+  return (
+    <button
+      type="button"
+      aria-pressed={shown}
+      onClick={onToggle}
+      aria-label={label}
+      aria-describedby={status ? statusId : undefined}
+      title={status ? `${title} · ${VIEW_STATUS_TEXT[status]}` : title}
+      className={`relative flex h-[30px] shrink-0 items-center gap-1.5 rounded-t-lg text-xs whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+        shown ? `${SHOWN_VIEW_CLASS} px-3` : "w-[34px] justify-center text-neutral-400 hover:bg-white/[0.04] hover:text-neutral-200"
+      }`}
+    >
+      {shown && (
+        <>
+          <TabEar side="left" fill="var(--color-pane)" />
+          <TabEar side="right" fill="var(--color-pane)" />
+        </>
+      )}
+      <span className="relative flex">
+        {icon}
+        {status && (
+          // Ringed in the colour behind it, so it reads as cut out of the icon's corner
+          <span
+            data-view-status={status}
+            aria-hidden
+            className={`absolute -top-[3px] -right-[3px] flex size-1.5 rounded-full ring-2 ${shown ? "ring-pane" : "ring-[#0f0f0f]"}`}
+          >
+            {status === "working" && (
+              <span className="absolute inline-flex size-full animate-ping rounded-full bg-neutral-200 opacity-60 motion-reduce:animate-none" />
+            )}
+            <span className={`relative inline-flex size-1.5 rounded-full ${status === "working" ? "bg-neutral-200" : "bg-amber-400"}`} />
+          </span>
+        )}
+      </span>
+      {status && (
+        <span id={statusId} hidden>
+          {VIEW_STATUS_TEXT[status]}
+        </span>
+      )}
+      {shown && label}
+    </button>
   );
 }
 

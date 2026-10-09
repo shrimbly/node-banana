@@ -5,10 +5,36 @@ import type { DynamicToolUIPart } from "ai";
 import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Shimmer } from "@/components/ai-elements/shimmer";
-import { Tool, ToolContent, ToolHeader, ToolInput } from "@/components/ai-elements/tool";
-import { isRenderedPart, toolDisplayState, toolDisplayTitle, toolSummaryLine } from "@/lib/agent/client/messages";
+import {
+  Tool,
+  ToolContent,
+  ToolGroup,
+  ToolGroupContent,
+  ToolGroupTrigger,
+  ToolHeader,
+  ToolInput,
+} from "@/components/ai-elements/tool";
+import { LocateFixedIcon } from "lucide-react";
+import { cn } from "@/components/agent/lib/utils";
+import {
+  builtWorkflows,
+  isRenderedPart,
+  isRunWorkflowPart,
+  toolCanvasTarget,
+  toolDisplayState,
+  toolDisplayTitle,
+  toolGroupSummary,
+  toolSummaryLine,
+} from "@/lib/agent/client/messages";
 import type { AgentUIMessage } from "@/lib/agent/types";
+import { AGENT_ICON } from "./AgentChrome";
 import { AgentNotice, type AgentNoticeSignIn } from "./AgentNotice";
+import { AgentRunCard } from "./AgentRunCard";
+import { CardIconButton } from "./AgentRunMedia";
+import { AgentToolRunResults } from "./AgentRunResults";
+import { useAgentTranscriptActions } from "./AgentSession";
+import { useAgentSurface } from "./AgentSurface";
+import { AgentWorkflowPreview } from "./AgentWorkflowPreview";
 
 export interface AgentMessageProps {
   message: AgentUIMessage;
@@ -31,6 +57,8 @@ function thinkingLabel(isStreaming: boolean, duration?: number) {
 
 function AgentToolRow({ part }: { part: DynamicToolUIPart }) {
   const state = toolDisplayState(part);
+  const transcript = useAgentTranscriptActions();
+  const target = transcript ? toolCanvasTarget(part) : null;
   return (
     <Tool>
       <ToolHeader
@@ -39,6 +67,13 @@ function AgentToolRow({ part }: { part: DynamicToolUIPart }) {
         toolName={part.toolName}
         title={toolDisplayTitle(part)}
         summary={toolSummaryLine(part)}
+        actions={
+          transcript && target ? (
+            <CardIconButton size="sm" label="Show on canvas" onClick={() => transcript.showOnCanvas(target)}>
+              <LocateFixedIcon {...AGENT_ICON} />
+            </CardIconButton>
+          ) : undefined
+        }
       />
       <ToolContent>
         {/* Height-capped: tool inputs (whole workflows) can be long. */}
@@ -48,48 +83,105 @@ function AgentToolRow({ part }: { part: DynamicToolUIPart }) {
   );
 }
 
-/** Consecutive tool calls read as one ruled list, like a settings page's rows. */
-function ToolRows({ children }: { children: ReactNode }) {
+interface ToolCall {
+  key: string;
+  part: DynamicToolUIPart;
+}
+
+/**
+ * Consecutive tool calls folded under one line: how many and what came of
+ * them, or the call still running, shimmering. Opens to a line per call.
+ */
+function AgentToolGroup({ calls, streaming }: { calls: ToolCall[]; streaming: boolean }) {
+  const summary = toolGroupSummary(calls.map((call) => call.part));
+  const { label, result, failed } = summary;
+  // A stopped turn leaves its last call open for good: once the reply has ended, nothing is running.
+  const running = streaming ? summary.running : null;
   return (
-    <div className="flex flex-col divide-y border-y fade-rule *:fade-rule">{children}</div>
+    <ToolGroup>
+      <ToolGroupTrigger
+        label={
+          running ? (
+            <Shimmer as="span" duration={1}>
+              {running}
+            </Shimmer>
+          ) : (
+            label
+          )
+        }
+        summary={running ? null : result}
+        failed={running ? null : failed}
+      />
+      <ToolGroupContent>
+        {calls.map(({ key, part }) => (
+          <AgentToolRow key={key} part={part} />
+        ))}
+      </ToolGroupContent>
+    </ToolGroup>
   );
 }
 
-/** One chat message: user text in a bubble; for the agent, text, reasoning, tool calls and notices in order. */
+/**
+ * The chat view's sizes: 15px reading text, the user's turn in a rounder,
+ * roomier bubble. The variant classes match MessageContent's own, so they replace them.
+ */
+const PAGE_USER_BUBBLE =
+  "text-[15px] leading-[26px] group-[.is-user]:rounded-[20px] group-[.is-user]:px-4 group-[.is-user]:py-2.5";
+const PAGE_ASSISTANT_TEXT = "text-[15px] leading-[26px]";
+
+/**
+ * One chat message: user text in a bubble; for the agent, text, reasoning,
+ * tool calls (then the results of runs they started), notices and the Run
+ * card, in order.
+ */
 export const AgentMessage = memo(function AgentMessage({ message, streaming, onSignIn }: AgentMessageProps) {
+  const page = useAgentSurface() === "page";
   if (message.role === "user") {
     const text = message.parts
       .filter((part) => part.type === "text")
       .map((part) => part.text)
       .join("\n");
     return (
-      <Message from="user" className="max-w-[85%]">
-        <MessageContent className="whitespace-pre-wrap break-words">
+      <Message from="user" className={page ? "max-w-[80%]" : "max-w-[85%]"}>
+        <MessageContent className={cn("whitespace-pre-wrap break-words", page && PAGE_USER_BUBBLE)}>
           {text}
         </MessageContent>
       </Message>
     );
   }
 
-  // Runs of tool calls are drawn together; everything else in order, one per part.
+  // Runs of tool calls fold together; everything else in order, one per part.
   const blocks: ReactNode[] = [];
-  let toolRun: ReactNode[] = [];
+  let toolRun: ToolCall[] = [];
+  // What those calls made, always in view under the folded line: the workflow a call built
+  // (the full page only), the results of a run one started.
+  let made: ReactNode[] = [];
+  const built = page ? builtWorkflows(message.parts) : null;
   const flushTools = () => {
-    if (toolRun.length) blocks.push(<ToolRows key={`tools-${blocks.length}`}>{toolRun}</ToolRows>);
+    if (toolRun.length) blocks.push(<AgentToolGroup key={`tools-${blocks.length}`} calls={toolRun} streaming={streaming} />);
+    blocks.push(...made);
     toolRun = [];
+    made = [];
   };
   message.parts.forEach((part, index) => {
     if (!isRenderedPart(part)) return;
     const key = `${message.id}-${index}`;
     if (part.type === "dynamic-tool") {
-      toolRun.push(<AgentToolRow key={key} part={part} />);
+      toolRun.push({ key, part });
+      const workflow = built?.get(part.toolCallId);
+      if (workflow) made.push(<AgentWorkflowPreview key={`built-${part.toolCallId}`} tabId={workflow.tabId} graph={workflow.graph} />);
+      if (isRunWorkflowPart(part)) made.push(<AgentToolRunResults key={`run-${part.toolCallId}`} toolCallId={part.toolCallId} />);
       return;
     }
     flushTools();
     switch (part.type) {
       case "text":
         blocks.push(
-          <MessageResponse key={key} isAnimating={streaming && part.state === "streaming"}>
+          <MessageResponse
+            key={key}
+            isAnimating={streaming && part.state === "streaming"}
+            className={page ? "space-y-4" : undefined}
+          >
             {part.text}
           </MessageResponse>,
         );
@@ -106,13 +198,17 @@ export const AgentMessage = memo(function AgentMessage({ message, streaming, onS
       case "data-agent-notice":
         blocks.push(<AgentNotice key={key} notice={part.data} onSignIn={onSignIn} />);
         break;
+      case "data-run-offer":
+        blocks.push(<AgentRunCard key={key} offer={part.data} />);
+        break;
     }
   });
   flushTools();
 
   return (
     <Message from="assistant" className="max-w-full">
-      <MessageContent className="w-full gap-3">{blocks}</MessageContent>
+      {/* Unclipped: a run's preview row reaches past the text, wider than the column on the page and to the window's edges. */}
+      <MessageContent className={cn("w-full overflow-visible", page ? `gap-4 ${PAGE_ASSISTANT_TEXT}` : "gap-3")}>{blocks}</MessageContent>
     </Message>
   );
 });

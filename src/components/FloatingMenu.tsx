@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderOpen, KeyRound, Keyboard, Layers, LayoutTemplate, LibraryBig, Menu, MessageSquareText, Plus, Save, Settings, SquareArrowOutUpRight } from "lucide-react";
+import { FolderOpen, KeyRound, Keyboard, Layers, LayoutTemplate, LibraryBig, Menu, MessageSquareText, MessagesSquare, Plus, Save, Settings, SquareArrowOutUpRight } from "lucide-react";
 import {
   useState,
   useMemo,
@@ -196,6 +196,7 @@ export function FloatingMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const [showProjectModal, setShowProjectModal] = useState(false);
   const [projectModalMode, setProjectModalMode] = useState<"new" | "settings">("new");
+  const [projectModalName, setProjectModalName] = useState("");
   const [settingsTab, setSettingsTab] = useState<SettingsTab>("project");
   const [showWorkflowBrowser, setShowWorkflowBrowser] = useState(false);
   // Settings asked for from elsewhere in the app (the first-run hint, the Assets view)
@@ -305,7 +306,8 @@ export function FloatingMenu() {
     action();
   };
 
-  const handleNewProject = () => {
+  const handleNewProject = (name: string) => {
+    setProjectModalName(name);
     setProjectModalMode("new");
     setShowProjectModal(true);
   };
@@ -331,11 +333,12 @@ export function FloatingMenu() {
   // One save for the button, the menu row, Cmd/Ctrl+S and the desktop's File ›
   // Save: a workflow with a folder saves; one without is asked for a name and
   // location once, then saves.
-  const handleSave = (_reason: SaveReason = "button") => {
+  const handleSave = (_reason: SaveReason = "button", name?: string) => {
     if (canSave) {
       void saveToFile({ reason: "manual" });
     } else {
-      handleNewProject();
+      // A first save keeps the name the workflow already has (or the agent asked for).
+      handleNewProject(name ?? workflowName ?? "");
     }
   };
 
@@ -345,7 +348,7 @@ export function FloatingMenu() {
     if (!saveRequest) return;
     consumeSaveRequest();
     if (isSaving) return;
-    handleSave(saveRequest.reason);
+    handleSave(saveRequest.reason, saveRequest.name);
     // The request is the trigger; handleSave reads the latest state when it runs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saveRequest]);
@@ -397,6 +400,7 @@ export function FloatingMenu() {
         onClose={() => setShowProjectModal(false)}
         onSave={handleProjectSave}
         mode={projectModalMode}
+        initialName={projectModalName}
         initialTab={settingsTab}
         pageRequest={settingsRequests}
       />
@@ -502,12 +506,20 @@ export function FloatingMenu() {
               onClick={choose(() => setShowQuickstart(true, "templates"))}
             />
             <MenuRow
+              icon={<MessagesSquare size={16} strokeWidth={1.75} />}
+              label="Chat"
+              shortcut="C"
+              onClick={choose(() => useAssetStore.getState().setAppView("chat"))}
+              title="The agent, full screen"
+            />
+            <MenuRow
               icon={<LibraryBig size={16} strokeWidth={1.75} />}
               label="Assets"
               shortcut="A"
               onClick={choose(() => useAssetStore.getState().setAppView("assets"))}
               title="Every generation, from every workflow"
-            />            {saveDirectoryPath && (
+            />
+            {saveDirectoryPath && (
               <MenuRow
                 icon={
                   <SquareArrowOutUpRight size={16} strokeWidth={1.75} />

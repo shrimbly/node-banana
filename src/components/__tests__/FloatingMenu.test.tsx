@@ -256,6 +256,7 @@ describe("FloatingMenu", () => {
         "Save project",
         "Open project…",
         "Templates",
+        "Chat",
         "Assets",
         "Open project folder",
         "New tab",
@@ -351,6 +352,18 @@ describe("FloatingMenu", () => {
       openMenu();
       fireEvent.click(menuItem(/Assets/));
       expect(useAssetStore.getState().appView).toBe("assets");
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+      useAssetStore.setState({ appView: "canvas" });
+    });
+
+    it("opens the full-page chat from its row, which names its key, and closes the menu", () => {
+      useAssetStore.setState({ appView: "canvas" });
+      render(<FloatingMenu />);
+      openMenu();
+      const row = menuItem(/^Chat/);
+      expect(row).toHaveTextContent("C");
+      fireEvent.click(row);
+      expect(useAssetStore.getState().appView).toBe("chat");
       expect(screen.queryByRole("menu")).not.toBeInTheDocument();
       useAssetStore.setState({ appView: "canvas" });
     });

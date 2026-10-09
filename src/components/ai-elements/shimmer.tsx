@@ -1,10 +1,11 @@
 "use client";
 
 import { cn } from "@/components/agent/lib/utils";
+import { prefersReducedMotion } from "@/components/assets/useVirtualWindow";
 import type { MotionProps } from "motion/react";
 import { motion } from "motion/react";
 import type { CSSProperties, ElementType, JSX } from "react";
-import { memo, useMemo } from "react";
+import { createElement, memo, useMemo, useState } from "react";
 
 type MotionHTMLProps = MotionProps & Record<string, unknown>;
 
@@ -46,6 +47,12 @@ const ShimmerComponent = ({
     () => (children?.length ?? 0) * spread,
     [children, spread]
   );
+  const [still] = useState(prefersReducedMotion);
+
+  // Under reduced motion no band sweeps: the line stays in the muted ink it sweeps over.
+  if (still) {
+    return createElement(Component, { className: cn("text-ink-3", className) }, children);
+  }
 
   return (
     <MotionComponent

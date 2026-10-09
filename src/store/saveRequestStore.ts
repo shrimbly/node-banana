@@ -5,8 +5,9 @@ export type SaveReason = "shortcut" | "button" | "menu" | "desktop";
 
 interface SaveRequestState {
   /** A pending request to save the current workflow; the floating menu consumes it. */
-  request: { reason: SaveReason; at: number } | null;
-  requestSave: (reason: SaveReason) => void;
+  request: { reason: SaveReason; at: number; name?: string } | null;
+  /** `name` fills in the first-save dialog, when the workflow has no folder yet (the agent's chosen name). */
+  requestSave: (reason: SaveReason, name?: string) => void;
   consumeRequest: () => void;
 }
 
@@ -19,8 +20,8 @@ interface SaveRequestState {
  */
 export const useSaveRequestStore = create<SaveRequestState>((set) => ({
   request: null,
-  requestSave: (reason) => set({ request: { reason, at: Date.now() } }),
+  requestSave: (reason, name) => set({ request: { reason, at: Date.now(), ...(name ? { name } : {}) } }),
   consumeRequest: () => set({ request: null }),
 }));
 
-export const requestSave = (reason: SaveReason) => useSaveRequestStore.getState().requestSave(reason);
+export const requestSave = (reason: SaveReason, name?: string) => useSaveRequestStore.getState().requestSave(reason, name);

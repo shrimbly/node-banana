@@ -13,18 +13,23 @@ import type { WorkflowEdge, NodeGroup } from "@/types/workflow";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import { estimatedNodeHeight } from "./sizes";
 import { getNodeSize } from "@/utils/nodeDimensions";
-import type { AgentSnapshotEdge, AgentSnapshotGroup, AgentSnapshotNode, AgentWorkflowSnapshot } from "../types";
+import type { AgentSnapshotEdge, AgentSnapshotGroup, AgentSnapshotNode, AgentSnapshotOutput, AgentWorkflowSnapshot } from "../types";
 import { isNodeType } from "./catalog";
 import { pickAgentData } from "./nodeData";
 import { capText, stripMedia } from "./scrub";
 
 export interface BuildAgentSnapshotInput {
+  /** The workflow tab this canvas belongs to. */
+  tabId?: string;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   groups: Record<string, NodeGroup>;
   /** Visible area in flow coordinates. */
   viewport?: AgentWorkflowSnapshot["viewport"];
   workflowName?: string;
+  workflowId?: string;
+  /** A run (or a batch of runs) is going on the canvas. */
+  running?: boolean;
   /**
    * The store's createDefaultNodeData, which applies the user's saved model
    * and settings. When given, the snapshot carries those defaults for the
@@ -91,12 +96,15 @@ export function buildAgentSnapshot(input: BuildAgentSnapshotInput): AgentWorkflo
   const selectedNodeIds = (input.nodes ?? []).filter((n) => n?.selected && ids.has(n.id)).map((n) => n.id);
 
   const snapshot: AgentWorkflowSnapshot = {
+    ...(input.tabId ? { tabId: input.tabId } : {}),
     nodes,
     edges,
     groups,
     selectedNodeIds,
     ...(validViewport(input.viewport) ? { viewport: roundViewport(input.viewport!) } : {}),
     ...(input.workflowName ? { workflowName: input.workflowName } : {}),
+    ...(input.workflowId ? { workflowId: input.workflowId } : {}),
+    ...(input.running ? { running: true as const } : {}),
   };
   const nodeDefaults = stickyDefaults(input.createDefaultNodeData);
   if (nodeDefaults) snapshot.nodeDefaults = nodeDefaults;
@@ -125,6 +133,7 @@ function snapshotNode(node: WorkflowNode): AgentSnapshotNode {
   const data = (node.data ?? {}) as Record<string, unknown>;
   const size = nodeSize(node);
   const content = contentOf(type, data);
+  const outputs = outputsOf(data);
   const status = typeof data.status === "string" && data.status !== "idle" ? data.status : undefined;
   const error = typeof data.error === "string" && data.error ? capText(data.error, ERROR_LIMIT) : undefined;
   return {
@@ -140,7 +149,42 @@ function snapshotNode(node: WorkflowNode): AgentSnapshotNode {
     ...(content ? { content } : {}),
     ...(status ? { status } : {}),
     ...(error ? { error } : {}),
+    ...(outputs.length > 0 ? { outputs } : {}),
   };
+}
+
+/** How many of a node's results the snapshot names: view_outputs compares at most this many takes. */
+export const SNAPSHOT_OUTPUTS_PER_NODE = 4;
+
+/** The carousels a node keeps its results in, the field that says which one it shows, and the fields that hold it. */
+const OUTPUT_HISTORIES: Array<{ history: string; selected: string; kind: AgentSnapshotOutput["kind"]; holds: string[] }> = [
+  { history: "imageHistory", selected: "selectedHistoryIndex", kind: "image", holds: ["outputImage", "outputImageRef"] },
+  { history: "videoHistory", selected: "selectedVideoHistoryIndex", kind: "video", holds: ["outputVideo", "outputVideoRef"] },
+  { history: "audioHistory", selected: "selectedAudioHistoryIndex", kind: "audio", holds: ["outputAudio", "outputAudioRef"] },
+];
+
+/** The node's results the asset library holds: the one it shows, then the newest others (histories keep the newest first). */
+export function outputsOf(data: Record<string, unknown>): AgentSnapshotOutput[] {
+  const outputs: AgentSnapshotOutput[] = [];
+  for (const { history, selected, kind, holds } of OUTPUT_HISTORIES) {
+    const entries = Array.isArray(data[history]) ? (data[history] as unknown[]) : [];
+    const ids = entries.map((entry) =>
+      entry && typeof entry === "object" && typeof (entry as { assetId?: unknown }).assetId === "string"
+        ? (entry as { assetId: string }).assetId
+        : null,
+    );
+    // Clearing a node's output leaves its carousel as it was: then it shows none of them.
+    const showing = holds.some((field) => typeof data[field] === "string" && data[field]);
+    const index = typeof data[selected] === "number" ? (data[selected] as number) : 0;
+    const shown = showing ? ids[index] : null;
+    const newest = (id: string) => (id === ids[0] ? { newest: true as const } : {});
+    if (shown) outputs.push({ assetId: shown, kind, current: true, ...newest(shown) });
+    for (const id of ids) {
+      if (outputs.length >= SNAPSHOT_OUTPUTS_PER_NODE) break;
+      if (id && id !== shown) outputs.push({ assetId: id, kind, ...newest(id) });
+    }
+  }
+  return outputs.slice(0, SNAPSHOT_OUTPUTS_PER_NODE);
 }
 
 /**

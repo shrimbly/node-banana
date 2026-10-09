@@ -1,12 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { WorkflowCanvas } from "@/components/WorkflowCanvas";
+import { AGENT_BUTTON_MARGIN } from "@/lib/agent/client/layout";
 import { useAssetStore } from "@/store/assetStore";
 
 /**
- * The canvas stays mounted (inert, invisible) under the Assets view, and its
- * window-level key handler must not act on the hidden graph. Rendered the
+ * The canvas stays mounted (inert, invisible) under the Assets and chat
+ * views, and its window-level key handler must not act on the hidden graph;
+ * bare A and C are how it opens them. Rendered the
  * way WorkflowCanvas.test.tsx renders it, with the store mocked; the
  * Assets view's side of the contract (the modal count it holds) is
  * modelled by `isModalOpen`.
@@ -15,6 +17,7 @@ import { useAssetStore } from "@/store/assetStore";
 const mocks = vi.hoisted(() => ({
   state: {} as Record<string, unknown>,
   reactFlowProps: { current: null as Record<string, unknown> | null },
+  historyProps: { current: null as { rightInset?: number; anchorRight?: number } | null },
 }));
 
 const mockAddNode = vi.fn().mockReturnValue("new-node-id");
@@ -57,7 +60,17 @@ vi.mock("@xyflow/react", async () => {
 
 vi.mock("@/components/ConnectionDropMenu", () => ({ ConnectionDropMenu: () => null }));
 vi.mock("@/components/MultiSelectToolbar", () => ({ MultiSelectToolbar: () => null }));
-vi.mock("@/components/GlobalImageHistory", () => ({ GlobalImageHistory: () => null }));
+vi.mock("@/components/GlobalImageHistory", () => ({
+  GlobalImageHistory: (props: { rightInset?: number; anchorRight?: number }) => {
+    mocks.historyProps.current = props;
+    return null;
+  },
+}));
+vi.mock("@/components/agent/AgentPanel", () => ({ AgentPanel: () => null }));
+// The agent button reads the page's agent session, which page.tsx mounts around the canvas.
+vi.mock("@/components/agent/AgentSession", () => ({
+  useAgentPresence: () => ({ busy: false, presence: { harness: "claude", harnessChosen: false, attention: false } }),
+}));
 vi.mock("@/components/GroupsOverlay", () => ({ GroupBackgroundsPortal: () => null, GroupControlsOverlay: () => null }));
 vi.mock("@/components/quickstart", () => ({ WelcomeModal: () => null }));
 vi.mock("@/utils/logger", () => ({ logger: { log: vi.fn(), error: vi.fn() } }));
@@ -212,6 +225,98 @@ describe("WorkflowCanvas behind the Assets view", () => {
     mocks.state = state({ isModalOpen: true });
     renderCanvas();
     fireEvent.keyDown(window, { key: "a" });
+    fireEvent.keyDown(window, { key: "c" });
     expect(useAssetStore.getState().appView).toBe("canvas");
+  });
+});
+
+describe("WorkflowCanvas and the chat view", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.state = state();
+    useAssetStore.setState({ appView: "canvas" });
+  });
+  afterEach(() => {
+    useAssetStore.setState({ appView: "canvas" });
+  });
+
+  it("shows the chat on a bare C, leaving Shift+C to add a ComfyUI node and Cmd+C to copy", () => {
+    renderCanvas();
+    fireEvent.keyDown(window, { key: "C", shiftKey: true });
+    expect(mockAddNode).toHaveBeenCalledWith("comfyApp", expect.any(Object));
+    fireEvent.keyDown(window, { key: "c", metaKey: true });
+    expect(mockCopySelectedNodes).toHaveBeenCalled();
+    fireEvent.keyDown(window, { key: "c", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "c", altKey: true });
+    fireEvent.keyDown(window, { key: "c", repeat: true });
+    expect(useAssetStore.getState().appView).toBe("canvas");
+
+    fireEvent.keyDown(window, { key: "c" });
+    expect(useAssetStore.getState().appView).toBe("chat");
+  });
+
+  it("leaves C to a text field being typed in", () => {
+    renderCanvas();
+    const field = document.createElement("textarea");
+    document.body.appendChild(field);
+    try {
+      field.focus();
+      fireEvent.keyDown(field, { key: "c" });
+      expect(useAssetStore.getState().appView).toBe("canvas");
+    } finally {
+      field.remove();
+    }
+  });
+
+  it("does not switch views while a menu is open or from inside a dialog such as the agent window", () => {
+    renderCanvas();
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    document.body.appendChild(menu);
+    try {
+      fireEvent.keyDown(window, { key: "c" });
+      expect(useAssetStore.getState().appView).toBe("canvas");
+    } finally {
+      menu.remove();
+    }
+    const dialog = document.createElement("section");
+    dialog.setAttribute("role", "dialog");
+    const button = document.createElement("button");
+    dialog.appendChild(button);
+    document.body.appendChild(dialog);
+    try {
+      fireEvent.keyDown(button, { key: "c" });
+      expect(useAssetStore.getState().appView).toBe("canvas");
+    } finally {
+      dialog.remove();
+    }
+  });
+
+  it("ignores its keys while the chat shows: C, A and the rest do nothing to the hidden graph", () => {
+    mocks.state = state({ isModalOpen: true });
+    useAssetStore.setState({ appView: "chat" });
+    renderCanvas();
+    fireEvent.keyDown(window, { key: "c" });
+    fireEvent.keyDown(window, { key: "a" });
+    fireEvent.keyDown(window, { key: "g", shiftKey: true });
+    fireEvent.keyDown(window, { key: "c", metaKey: true });
+    fireEvent.keyDown(window, { key: "?" });
+    expect(useAssetStore.getState().appView).toBe("chat");
+    expect(mockAddNode).not.toHaveBeenCalled();
+    expect(mockCopySelectedNodes).not.toHaveBeenCalled();
+    expect(mockSetShortcutsDialogOpen).not.toHaveBeenCalled();
+  });
+
+  it("puts notifications back in the corner while the chat hides the agent window", () => {
+    renderCanvas();
+    fireEvent.click(screen.getByRole("button", { name: "Open agent" }));
+    const windowEdge = mocks.historyProps.current?.anchorRight;
+    expect(windowEdge).toBeGreaterThan(AGENT_BUTTON_MARGIN);
+
+    act(() => useAssetStore.getState().setAppView("chat"));
+    expect(mocks.historyProps.current?.anchorRight).toBe(AGENT_BUTTON_MARGIN);
+
+    act(() => useAssetStore.getState().setAppView("canvas"));
+    expect(mocks.historyProps.current?.anchorRight).toBe(windowEdge);
   });
 });

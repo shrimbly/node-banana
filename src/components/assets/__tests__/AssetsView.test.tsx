@@ -770,6 +770,30 @@ describe("AssetsView", () => {
     );
   });
 
+  it("goes back to the canvas on a bare A, and over to the chat on a bare C", async () => {
+    await renderView();
+    fireEvent.keyDown(window, { key: "a", repeat: true });
+    expect(useAssetStore.getState().appView).toBe("assets");
+    fireEvent.keyDown(window, { key: "a" });
+    expect(useAssetStore.getState().appView).toBe("canvas");
+
+    act(() => useAssetStore.setState({ appView: "assets" }));
+    fireEvent.keyDown(window, { key: "C", shiftKey: true });
+    fireEvent.keyDown(window, { key: "c", repeat: true });
+    expect(useAssetStore.getState().appView).toBe("assets");
+    fireEvent.keyDown(window, { key: "c" });
+    expect(useAssetStore.getState().appView).toBe("chat");
+  });
+
+  it("leaves A and C to the search field being typed in", async () => {
+    await renderView();
+    const search = screen.getByRole("textbox", { name: "Search assets" });
+    search.focus();
+    fireEvent.keyDown(search, { key: "c" });
+    fireEvent.keyDown(search, { key: "a" });
+    expect(useAssetStore.getState().appView).toBe("assets");
+  });
+
   it("opens the shortcuts from ? and hands the keyboard to a dialog above it", async () => {
     await renderView();
     fireEvent.keyDown(window, { key: "?" });

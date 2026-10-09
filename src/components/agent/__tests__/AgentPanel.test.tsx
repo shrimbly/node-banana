@@ -8,6 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { useEffect, type ReactNode } from "react";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 import type { AgentHarnessStatus, AgentGraphOpBatch } from "@/lib/agent/types";
@@ -27,8 +28,27 @@ vi.mock("@/utils/logger", () => ({
   },
 }));
 
-import { AgentPanel } from "@/components/agent/AgentPanel";
+/** The real Run card, counted: a finished message's cards must not re-render while the user types. */
+const cardRenders = vi.hoisted(() => ({ count: 0 }));
+vi.mock("@/components/agent/AgentRunCard", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/agent/AgentRunCard")>();
+  const { createElement } = await import("react");
+  return {
+    ...actual,
+    AgentRunCard: (props: Parameters<typeof actual.AgentRunCard>[0]) => {
+      cardRenders.count++;
+      return createElement(actual.AgentRunCard, props);
+    },
+  };
+});
+
+import { AgentPanel, type AgentPanelProps } from "@/components/agent/AgentPanel";
+import { AgentSessionProvider, useAgentPresence, type AgentPresence } from "@/components/agent/AgentSession";
+import { useToast } from "@/components/Toast";
+import { buildAgentSnapshot } from "@/lib/agent/graph/snapshot";
+import { useAssetStore } from "@/store/assetStore";
 import { useWorkflowStore } from "@/store/workflowStore";
+import { AGENT_HISTORY_KEY } from "@/lib/agent/client/history";
 import { AGENT_SETTINGS_KEY } from "@/lib/agent/client/settings";
 import { AGENT_STATUS_POLL_MS } from "@/lib/agent/client/useAgentStatus";
 
@@ -135,14 +155,37 @@ function replyChunks({
 
 // ---------------------------------------------------------------------------
 
-function renderPanel(props: Partial<Parameters<typeof AgentPanel>[0]> = {}) {
-  const onClose = vi.fn();
-  const utils = render(
+/** Reports the session's presence (what the agent button shows) on every change. */
+function PresenceProbe({ onPresenceChange }: { onPresenceChange: (presence: AgentPresence) => void }) {
+  const { presence } = useAgentPresence();
+  useEffect(() => onPresenceChange(presence), [presence, onPresenceChange]);
+  return null;
+}
+
+/** The window as the page mounts it: inside React Flow and the agent session. */
+function Harness({ children }: { children: ReactNode }) {
+  return (
     <ReactFlowProvider>
-      <AgentPanel open onClose={onClose} buttonRight={15} buttonBottom={173} {...props} />
-    </ReactFlowProvider>,
+      <AgentSessionProvider>{children}</AgentSessionProvider>
+    </ReactFlowProvider>
   );
-  return { ...utils, onClose };
+}
+
+function renderPanel(
+  props: Partial<AgentPanelProps> = {},
+  { onPresenceChange }: { onPresenceChange?: (presence: AgentPresence) => void } = {},
+) {
+  const onClose = vi.fn();
+  const tree = (next: Partial<AgentPanelProps>) => (
+    <Harness>
+      <AgentPanel open onClose={onClose} buttonRight={15} buttonBottom={173} {...next} />
+      {onPresenceChange && <PresenceProbe onPresenceChange={onPresenceChange} />}
+    </Harness>
+  );
+  const utils = render(tree(props));
+  /** Re-renders the window with new props under the same session. */
+  const rerenderPanel = (next: Partial<AgentPanelProps>) => utils.rerender(tree({ ...props, ...next }));
+  return { ...utils, onClose, rerenderPanel };
 }
 
 /** Opens the header's harness and model menu (Radix opens it from the keyboard in jsdom). */
@@ -156,7 +199,10 @@ async function waitForComposer() {
 }
 
 describe("AgentPanel", () => {
-  const applyAgentGraphOps = vi.fn(() => ({ applied: 1, skipped: [] as string[] }));
+  const applyAgentGraphOps = vi.fn<(batch: AgentGraphOpBatch) => { applied: number; skipped: string[]; runRefused?: string }>(() => ({
+    applied: 1,
+    skipped: [],
+  }));
   const originalApply = useWorkflowStore.getState().applyAgentGraphOps;
 
   beforeEach(() => {
@@ -200,7 +246,7 @@ describe("AgentPanel", () => {
     const onPresenceChange = vi.fn();
     localStorage.setItem(AGENT_SETTINGS_KEY, JSON.stringify({ harness: "codex", harnessChosen: true, models: {} }));
     statuses.codex = harnessStatus("codex", { signedIn: false, billing: "none" });
-    renderPanel({ onPresenceChange });
+    renderPanel({}, { onPresenceChange });
 
     await screen.findByRole("button", { name: "Sign in with ChatGPT" });
     expect(onPresenceChange).toHaveBeenLastCalledWith({ harness: "codex", harnessChosen: true, attention: true });
@@ -211,6 +257,25 @@ describe("AgentPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /check again/i }));
     await waitForComposer();
     expect(onPresenceChange).toHaveBeenLastCalledWith({ harness: "codex", harnessChosen: true, attention: false });
+  });
+
+  it("leaves finished messages and their cards alone while the user types", async () => {
+    const offer = { offerId: "offer-1", primary: { scope: { kind: "all" }, label: "Run workflow", nodeIds: [] }, alternatives: [] };
+    const chunks: Array<Record<string, unknown>> = replyChunks({ text: "Built it." });
+    chunks.splice(chunks.length - 2, 0, { type: "data-run-offer", id: "run-offer", data: offer });
+    chatChunks.push(chunks);
+    renderPanel();
+    const textarea = await waitForComposer();
+    fireEvent.change(textarea, { target: { value: "Build it" } });
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    await screen.findByText("Built it.");
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument());
+
+    const before = cardRenders.count;
+    expect(before).toBeGreaterThan(0);
+    for (const text of ["m", "ma", "mak", "make"]) fireEvent.change(textarea, { target: { value: text } });
+    expect(textarea).toHaveValue("make");
+    expect(cardRenders.count).toBe(before);
   });
 
   it("shows the empty state with suggestions once the harness is ready", async () => {
@@ -259,6 +324,14 @@ describe("AgentPanel", () => {
     await waitForComposer();
     // Once: who is in.
     expect(await screen.findByTestId("agent-signed-in-banner")).toHaveTextContent("Signed in to Claude Code as me@example.com · max");
+
+    // Dismissed, it leaves the cursor in the message box, not on the page (where keys are canvas shortcuts).
+    const textarea = await waitForComposer();
+    await waitFor(() => expect(document.activeElement).toBe(textarea));
+    const dismiss = within(screen.getByTestId("agent-signed-in-banner")).getByRole("button", { name: "Dismiss" });
+    dismiss.focus();
+    fireEvent.click(dismiss);
+    await waitFor(() => expect(document.activeElement).toBe(textarea));
   });
 
   it("opens Codex's sign-in page and shows its device code", async () => {
@@ -401,6 +474,9 @@ describe("AgentPanel", () => {
     fireEvent.keyDown(textarea, { key: "Enter" });
 
     expect(await screen.findByText("Added a prompt node.")).toBeInTheDocument();
+    const tools = screen.getByRole("button", { name: /Used 1 tool/ });
+    expect(tools).toHaveTextContent("added 1 node");
+    fireEvent.click(tools);
     expect(screen.getByText("Edit workflow")).toBeInTheDocument();
     expect(screen.getByText("Added 1 node")).toBeInTheDocument();
 
@@ -412,6 +488,33 @@ describe("AgentPanel", () => {
     fireEvent.keyDown(textarea, { key: "Enter" });
     expect(await screen.findByText("Changed it.")).toBeInTheDocument();
     expect(chatBodies[1].sessionId).toBe("session-1");
+  });
+
+  it("says a run is going in the snapshot, and when the agent's run could not start", async () => {
+    const run: AgentGraphOpBatch = {
+      batchId: "b-run",
+      toolCallId: "call-run",
+      ops: [{ op: "run", scope: { kind: "all" }, runs: 1 }],
+      summary: "Running the workflow",
+    };
+    applyAgentGraphOps.mockImplementationOnce(() => ({ applied: 0, skipped: [], runRefused: "a run is already going" }));
+    chatChunks.push(replyChunks({ text: "Started the workflow.", batch: run }));
+    useWorkflowStore.setState({ isRunning: true });
+
+    try {
+      renderPanel();
+      const textarea = await waitForComposer();
+      fireEvent.change(textarea, { target: { value: "Run it" } });
+      fireEvent.keyDown(textarea, { key: "Enter" });
+
+      expect(await screen.findByText("Started the workflow.")).toBeInTheDocument();
+      expect(vi.mocked(buildAgentSnapshot).mock.calls.at(-1)?.[0]).toMatchObject({ running: true });
+      expect(applyAgentGraphOps).toHaveBeenCalledWith(run);
+      expect(useToast.getState().message).toBe("The agent's run didn't start: a run is already going");
+    } finally {
+      useWorkflowStore.setState({ isRunning: false });
+      useToast.getState().hide();
+    }
   });
 
   it("looks up prompting tips for the selected generator's model in a research turn", async () => {
@@ -469,6 +572,36 @@ describe("AgentPanel", () => {
     expect(await screen.findByText("Changed the ratio.")).toBeInTheDocument();
     expect(chatBodies[1].id).toBe(chatBodies[0].id);
     expect(chatBodies[1].sessionId).toBe("session-1");
+  });
+
+  it("offers the harness chooser under a reopened chat while no harness can answer yet", async () => {
+    // Never picked (the first open settled on one), and neither can run now.
+    localStorage.setItem(AGENT_SETTINGS_KEY, JSON.stringify({ harness: "claude", models: {} }));
+    statuses.claude = harnessStatus("claude", { signedIn: false, billing: "none" });
+    statuses.codex = harnessStatus("codex", { signedIn: false, billing: "none" });
+    localStorage.setItem(
+      AGENT_HISTORY_KEY,
+      JSON.stringify([
+        {
+          id: "chat-saved",
+          createdAt: 1,
+          updatedAt: Date.now(),
+          summary: "Hero film",
+          messages: [
+            { id: "u-1", role: "user", parts: [{ type: "text", text: "Build a hero film" }] },
+            { id: "a-1", role: "assistant", parts: [{ type: "text", text: "Built the hero film." }] },
+          ],
+        },
+      ]),
+    );
+    renderPanel();
+    await screen.findByTestId("agent-chooser");
+
+    fireEvent.click(screen.getByRole("button", { name: "History" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Hero film/ }));
+    expect(await screen.findByText("Built the hero film.")).toBeInTheDocument();
+    // Where the message box goes, rather than nothing at all.
+    expect(screen.getByTestId("agent-chooser")).toBeInTheDocument();
   });
 
   it("renders a notice inline with a sign-in action", async () => {
@@ -664,6 +797,17 @@ describe("AgentPanel", () => {
     }
   });
 
+  it("expands into the full-page chat, the same conversation with more room", async () => {
+    try {
+      renderPanel();
+      await waitForComposer();
+      fireEvent.click(screen.getByRole("button", { name: "Open the full chat" }));
+      expect(useAssetStore.getState().appView).toBe("chat");
+    } finally {
+      useAssetStore.setState({ appView: "canvas" });
+    }
+  });
+
   it("keeps an unsent message across a switch to a harness that isn't ready", async () => {
     statuses.codex = harnessStatus("codex", { signedIn: false, billing: "none" });
     renderPanel();
@@ -704,13 +848,9 @@ describe("AgentPanel", () => {
   });
 
   it("stays mounted but hidden while closed", async () => {
-    const { rerender } = renderPanel();
+    const { rerenderPanel } = renderPanel();
     await waitForComposer();
-    rerender(
-      <ReactFlowProvider>
-        <AgentPanel open={false} onClose={vi.fn()} buttonRight={15} buttonBottom={173} />
-      </ReactFlowProvider>,
-    );
+    rerenderPanel({ open: false, onClose: vi.fn() });
     const panel = screen.getByTestId("agent-panel");
     expect(panel.className).toContain("hidden");
     expect(panel.className).not.toMatch(/(^|\s)flex(\s|$)/);

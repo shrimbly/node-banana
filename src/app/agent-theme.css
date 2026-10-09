@@ -224,6 +224,30 @@
   line-height: 18px;
 }
 
+/*
+ * The same markdown in the full-page chat (data-agent-surface="page" on the
+ * view's root): the replies are 15px there, so headings, code and the space
+ * around them step up with the text. The window keeps the rules above.
+ */
+.nb-agent[data-agent-surface="page"] [data-streamdown^="heading-"] { margin: 24px 0 6px; }
+.nb-agent[data-agent-surface="page"] [data-streamdown="heading-1"] { font-size: 22px; line-height: 30px; }
+.nb-agent[data-agent-surface="page"] [data-streamdown="heading-2"] { font-size: 19px; line-height: 26px; }
+.nb-agent[data-agent-surface="page"] [data-streamdown="heading-3"],
+.nb-agent[data-agent-surface="page"] [data-streamdown="heading-4"],
+.nb-agent[data-agent-surface="page"] [data-streamdown="heading-5"],
+.nb-agent[data-agent-surface="page"] [data-streamdown="heading-6"] { font-size: 16px; line-height: 24px; }
+.nb-agent[data-agent-surface="page"] [data-streamdown="list-item"] { padding: 2px 0; }
+.nb-agent[data-agent-surface="page"] [data-streamdown="ordered-list"],
+.nb-agent[data-agent-surface="page"] [data-streamdown="unordered-list"] { padding-left: 4px; }
+.nb-agent[data-agent-surface="page"] [data-streamdown="blockquote"] { margin: 12px 0; padding-left: 16px; }
+.nb-agent[data-agent-surface="page"] [data-streamdown="horizontal-rule"] { margin: 24px 0; }
+.nb-agent[data-agent-surface="page"] [data-streamdown="inline-code"] { padding: 2px 6px; font-size: 13px; }
+.nb-agent[data-agent-surface="page"] [data-streamdown="code-block"] { margin: 8px 0; border-radius: 12px; }
+.nb-agent[data-agent-surface="page"] [data-streamdown="code-block-header"] { padding: 0 14px; }
+.nb-agent[data-agent-surface="page"] [data-streamdown="code-block-body"] { padding: 2px 16px 14px; }
+.nb-agent[data-agent-surface="page"] [data-streamdown="code-block-body"] pre,
+.nb-agent[data-agent-surface="page"] [data-streamdown="code-block-body"] code { font-size: 13px; line-height: 20px; }
+
 @layer base {
   /* shadcn assumes `* { border-color: var(--border) }`. Scoped to the panel and to
      portalled primitives (every shadcn primitive renders data-slot). */

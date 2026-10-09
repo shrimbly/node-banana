@@ -21,6 +21,7 @@ describe("KeyboardShortcutsDialog", () => {
   it("lists the view switch and the Assets keys", () => {
     render(<KeyboardShortcutsDialog isOpen onClose={vi.fn()} />);
     expect(screen.getByText("Views")).toBeInTheDocument();
+    expect(screen.getByText("Show or hide the chat")).toBeInTheDocument();
     expect(screen.getByText("Show or hide Assets")).toBeInTheDocument();
     expect(screen.getByText("Undo the last asset action")).toBeInTheDocument();
     // Views and Assets follow the canvas groups from the canvas
@@ -33,6 +34,15 @@ describe("KeyboardShortcutsDialog", () => {
     render(<KeyboardShortcutsDialog isOpen onClose={vi.fn()} />);
     const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
     expect(headings.slice(0, 2)).toEqual(["Views", "Assets"]);
+    useAssetStore.setState({ appView: "canvas" });
+  });
+
+  it("puts the view switches first when opened from the chat, and Assets' own keys last", () => {
+    useAssetStore.setState({ appView: "chat" });
+    render(<KeyboardShortcutsDialog isOpen onClose={vi.fn()} />);
+    const headings = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(headings[0]).toBe("Views");
+    expect(headings.at(-1)).toBe("Assets");
     useAssetStore.setState({ appView: "canvas" });
   });
 

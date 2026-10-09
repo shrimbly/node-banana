@@ -9,15 +9,44 @@ import type { NodeGroup, WorkflowEdge } from "@/types/workflow";
 import { desktopCredentialsReady } from "@/lib/desktop/credentials";
 import { buildModelsApiHeaders, type ModelsApiKeys } from "@/store/utils/buildApiHeaders";
 import { createDefaultNodeData } from "@/store/utils/nodeDefaults";
+import type { WorkflowTab } from "@/store/utils/workflowTabs";
 import { buildAgentSnapshot } from "../graph/snapshot";
-import type { AgentChatRequestBody, AgentHarnessId, AgentUIMessage, AgentWorkflowSnapshot } from "../types";
+import type { AgentChatRequestBody, AgentHarnessId, AgentTabSummary, AgentUIMessage, AgentWorkflowSnapshot } from "../types";
+import { getVisibleFlowRect } from "./layout";
+import { outputWithoutGraph } from "./messages";
 import { sessionIdForHarness } from "./session";
+
+/** The server reads messages' text and session parts only: the maps of built workflows stay in the browser. */
+function withoutGraphs(messages: AgentUIMessage[]): AgentUIMessage[] {
+  return messages.map((message) =>
+    message.parts.some((part) => part.type === "dynamic-tool" && outputWithoutGraph(part.output) !== part.output)
+      ? {
+          ...message,
+          parts: message.parts.map((part) =>
+            part.type === "dynamic-tool" ? ({ ...part, output: outputWithoutGraph(part.output) } as typeof part) : part,
+          ),
+        }
+      : message,
+  );
+}
 
 export interface AgentCanvasState {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   groups: Record<string, NodeGroup>;
   workflowName: string | null;
+  /** The store's workflowId, when it has one. */
+  workflowId?: string | null;
+  /** A run (or a batch of runs) is going. */
+  running?: boolean;
+}
+
+/** The tab strip: the parked tabs' state, and the live tab's save state (its nodes and name are the canvas). */
+export interface AgentTabStrip {
+  tabs: WorkflowTab[];
+  activeTabId: string;
+  hasUnsavedChanges: boolean;
+  saveDirectoryPath: string | null;
 }
 
 export interface BuildAgentChatRequestInput {
@@ -28,6 +57,8 @@ export interface BuildAgentChatRequestInput {
   effort?: string;
   canvas: AgentCanvasState;
   viewport?: AgentWorkflowSnapshot["viewport"];
+  /** The open tabs; without it the request describes the live canvas alone. */
+  strip?: AgentTabStrip;
 }
 
 export function buildAgentChatRequestBody({
@@ -38,24 +69,94 @@ export function buildAgentChatRequestBody({
   effort,
   canvas,
   viewport,
+  strip,
 }: BuildAgentChatRequestInput): AgentChatRequestBody {
+  // Parked first, so the live canvas is the last snapshot built.
+  const parkedWorkflows = strip ? parkedSnapshots(strip, viewport) : null;
+  const workflow = buildAgentSnapshot({
+    nodes: canvas.nodes,
+    edges: canvas.edges,
+    groups: canvas.groups,
+    viewport,
+    workflowName: canvas.workflowName ?? undefined,
+    workflowId: canvas.workflowId ?? undefined,
+    running: canvas.running,
+    // The user's saved models and settings, so the agent's new nodes are described as they will appear.
+    createDefaultNodeData,
+  });
   return {
     id: chatId,
-    messages,
+    messages: withoutGraphs(messages),
     harness,
     ...(model ? { model } : {}),
     ...(effort ? { effort } : {}),
     sessionId: sessionIdForHarness(messages, harness),
-    workflow: buildAgentSnapshot({
-      nodes: canvas.nodes,
-      edges: canvas.edges,
-      groups: canvas.groups,
-      viewport,
-      workflowName: canvas.workflowName ?? undefined,
-      // The user's saved models and settings, so the agent's new nodes are described as they will appear.
-      createDefaultNodeData,
-    }),
+    workflow: strip ? { ...workflow, tabId: strip.activeTabId } : workflow,
+    ...(strip && parkedWorkflows ? { tabs: tabSummaries(strip, canvas), parkedWorkflows } : {}),
   };
+}
+
+/** Every open tab in strip order; the live one reads from the canvas. */
+export function tabSummaries(strip: AgentTabStrip, canvas: Pick<AgentCanvasState, "nodes" | "workflowName">): AgentTabSummary[] {
+  const live = {
+    nodes: canvas.nodes,
+    workflowName: canvas.workflowName,
+    saveDirectoryPath: strip.saveDirectoryPath,
+    hasUnsavedChanges: strip.hasUnsavedChanges,
+  };
+  return strip.tabs.map((tab) => {
+    const active = tab.id === strip.activeTabId;
+    const source = (!active && tab.snapshot) || live;
+    return {
+      id: tab.id,
+      ...(source.workflowName ? { name: source.workflowName } : {}),
+      ...(active ? { active: true as const } : {}),
+      nodeCount: source.nodes.length,
+      ...(source.saveDirectoryPath ? { saved: true as const } : {}),
+      ...(source.hasUnsavedChanges ? { unsaved: true as const } : {}),
+    };
+  });
+}
+
+/**
+ * The parked tabs as the agent would see them once switched in: the live
+ * pane's size at each tab's own last pan and zoom (none when it was never
+ * shown, so it is fitted to view when it is).
+ */
+function parkedSnapshots(
+  strip: AgentTabStrip,
+  liveViewport: AgentWorkflowSnapshot["viewport"],
+): Record<string, AgentWorkflowSnapshot> {
+  const parked: Record<string, AgentWorkflowSnapshot> = {};
+  for (const tab of strip.tabs) {
+    if (tab.id === strip.activeTabId || !tab.snapshot) continue;
+    const { nodes, edges, groups, workflowName, workflowId, canvasViewport } = tab.snapshot;
+    parked[tab.id] = {
+      ...buildAgentSnapshot({
+        nodes,
+        edges,
+        groups,
+        viewport: parkedViewport(liveViewport, canvasViewport),
+        workflowName: workflowName ?? undefined,
+        workflowId: workflowId ?? undefined,
+      }),
+      tabId: tab.id,
+    };
+  }
+  return parked;
+}
+
+function parkedViewport(
+  live: AgentWorkflowSnapshot["viewport"],
+  pan: { x: number; y: number; zoom: number } | null,
+): AgentWorkflowSnapshot["viewport"] {
+  if (!live || !pan) return undefined;
+  // The live rect is in flow units at the live zoom: back to pane pixels, then through the tab's own transform.
+  return getVisibleFlowRect({
+    transform: [pan.x, pan.y, pan.zoom],
+    paneWidth: live.width * live.zoom,
+    paneHeight: live.height * live.zoom,
+  });
 }
 
 /** The store fields the provider keys live in. */

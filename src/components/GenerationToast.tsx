@@ -39,8 +39,8 @@ export function pushGenerationToast({
   model: string;
   aspectRatio: string;
 }) {
-  // The Assets view shows arrivals itself; cards would sit over its header
-  if (useAssetStore.getState().appView === "assets") return;
+  // Assets and the chat show what arrives themselves; cards would sit over their headers
+  if (useAssetStore.getState().appView !== "canvas") return;
   const now = Date.now();
   const item: GenerationToastItem = {
     id: `${now}-${Math.random().toString(36).slice(2, 9)}`,

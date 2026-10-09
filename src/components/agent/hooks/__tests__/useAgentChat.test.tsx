@@ -9,6 +9,13 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 
 const toastShow = vi.hoisted(() => vi.fn());
 vi.mock("@/components/Toast", () => ({ useToast: { getState: () => ({ show: toastShow }) } }));
+const saveLiveWorkflow = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/agent/client/save", () => ({ saveLiveWorkflow }));
+const trackStartedRun = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/agent/client/runs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/agent/client/runs")>()),
+  trackStartedRun,
+}));
 vi.mock("@/utils/logger", () => ({
   logger: {
     info: vi.fn(),
@@ -524,5 +531,565 @@ describe("useAgentChat: queued messages", () => {
     await waitFor(() => expect(bodies).toHaveLength(2));
     expect(bodies[1].messages.at(-1)).toMatchObject({ parts: [{ text: "Look up prompting tips for Kling I2V" }], metadata: { research } });
     streams[1].end();
+  });
+});
+
+describe("useAgentChat: the turn's tab and save steps", () => {
+  const graphOps = (batchId: string, fields: Partial<AgentGraphOpBatch> = {}): AgentGraphOpBatch => ({
+    batchId,
+    toolCallId: `call-${batchId}`,
+    summary: `Edited (${batchId})`,
+    ops: [{ op: "addNode", id: `prompt-${batchId}`, nodeType: "prompt", position: { x: 0, y: 0 }, data: { prompt: batchId } }],
+    ...fields,
+  });
+  const step = (batchId: string, workspace: AgentGraphOpBatch["workspace"], tabId?: string): AgentGraphOpBatch => ({
+    batchId,
+    toolCallId: `call-${batchId}`,
+    summary: batchId,
+    ops: [],
+    workspace,
+    ...(tabId ? { tabId } : {}),
+  });
+  const nodeIds = () => useWorkflowStore.getState().nodes.map((node) => node.id);
+  const push = (stream: ReturnType<typeof controlledStream>, batch: AgentGraphOpBatch) =>
+    stream.push({ type: "data-graph-ops", data: batch, transient: true });
+  let tabCounter = 0;
+  const freshTabId = () => `tab-ag${Date.now().toString(36)}${(tabCounter += 1)}`;
+
+  beforeEach(async () => {
+    toastShow.mockClear();
+    saveLiveWorkflow.mockReset();
+    trackStartedRun.mockReset();
+    const store = useWorkflowStore.getState();
+    useWorkflowStore.setState({ tabs: [{ id: store.activeTabId, snapshot: null }], isRunning: false, isSaving: false, batch: null });
+    useWorkflowStore.getState().clearWorkflow();
+    await act(() => useWorkflowStore.getState().loadWorkflow(workflow("wf-A", "A", "a cat")));
+  });
+
+  afterEach(() => {
+    useWorkflowStore.setState({ isRunning: false, isSaving: false });
+    vi.unstubAllGlobals();
+  });
+
+  it("applies batches in stream order, waiting for a save before the next", async () => {
+    let finishSave!: (result: { ok: true; name: string; path: string }) => void;
+    saveLiveWorkflow.mockImplementation(() => new Promise((resolve) => (finishSave = resolve)));
+    const { stream } = await startTurn();
+    const tabId = useWorkflowStore.getState().activeTabId;
+
+    await act(async () => {
+      push(stream, graphOps("one", { tabId }));
+      push(stream, step("save", { op: "save", name: "Fox" }, tabId));
+      push(stream, graphOps("two", { tabId }));
+      await sleep(30);
+    });
+    expect(nodeIds()).toContain("prompt-one");
+    expect(saveLiveWorkflow).toHaveBeenCalledWith("Fox");
+    expect(nodeIds()).not.toContain("prompt-two");
+
+    await act(async () => {
+      finishSave({ ok: true, name: "Fox", path: "/lib/Fox" });
+      await sleep(20);
+    });
+    expect(nodeIds()).toContain("prompt-two");
+    expect(toastShow).toHaveBeenCalledWith("Saved Fox", "info");
+    stream.end();
+  });
+
+  it("says why a save failed and carries on", async () => {
+    saveLiveWorkflow.mockResolvedValue({ ok: false, reason: "Couldn't save: disk full" });
+    const { result, stream } = await startTurn();
+    await act(async () => {
+      push(stream, step("save", { op: "save" }));
+      push(stream, graphOps("after"));
+      await sleep(30);
+    });
+    expect(toastShow).toHaveBeenCalledWith("Couldn't save: disk full", "warning");
+    expect(nodeIds()).toContain("prompt-after");
+    expect(result.current.busy).toBe(true);
+    stream.end();
+  });
+
+  it("keeps the turn and the queue going across its own tab switch and new tab", async () => {
+    const tabA = useWorkflowStore.getState().activeTabId;
+    const tabB = useWorkflowStore.getState().newTab()!;
+    useWorkflowStore.getState().switchTab(tabA);
+    const { result, stream } = await startTurn();
+    const body = JSON.parse(String(vi.mocked(fetch).mock.calls[0][1]?.body));
+    expect(body.workflow.tabId).toBe(tabA);
+    expect(body.tabs.map((tab: { id: string }) => tab.id)).toEqual([tabA, tabB]);
+    expect(Object.keys(body.parkedWorkflows)).toEqual([tabB]);
+
+    act(() => {
+      result.current.send("then make it blue");
+    });
+    const tabC = freshTabId();
+    await act(async () => {
+      push(stream, step("switch", { op: "switchTab", tabId: tabB }, tabB));
+      push(stream, graphOps("in-b", { tabId: tabB }));
+      push(stream, step("new", { op: "newTab", tabId: tabC, name: "Fresh" }, tabC));
+      push(stream, graphOps("in-c", { tabId: tabC }));
+      await sleep(30);
+    });
+
+    const state = useWorkflowStore.getState();
+    expect(state.activeTabId).toBe(tabC);
+    expect(state.workflowName).toBe("Fresh");
+    expect(nodeIds()).toEqual(["prompt-in-c"]);
+    expect(state.tabs.find((tab) => tab.id === tabB)?.snapshot?.nodes.map((node) => node.id)).toContain("prompt-in-b");
+    expect(result.current.busy).toBe(true);
+    expect(result.current.queued.map((entry) => entry.text)).toEqual(["then make it blue"]);
+    expect(toastShow).not.toHaveBeenCalled();
+    stream.end();
+  });
+
+  it("waits for a save to finish before switching tabs", async () => {
+    const tabA = useWorkflowStore.getState().activeTabId;
+    const tabB = useWorkflowStore.getState().newTab()!;
+    useWorkflowStore.getState().switchTab(tabA);
+    const { result, stream } = await startTurn();
+    useWorkflowStore.setState({ isSaving: true });
+
+    await act(async () => {
+      push(stream, step("switch", { op: "switchTab", tabId: tabB }, tabB));
+      await sleep(150);
+    });
+    expect(useWorkflowStore.getState().activeTabId).toBe(tabA);
+
+    await act(async () => {
+      useWorkflowStore.setState({ isSaving: false });
+      await sleep(150);
+    });
+    expect(useWorkflowStore.getState().activeTabId).toBe(tabB);
+    expect(result.current.busy).toBe(true);
+    stream.end();
+  });
+
+  it("stops the turn when a switch is refused, and drops what follows", async () => {
+    const tabA = useWorkflowStore.getState().activeTabId;
+    const tabB = useWorkflowStore.getState().newTab()!;
+    useWorkflowStore.getState().switchTab(tabA);
+    const { result, stream, signal } = await startTurn();
+    useWorkflowStore.setState({ isRunning: true });
+
+    await act(async () => {
+      push(stream, step("switch", { op: "switchTab", tabId: tabB }, tabB));
+      push(stream, graphOps("in-b", { tabId: tabB }));
+      await sleep(30);
+    });
+
+    expect(useWorkflowStore.getState().activeTabId).toBe(tabA);
+    expect(toastShow).toHaveBeenCalledWith("Stopped the agent: it couldn't switch workflows (wait for the run to finish)", "warning");
+    await waitFor(() => expect(result.current.busy).toBe(false));
+    expect(signal().aborted).toBe(true);
+    expect(nodeIds()).not.toContain("prompt-in-b");
+    stream.end();
+  });
+
+  it("drops a batch meant for a tab that isn't live, and stops the turn", async () => {
+    const { result, stream } = await startTurn();
+    await act(async () => {
+      push(stream, graphOps("elsewhere", { tabId: "tab-somewhere-else" }));
+      await sleep(30);
+    });
+    expect(nodeIds()).not.toContain("prompt-elsewhere");
+    expect(toastShow).toHaveBeenCalledWith("Stopped the agent: its changes were for a workflow that isn't the open tab", "warning");
+    await waitFor(() => expect(result.current.busy).toBe(false));
+    stream.end();
+  });
+
+  it("records the run a batch started, under its tool call, as the canvas allowed it", async () => {
+    const original = useWorkflowStore.getState().applyAgentGraphOps;
+    // The user deleted a node mid-turn: the store left it out of the run it started.
+    useWorkflowStore.setState((state) => ({ nodes: state.nodes.filter((node) => node.id !== "nanoBanana-2") }));
+    useWorkflowStore.setState({
+      applyAgentGraphOps: vi.fn(() => ({
+        applied: 0,
+        skipped: [],
+        runStarted: true as const,
+        run: { scope: { kind: "nodes" as const, nodeIds: ["prompt-1"] }, runs: 2 },
+      })),
+    });
+    try {
+      const { result, stream } = await startTurn();
+      await act(async () => {
+        push(stream, {
+          batchId: "run",
+          toolCallId: "call-run",
+          summary: "Run 2 nodes",
+          ops: [{ op: "run", scope: { kind: "nodes", nodeIds: ["prompt-1", "nanoBanana-2"] }, runs: 2 }],
+          focusNodeIds: ["prompt-1", "nanoBanana-2"],
+        });
+        await sleep(30);
+      });
+      expect(trackStartedRun).toHaveBeenCalledWith({
+        chatId: result.current.chatId,
+        anchor: { toolCallId: "call-run" },
+        label: "Run 2 nodes",
+        scope: { kind: "nodes", nodeIds: ["prompt-1"] },
+        runs: 2,
+        tabId: useWorkflowStore.getState().activeTabId,
+        plannedNodeIds: ["prompt-1"],
+      });
+      stream.end();
+    } finally {
+      useWorkflowStore.setState({ applyAgentGraphOps: original });
+    }
+  });
+
+  it("plans a whole-workflow run's nodes from the canvas when the batch names none", async () => {
+    const original = useWorkflowStore.getState().applyAgentGraphOps;
+    useWorkflowStore.setState({
+      applyAgentGraphOps: vi.fn(() => ({ applied: 0, skipped: [], runStarted: true as const, run: { scope: { kind: "all" as const }, runs: 1 } })),
+    });
+    try {
+      const { stream } = await startTurn();
+      await act(async () => {
+        push(stream, { batchId: "run", toolCallId: "call-run", summary: "Running the workflow", ops: [{ op: "run", scope: { kind: "all" }, runs: 1 }] });
+        await sleep(30);
+      });
+      expect(trackStartedRun).toHaveBeenCalledWith(
+        expect.objectContaining({ scope: { kind: "all" }, runs: 1, plannedNodeIds: ["prompt-1", "nanoBanana-2"] }),
+      );
+      stream.end();
+    } finally {
+      useWorkflowStore.setState({ applyAgentGraphOps: original });
+    }
+  });
+
+  it("says why, and records nothing, when the canvas refuses the run", async () => {
+    useWorkflowStore.setState({ desktopConnected: false });
+    try {
+      const { stream } = await startTurn();
+      await act(async () => {
+        push(stream, {
+          batchId: "run",
+          toolCallId: "call-run",
+          summary: "Running the workflow ×3",
+          ops: [{ op: "run", scope: { kind: "all" }, runs: 3 }],
+        });
+        await sleep(30);
+      });
+      expect(toastShow).toHaveBeenLastCalledWith(
+        "The agent's run didn't start: local server disconnected. Use Help → Restart Local Server to reconnect.",
+        "warning",
+      );
+      expect(trackStartedRun).not.toHaveBeenCalled();
+      stream.end();
+    } finally {
+      useWorkflowStore.setState({ desktopConnected: true });
+    }
+  });
+});
+
+describe("useAgentChat: steps still pending when the turn ends", () => {
+  /** Every request gets its own stream and signal; turn n is streams[n]. */
+  function fakeTurns() {
+    const streams: ReturnType<typeof controlledStream>[] = [];
+    const bodies: Array<{ workflow?: { tabId?: string } }> = [];
+    const signals: AbortSignal[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        const stream = controlledStream();
+        if (init.signal) {
+          stream.abortWith(init.signal);
+          signals.push(init.signal);
+        }
+        streams.push(stream);
+        bodies.push(JSON.parse(String(init.body)));
+        return stream.response;
+      }),
+    );
+    return { streams, bodies, signals };
+  }
+
+  async function busyChat() {
+    const turns = fakeTurns();
+    const hook = renderHook(() =>
+      useAgentChat({ harness: "claude", getViewport: () => ({ x: 0, y: 0, width: 800, height: 600, zoom: 1 }) }),
+    );
+    act(() => {
+      hook.result.current.send("first");
+    });
+    await waitFor(() => expect(turns.streams).toHaveLength(1));
+    turns.streams[0].push({ type: "start", messageId: "assistant-1" });
+    await waitFor(() => expect(hook.result.current.busy).toBe(true));
+    return { ...hook, ...turns };
+  }
+
+  const push = (stream: ReturnType<typeof controlledStream>, batch: AgentGraphOpBatch) =>
+    stream.push({ type: "data-graph-ops", data: batch, transient: true });
+  const step = (batchId: string, workspace: AgentGraphOpBatch["workspace"], tabId?: string): AgentGraphOpBatch => ({
+    batchId,
+    toolCallId: `call-${batchId}`,
+    summary: batchId,
+    ops: [],
+    workspace,
+    ...(tabId ? { tabId } : {}),
+  });
+  const edit = (batchId: string, tabId?: string): AgentGraphOpBatch => ({
+    batchId,
+    toolCallId: `call-${batchId}`,
+    summary: batchId,
+    ops: [{ op: "addNode", id: `prompt-${batchId}`, nodeType: "prompt", position: { x: 0, y: 0 }, data: { prompt: batchId } }],
+    ...(tabId ? { tabId } : {}),
+  });
+  const runAll: AgentGraphOpBatch = {
+    batchId: "run",
+    toolCallId: "call-run",
+    summary: "Running the workflow",
+    ops: [{ op: "run", scope: { kind: "all" }, runs: 1 }],
+  };
+  const nodeIds = () => useWorkflowStore.getState().nodes.map((node) => node.id);
+  /** Two tabs, A live. */
+  function twoTabs() {
+    const tabA = useWorkflowStore.getState().activeTabId;
+    const tabB = useWorkflowStore.getState().newTab()!;
+    useWorkflowStore.getState().switchTab(tabA);
+    return { tabA, tabB };
+  }
+
+  const originalRunBatch = useWorkflowStore.getState().runBatch;
+  const runBatch = vi.fn(async () => {});
+
+  beforeEach(async () => {
+    toastShow.mockClear();
+    saveLiveWorkflow.mockReset();
+    trackStartedRun.mockReset();
+    runBatch.mockClear();
+    const store = useWorkflowStore.getState();
+    useWorkflowStore.setState({ tabs: [{ id: store.activeTabId, snapshot: null }], isRunning: false, isSaving: false, batch: null, runBatch });
+    useWorkflowStore.getState().clearWorkflow();
+    await act(() => useWorkflowStore.getState().loadWorkflow(workflow("wf-A", "A", "a cat")));
+  });
+
+  afterEach(() => {
+    useWorkflowStore.setState({ isRunning: false, isSaving: false, runBatch: originalRunBatch });
+    vi.unstubAllGlobals();
+  });
+
+  it.each([
+    ["sends again", (chat: ReturnType<typeof useAgentChat>) => chat.send("and another")],
+    ["starts a new chat", (chat: ReturnType<typeof useAgentChat>) => chat.newChat()],
+  ])("never starts a run asked for before Stop, even once the user %s", async (_what, next) => {
+    let finishSave!: (result: { ok: true; name: string; path: string }) => void;
+    saveLiveWorkflow.mockImplementation(() => new Promise((resolve) => (finishSave = resolve)));
+    const { result, streams } = await busyChat();
+    await act(async () => {
+      push(streams[0], step("save", { op: "save", name: "Fox" }));
+      push(streams[0], runAll);
+      await sleep(30);
+    });
+
+    act(() => result.current.stop());
+    await waitFor(() => expect(result.current.busy).toBe(false));
+    act(() => {
+      next(result.current);
+    });
+    await act(async () => {
+      finishSave({ ok: true, name: "Fox", path: "/lib/Fox" });
+      await sleep(30);
+    });
+
+    expect(runBatch).not.toHaveBeenCalled();
+    expect(trackStartedRun).not.toHaveBeenCalled();
+    for (const stream of streams) stream.end();
+  });
+
+  it("keeps an ended turn's queued edits and run off a workflow loaded into the tab since, once a new turn begins", async () => {
+    let finishSave!: (result: { ok: false; reason: string }) => void;
+    saveLiveWorkflow.mockImplementation(() => new Promise((resolve) => (finishSave = resolve)));
+    const { result, streams } = await busyChat();
+    await act(async () => {
+      push(streams[0], step("save", { op: "save", name: "Fox" }));
+      push(streams[0], edit("dog"));
+      push(streams[0], runAll);
+      streams[0].push({ type: "finish" });
+      streams[0].end();
+      await sleep(30);
+    });
+    await waitFor(() => expect(result.current.busy).toBe(false));
+    // The user drops another workflow onto the same tab, then starts afresh.
+    await act(() => useWorkflowStore.getState().loadWorkflow(workflow("wf-B", "B", "a mountain lake")));
+    act(() => result.current.newChat());
+    await act(async () => {
+      finishSave({ ok: false, reason: "A different workflow was opened" });
+      await sleep(30);
+    });
+    expect(nodeIds()).not.toContain("prompt-dog");
+    expect(runBatch).not.toHaveBeenCalled();
+  });
+
+  it("Stop also covers the last turn's run still queued behind its save, and lets the waiting turn go at once", async () => {
+    let finishSave!: (result: { ok: true; name: string; path: string }) => void;
+    saveLiveWorkflow.mockImplementation(() => new Promise((resolve) => (finishSave = resolve)));
+    const { result, streams } = await busyChat();
+    act(() => {
+      result.current.send("then make it blue");
+    });
+    await act(async () => {
+      push(streams[0], step("save", { op: "save", name: "Fox" }));
+      push(streams[0], runAll);
+      streams[0].push({ type: "finish" });
+      streams[0].end();
+      await sleep(50);
+    });
+    // The queued message went, and waits for the save before its request is built.
+    act(() => result.current.stop());
+    await waitFor(() => expect(result.current.busy).toBe(false));
+    await act(async () => {
+      finishSave({ ok: true, name: "Fox", path: "/lib/Fox" });
+      await sleep(30);
+    });
+    expect(runBatch).not.toHaveBeenCalled();
+    for (const stream of streams) stream.end();
+  });
+
+  it("New chat after a turn ended drops the run it still had queued", async () => {
+    let finishSave!: (result: { ok: true; name: string; path: string }) => void;
+    saveLiveWorkflow.mockImplementation(() => new Promise((resolve) => (finishSave = resolve)));
+    const { result, streams } = await busyChat();
+    await act(async () => {
+      push(streams[0], step("save", { op: "save", name: "Fox" }));
+      push(streams[0], runAll);
+      streams[0].push({ type: "finish" });
+      streams[0].end();
+      await sleep(30);
+    });
+    await waitFor(() => expect(result.current.busy).toBe(false));
+    act(() => result.current.newChat());
+    await act(async () => {
+      finishSave({ ok: true, name: "Fox", path: "/lib/Fox" });
+      await sleep(30);
+    });
+    expect(runBatch).not.toHaveBeenCalled();
+    expect(trackStartedRun).not.toHaveBeenCalled();
+  });
+
+  it("New chat mid-turn drops the old turn's remaining steps, a switch already waiting included", async () => {
+    const { tabA, tabB } = twoTabs();
+    const { result, streams } = await busyChat();
+    useWorkflowStore.setState({ isSaving: true });
+    await act(async () => {
+      push(streams[0], step("switch", { op: "switchTab", tabId: tabB }, tabB));
+      push(streams[0], edit("in-b", tabB));
+      push(streams[0], { ...runAll, tabId: tabB });
+      await sleep(30);
+    });
+
+    act(() => result.current.newChat());
+    await act(async () => {
+      useWorkflowStore.setState({ isSaving: false });
+      await sleep(200);
+    });
+
+    const state = useWorkflowStore.getState();
+    expect(state.activeTabId).toBe(tabA);
+    expect(nodeIds()).not.toContain("prompt-in-b");
+    expect(state.tabs.find((tab) => tab.id === tabB)?.snapshot?.nodes.map((node) => node.id)).not.toContain("prompt-in-b");
+    expect(runBatch).not.toHaveBeenCalled();
+    expect(toastShow).not.toHaveBeenCalled();
+    for (const stream of streams) stream.end();
+  });
+
+  it("sends the next turn once the last one's steps have landed, describing the tab they left live", async () => {
+    const { tabB } = twoTabs();
+    const { result, streams, bodies, signals } = await busyChat();
+    useWorkflowStore.setState({ isSaving: true });
+    act(() => {
+      result.current.send("then make it blue");
+    });
+    await act(async () => {
+      push(streams[0], step("switch", { op: "switchTab", tabId: tabB }, tabB));
+      streams[0].push({ type: "finish" });
+      streams[0].end();
+      await sleep(50);
+    });
+    // The switch still waits for the save: the queued message waits with it.
+    expect(streams).toHaveLength(1);
+
+    await act(async () => {
+      useWorkflowStore.setState({ isSaving: false });
+      await sleep(200);
+    });
+    await waitFor(() => expect(streams).toHaveLength(2));
+    expect(bodies[1].workflow?.tabId).toBe(tabB);
+
+    await act(async () => {
+      streams[1].push({ type: "start", messageId: "assistant-2" });
+      push(streams[1], edit("blue", tabB));
+      await sleep(30);
+    });
+    expect(nodeIds()).toContain("prompt-blue");
+    expect(signals[1].aborted).toBe(false);
+    expect(toastShow).not.toHaveBeenCalled();
+    streams[1].end();
+  });
+
+  it("a step refused after its turn ended stops nothing but that turn", async () => {
+    const { tabA, tabB } = twoTabs();
+    const { result, streams, signals } = await busyChat();
+    useWorkflowStore.setState({ isSaving: true });
+    act(() => {
+      result.current.send("then make it blue");
+    });
+    await act(async () => {
+      push(streams[0], step("switch", { op: "switchTab", tabId: tabB }, tabB));
+      streams[0].push({ type: "finish" });
+      streams[0].end();
+      await sleep(50);
+    });
+
+    // The tab closes while the switch waits: the switch is refused once the save ends.
+    await act(async () => {
+      useWorkflowStore.setState((state) => ({ tabs: state.tabs.filter((tab) => tab.id !== tabB), isSaving: false }));
+      await sleep(200);
+    });
+    expect(toastShow).toHaveBeenCalledWith("Stopped the agent: it couldn't switch workflows (that workflow is no longer open)", "warning");
+    expect(useWorkflowStore.getState().activeTabId).toBe(tabA);
+
+    // The queued message's turn goes on.
+    await waitFor(() => expect(streams).toHaveLength(2));
+    expect(signals[1].aborted).toBe(false);
+    expect(result.current.busy).toBe(true);
+    streams[1].end();
+  });
+
+  it("names the tab its turn worked on, once the turn's steps have settled", async () => {
+    const { tabA, tabB } = twoTabs();
+    const { result, streams } = await busyChat();
+    useWorkflowStore.setState({ isSaving: true });
+    await act(async () => {
+      push(streams[0], step("switch", { op: "switchTab", tabId: tabB }, tabB));
+      streams[0].push({ type: "finish" });
+      streams[0].end();
+      await sleep(50);
+    });
+    expect(result.current.busy).toBe(false);
+
+    let settled = false;
+    void result.current.stepsSettled!().then(() => (settled = true));
+    await act(() => sleep(30));
+    expect(settled).toBe(false);
+    expect(result.current.turnTabId!()).toBe(tabA);
+
+    await act(async () => {
+      useWorkflowStore.setState({ isSaving: false });
+      await sleep(200);
+    });
+    expect(settled).toBe(true);
+    expect(result.current.turnTabId!()).toBe(tabB);
+  });
+
+  it("keeps naming the turn's own tab when the user opens another one mid-turn", async () => {
+    const { tabA, tabB } = twoTabs();
+    const { result, streams } = await busyChat();
+    act(() => {
+      useWorkflowStore.getState().switchTab(tabB);
+    });
+    await waitFor(() => expect(result.current.busy).toBe(false));
+    expect(result.current.turnTabId!()).toBe(tabA);
+    streams[0].end();
   });
 });

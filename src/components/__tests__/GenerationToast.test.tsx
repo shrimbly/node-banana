@@ -64,8 +64,8 @@ describe("GenerationToaster", () => {
     expect(document.querySelector("img")).toHaveAttribute("src", "data:image/png;base64,a");
   });
 
-  it("stays quiet while the Assets view shows (it shows arrivals itself)", () => {
-    useAssetStore.setState({ appView: "assets" });
+  it.each(["assets", "chat"] as const)("stays quiet while the %s view shows (it shows arrivals itself)", (view) => {
+    useAssetStore.setState({ appView: view });
     render(<GenerationToaster />);
     push();
     expect(screen.queryByTestId("generation-toast")).not.toBeInTheDocument();

@@ -237,7 +237,7 @@ describe("groups in the agent's tools", () => {
 
   it("shows each group's colour, box, lock and nodes in get_workflow", async () => {
     const result = await call(runtimeWith(grouped()), "get_workflow", {});
-    expect(result.text).toContain("- Group group-1 [group-1] blue locked box (2980, 2980) 800×300: prompt-1, nanoBanana-2");
+    expect(result.text).toContain('- "Group group-1" [group-1] blue locked box (2980, 2980) 800×300: prompt-1, nanoBanana-2');
   });
 });
 
@@ -451,7 +451,7 @@ describe("the agent's own groups", () => {
     expect(again.ops).toEqual([{ op: "updateGroup", id: "group-1", color: "green" }]);
     store = applyResult(store, again);
     expect(store.groups["group-1"].color).toBe("green");
-    expect((await call(runtime, "get_workflow", {})).text).toContain("- Scene set [group-1] green box (-30, -30) 380×280: prompt-1");
+    expect((await call(runtime, "get_workflow", {})).text).toContain('- "Scene set" [group-1] green box (-30, -30) 380×280: prompt-1');
   });
 
   it("ungroups: the box goes, the nodes stay where they are", async () => {

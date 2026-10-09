@@ -788,6 +788,24 @@ describe("app view", () => {
     expect(useAssetStore.getState().appView).toBe("canvas");
   });
 
+  it("toggles the named view against the canvas, and moves straight from one view to the other", () => {
+    const { toggleAppView } = useAssetStore.getState();
+    toggleAppView("chat");
+    expect(useAssetStore.getState().appView).toBe("chat");
+    toggleAppView("assets");
+    expect(useAssetStore.getState().appView).toBe("assets");
+    toggleAppView("chat");
+    expect(useAssetStore.getState().appView).toBe("chat");
+    toggleAppView("chat");
+    expect(useAssetStore.getState().appView).toBe("canvas");
+  });
+
+  it("closes an open popover when the view changes", () => {
+    useAssetStore.setState({ popover: { kind: "sort", x: 0, y: 0 } });
+    useAssetStore.getState().toggleAppView("chat");
+    expect(useAssetStore.getState().popover).toBeNull();
+  });
+
   it("remembers the tile size per viewer", () => {
     useAssetStore.getState().setTileSize("l");
     expect(window.localStorage.getItem("node-banana-assets-tile-size")).toBe("l");

@@ -49,7 +49,7 @@ import type { ProviderModel } from "@/lib/providers/types";
 import { isGenerateNodeType, modelSelectionData } from "./utils/modelSelection";
 import { externalizeWorkflowMedia, hydrateWorkflowMedia } from "@/utils/mediaStorage";
 import { EditOperation, applyEditOperations as executeEditOps } from "@/lib/chat/editOperations";
-import { applyGraphOps } from "@/lib/agent/graph/applyOps";
+import { applyGraphOps, type ApplyGraphOpsResult } from "@/lib/agent/graph/applyOps";
 import type { AgentGraphOpBatch } from "@/lib/agent/types";
 import { findNearestFreePosition } from "@/utils/spatialLayout";
 import { getNodeSize } from "@/utils/nodeDimensions";
@@ -76,7 +76,9 @@ import {
 import { normalizeEdgeAppearance } from "@/lib/edges/appearance";
 import {
   captureWorkflowTabSnapshot,
+  claimTabId,
   createTabId,
+  markTabIdsUsed,
   emptyWorkflowTabSnapshot,
   isWorkflowTabPristine,
   tabToActivateAfterClose,
@@ -409,8 +411,8 @@ export interface WorkflowStore {
   setRunCount: (count: number) => void;
   /** The batch in progress, or null (a single run, or nothing running). */
   batch: RunBatch | null;
-  /** Run `scope` runCount times, one run after another. */
-  runBatch: (scope: RunScope) => Promise<void>;
+  /** Run `scope` runCount times (or `count` times, leaving runCount alone), one run after another. */
+  runBatch: (scope: RunScope, count?: number) => Promise<void>;
   /** The Run button's Stop: mid-batch the first press lets this run finish, the second stops now. */
   requestStop: () => void;
   mockTutorialExecution: () => Promise<void>;
@@ -436,8 +438,13 @@ export interface WorkflowStore {
   pendingMediaSaves: number;
   /** Why tab changes are refused right now, or null when they are allowed. */
   tabsBusyReason: () => string | null;
-  /** Park the live workflow and open an empty tab. Returns the new tab id, or null while a run or save is in flight. */
-  newTab: () => string | null;
+  /**
+   * Park the live workflow and open an empty tab. Returns the new tab id, or
+   * null while a run or save is in flight. `id` asks for that tab id (the
+   * agent names the tabs it opens): refused, null, when it is malformed or
+   * was ever used in this page. `name` labels the new, unsaved workflow.
+   */
+  newTab: (options?: { id?: string; name?: string }) => string | null;
   /** Park the live workflow and bring `tabId` into the canvas. False when nothing changed. */
   switchTab: (tabId: string) => boolean;
   /** Close a tab. Closing the only tab leaves an empty one. False when nothing changed. */
@@ -546,9 +553,17 @@ export interface WorkflowStore {
   /**
    * Applies one batch of resolved canvas changes from the agent as a single
    * undo step. Ops that no longer fit the live canvas are skipped and
-   * returned with reasons.
+   * returned with reasons. A run the batch asks for starts after its edits,
+   * outside the undo step; `runRefused` says why it did not. `run` is the run
+   * that started, as the live canvas allowed it (nodes deleted meanwhile left out).
    */
-  applyAgentGraphOps: (batch: AgentGraphOpBatch) => { applied: number; skipped: string[] };
+  applyAgentGraphOps: (batch: AgentGraphOpBatch) => {
+    applied: number;
+    skipped: string[];
+    runRefused?: string;
+    runStarted?: true;
+    run?: { scope: RunScope; runs: number };
+  };
   /**
    * Bumped whenever a different canvas replaces the live one (loadWorkflow,
    * clearWorkflow, a tab switch). An agent turn remembers the generation it
@@ -860,6 +875,26 @@ function splitGridsToBuild(ops: AgentGraphOpBatch["ops"]): string[] {
   return [...ids];
 }
 
+/**
+ * Starts the run an agent batch asked for, through runBatch like every Run
+ * entry point. Not awaited: the batch's edits are already in, and the run
+ * goes on after the agent's turn.
+ */
+function startAgentRun(
+  get: () => WorkflowStore,
+  run: ApplyGraphOpsResult["run"],
+): Pick<ReturnType<WorkflowStore["applyAgentGraphOps"]>, "runRefused" | "runStarted" | "run"> {
+  if (!run) return {};
+  // The turn saw an idle canvas; a run started since then (the user pressed Run) wins.
+  if (get().isRunning || get().batch) return { runRefused: "a run is already going" };
+  // The whole workflow means all of it: a pause left by an earlier run would have it resume from there instead.
+  if (run.scope.kind === "all" && get().pausedAtNodeId) useWorkflowStore.setState({ pausedAtNodeId: null });
+  void get().runBatch(run.scope, run.runs);
+  // The first run is going before runBatch first awaits: nothing running now means it was refused.
+  if (!get().isRunning) return { runRefused: executionRefusal(get().desktopConnected) ?? "the canvas refused it" };
+  return { runStarted: true, run };
+}
+
 function pushUndoCheckpoint(
   get: () => WorkflowStore,
   set: (partial: Partial<WorkflowStore>) => void,
@@ -975,11 +1010,16 @@ function applyTabSnapshot(
   get().recomputeDimmedNodes();
 }
 
-/** Explain blocked run attempts instead of silently dropping node-button clicks. */
-function canStartExecution(connected: boolean): boolean {
-  const reason = !desktopCredentialsReady()
+/** Why no run can start right now, or null. */
+function executionRefusal(connected: boolean): string | null {
+  return !desktopCredentialsReady()
     ? "Provider keys are still loading. Wait for setup to finish before running."
     : !connected ? "Local server disconnected. Use Help → Restart Local Server to reconnect." : null;
+}
+
+/** Explain blocked run attempts instead of silently dropping node-button clicks. */
+function canStartExecution(connected: boolean): boolean {
+  const reason = executionRefusal(connected);
   if (!reason) return true;
   logger.warn('workflow.start', reason);
   useToast.getState().show(reason, "warning");
@@ -2782,7 +2822,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     set({ runCount, hasUnsavedChanges: true });
   },
 
-  runBatch: async (scope: RunScope) => {
+  runBatch: async (scope: RunScope, countOverride?: number) => {
     if (get().isRunning || get().batch) return;
     const runOnce = async (): Promise<RunOutcome> => {
       const serial = lastRun.serial;
@@ -2791,7 +2831,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       else await get().executeSelectedNodes(scope.nodeIds);
       return { started: lastRun.serial !== serial, failed: lastRun.failed };
     };
-    const count = clampRunCount(get().runCount);
+    const count = clampRunCount(countOverride ?? get().runCount);
     if (count === 1) {
       await runOnce();
       return;
@@ -2809,9 +2849,13 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         },
         runOnce,
         // A hard Stop clears the batch; a pause edge, or a canvas replaced
-        // under the batch, ends it too.
+        // under the batch, ends it too. Selected nodes never pause: a pause
+        // the canvas holds is an earlier run's resume point.
         keepGoing: () =>
-          ours() && !get().batch?.stopping && !get().pausedAtNodeId && get().canvasGeneration === canvasGeneration,
+          ours() &&
+          !get().batch?.stopping &&
+          (scope.kind === "nodes" || !get().pausedAtNodeId) &&
+          get().canvasGeneration === canvasGeneration,
       });
     } finally {
       if (ours()) set({ batch: null });
@@ -3573,15 +3617,17 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
   restoreDesktopSession: (tabs, activeTabId) => {
     const active = tabs.find(tab => tab.id === activeTabId);
     if (!active) return;
+    markTabIdsUsed(tabs.map((tab) => tab.id));
     set({ tabs: tabs.map(tab => ({ ...tab, snapshot: tab.id === activeTabId ? null : tab.snapshot })), activeTabId });
     applyTabSnapshot(set, get, active.snapshot);
   },
 
-  newTab: () => {
+  newTab: (options) => {
     if (get().tabsBusyReason()) return null;
     const { tabs, activeTabId, edgeStyle, edgeAppearance, useExternalImageStorage } = get();
+    if (options?.id !== undefined && !claimTabId(options.id)) return null;
     const parked = captureWorkflowTabSnapshot(get());
-    const id = createTabId();
+    const id = options?.id ?? createTabId();
     set({
       tabs: [
         ...tabs.map((tab) => (tab.id === activeTabId ? { ...tab, snapshot: parked } : tab)),
@@ -3590,6 +3636,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       activeTabId: id,
     });
     applyTabSnapshot(set, get, emptyWorkflowTabSnapshot({ edgeStyle, edgeAppearance, useExternalImageStorage }));
+    const name = options?.name?.trim();
+    if (name) set({ workflowName: name });
     return id;
   },
 
@@ -4313,8 +4361,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       createDefaultNodeData,
       defaultNodeDimensions,
     });
-    // Nothing landed (every op was stale): leave undo history alone.
-    if (result.applied === 0) return { applied: 0, skipped: result.skipped };
+    // Nothing landed (every op was stale, or the batch only runs): leave undo history alone.
+    if (result.applied === 0) return { applied: 0, skipped: result.skipped, ...startAgentRun(get, result.run) };
 
     pushUndoCheckpoint(get, set);
 
@@ -4356,7 +4404,7 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
     }
     get().recomputeDimmedNodes();
 
-    return { applied: result.applied, skipped: result.skipped };
+    return { applied: result.applied, skipped: result.skipped, ...startAgentRun(get, result.run) };
   },
 
   // Canvas navigation settings actions

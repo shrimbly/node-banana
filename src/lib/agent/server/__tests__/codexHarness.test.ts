@@ -207,6 +207,10 @@ describe("Codex harness runTurn", () => {
     // The user's global AGENTS.md is always sent; the developer message tells the model to ignore it.
     expect(CODEX_DEVELOPER_INSTRUCTIONS).toMatch(/AGENTS\.md/);
     expect(CODEX_DEVELOPER_INSTRUCTIONS).toMatch(/never add places, themes or styles/);
+    // Code mode hands a tool's reply to the cell as a string: images reach the model only through image().
+    expect(CODEX_DEVELOPER_INSTRUCTIONS).toContain(
+      'const result = await tools.node_banana__view_outputs({}); for (const line of String(result).split("\\n")) { if (line.startsWith("data:image/")) image(line); else if (line.trim()) text(line); }',
+    );
   });
 
   it("remembers the instruction files Codex adds anyway (the global AGENTS.md)", async () => {
