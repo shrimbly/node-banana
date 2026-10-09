@@ -27,7 +27,7 @@ import { isGeminiOmni } from "@/lib/providers/geminiOmni";
 import { generateWithReplicate } from "./providers/replicate";
 import { generateWithFalQueue } from "./providers/fal";
 import { submitKieTask } from "./providers/kie";
-import { COMFY_ROUTER_HEADER, resolveComfyRouterKey, submitComfyTask } from "./providers/comfy";
+import { COMFY_ROUTER_HEADER, comfyRunsSynchronously, resolveComfyRouterKey, runComfySynchronously, submitComfyTask } from "./providers/comfy";
 import { generateWithWaveSpeed } from "./providers/wavespeed";
 import { generateWithOpenAI } from "./providers/openai";
 import { buildMediaResponse } from "./shared";
@@ -400,6 +400,20 @@ export async function POST(request: NextRequest) {
         parameters,
         dynamicInputs: processedDynamicInputs,
       };
+
+      // A binary partner (ElevenLabs) runs in one request: the queue cannot
+      // carry its bytes, so the finished output comes back here.
+      if (comfyRunsSynchronously(selectedModel.modelId)) {
+        const result = await runComfySynchronously(requestId, comfyApiKey, genInput);
+        if (!result.success) {
+          return NextResponse.json<GenerateResponse>({ success: false, error: result.error || "Generation failed" }, { status: 500 });
+        }
+        const output = result.outputs?.[0];
+        if (!output?.data && !output?.url) {
+          return NextResponse.json<GenerateResponse>({ success: false, error: "No output in generation result" }, { status: 500 });
+        }
+        return buildMediaResponse(output);
+      }
 
       // Submit task and return immediately — client polls for completion
       try {

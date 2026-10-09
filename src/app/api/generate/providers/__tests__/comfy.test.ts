@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { checkComfyTaskOnce, fetchComfyMediaResult, parseRetryAfter, prepareRouterInput, readRouterResult, servingProvider, submitComfyTask } from "../comfy";
+import { checkComfyTaskOnce, comfyRunsSynchronously, fetchComfyMediaResult, parseRetryAfter, prepareRouterInput, readRouterResult, runComfySynchronously, servingProvider, submitComfyTask } from "../comfy";
 import { nodeParameters, primeRouterSchema, servingProviders } from "@/lib/providers/comfyRouter/catalog";
 import { routerBinding, type RouterBinding } from "@/lib/providers/comfyRouter/families";
 import { buildRouterBody } from "@/lib/providers/comfyRouter/request";
@@ -313,6 +313,63 @@ describe("fetchComfyMediaResult", () => {
     ) as unknown as typeof fetch;
     const out = await fetchComfyMediaResult("t", "key", "meshy/meshy-6", "req");
     expect(out.outputs?.[0]).toEqual({ type: "3d", data: "", url: "https://cdn.example.com/model.glb" });
+  });
+});
+
+describe("synchronous partners", () => {
+  const originalFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = originalFetch;
+  });
+
+  it("marks the ElevenLabs families, and only them, as running in one request", () => {
+    expect(comfyRunsSynchronously("elevenlabs/eleven_v4")).toBe(true);
+    expect(comfyRunsSynchronously("elevenlabs/eleven_sfx_v2")).toBe(true);
+    expect(comfyRunsSynchronously("bfl/flux-2-pro")).toBe(false);
+    expect(binding("elevenlabs/eleven_v4").transport).toBe("sync");
+    expect(binding("bfl/flux-2-pro").transport).toBe("queue");
+  });
+
+  it("runs ElevenLabs on the model's own route and returns the bytes as audio", async () => {
+    primeRouterSchema("elevenlabs/eleven_sfx_v2", { openapi: "3.1.0", info: { title: "sfx", version: "1" }, paths: {}, components: { schemas: {} } });
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      new Response(new Uint8Array([7, 7, 7]), { status: 200, headers: { "Content-Type": "audio/mpeg", "X-Comfy-Credits-Used": "3" } })
+    );
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const out = await runComfySynchronously("t", "key", makeInput({
+      model: { id: "elevenlabs/eleven_sfx_v2", name: "Eleven SFX", description: null, provider: "comfy", capabilities: ["text-to-audio"] },
+      prompt: "a door creaks",
+      parameters: { duration_seconds: 1 },
+    }));
+    expect(out).toEqual({ success: true, outputs: [{ type: "audio", data: `data:audio/mpeg;base64,${Buffer.from([7, 7, 7]).toString("base64")}` }] });
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe("https://api.comfy.org/v2/models/elevenlabs/eleven_sfx_v2");
+    expect(init.method).toBe("POST");
+    expect((init.headers as Record<string, string>)["X-API-Key"]).toBe("key");
+    expect(JSON.parse(init.body as string)).toMatchObject({ text: "a door creaks" });
+  });
+
+  it("reports the Router's refusal with its reason", async () => {
+    primeRouterSchema("elevenlabs/eleven_v4", { openapi: "3.1.0", info: { title: "v4", version: "1" }, paths: {}, components: { schemas: {} } });
+    global.fetch = vi.fn().mockResolvedValueOnce(
+      new Response(JSON.stringify({ detail: "Comfy workspace has no credits", error_type: "payment_required" }), { status: 402, headers: { "Content-Type": "application/json" } })
+    ) as unknown as typeof fetch;
+    const out = await runComfySynchronously("t", "key", makeInput({
+      model: { id: "elevenlabs/eleven_v4", name: "Eleven v4", description: null, provider: "comfy", capabilities: ["text-to-audio"] },
+      prompt: "hello",
+    }));
+    expect(out).toEqual({ success: false, error: "Comfy workspace has no credits (payment_required)" });
+  });
+
+  it("never queues a synchronous model", async () => {
+    primeRouterSchema("elevenlabs/eleven_v4", { openapi: "3.1.0", info: { title: "v4", version: "1" }, paths: {}, components: { schemas: {} } });
+    const fetchMock = vi.fn();
+    global.fetch = fetchMock as unknown as typeof fetch;
+    await expect(submitComfyTask("t", "key", makeInput({
+      model: { id: "elevenlabs/eleven_v4", name: "Eleven v4", description: null, provider: "comfy", capabilities: ["text-to-audio"] },
+      prompt: "hello",
+    }))).rejects.toThrow(/runs in one request/);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
 
