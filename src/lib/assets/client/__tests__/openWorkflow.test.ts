@@ -188,6 +188,26 @@ describe("openAssetWorkflow: snapshot", () => {
     expect(server.calls).toHaveLength(0);
   });
 
+  it("asks before opening the copy while the agent works, and opens nothing when the user keeps it working", async () => {
+    await fakeServer();
+    const guard = await import("@/lib/agent/client/stopGuard");
+    const stopTurn = vi.fn();
+    guard.setAgentTurnStop(stopTurn);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      await expect(open.openAssetWorkflow(asset(), "snapshot")).resolves.toEqual({
+        ok: false,
+        reason: "The agent is still working",
+        kept: true,
+      });
+      expect(confirm).toHaveBeenCalledWith("The agent is still working. Opening another workflow will stop it.");
+      expect(stopTurn).not.toHaveBeenCalled();
+      expect(store.getState().openWorkflowInNewTab).not.toHaveBeenCalled();
+    } finally {
+      guard.setAgentTurnStop(null);
+    }
+  });
+
   it("opens a prepared copy in a new tab with the asset in its node, and centres on it", async () => {
     await fakeServer();
     const result = await open.openAssetWorkflow(asset(), "snapshot");
@@ -393,6 +413,29 @@ describe("openAssetWorkflow: project", () => {
     await expect(open.openAssetWorkflow(projectAsset(), "project")).resolves.toEqual({ ok: true, tabId: "tab-cats", nodeId: null });
     expect(store.getState().switchTab).toHaveBeenCalledWith("tab-cats");
     expect(server.calls).toHaveLength(0);
+  });
+
+  it("stops the agent before switching to the project's tab once the user agrees", async () => {
+    const { applyLibraryStatus } = await import("../recorder");
+    applyLibraryStatus(libraryStatus({ platform: "darwin" }));
+    projectServer(projectWorkflow());
+    store.setState({
+      tabs: [
+        { id: "tab-1", snapshot: null },
+        { id: "tab-cats", snapshot: { workflowId: "wf_1_cats", saveDirectoryPath: PROJECT, nodes: [] } },
+      ],
+    });
+    const guard = await import("@/lib/agent/client/stopGuard");
+    const stopTurn = vi.fn();
+    guard.setAgentTurnStop(stopTurn);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    try {
+      await expect(open.openAssetWorkflow(projectAsset(), "project")).resolves.toEqual({ ok: true, tabId: "tab-cats", nodeId: null });
+      expect(stopTurn).toHaveBeenCalledTimes(1);
+      expect(store.getState().switchTab).toHaveBeenCalledWith("tab-cats");
+    } finally {
+      guard.setAgentTurnStop(null);
+    }
   });
 
   it("compares paths exactly where the file system does", async () => {

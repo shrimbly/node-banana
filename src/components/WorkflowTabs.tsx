@@ -4,6 +4,7 @@ import { LibraryBig, MessagesSquare, Plus, X } from "lucide-react";
 import { useEffect, useId, useMemo, type MouseEvent, type ReactNode } from "react";
 import { useOnViewportChange, useReactFlow } from "@xyflow/react";
 import { useAgentPresence } from "@/components/agent/AgentSession";
+import { confirmStopAgent } from "@/lib/agent/client/stopGuard";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { useAssetStore } from "@/store/assetStore";
 import { useShallow } from "zustand/shallow";
@@ -94,6 +95,8 @@ export function WorkflowTabs() {
   const handleClose = (id: string, name: string | null, unsaved: boolean) => {
     if (busy) return;
     if (unsaved && !window.confirm(`Close ${name ?? "Untitled"} and discard its unsaved changes?`)) return;
+    // Only the live tab's close replaces the canvas a running turn works on.
+    if (id === activeTabId && !confirmStopAgent("Closing this tab")) return;
     closeTab(id);
     setAppView("canvas");
   };
@@ -160,6 +163,7 @@ export function WorkflowTabs() {
             <button
               type="button"
               onClick={() => {
+                if (!tab.isActive && !confirmStopAgent("Switching workflows")) return;
                 setAppView("canvas");
                 if (!tab.isActive) switchTab(tab.id);
               }}
@@ -201,6 +205,7 @@ export function WorkflowTabs() {
       <button
         type="button"
         onClick={() => {
+          if (!confirmStopAgent("Opening a new tab")) return;
           setAppView("canvas");
           newTab();
         }}

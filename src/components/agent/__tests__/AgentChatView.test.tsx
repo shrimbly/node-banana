@@ -113,11 +113,21 @@ const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => 
     chatBodies.push(JSON.parse(String(init?.body)));
     const gate = chatGate;
     chatGate = undefined;
-    if (gate) await gate;
+    if (gate) await Promise.race([gate, aborted(init?.signal)]);
     return sse(chatChunks.shift() ?? []);
   }
   throw new Error(`unexpected fetch ${url}`);
 });
+
+/** Rejects as fetch does once `signal` aborts (Stop), so a held turn can be stopped. */
+function aborted(signal?: AbortSignal | null): Promise<never> {
+  return new Promise((_, reject) => {
+    if (!signal) return;
+    const fail = () => reject(new DOMException("The operation was aborted.", "AbortError"));
+    if (signal.aborted) fail();
+    else signal.addEventListener("abort", fail, { once: true });
+  });
+}
 
 function reply(text: string) {
   return [
@@ -551,20 +561,39 @@ describe("AgentChatView", () => {
       expect(useAssetStore.getState().appView).toBe("chat");
     });
 
-    it("refuses to change workflow while a turn runs, saying why", async () => {
+    it("asks before changing workflow while a turn runs, and keeps the turn when the user declines", async () => {
       openSecondTab();
       const live = store().activeTabId;
       chatGate = new Promise(() => {});
       render(<Harness />);
       send(await waitForComposer(), "Keep going");
       await screen.findByRole("button", { name: "Stop" });
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
 
       const menu = openMenu(/Switch workflow/);
-      expect(within(menu).getByText("Wait for the agent to finish")).toBeInTheDocument();
-      expect(within(menu).getByRole("menuitem", { name: /^First/ })).toHaveAttribute("aria-disabled", "true");
-      expect(within(menu).getByRole("menuitem", { name: "New workflow" })).toHaveAttribute("aria-disabled", "true");
+      expect(within(menu).getByText("Switching stops the agent")).toBeInTheDocument();
+      expect(within(menu).getByRole("menuitem", { name: "New workflow" })).not.toHaveAttribute("aria-disabled");
       fireEvent.click(within(menu).getByRole("menuitem", { name: /^First/ }));
+      expect(confirm).toHaveBeenCalledWith("The agent is still working. Switching workflows will stop it.");
       expect(store().activeTabId).toBe(live);
+      // Still working: it ends only when the user stops it.
+      fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument());
+    });
+
+    it("stops the turn and switches once the user agrees, without a second notice", async () => {
+      const first = openSecondTab();
+      chatGate = new Promise(() => {});
+      render(<Harness />);
+      send(await waitForComposer(), "Keep going");
+      await screen.findByRole("button", { name: "Stop" });
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+
+      fireEvent.click(within(openMenu(/Switch workflow/)).getByRole("menuitem", { name: /^First/ }));
+      expect(store().activeTabId).toBe(first);
+      await waitFor(() => expect(screen.queryByRole("button", { name: "Stop" })).not.toBeInTheDocument());
+      // They were asked; "Stopped the agent: a different workflow was opened" would only repeat it.
+      expect(useToast.getState().message ?? "").not.toMatch(/Stopped the agent/);
     });
 
     it("refuses while a run holds the tabs", async () => {

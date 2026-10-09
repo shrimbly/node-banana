@@ -86,6 +86,7 @@ import { insideAgentWindow, isSaveShortcut } from "@/utils/saveShortcut";
 import type { WorkflowNode } from "@/types";
 import { NodeType, NanoBananaNodeData, HandleType, PromptNodeData, LLMGenerateNodeData, PromptConstructorNodeData, AvailableVariable, WorkflowNodeData } from "@/types";
 import { isComfyWorkflow, isNodeBananaWorkflow } from "@/lib/comfy/detect";
+import { confirmStopAgent } from "@/lib/agent/client/stopGuard";
 import { NODE_TITLES, getNodeHandles } from "@/lib/nodes/handles";
 import { getSavedComfyNode, seedFromSavedComfyNode } from "@/lib/comfy/library";
 import { appInputHandles } from "@/lib/comfy/nodeSchema";
@@ -411,7 +412,10 @@ export function WorkflowCanvas() {
   // window open. A canvas that already has nodes keeps them in its own tab.
   const startWithAgent = useCallback(() => {
     const store = useWorkflowStore.getState();
-    if (store.nodes.length > 0) store.newTab();
+    if (store.nodes.length > 0) {
+      if (!confirmStopAgent("Opening a new tab")) return;
+      store.newTab();
+    }
     setShowQuickstart(false);
     setIsAgentMounted(true);
     setIsAgentOpen(true);
@@ -2318,6 +2322,7 @@ export function WorkflowCanvas() {
             return;
           }
           if (isNodeBananaWorkflow(parsed)) {
+            if (!confirmStopAgent("Opening another workflow")) return;
             // Reported the same way the parse failure above is: without this the
             // rejection is unhandled and the canvas simply does not change.
             try {
@@ -2452,11 +2457,13 @@ export function WorkflowCanvas() {
         <WelcomeModal
           initialView={quickstartView}
           onWorkflowGenerated={async (workflow, directoryPath) => {
+            if (!confirmStopAgent("Opening another workflow")) return;
             await useWorkflowStore.getState().openWorkflowInNewTab(workflow, directoryPath);
             setShowQuickstart(false);
           }}
           onClose={() => setShowQuickstart(false)}
           onNewProject={() => {
+            if (!confirmStopAgent("Starting a new project")) return;
             clearWorkflow();
             setShowQuickstart(false);
             setShowNewProjectSetup(true);

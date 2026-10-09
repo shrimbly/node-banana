@@ -28,6 +28,7 @@ import {
 import { LibraryNotices } from "./LibraryNotices";
 import { useSettingsDialogStore } from "@/store/settingsDialogStore";
 import { useSaveRequestStore, type SaveReason } from "@/store/saveRequestStore";
+import { confirmStopAgent } from "@/lib/agent/client/stopGuard";
 import { saveShortcutLabel } from "@/utils/saveShortcut";
 
 /** The bar's buttons are the navigator card's: 32px squircles in a 40px row. */
@@ -409,6 +410,7 @@ export function FloatingMenu() {
         isOpen={showWorkflowBrowser}
         onClose={() => setShowWorkflowBrowser(false)}
         onWorkflowLoaded={async (workflow, dirPath) => {
+          if (!confirmStopAgent("Opening another workflow")) return;
           setShowWorkflowBrowser(false);
           await openWorkflowInNewTab(workflow, dirPath);
         }}
@@ -533,7 +535,9 @@ export function FloatingMenu() {
                 <Plus size={16} strokeWidth={2.25} />
               }
               label="New tab"
-              onClick={choose(() => newTab())}
+              onClick={choose(() => {
+                if (confirmStopAgent("Opening a new tab")) newTab();
+              })}
               disabled={tabsBusy}
               title={tabsBusy ? tabsBusyReason : undefined}
             />
@@ -542,6 +546,7 @@ export function FloatingMenu() {
               label="Close tab"
               onClick={choose(() => {
                 if (hasUnsavedChanges && !window.confirm("Close this tab and discard its unsaved changes?")) return;
+                if (!confirmStopAgent("Closing this tab")) return;
                 closeTab(activeTabId);
               })}
               disabled={tabsBusy}

@@ -27,6 +27,7 @@ import {
 } from "@/lib/agent/client/readiness";
 import { researchMessage, researchTargetForSelection } from "@/lib/agent/client/research";
 import { findLatestAgentSession } from "@/lib/agent/client/session";
+import { confirmStopAgent, setAgentTurnStop } from "@/lib/agent/client/stopGuard";
 import { resolveAgentEffort, resolveAgentModel } from "@/lib/agent/client/settings";
 import { useAgentHistory } from "@/lib/agent/client/useAgentHistory";
 import { useAgentSettings } from "@/lib/agent/client/useAgentSettings";
@@ -162,8 +163,8 @@ export interface AgentSessionValue {
   /**
    * Show the canvas: leaves the chat view, switches to `tabId` when it isn't
    * live, then fits `nodeIds` into view. False (with a toast saying why) when
-   * the tab can't be shown: it was closed, a run or save holds the tabs, or a
-   * turn is running.
+   * the tab can't be shown: it was closed, or a run or save holds the tabs;
+   * also false when the user keeps a running turn going rather than switch.
    */
   showOnCanvas: (target?: AgentCanvasTarget) => boolean;
 }
@@ -353,6 +354,13 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
     onNotice: handleNotice,
   });
   const { busy, messages, send, chatId, newChat, openConversation: openSavedChat, turnTabId, stepsSettled } = chat;
+  // While a turn runs, the user's own ways of opening another workflow ask before they stop it.
+  const stopTurn = chat.stop;
+  useEffect(() => {
+    if (!busy) return;
+    setAgentTurnStop(stopTurn);
+    return () => setAgentTurnStop(null);
+  }, [busy, stopTurn]);
   // Kept here, not in a composer: a composer unmounts whenever the harness
   // isn't ready (switching harness, a re-check), and the unsent text must survive.
   const [draft, setDraft] = useState("");
@@ -537,16 +545,13 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
     ({ tabId, nodeIds, all }: AgentCanvasTarget = {}) => {
       const store = useWorkflowStore.getState();
       if (tabId && tabId !== store.activeTabId) {
-        // A tab change mid-turn would stop the turn, as any other workflow switch does.
-        const refusal = !store.tabs.some((tab) => tab.id === tabId)
-          ? "That workflow is no longer open"
-          : busy
-            ? "Wait for the agent to finish"
-            : store.tabsBusyReason();
+        const refusal = !store.tabs.some((tab) => tab.id === tabId) ? "That workflow is no longer open" : store.tabsBusyReason();
         if (refusal) {
           useToast.getState().show(refusal, "warning");
           return false;
         }
+        // A tab change mid-turn stops the turn, as any other workflow switch does: the user decides.
+        if (!confirmStopAgent("Switching workflows")) return false;
         if (!store.switchTab(tabId)) return false;
       }
       useAssetStore.getState().setAppView("canvas");
@@ -554,7 +559,7 @@ export function AgentSessionProvider({ children }: { children: ReactNode }) {
       if (fit && fit.length > 0) focusNodes(fit);
       return true;
     },
-    [busy, focusNodes],
+    [focusNodes],
   );
 
   const presenceValue = useMemo<AgentPresenceValue>(() => ({ busy, presence }), [busy, presence]);

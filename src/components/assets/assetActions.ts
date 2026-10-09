@@ -176,7 +176,7 @@ export async function openWorkflowFor(asset: AssetView, mode: OpenWorkflowMode) 
     const store = useAssetStore.getState();
     store.closeDetail();
     store.setAppView("canvas");
-  } else {
+  } else if (!result.kept) {
     notice(result.reason, "error");
   }
 }
