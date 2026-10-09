@@ -7,6 +7,7 @@
 
 import { GenerationInput, GenerationOutput } from "@/lib/providers/types";
 import { validateMediaUrl } from "@/utils/urlValidation";
+import { clearFalSchemaCache, fetchFalInputSchema } from "@/lib/providers/falSchema";
 import {
   INPUT_PATTERNS,
   InputMapping,
@@ -27,15 +28,16 @@ interface FalInputMapping extends InputMapping {
 const falInputMappingCache = new Map<string, { result: FalInputMapping; timestamp: number }>();
 const FAL_MAPPING_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 
-/** Clear the fal schema mapping cache (exported for testing) */
+/** Clear the fal schema mapping cache and the shared schema cache it reads (exported for testing) */
 export function clearFalInputMappingCache() {
   falInputMappingCache.clear();
+  clearFalSchemaCache();
 }
 
 /**
  * Fetch fal.ai model schema and extract input parameter mappings
- * Uses the Model Search API with OpenAPI expansion (same as /api/models/[modelId])
- * Results are cached in-memory for 30 minutes per model.
+ * The schema comes from the shared, cached fetch in @/lib/providers/falSchema
+ * (the same one the node's settings use); the mapping is cached here for 30 minutes.
  */
 async function getFalInputMapping(modelId: string, apiKey: string | null): Promise<FalInputMapping> {
   // Check cache first
@@ -49,51 +51,8 @@ async function getFalInputMapping(modelId: string, apiKey: string | null): Promi
   const parameterTypes: ParameterTypeInfo = {};
 
   try {
-    // Use fal.ai Model Search API with OpenAPI expansion
-    const headers: Record<string, string> = {};
-    if (apiKey) {
-      headers["Authorization"] = `Key ${apiKey}`;
-    }
-
-    const url = `https://api.fal.ai/v1/models?endpoint_id=${encodeURIComponent(modelId)}&expand=openapi-3.0`;
-    const response = await fetch(url, { headers });
-
-    if (!response.ok) {
-      return { paramMap, arrayParams, schemaArrayParams, parameterTypes };
-    }
-
-    const data = await response.json();
-    const modelData = data.models?.[0];
-    if (!modelData?.openapi) {
-      return { paramMap, arrayParams, schemaArrayParams, parameterTypes };
-    }
-
-    // Extract input schema from OpenAPI spec (same logic as /api/models/[modelId])
-    const spec = modelData.openapi;
-    let inputSchema: Record<string, unknown> | null = null;
-
-    for (const pathObj of Object.values(spec.paths || {})) {
-      const postOp = (pathObj as Record<string, unknown>)?.post as Record<string, unknown> | undefined;
-      const reqBody = postOp?.requestBody as Record<string, unknown> | undefined;
-      const content = reqBody?.content as Record<string, Record<string, unknown>> | undefined;
-      const jsonContent = content?.["application/json"];
-
-      if (jsonContent?.schema) {
-        const schema = jsonContent.schema as Record<string, unknown>;
-        if (schema.$ref && typeof schema.$ref === "string") {
-          const refPath = schema.$ref.replace("#/components/schemas/", "");
-          inputSchema = spec.components?.schemas?.[refPath] as Record<string, unknown>;
-          break;
-        } else if (schema.properties) {
-          inputSchema = schema;
-          break;
-        }
-      }
-    }
-
-    if (!inputSchema) {
-      return { paramMap, arrayParams, schemaArrayParams, parameterTypes };
-    }
+    // One schema fetch per model, shared with the node's settings (see falSchema.ts)
+    const { schema: inputSchema } = await fetchFalInputSchema(modelId, apiKey);
 
     const properties = inputSchema.properties as Record<string, unknown> | undefined;
     if (!properties) return { paramMap, arrayParams, schemaArrayParams, parameterTypes };
@@ -147,8 +106,10 @@ async function getFalInputMapping(modelId: string, apiKey: string | null): Promi
     const result = { paramMap, arrayParams, schemaArrayParams, parameterTypes };
     falInputMappingCache.set(modelId, { result, timestamp: Date.now() });
     return result;
-  } catch {
-    // Schema parsing failed - return defaults without caching so next call retries
+  } catch (error) {
+    // Rate limited, refused or unparsable: generate with the name-based defaults,
+    // uncached so the next run asks again.
+    console.warn(`[fal] Input mapping for ${modelId} falls back to defaults: ${error instanceof Error ? error.message : String(error)}`);
     return { paramMap, arrayParams, schemaArrayParams, parameterTypes };
   }
 }

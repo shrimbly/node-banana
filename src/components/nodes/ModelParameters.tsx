@@ -24,7 +24,8 @@ function getCachedSchema(modelId: string, provider: string): SchemaCacheEntry | 
     const cache = JSON.parse(localStorage.getItem(SCHEMA_CACHE_KEY) || "{}");
     const key = `${provider}:${modelId}`;
     const entry = cache[key];
-    if (entry && Date.now() - entry.timestamp < SCHEMA_CACHE_TTL) {
+    // An empty entry is a failed lookup an older build cached as "no settings"; ask again.
+    if (entry && Date.now() - entry.timestamp < SCHEMA_CACHE_TTL && (entry.parameters?.length || entry.inputs?.length)) {
       return entry;
     }
   } catch {
@@ -73,6 +74,8 @@ function ModelParametersInner({
   const [schemaKey, setSchemaKey] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Bumped by Retry after a failed lookup (a rate limit, say); re-runs the fetch effect.
+  const [attempt, setAttempt] = useState(0);
   // Use stable selector for API keys to prevent unnecessary re-fetches
   const { replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, comfyApiKey } = useProviderApiKeys();
 
@@ -138,8 +141,9 @@ function ModelParametersInner({
         const params = data.parameters || [];
         const inputs = data.inputs || [];
 
-        // Cache the successful result (safe regardless of staleness).
-        setCachedSchema(modelId, provider, params, inputs);
+        // Cache the successful result (safe regardless of staleness). An empty
+        // schema is never cached: a refusal must be asked again, not remembered.
+        if (params.length || inputs.length) setCachedSchema(modelId, provider, params, inputs);
 
         if (cancelled) return;
         setSchema(params);
@@ -165,7 +169,7 @@ function ModelParametersInner({
     return () => {
       cancelled = true;
     };
-  }, [modelId, provider, replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, comfyApiKey, onInputsLoaded]);
+  }, [modelId, provider, replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, comfyApiKey, onInputsLoaded, attempt]);
 
   // Pre-populate schema defaults into parameters
   useEffect(() => {
@@ -241,7 +245,10 @@ function ModelParametersInner({
   return (
     <div className="shrink-0">
       {error ? (
-        <span className="text-[9px] text-red-400">{error}</span>
+        <span className="flex items-baseline gap-2 text-[9px] text-red-400">
+          <span>{error}</span>
+          <button type="button" className="shrink-0 text-neutral-400 underline underline-offset-2 hover:text-neutral-200" onClick={() => setAttempt((n) => n + 1)}>Retry</button>
+        </span>
       ) : isLoading ? (
         <span className="text-[9px] text-neutral-500">Loading parameters...</span>
       ) : schema.length === 0 ? (

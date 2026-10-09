@@ -17,6 +17,7 @@ import { ProviderType } from "@/types";
 import { isOpenAIImage25, OPENAI_IMAGE_25_PARAMETERS } from "./openaiImages";
 import { isGeminiOmni, GEMINI_OMNI_PARAMETERS, GEMINI_OMNI_INPUTS } from "./geminiOmni";
 import { ModelParameter, ModelInput } from "./types";
+import { FalSchemaError, fetchFalInputSchema } from "./falSchema";
 import {
   getCachedWaveSpeedSchema,
   setCachedWaveSpeedSchemas,
@@ -539,73 +540,18 @@ async function fetchReplicateSchema(
 }
 
 /**
- * Fetch and parse schema from fal.ai using Model Search API
- * Uses: GET https://api.fal.ai/v1/models?endpoint_id={modelId}&expand=openapi-3.0
+ * The settings and inputs of a fal.ai model, from the schema ./falSchema
+ * fetches and shares with the generate path. A refusal (rate limit, bad key,
+ * unknown model) throws a FalSchemaError the caller reports; it is never an
+ * empty schema.
  */
 async function fetchFalSchema(
   modelId: string,
   apiKey: string | null,
   signal?: AbortSignal
 ): Promise<ExtractedSchema> {
-  const headers: Record<string, string> = {};
-  if (apiKey) {
-    headers["Authorization"] = `Key ${apiKey}`;
-  }
-
-  // Use fal.ai Model Search API with OpenAPI expansion
-  const url = `https://api.fal.ai/v1/models?endpoint_id=${encodeURIComponent(modelId)}&expand=openapi-3.0`;
-
-  const response = await fetch(url, { headers, ...(signal && { signal }) });
-
-  if (!response.ok) {
-    // Return empty params if API fails so generation still works
-    return { parameters: [], inputs: [] };
-  }
-
-  const data = await response.json();
-
-  // Response is { models: [{ openapi: {...}, ... }] }
-  const modelData = data.models?.[0];
-  if (!modelData?.openapi) {
-    return { parameters: [], inputs: [] };
-  }
-
-  const spec = modelData.openapi;
-
-  // Find POST endpoint with requestBody - paths are keyed by full endpoint path
-  let inputSchema: Record<string, unknown> | null = null;
-
-  for (const pathObj of Object.values(spec.paths || {})) {
-    const postOp = (pathObj as Record<string, unknown>)?.post as Record<string, unknown> | undefined;
-    const reqBody = postOp?.requestBody as Record<string, unknown> | undefined;
-    const content = reqBody?.content as Record<string, Record<string, unknown>> | undefined;
-    const jsonContent = content?.["application/json"];
-
-    if (jsonContent?.schema) {
-      const schema = jsonContent.schema as Record<string, unknown>;
-
-      // Handle $ref - resolve from components.schemas
-      if (schema.$ref && typeof schema.$ref === "string") {
-        const refPath = schema.$ref.replace("#/components/schemas/", "");
-        const resolvedSchema = spec.components?.schemas?.[refPath] as Record<string, unknown> | undefined;
-        if (resolvedSchema) {
-          inputSchema = resolvedSchema;
-          break;
-        }
-      } else if (schema.properties) {
-        inputSchema = schema;
-        break;
-      }
-    }
-  }
-
-  if (!inputSchema) {
-    return { parameters: [], inputs: [] };
-  }
-
-  // Pass components.schemas for $ref resolution
-  const schemaComponents = spec.components?.schemas as Record<string, unknown> | undefined;
-  return extractParametersFromSchema(inputSchema, schemaComponents);
+  const { schema, components } = await fetchFalInputSchema(modelId, apiKey, signal);
+  return extractParametersFromSchema(schema, components);
 }
 
 /**
@@ -1705,6 +1651,8 @@ export async function getModelSchema(
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
     console.error(`[ModelSchema] Error fetching ${modelId}: ${errorMessage}`);
-    return { ok: false, error: errorMessage, status: 500 };
+    // A provider's refusal keeps its status (429, 401, 404) so the node can say why.
+    const status = error instanceof FalSchemaError ? error.status : 500;
+    return { ok: false, error: errorMessage, status };
   }
 }

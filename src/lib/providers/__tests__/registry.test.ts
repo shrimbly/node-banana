@@ -287,6 +287,24 @@ describe("listModels", () => {
       expect(result.models[0].capabilities).toEqual(["text-to-image"]);
     });
 
+    it("waits out a rate-limited fal.ai page and asks for it again", async () => {
+      vi.useFakeTimers();
+      const page = (id: string, more: boolean) => jsonResponse({
+        models: [{ endpoint_id: id, metadata: { display_name: id, category: "text-to-image", description: "" } }],
+        has_more: more, next_cursor: more ? "next" : null,
+      });
+      mockFetch
+        .mockResolvedValueOnce(page("fal-ai/one", true))
+        .mockResolvedValueOnce({ ok: false, status: 429, headers: new Headers({ "retry-after": "1" }), json: () => Promise.resolve({ error: "Too Many Requests" }) })
+        .mockResolvedValueOnce(page("fal-ai/two", false));
+      const listing = listModels({ provider: "fal" }, { fal: "fal" });
+      await vi.advanceTimersByTimeAsync(1000);
+      vi.useRealTimers();
+      const result = expectOk(await listing);
+      expect(result.models.map((m) => m.id)).toEqual(["fal-ai/one", "fal-ai/two"]);
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    });
+
     it("follows fal.ai's cursor to the last page", async () => {
       let page = 0;
       mockFetch.mockImplementation(() => {

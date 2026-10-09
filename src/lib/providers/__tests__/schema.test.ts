@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { getModelSchema, isSchemaProvider, type ModelSchemaResult, type ModelSchemaSuccess } from "../schema";
 import { primeRouterSchema } from "../comfyRouter/catalog";
+import { clearFalSchemaCache } from "../falSchema";
 
 const mockFetch = vi.fn();
 
@@ -37,6 +38,8 @@ describe("getModelSchema", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    vi.useRealTimers();
+    clearFalSchemaCache();
   });
 
   describe("static schemas", () => {
@@ -140,6 +143,57 @@ describe("getModelSchema", () => {
       expect(["replicate", "fal", "kie", "wavespeed", "gemini", "openai", "comfy"].every(isSchemaProvider)).toBe(true);
       expect(isSchemaProvider("anthropic")).toBe(false);
       expect(isSchemaProvider(null)).toBe(false);
+    });
+  });
+
+  describe("fal.ai (network mocked)", () => {
+    const falResponse = (status: number, body: unknown, headers: Record<string, string> = {}) => ({
+      ok: status >= 200 && status < 300, status, headers: new Headers(headers), json: () => Promise.resolve(body),
+    });
+    const falSpec = {
+      paths: { "/fal-ai/nano-banana-lite": { post: { requestBody: { content: { "application/json": { schema: { $ref: "#/components/schemas/Input" } } } } } } },
+      components: { schemas: { Input: { properties: {
+        prompt: { type: "string" },
+        aspect_ratio: { anyOf: [{ type: "string", enum: ["auto", "1:1", "16:9"] }, { type: "null" }], default: "auto" },
+        num_images: { type: "integer", minimum: 1, maximum: 4, default: 1 },
+      } } } },
+    };
+
+    it("needs a key (401) before asking fal", async () => {
+      expect(await getModelSchema("fal", uniqueId("google/nano-banana-2-lite"), {})).toMatchObject({ ok: false, status: 401 });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("turns the model's schema into settings and a prompt input", async () => {
+      const modelId = uniqueId("google/nano-banana-2-lite");
+      mockFetch.mockResolvedValueOnce(falResponse(200, { models: [{ endpoint_id: modelId, openapi: falSpec }] }));
+      const result = expectOk(await getModelSchema("fal", modelId, { fal: "fal-key" }));
+      expect(result.parameters.map((p) => p.name)).toEqual(["num_images", "aspect_ratio"]);
+      expect(result.parameters[1]).toMatchObject({ type: "string", enum: ["auto", "1:1", "16:9"], default: "auto" });
+      expect(result.inputs).toEqual([{ name: "prompt", type: "text", required: false, label: "Prompt", description: undefined, isArray: false }]);
+      expect(mockFetch.mock.calls[0][1].headers).toEqual({ Authorization: "Key fal-key" });
+    });
+
+    it("reports a rate limit as an error with its status, and asks again next time rather than remembering it", async () => {
+      vi.useFakeTimers();
+      const modelId = uniqueId("google/nano-banana-2-lite");
+      mockFetch.mockResolvedValue(falResponse(429, { error: "Too Many Requests" }, { "retry-after": "1" }));
+      const pending = getModelSchema("fal", modelId, { fal: "fal-key" });
+      await vi.advanceTimersByTimeAsync(20000);
+      expect(await pending).toEqual({ ok: false, status: 429, error: expect.stringContaining("rate limiting") });
+      mockFetch.mockReset();
+      mockFetch.mockResolvedValueOnce(falResponse(200, { models: [{ endpoint_id: modelId, openapi: falSpec }] }));
+      // The refusal is not cached; the next lookup waits out the hold it left, then asks again
+      const again = getModelSchema("fal", modelId, { fal: "fal-key" });
+      await vi.advanceTimersByTimeAsync(32000);
+      expect(expectOk(await again).parameters).toHaveLength(2);
+    });
+
+    it("reports a rejected key (401) and an unknown model (404) instead of an empty schema", async () => {
+      mockFetch.mockResolvedValueOnce(falResponse(401, {}));
+      expect(await getModelSchema("fal", uniqueId("google/nano-banana-2-lite"), { fal: "bad" })).toMatchObject({ ok: false, status: 401 });
+      mockFetch.mockResolvedValueOnce(falResponse(200, { models: [] }));
+      expect(await getModelSchema("fal", uniqueId("fal-ai/nano-banana-2-lite"), { fal: "fal-key" })).toMatchObject({ ok: false, status: 404 });
     });
   });
 
