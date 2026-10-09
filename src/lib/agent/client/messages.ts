@@ -58,6 +58,14 @@ export function toolGraphPreview(part: Pick<DynamicToolUIPart, "state" | "output
   };
 }
 
+/** A tool output without the map of the workflow it built. */
+export function outputWithoutGraph(output: unknown): unknown {
+  if (!output || typeof output !== "object" || !("graph" in output)) return output;
+  const rest = { ...(output as Record<string, unknown>) };
+  delete rest.graph;
+  return rest;
+}
+
 export interface BuiltWorkflow {
   tabId?: string;
   graph: AgentGraphPreview;

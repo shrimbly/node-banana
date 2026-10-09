@@ -10,6 +10,7 @@
  */
 
 import type { AgentHarnessId, AgentUIMessage } from "../types";
+import { builtWorkflows, outputWithoutGraph } from "./messages";
 
 export const AGENT_HISTORY_KEY = "node-banana-agent-conversations";
 export const MAX_CONVERSATIONS = 50;
@@ -88,10 +89,19 @@ export function loadConversations(): AgentConversation[] {
 function withoutToolInputs(conversation: AgentConversation): AgentConversation {
   return {
     ...conversation,
-    messages: conversation.messages.map((message) => ({
-      ...message,
-      parts: message.parts.map((part) => (part.type === "dynamic-tool" ? ({ ...part, input: {} } as typeof part) : part)),
-    })),
+    messages: conversation.messages.map((message) => {
+      const built = builtWorkflows(message.parts);
+      return {
+        ...message,
+        parts: message.parts.map((part) => {
+          if (part.type !== "dynamic-tool") return part;
+          // One map per built workflow, on the call that built it: the one the chat draws, as the turn left it.
+          const map = built.get(part.toolCallId);
+          const output = map ? { ...(outputWithoutGraph(part.output) as object), graph: map.graph } : outputWithoutGraph(part.output);
+          return { ...part, input: {}, output } as typeof part;
+        }),
+      };
+    }),
   };
 }
 

@@ -204,4 +204,31 @@ describe("safeExternalUrl", () => {
     expect(safeExternalUrl("not a url")).toBeNull();
     expect(safeExternalUrl(undefined)).toBeNull();
   });
+
+  it("leaves the maps of built workflows out of the messages it sends: the server reads text and sessions only", () => {
+    const messages = [
+      { id: "u1", role: "user", parts: [{ type: "text", text: "build it" }] },
+      {
+        id: "a1",
+        role: "assistant",
+        parts: [
+          {
+            type: "dynamic-tool",
+            toolName: "create_workflow",
+            toolCallId: "c1",
+            state: "output-available",
+            input: {},
+            output: { ok: true, summary: "Added 2 nodes", tabId: "tab-a", graph: { nodes: [["prompt", 0, 0, 1, 1]], edges: [] } },
+          },
+          { type: "text", text: "Built." },
+        ],
+      },
+      { id: "u2", role: "user", parts: [{ type: "text", text: "run it" }] },
+    ] as AgentUIMessage[];
+    const body = buildAgentChatRequestBody({ chatId: "chat-1", messages, harness: "claude", canvas: { nodes: [], edges: [], groups: {}, workflowName: null } });
+    expect(body.messages[1].parts[0]).toMatchObject({ output: { ok: true, summary: "Added 2 nodes", tabId: "tab-a" } });
+    expect(JSON.stringify(body.messages)).not.toContain("graph");
+    // Messages without a map go as they are.
+    expect(body.messages[0]).toBe(messages[0]);
+  });
 });

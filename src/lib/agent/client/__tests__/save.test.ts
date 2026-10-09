@@ -108,6 +108,8 @@ describe("saveLiveWorkflow", () => {
       reason: "Choose where to save Fox: there is no default folder",
     });
     expect(requestSave).toHaveBeenCalledTimes(1);
+    // The dialog opens with the name the agent chose already in it.
+    expect(requestSave).toHaveBeenCalledWith("menu", "Fox");
     expect(saveToFile).not.toHaveBeenCalled();
     expect(useWorkflowStore.getState().saveDirectoryPath).toBeNull();
   });

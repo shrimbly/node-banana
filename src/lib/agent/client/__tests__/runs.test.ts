@@ -568,4 +568,63 @@ describe("startOfferRun", () => {
     expect(runBatch).toHaveBeenCalledWith({ kind: "nodes", nodeIds: ["gen-1"] }, 1);
     expect(result).toMatchObject({ ok: true, record: { tabId: offerTab } });
   });
+
+  it("refuses an offer, or Run again, once another workflow is in its tab: node ids repeat across workflows", () => {
+    useWorkflowStore.setState({ workflowId: "wf-B" });
+    const current = offer({ workflowId: "wf-A" });
+    expect(startOfferRun({ chatId: "chat-1", offer: current, option: current.primary, runs: 1 })).toEqual({
+      ok: false,
+      reason: "Another workflow is open in that tab now",
+    });
+    expect(runBatch).not.toHaveBeenCalled();
+    useWorkflowStore.setState({ workflowId: "wf-A" });
+    expect(startOfferRun({ chatId: "chat-1", offer: current, option: current.primary, runs: 1 }).ok).toBe(true);
+    const started = useAgentRuns.getState().records[0];
+    expect(started.workflowId).toBe("wf-A");
+    endRun();
+    useWorkflowStore.setState({ workflowId: "wf-C" });
+    expect(rerunChatRun(started)).toEqual({ ok: false, reason: "Another workflow is open in that tab now" });
+  });
+
+  it("runs the whole workflow from the top, not from a pause an earlier run left", () => {
+    useWorkflowStore.setState({ pausedAtNodeId: "gen-1" });
+    const current = offer();
+    startOfferRun({ chatId: "chat-1", offer: current, option: current.alternatives[0], runs: 1 });
+    expect(runBatch).toHaveBeenCalledWith({ kind: "all" }, 1);
+    expect(useWorkflowStore.getState().pausedAtNodeId).toBeNull();
+  });
+});
+
+describe("chat run records: another workflow in the tab", () => {
+  beforeEach(() => {
+    resetStore([node("llm-1", "llmGenerate", { status: "idle", outputText: null })]);
+    useWorkflowStore.setState({ workflowId: "wf-A" });
+    useAgentRuns.setState({ records: [] });
+  });
+
+  it("takes nothing from a workflow loaded into the run's tab mid-batch", () => {
+    beginRun();
+    const started = track({ scope: { kind: "all" } });
+    setNode("llm-1", { status: "loading" });
+    // A file dropped on the canvas: same tab, same node ids, another workflow.
+    useWorkflowStore.setState({
+      workflowId: "wf-B",
+      nodes: [node("llm-1", "llmGenerate", { status: "error", error: "Old error saved in that file", outputText: "TEXT FROM ANOTHER WORKFLOW" })],
+      isRunning: false,
+      batch: null,
+    });
+    expect(record(started.id)).toMatchObject({ status: "stopped", outputs: [], errors: [] });
+  });
+
+  it("drops a stored record whose nested fields the cards could not read", () => {
+    const good = track();
+    endRun();
+    flushAgentRuns();
+    const stored = JSON.parse(localStorage.getItem(AGENT_RUNS_KEY)!);
+    stored.records.push({ ...stored.records[0], id: "bad-scope", scope: { kind: "nodes" } });
+    stored.records.push({ ...stored.records[0], id: "bad-output", outputs: [null] });
+    stored.records.push({ ...stored.records[0], id: "bad-progress", progress: {} });
+    localStorage.setItem(AGENT_RUNS_KEY, JSON.stringify(stored));
+    expect(loadAgentRuns().map((entry) => entry.id)).toEqual([good.id]);
+  });
 });

@@ -887,6 +887,8 @@ function startAgentRun(
   if (!run) return {};
   // The turn saw an idle canvas; a run started since then (the user pressed Run) wins.
   if (get().isRunning || get().batch) return { runRefused: "a run is already going" };
+  // The whole workflow means all of it: a pause left by an earlier run would have it resume from there instead.
+  if (run.scope.kind === "all" && get().pausedAtNodeId) useWorkflowStore.setState({ pausedAtNodeId: null });
   void get().runBatch(run.scope, run.runs);
   // The first run is going before runBatch first awaits: nothing running now means it was refused.
   if (!get().isRunning) return { runRefused: executionRefusal(get().desktopConnected) ?? "the canvas refused it" };

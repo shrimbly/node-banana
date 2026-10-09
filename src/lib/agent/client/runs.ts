@@ -73,6 +73,8 @@ export interface ChatRunTarget {
    * plannedNodeIds): a whole-workflow run with none of them left is refused.
    */
   plannedNodeIds?: readonly string[];
+  /** The workflow it was made for (an offer's, a record's): another loaded into the tab since is refused. */
+  workflowId?: string;
 }
 
 export interface StartChatRunInput extends ChatRunTarget {
@@ -87,6 +89,7 @@ export interface StartChatRunInput extends ChatRunTarget {
 const RUN_GOING = "Wait for the run to finish";
 const TAB_CLOSED = "That workflow is no longer open";
 const NODES_GONE = "The nodes it would run are no longer on the canvas";
+const WORKFLOW_REPLACED = "Another workflow is open in that tab now";
 
 /**
  * Why `target` can't run right now, or null: a run is going, its tab was
@@ -94,18 +97,22 @@ const NODES_GONE = "The nodes it would run are no longer on the canvas";
  */
 export function chatRunBlockedReason(
   target: ChatRunTarget,
-  state: Pick<WorkflowStore, "isRunning" | "batch" | "tabs" | "activeTabId" | "nodes" | "tabsBusyReason"> = useWorkflowStore.getState(),
+  state: Pick<WorkflowStore, "isRunning" | "batch" | "tabs" | "activeTabId" | "nodes" | "workflowId" | "tabsBusyReason"> = useWorkflowStore.getState(),
 ): string | null {
   if (state.isRunning || state.batch) return RUN_GOING;
   const live = !target.tabId || target.tabId === state.activeTabId;
   let nodes = state.nodes;
+  let workflowId = state.workflowId;
   if (!live) {
     const tab = state.tabs.find((candidate) => candidate.id === target.tabId);
     if (!tab?.snapshot) return TAB_CLOSED;
     const busy = state.tabsBusyReason();
     if (busy) return busy;
     nodes = tab.snapshot.nodes;
+    workflowId = tab.snapshot.workflowId;
   }
+  // Node ids repeat across workflows (an agent's restart at -ag1 on every empty canvas): the workflow's own id tells them apart.
+  if (target.workflowId && workflowId !== target.workflowId) return WORKFLOW_REPLACED;
   return scopeOnCanvas(target.scope, nodes, target.plannedNodeIds) ? null : NODES_GONE;
 }
 
@@ -170,6 +177,8 @@ export function startChatRun(input: StartChatRunInput): StartChatRunResult {
   const scope = scopeOnCanvas(input.scope, store.nodes, input.plannedNodeIds);
   if (!scope) return { ok: false, reason: NODES_GONE };
   const runs = clampRunCount(input.runs);
+  // "Run workflow" runs it all: a pause left by an earlier run would have it resume from there instead.
+  if (scope.kind === "all" && store.pausedAtNodeId) useWorkflowStore.setState({ pausedAtNodeId: null });
   void store.runBatch(scope, runs);
   const after = useWorkflowStore.getState();
   // The first run is going before runBatch first awaits; nothing running now means it was
@@ -208,6 +217,7 @@ export function startOfferRun({
     scope: option.scope,
     runs,
     plannedNodeIds: option.nodeIds,
+    ...(offer.workflowId ? { workflowId: offer.workflowId } : {}),
   });
 }
 
@@ -221,6 +231,7 @@ export function rerunChatRun(record: AgentRunRecord, runs = record.runs): StartC
     scope: record.scope,
     runs,
     plannedNodeIds: record.plannedNodeIds,
+    ...(record.workflowId ? { workflowId: record.workflowId } : {}),
   });
 }
 
@@ -272,6 +283,8 @@ function runActionLabel(label: string): string {
 
 /** Records a run that has just started on the live tab, and follows it until it ends. */
 export function trackStartedRun(input: TrackRunInput): AgentRunRecord {
+  // The run goes on the live tab: its workflow, given an id now if it had none (the asset recorder does the same).
+  const workflowId = useWorkflowStore.getState().ensureWorkflowId();
   const state = useWorkflowStore.getState();
   const runs = clampRunCount(input.runs);
   const record: AgentRunRecord = {
@@ -280,6 +293,7 @@ export function trackStartedRun(input: TrackRunInput): AgentRunRecord {
     anchor: input.anchor,
     tabId: input.tabId,
     ...(state.workflowName ? { workflowName: state.workflowName } : {}),
+    workflowId,
     label: runActionLabel(input.label),
     scope: input.scope,
     runs,
@@ -300,6 +314,8 @@ interface Watcher {
   recordId: string;
   chatId: string;
   tabId: string;
+  /** The workflow it runs: another loaded into the tab mid-batch is not this run's. */
+  workflowId: string | null;
   /** The run was seen going on its tab. */
   seen: boolean;
   /** Asset run ids, one per run of the batch, in order. */
@@ -329,6 +345,7 @@ function watch(record: AgentRunRecord): void {
     recordId: record.id,
     chatId: record.chatId,
     tabId: record.tabId,
+    workflowId: record.workflowId ?? null,
     seen: false,
     runIds: [],
     statuses: new Map(),
@@ -358,7 +375,7 @@ function watch(record: AgentRunRecord): void {
 function observe(watcher: Watcher): void {
   if (watcher.finalized) return;
   const state = useWorkflowStore.getState();
-  const onTab = state.activeTabId === watcher.tabId;
+  const onTab = onRunTab(watcher, state);
   const going = onTab && (state.isRunning || state.batch !== null);
   if (!onTab) watcher.leftTab = true;
   if (going) {
@@ -413,12 +430,17 @@ function observe(watcher: Watcher): void {
   if (!going) finalize(watcher);
 }
 
+/** The run's tab is live and still holds the run's workflow (a file dropped onto it replaces it). */
+function onRunTab(watcher: Watcher, state: Pick<WorkflowStore, "activeTabId" | "workflowId">): boolean {
+  return state.activeTabId === watcher.tabId && (watcher.workflowId === null || state.workflowId === watcher.workflowId);
+}
+
 function finalize(watcher: Watcher): void {
   watcher.finalized = true;
   watcher.unsubscribeStore?.();
   watcher.unsubscribeStore = null;
   const state = useWorkflowStore.getState();
-  const onTab = !watcher.leftTab && state.activeTabId === watcher.tabId;
+  const onTab = !watcher.leftTab && onRunTab(watcher, state);
   const record = findRecord(watcher.recordId);
   if (!record) {
     disposeWatcher(watcher);
@@ -625,10 +647,22 @@ export function loadAgentRuns(): AgentRunRecord[] {
   }
 }
 
+const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((entry) => typeof entry === "string");
+
+/** A stored scope the run card can read: the guards and selectors reach into it. */
+function isRunScope(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const scope = value as { kind?: unknown; nodeId?: unknown; nodeIds?: unknown };
+  if (scope.kind === "all") return true;
+  if (scope.kind === "from") return typeof scope.nodeId === "string";
+  return scope.kind === "nodes" && isStringArray(scope.nodeIds);
+}
+
 function isRunRecord(value: unknown): value is AgentRunRecord {
   if (!value || typeof value !== "object") return false;
   const record = value as Partial<AgentRunRecord>;
   const anchor = record.anchor as Partial<{ toolCallId: unknown; offerId: unknown }> | undefined;
+  const progress = record.progress as Partial<AgentRunRecord["progress"]> | undefined;
   return (
     typeof record.id === "string" &&
     typeof record.chatId === "string" &&
@@ -636,17 +670,22 @@ function isRunRecord(value: unknown): value is AgentRunRecord {
     (typeof anchor.toolCallId === "string" || typeof anchor.offerId === "string") &&
     typeof record.tabId === "string" &&
     typeof record.label === "string" &&
-    !!record.scope &&
-    typeof record.scope === "object" &&
+    isRunScope(record.scope) &&
     typeof record.runs === "number" &&
     typeof record.startedAt === "number" &&
     typeof record.status === "string" &&
     STATUSES.has(record.status) &&
-    !!record.progress &&
-    Array.isArray(record.plannedNodeIds) &&
-    Array.isArray(record.ranNodeIds) &&
+    typeof progress?.index === "number" &&
+    typeof progress.count === "number" &&
+    isStringArray(record.plannedNodeIds) &&
+    isStringArray(record.ranNodeIds) &&
     Array.isArray(record.outputs) &&
-    Array.isArray(record.errors)
+    record.outputs.every(
+      (output) => !!output && typeof output === "object" && typeof output.id === "string" && typeof output.nodeId === "string" && typeof output.kind === "string",
+    ) &&
+    Array.isArray(record.errors) &&
+    record.errors.every((error) => !!error && typeof error === "object" && typeof error.nodeId === "string") &&
+    (record.workflowId === undefined || typeof record.workflowId === "string")
   );
 }
 

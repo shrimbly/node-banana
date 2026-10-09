@@ -13,13 +13,30 @@ import type { WorkflowTab } from "@/store/utils/workflowTabs";
 import { buildAgentSnapshot } from "../graph/snapshot";
 import type { AgentChatRequestBody, AgentHarnessId, AgentTabSummary, AgentUIMessage, AgentWorkflowSnapshot } from "../types";
 import { getVisibleFlowRect } from "./layout";
+import { outputWithoutGraph } from "./messages";
 import { sessionIdForHarness } from "./session";
+
+/** The server reads messages' text and session parts only: the maps of built workflows stay in the browser. */
+function withoutGraphs(messages: AgentUIMessage[]): AgentUIMessage[] {
+  return messages.map((message) =>
+    message.parts.some((part) => part.type === "dynamic-tool" && outputWithoutGraph(part.output) !== part.output)
+      ? {
+          ...message,
+          parts: message.parts.map((part) =>
+            part.type === "dynamic-tool" ? ({ ...part, output: outputWithoutGraph(part.output) } as typeof part) : part,
+          ),
+        }
+      : message,
+  );
+}
 
 export interface AgentCanvasState {
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
   groups: Record<string, NodeGroup>;
   workflowName: string | null;
+  /** The store's workflowId, when it has one. */
+  workflowId?: string | null;
   /** A run (or a batch of runs) is going. */
   running?: boolean;
 }
@@ -62,13 +79,14 @@ export function buildAgentChatRequestBody({
     groups: canvas.groups,
     viewport,
     workflowName: canvas.workflowName ?? undefined,
+    workflowId: canvas.workflowId ?? undefined,
     running: canvas.running,
     // The user's saved models and settings, so the agent's new nodes are described as they will appear.
     createDefaultNodeData,
   });
   return {
     id: chatId,
-    messages,
+    messages: withoutGraphs(messages),
     harness,
     ...(model ? { model } : {}),
     ...(effort ? { effort } : {}),
@@ -112,7 +130,7 @@ function parkedSnapshots(
   const parked: Record<string, AgentWorkflowSnapshot> = {};
   for (const tab of strip.tabs) {
     if (tab.id === strip.activeTabId || !tab.snapshot) continue;
-    const { nodes, edges, groups, workflowName, canvasViewport } = tab.snapshot;
+    const { nodes, edges, groups, workflowName, workflowId, canvasViewport } = tab.snapshot;
     parked[tab.id] = {
       ...buildAgentSnapshot({
         nodes,
@@ -120,6 +138,7 @@ function parkedSnapshots(
         groups,
         viewport: parkedViewport(liveViewport, canvasViewport),
         workflowName: workflowName ?? undefined,
+        workflowId: workflowId ?? undefined,
       }),
       tabId: tab.id,
     };

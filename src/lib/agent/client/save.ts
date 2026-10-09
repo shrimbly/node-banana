@@ -42,7 +42,8 @@ export async function saveLiveWorkflow(name?: string): Promise<SaveLiveWorkflowR
     return { ok: false, reason: "Didn't save: a different workflow was opened" };
   }
   if (!path) {
-    requestSave("menu");
+    // The dialog asks where; the name the agent chose is already in it.
+    requestSave("menu", projectName);
     return { ok: false, reason: `Choose where to save ${projectName}: there is no default folder` };
   }
 
