@@ -897,6 +897,76 @@ describe("useAgentChat: steps still pending when the turn ends", () => {
     for (const stream of streams) stream.end();
   });
 
+  it("keeps an ended turn's queued edits and run off a workflow loaded into the tab since, once a new turn begins", async () => {
+    let finishSave!: (result: { ok: false; reason: string }) => void;
+    saveLiveWorkflow.mockImplementation(() => new Promise((resolve) => (finishSave = resolve)));
+    const { result, streams } = await busyChat();
+    await act(async () => {
+      push(streams[0], step("save", { op: "save", name: "Fox" }));
+      push(streams[0], edit("dog"));
+      push(streams[0], runAll);
+      streams[0].push({ type: "finish" });
+      streams[0].end();
+      await sleep(30);
+    });
+    await waitFor(() => expect(result.current.busy).toBe(false));
+    // The user drops another workflow onto the same tab, then starts afresh.
+    await act(() => useWorkflowStore.getState().loadWorkflow(workflow("wf-B", "B", "a mountain lake")));
+    act(() => result.current.newChat());
+    await act(async () => {
+      finishSave({ ok: false, reason: "A different workflow was opened" });
+      await sleep(30);
+    });
+    expect(nodeIds()).not.toContain("prompt-dog");
+    expect(runBatch).not.toHaveBeenCalled();
+  });
+
+  it("Stop also covers the last turn's run still queued behind its save, and lets the waiting turn go at once", async () => {
+    let finishSave!: (result: { ok: true; name: string; path: string }) => void;
+    saveLiveWorkflow.mockImplementation(() => new Promise((resolve) => (finishSave = resolve)));
+    const { result, streams } = await busyChat();
+    act(() => {
+      result.current.send("then make it blue");
+    });
+    await act(async () => {
+      push(streams[0], step("save", { op: "save", name: "Fox" }));
+      push(streams[0], runAll);
+      streams[0].push({ type: "finish" });
+      streams[0].end();
+      await sleep(50);
+    });
+    // The queued message went, and waits for the save before its request is built.
+    act(() => result.current.stop());
+    await waitFor(() => expect(result.current.busy).toBe(false));
+    await act(async () => {
+      finishSave({ ok: true, name: "Fox", path: "/lib/Fox" });
+      await sleep(30);
+    });
+    expect(runBatch).not.toHaveBeenCalled();
+    for (const stream of streams) stream.end();
+  });
+
+  it("New chat after a turn ended drops the run it still had queued", async () => {
+    let finishSave!: (result: { ok: true; name: string; path: string }) => void;
+    saveLiveWorkflow.mockImplementation(() => new Promise((resolve) => (finishSave = resolve)));
+    const { result, streams } = await busyChat();
+    await act(async () => {
+      push(streams[0], step("save", { op: "save", name: "Fox" }));
+      push(streams[0], runAll);
+      streams[0].push({ type: "finish" });
+      streams[0].end();
+      await sleep(30);
+    });
+    await waitFor(() => expect(result.current.busy).toBe(false));
+    act(() => result.current.newChat());
+    await act(async () => {
+      finishSave({ ok: true, name: "Fox", path: "/lib/Fox" });
+      await sleep(30);
+    });
+    expect(runBatch).not.toHaveBeenCalled();
+    expect(trackStartedRun).not.toHaveBeenCalled();
+  });
+
   it("New chat mid-turn drops the old turn's remaining steps, a switch already waiting included", async () => {
     const { tabA, tabB } = twoTabs();
     const { result, streams } = await busyChat();
