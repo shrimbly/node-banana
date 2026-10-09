@@ -76,6 +76,8 @@ export interface DraftNode extends GraphNodeLike {
   error?: string | null;
   /** The canvas has not measured the node: its height is an estimate, redone when its settings change. */
   heightEstimated?: boolean;
+  /** Its results in the asset library, from the snapshot: what view_outputs looks at. */
+  outputs?: AgentSnapshotNode["outputs"];
 }
 
 export type DraftEdge = GraphEdgeLike;
@@ -222,6 +224,7 @@ export class GraphDraft {
         ...(node.status ? { status: node.status } : {}),
         ...(node.error ? { error: node.error } : {}),
         ...(node.heightEstimated ? { heightEstimated: true } : {}),
+        ...(Array.isArray(node.outputs) && node.outputs.length > 0 ? { outputs: node.outputs.map((output) => ({ ...output })) } : {}),
       });
     }
     this.edges = (Array.isArray(snapshot?.edges) ? snapshot.edges : [])

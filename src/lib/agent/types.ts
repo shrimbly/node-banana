@@ -222,6 +222,18 @@ export interface AgentToolResult {
    * turn's later edits to that tab: the full-page chat draws it as a minimap.
    */
   graph?: AgentGraphPreview;
+  /**
+   * Pictures for the model to look at, after `text`, each with its own
+   * caption (view_outputs). Never written to the chat stream.
+   */
+  images?: AgentToolImage[];
+}
+
+/** An image a tool shows the model: bytes, base64, and the line that says what it is. */
+export interface AgentToolImage {
+  mime: string;
+  data: string;
+  caption: string;
 }
 
 /** A workflow's graph in miniature: enough to draw its minimap, nothing a node holds. */
@@ -408,6 +420,19 @@ export interface AgentSnapshotNode {
   };
   status?: string;
   error?: string | null;
+  /**
+   * The node's results in the asset library, the one it shows first, then
+   * the newest others (a few at most): what view_outputs looks at. Ids only.
+   */
+  outputs?: AgentSnapshotOutput[];
+}
+
+/** One of a node's generated results, by its asset library id. */
+export interface AgentSnapshotOutput {
+  assetId: string;
+  kind: "image" | "video" | "audio";
+  /** The result the node shows now. */
+  current?: true;
 }
 
 export interface AgentSnapshotEdge {

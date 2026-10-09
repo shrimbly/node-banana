@@ -229,3 +229,34 @@ describe("buildAgentSnapshot", () => {
     expect(snapshot.nodes.map((n) => [n.width, n.height])).toEqual([[320, 244], [500, 220], [333, 452]]);
   });
 });
+
+describe("node outputs", () => {
+  const item = (assetId?: string) => ({ id: `item-${assetId ?? "none"}`, ...(assetId ? { assetId } : {}), timestamp: 1, prompt: "p", model: "m" });
+
+  it("names the result a node shows, then its newest others, by library id only", () => {
+    const node = storeNode("nanoBanana-1", "nanoBanana", { x: 0, y: 0 }, {
+      outputImage: "data:image/png;base64,AAAA",
+      imageHistory: [item("a-new"), item(), item("b"), item("c-shown"), item("d"), item("e")],
+      selectedHistoryIndex: 3,
+    });
+    const snapshot = buildAgentSnapshot({ nodes: [node], edges: [] });
+    expect(snapshot.nodes[0].outputs).toEqual([
+      { assetId: "c-shown", kind: "image", current: true },
+      { assetId: "a-new", kind: "image" },
+      { assetId: "b", kind: "image" },
+      { assetId: "d", kind: "image" },
+    ]);
+    expect(containsMedia(snapshot)).toBe(false);
+  });
+
+  it("reads video and audio carousels, and leaves out a node with none", () => {
+    const video = storeNode("generateVideo-1", "generateVideo", { x: 0, y: 0 }, { videoHistory: [item("v1"), item("v2")], selectedVideoHistoryIndex: 0 });
+    const prompt = storeNode("prompt-1", "prompt", { x: 0, y: 0 }, { prompt: "a cat" });
+    const snapshot = buildAgentSnapshot({ nodes: [video, prompt], edges: [] });
+    expect(snapshot.nodes[0].outputs).toEqual([
+      { assetId: "v1", kind: "video", current: true },
+      { assetId: "v2", kind: "video" },
+    ]);
+    expect(snapshot.nodes[1]).not.toHaveProperty("outputs");
+  });
+});

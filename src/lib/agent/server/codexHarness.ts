@@ -32,6 +32,7 @@ import type {
   AgentSignInStart,
   AgentSignInState,
   AgentToolDefinition,
+  AgentToolImage,
   AgentToolRuntime,
   HarnessEvent,
   HarnessTurnParams,
@@ -40,6 +41,7 @@ import { AsyncQueue } from "./asyncQueue";
 import { resolveCodexBinary, type BinaryLookup } from "./binaries";
 import { isHarnessReady, type BillingVerdict } from "./billing";
 import { CodexRpcError, getCodexAppServer, type CodexAppServer, type CodexNotification } from "./codexAppServer";
+import { TOOL_NAMES } from "../tools/definitions";
 import { CODEX_TOOL_NAMESPACE, CodexTurnMapper } from "./codexEvents";
 import {
   classifyCodexAccount,
@@ -96,7 +98,14 @@ export const CODEX_DEVELOPER_INSTRUCTIONS =
   "sessions and do not apply inside Node Banana. Ignore the persona, tone, slang, dialect, language and topic " +
   "preferences those files describe. Reply in plain, neutral English unless the user asks otherwise here, and " +
   "never add places, themes or styles to prompts or node settings that the user did not ask for. What the user " +
-  "asks for in this chat, including preferences from earlier messages, always applies.";
+  "asks for in this chat, including preferences from earlier messages, always applies. " +
+  // In code mode a dynamic tool's reply reaches the cell as one string, its images as data: URLs: the model sees a
+  // picture only when the cell hands it to image() (measured on gpt-6-astra, Codex 0.157).
+  `${TOOL_NAMES.viewOutputs} answers with text in which each image is a data: URL on a line of its own. To see the images, ` +
+  `call it in exec and pass each image line to image() and every other line to text(), for example: const result = ` +
+  `await tools.${CODEX_TOOL_NAMESPACE}__${TOOL_NAMES.viewOutputs}({}); for (const line of String(result).split("\\n")) { ` +
+  `if (line.startsWith("data:image/")) image(line); else if (line.trim()) text(line); } Never print the data URLs ` +
+  "as text, and never describe an image you have not seen.";
 
 /** A thread is reusable only while its instructions and tools are unchanged. */
 function threadSignature(systemPrompt: string, tools: CodexToolNamespace, webAccess: boolean): string {
@@ -281,8 +290,18 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function toolReply(text: string, success: boolean) {
-  return { contentItems: [{ type: "inputText", text }], success };
+/** A dynamic tool's answer: its text, then each image (as a data URL) after its caption. */
+export function toolReply(text: string, success: boolean, images: readonly AgentToolImage[] = []) {
+  return {
+    contentItems: [
+      { type: "inputText", text },
+      ...images.flatMap((image) => [
+        { type: "inputText", text: image.caption },
+        { type: "inputImage", imageUrl: `data:${image.mime};base64,${image.data}` },
+      ]),
+    ],
+    success,
+  };
 }
 
 /** Whether a sparse `account/rateLimits/updated` snapshot says a limit may have been reached. */
@@ -342,7 +361,7 @@ export function createCodexHarness(overrides: Partial<CodexHarnessDeps> = {}): A
       return toolReply("That request was stopped, so the tool didn't run.", false);
     }
     const result = await executeTool(active.runtime, params.tool, params.arguments ?? {});
-    return toolReply(result.text, result.ok);
+    return toolReply(result.text, result.ok, result.images);
   }
 
   /** The app-server for this binary, with our handlers attached. */

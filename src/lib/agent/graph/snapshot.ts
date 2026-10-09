@@ -13,7 +13,7 @@ import type { WorkflowEdge, NodeGroup } from "@/types/workflow";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import { estimatedNodeHeight } from "./sizes";
 import { getNodeSize } from "@/utils/nodeDimensions";
-import type { AgentSnapshotEdge, AgentSnapshotGroup, AgentSnapshotNode, AgentWorkflowSnapshot } from "../types";
+import type { AgentSnapshotEdge, AgentSnapshotGroup, AgentSnapshotNode, AgentSnapshotOutput, AgentWorkflowSnapshot } from "../types";
 import { isNodeType } from "./catalog";
 import { pickAgentData } from "./nodeData";
 import { capText, stripMedia } from "./scrub";
@@ -131,6 +131,7 @@ function snapshotNode(node: WorkflowNode): AgentSnapshotNode {
   const data = (node.data ?? {}) as Record<string, unknown>;
   const size = nodeSize(node);
   const content = contentOf(type, data);
+  const outputs = outputsOf(data);
   const status = typeof data.status === "string" && data.status !== "idle" ? data.status : undefined;
   const error = typeof data.error === "string" && data.error ? capText(data.error, ERROR_LIMIT) : undefined;
   return {
@@ -146,7 +147,39 @@ function snapshotNode(node: WorkflowNode): AgentSnapshotNode {
     ...(content ? { content } : {}),
     ...(status ? { status } : {}),
     ...(error ? { error } : {}),
+    ...(outputs.length > 0 ? { outputs } : {}),
   };
+}
+
+/** How many of a node's results the snapshot names: view_outputs compares at most this many takes. */
+export const SNAPSHOT_OUTPUTS_PER_NODE = 4;
+
+/** The carousels a node keeps its results in, and the field that says which one it shows. */
+const OUTPUT_HISTORIES: Array<{ history: string; selected: string; kind: AgentSnapshotOutput["kind"] }> = [
+  { history: "imageHistory", selected: "selectedHistoryIndex", kind: "image" },
+  { history: "videoHistory", selected: "selectedVideoHistoryIndex", kind: "video" },
+  { history: "audioHistory", selected: "selectedAudioHistoryIndex", kind: "audio" },
+];
+
+/** The node's results the asset library holds: the one it shows, then the newest others (histories keep the newest first). */
+export function outputsOf(data: Record<string, unknown>): AgentSnapshotOutput[] {
+  const outputs: AgentSnapshotOutput[] = [];
+  for (const { history, selected, kind } of OUTPUT_HISTORIES) {
+    const entries = Array.isArray(data[history]) ? (data[history] as unknown[]) : [];
+    const ids = entries.map((entry) =>
+      entry && typeof entry === "object" && typeof (entry as { assetId?: unknown }).assetId === "string"
+        ? (entry as { assetId: string }).assetId
+        : null,
+    );
+    const index = typeof data[selected] === "number" ? (data[selected] as number) : 0;
+    const shown = ids[index];
+    if (shown) outputs.push({ assetId: shown, kind, current: true });
+    for (const id of ids) {
+      if (outputs.length >= SNAPSHOT_OUTPUTS_PER_NODE) break;
+      if (id && id !== shown) outputs.push({ assetId: id, kind });
+    }
+  }
+  return outputs.slice(0, SNAPSHOT_OUTPUTS_PER_NODE);
 }
 
 /**

@@ -22,6 +22,7 @@ export const TOOL_NAMES = {
   switchWorkflow: "switch_workflow",
   newWorkflow: "new_workflow",
   saveWorkflow: "save_workflow",
+  viewOutputs: "view_outputs",
 } as const;
 
 export type AgentToolName = (typeof TOOL_NAMES)[keyof typeof TOOL_NAMES];
@@ -181,6 +182,20 @@ export const nameConversationShape = {
     .describe('3-6 words naming what the conversation is about, sentence case, no final period, e.g. "Espresso hero film workflow".'),
 };
 
+export const viewOutputsShape = {
+  nodeIds: z
+    .array(z.string())
+    .optional()
+    .describe("The nodes whose results to look at (ids, or refs from this turn). Omit for every node that has one."),
+  takes: z
+    .number()
+    .int()
+    .min(1)
+    .max(4)
+    .optional()
+    .describe("Results per node: 1 (the default) is the one it shows; up to 4 adds its latest earlier takes, newest first, to compare runs."),
+};
+
 export const getPromptGuideShape = {
   node: z
     .string()
@@ -290,6 +305,14 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     description:
       "How to write a strong prompt for one node: the parts it needs in order, the length, rules, a weak and a strong example, notes from the chosen model's own listing, and prompting notes the user saved for that model. Call it before you write or rewrite the prompt that feeds a generator or LLM Generate, once per node type and model in this conversation; pass the node when it exists.",
     inputShape: getPromptGuideShape,
+  },
+  {
+    name: TOOL_NAMES.viewOutputs,
+    title: "Review outputs",
+    readOnly: true,
+    description:
+      "Look at the images the nodes generated, as the user sees them, each captioned with its node, model and prompt. Use it before judging results (quality, consistency, matching the brief) or changing a workflow to fix them, and say what you saw. A video shows its first frame only; audio, 3D models and uploaded images cannot be viewed. Shows what the nodes held when the user sent this message: a run you start this turn is not in it. At most 12 images per call; one call shows them all, so don't repeat it for the same nodes.",
+    inputShape: viewOutputsShape,
   },
   {
     name: TOOL_NAMES.runWorkflow,

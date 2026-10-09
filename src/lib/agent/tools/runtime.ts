@@ -46,8 +46,11 @@ import {
   searchModelsShape,
   switchWorkflowShape,
   updateNodeShape,
+  viewOutputsShape,
 } from "./definitions";
+import { libraryOutputReader } from "./libraryOutputs";
 import { AgentModels, type ModelRequest, type ModelSource } from "./modelSearch";
+import { viewOutputs, type AgentOutputReader } from "./outputs";
 import { PROMPT_NODE_MODALITY, renderPromptGuide, type PromptGuideInput } from "../prompting";
 import { audioTaskOf } from "../prompting/modelNotes";
 import { filePromptNotesStore, type PromptNotesStore } from "../prompting/notesStore";
@@ -77,6 +80,8 @@ export interface AgentToolRuntimeOptions extends Omit<GraphDraftOptions, "models
   tabs?: AgentTabSummary[];
   /** Media-free snapshots of the parked tabs, by tab id: a tab's draft is built from its snapshot when the turn first switches to it. */
   parkedWorkflows?: Record<string, AgentWorkflowSnapshot>;
+  /** Where view_outputs reads results; the asset library by default. */
+  outputs?: AgentOutputReader;
 }
 
 /** Tools that change the canvas, and so may set models. */
@@ -105,7 +110,8 @@ const settled = (...promises: Promise<unknown>[]) =>
  * tabs given, each tab the turn works in gets its own draft.
  */
 export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options: AgentToolRuntimeOptions = {}): AgentToolRuntime {
-  const { providerKeys, signal, modelSource, promptNotes, tabs, parkedWorkflows, ...draftOptions } = options;
+  const { providerKeys, signal, modelSource, promptNotes, tabs, parkedWorkflows, outputs, ...draftOptions } = options;
+  const outputReader = outputs ?? libraryOutputReader();
   const models = new AgentModels(providerKeys ?? {}, { source: modelSource, signal });
   const live = snapshot ?? { nodes: [], edges: [], groups: [], selectedNodeIds: [] };
   const workspace = new TurnWorkspace(live, { tabs, parkedWorkflows }, (seed) => new GraphDraft(seed, { ...draftOptions, models }));
@@ -123,6 +129,7 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
     [TOOL_NAMES.searchModels]: (args) => searchModels(models, args as Args<typeof searchModelsShape>),
     [TOOL_NAMES.getPromptGuide]: (args, draft) =>
       getPromptGuide(draft, models, promptNotes ?? filePromptNotesStore(), args as Args<typeof getPromptGuideShape>),
+    [TOOL_NAMES.viewOutputs]: (args, draft) => viewOutputs(draft, outputReader, args as Args<typeof viewOutputsShape>),
     [TOOL_NAMES.createWorkflow]: (args, draft) => createWorkflow(draft, args as Args<typeof createWorkflowShape>),
     [TOOL_NAMES.editWorkflow]: (args, draft) => editWorkflow(draft, args as Args<typeof editWorkflowShape>),
     [TOOL_NAMES.updateNode]: (args, draft) => updateNode(draft, args as Args<typeof updateNodeShape>),

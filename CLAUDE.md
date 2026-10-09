@@ -415,6 +415,18 @@ node types and boxes, connections; the turn's later edits to that tab carry it
 too), which the full-page chat alone draws as a minimap under the call
 (`AgentWorkflowPreview`), with Open in canvas.
 
+Reviewing results: `view_outputs` shows the model what the nodes generated.
+The snapshot names each node's results by asset library id (`outputs`: the
+one it shows, then up to three newer, never bytes); the tool reads them from
+the library (`libraryOutputs.ts`: images downsized to 1024px webp, a video's
+captured frame) and returns them as images after their captions, MCP image
+blocks for Claude and `inputImage` data URLs for Codex. Uploads, audio and 3D
+cannot be viewed, and a run started in the same turn is not in it yet. Codex's
+models run tools from code-mode `exec` cells, where a tool's reply arrives as
+one string (images as `data:` URLs on their own lines) and the model sees a
+picture only when the cell passes it to `image()`: the harness's developer
+instructions show it how. Without them it describes images it never saw.
+
 Tabs: each request carries every open tab (`tabs`, `parkedWorkflows`); the
 runtime keeps a draft per tab and `switch_workflow`, `new_workflow` and
 `save_workflow` emit workspace steps (`AgentWorkspaceOp`) that `useAgentChat`

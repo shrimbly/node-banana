@@ -69,8 +69,9 @@ describe("buildAgentSystemPrompt", () => {
     // then from 14.25k for what to run when the user asks for a run,
     // then from 14.5k for the chat's Run button and the open workflows,
     // then from 15k for the button covering only the workflow the reply ends in (Claude 15,099, Codex 15,293),
-    // then from 15.15k for saving a workflow built from scratch (Claude 15,226, Codex 15,420).
-    expect(prompt.length).toBeLessThan(15_300);
+    // then from 15.15k for saving a workflow built from scratch (Claude 15,226, Codex 15,420),
+    // then from 15.3k for looking at results with view_outputs (Claude 15,328, Codex 15,522).
+    expect(prompt.length).toBeLessThan(15_400);
   });
 
   it("points at the chat's Run button, and teaches the open workflows and their tools", () => {
@@ -94,7 +95,9 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("Then run the nodes you added or changed in this conversation if what feeds them holds its output");
     expect(prompt).toContain("run everything if they ask, you built it all in this conversation, or inputs are missing");
     expect(prompt).toContain("or from the node they name");
-    expect(prompt).toContain("Results arrive with their next message: report them from its canvas only.");
+    expect(prompt).toContain(
+      "Results arrive with their next message: report them from its canvas, and look at them with view_outputs before you judge them or change the workflow to fix them.",
+    );
   });
 
   it("teaches what groups are and when to make them", () => {
