@@ -44,7 +44,6 @@ vi.mock("@/components/agent/AgentRunCard", async (importOriginal) => {
 
 import { AgentPanel, type AgentPanelProps } from "@/components/agent/AgentPanel";
 import { AgentSessionProvider, useAgentPresence, type AgentPresence } from "@/components/agent/AgentSession";
-import { useToast } from "@/components/Toast";
 import { buildAgentSnapshot } from "@/lib/agent/graph/snapshot";
 import { useAssetStore } from "@/store/assetStore";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -199,7 +198,7 @@ async function waitForComposer() {
 }
 
 describe("AgentPanel", () => {
-  const applyAgentGraphOps = vi.fn<(batch: AgentGraphOpBatch) => { applied: number; skipped: string[]; runRefused?: string }>(() => ({
+  const applyAgentGraphOps = vi.fn<(batch: AgentGraphOpBatch) => { applied: number; skipped: string[] }>(() => ({
     applied: 1,
     skipped: [],
   }));
@@ -490,30 +489,20 @@ describe("AgentPanel", () => {
     expect(chatBodies[1].sessionId).toBe("session-1");
   });
 
-  it("says a run is going in the snapshot, and when the agent's run could not start", async () => {
-    const run: AgentGraphOpBatch = {
-      batchId: "b-run",
-      toolCallId: "call-run",
-      ops: [{ op: "run", scope: { kind: "all" }, runs: 1 }],
-      summary: "Running the workflow",
-    };
-    applyAgentGraphOps.mockImplementationOnce(() => ({ applied: 0, skipped: [], runRefused: "a run is already going" }));
-    chatChunks.push(replyChunks({ text: "Started the workflow.", batch: run }));
+  it("says a run is going in the snapshot", async () => {
+    chatChunks.push(replyChunks({ text: "It's still running." }));
     useWorkflowStore.setState({ isRunning: true });
 
     try {
       renderPanel();
       const textarea = await waitForComposer();
-      fireEvent.change(textarea, { target: { value: "Run it" } });
+      fireEvent.change(textarea, { target: { value: "How is it going?" } });
       fireEvent.keyDown(textarea, { key: "Enter" });
 
-      expect(await screen.findByText("Started the workflow.")).toBeInTheDocument();
+      expect(await screen.findByText("It's still running.")).toBeInTheDocument();
       expect(vi.mocked(buildAgentSnapshot).mock.calls.at(-1)?.[0]).toMatchObject({ running: true });
-      expect(applyAgentGraphOps).toHaveBeenCalledWith(run);
-      expect(useToast.getState().message).toBe("The agent's run didn't start: a run is already going");
     } finally {
       useWorkflowStore.setState({ isRunning: false });
-      useToast.getState().hide();
     }
   });
 

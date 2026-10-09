@@ -251,9 +251,9 @@ export interface AgentToolRuntime {
   /** Validates args against the tool's shape. Never throws: failures come back as ok:false. */
   execute(name: string, args: unknown): Promise<AgentToolResult>;
   /**
-   * Read once the turn has ended: the Run button the chat should offer for
-   * what this turn built or changed, or null (nothing runnable changed, the
-   * turn started a run itself, or what changed can't run yet).
+   * Read once the turn has ended: the Run button the chat should offer, set
+   * up by run_workflow or for what this turn built or changed, or null
+   * (nothing runnable changed, what changed can't run yet, or a run is going).
    */
   runOffer?(): AgentRunOffer | null;
 }
@@ -342,12 +342,7 @@ export type AgentGraphOp =
   /** Delete a group box. Its nodes stay where they are; their groupId clears. */
   | { op: "removeGroup"; id: string }
   /** Put a node into a group (`groupId`) or take it out of the one it is in (null). */
-  | { op: "setNodeGroup"; id: string; groupId: string | null }
-  /**
-   * Start a run through the store's runBatch, `runs` times (1–50), after the
-   * batch's other ops. Not part of the undo step; ignored while a run is going.
-   */
-  | { op: "run"; scope: RunScope; runs: number };
+  | { op: "setNodeGroup"; id: string; groupId: string | null };
 
 /** The colours a group can have (the canvas's GROUP_COLOR_ORDER). */
 export type AgentGroupColor = GroupColor;
@@ -571,11 +566,11 @@ export interface AgentRunOutput {
 
 export type AgentRunStatus = "running" | "done" | "failed" | "stopped" | "paused";
 
-/** A run the chat started (the agent's run_workflow, or the Run button) and what came of it. */
+/** A run the chat started (its Run button, or Run again) and what came of it. */
 export interface AgentRunRecord {
   id: string;
   chatId: string;
-  /** Where it shows in the transcript: under that tool call, or that offer's card. */
+  /** Where it shows in the transcript: that offer's card (or, for a run the agent once started itself, under that tool call). */
   anchor: { toolCallId: string } | { offerId: string };
   tabId: string;
   workflowName?: string;

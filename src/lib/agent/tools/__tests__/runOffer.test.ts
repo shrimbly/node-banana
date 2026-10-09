@@ -279,12 +279,12 @@ describe("runOffer", () => {
     });
   });
 
-  it("offers nothing once the turn started a run, or while one was going", async () => {
+  it("offers the run run_workflow set up in place of its own, and nothing while a run was going", async () => {
     const runtime = runtimeFor(chain());
     await call(runtime, "update_node", { node: "nanoBanana-3", settings: { aspectRatio: "16:9" } });
-    expect(runtime.runOffer!()).not.toBeNull();
-    expect((await call(runtime, "run_workflow", { scope: "nodes", nodeIds: ["nanoBanana-3"] })).ok).toBe(true);
-    expect(runtime.runOffer!()).toBeNull();
+    expect(runtime.runOffer!()?.primary.scope).toEqual({ kind: "nodes", nodeIds: ["nanoBanana-3", "output-4"] });
+    expect((await call(runtime, "run_workflow", { scope: "all", runs: 2 })).ok).toBe(true);
+    expect(runtime.runOffer!()).toMatchObject({ primary: { scope: { kind: "all" }, label: "Run workflow", runs: 2 }, alternatives: [] });
 
     const running = runtimeFor(chain(), { running: true });
     await call(running, "update_node", { node: "nanoBanana-3", settings: { aspectRatio: "16:9" } });

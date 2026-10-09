@@ -1,6 +1,6 @@
 /**
- * The runs the chat started (the agent's run_workflow, or an offer's Run
- * button) and what came of them, for the chat's results cards.
+ * The runs the chat started (an offer's Run button, or Run again) and what
+ * came of them, for the chat's results cards.
  *
  * A record is followed while its run goes: the nodes that started, batch
  * progress, errors, and every asset the library recorded under the run's ids
@@ -43,7 +43,7 @@ interface AgentRunsState {
 
 export const useAgentRuns = create<AgentRunsState>(() => ({ records: loadAgentRuns() }));
 
-/** The latest run shown at `anchor` (a run_workflow call, or an offer's card), if any. */
+/** The latest run shown at `anchor` (an offer's card, or a run_workflow call that once started one), if any. */
 export function latestRunFor(records: readonly AgentRunRecord[], anchor: AgentRunAnchor | null | undefined): AgentRunRecord | undefined {
   const key = anchor ? anchorKey(anchor) : null;
   return key ? records.find((record) => anchorKey(record.anchor) === key) : undefined;
@@ -127,38 +127,6 @@ function scopeOnCanvas(scope: RunScope, nodes: readonly WorkflowNode[], plannedN
   if (scope.kind === "from") return present.has(scope.nodeId) ? scope : null;
   const nodeIds = scope.nodeIds.filter((id) => present.has(id));
   return nodeIds.length > 0 ? { kind: "nodes", nodeIds } : null;
-}
-
-/**
- * The nodes a run of `scope` is expected to run on this canvas, for the
- * card's placeholders: `checked` (what the agent validated) when it sent it,
- * else every node outside a locked group for "all", the node and everything
- * it feeds for "from", the scope's own for "nodes". Only those on the canvas.
- */
-export function plannedRunNodeIds(
-  scope: RunScope,
-  canvas: Pick<WorkflowStore, "nodes" | "edges" | "groups">,
-  checked?: readonly string[],
-): string[] {
-  const present = new Set(canvas.nodes.map((node) => node.id));
-  return (checked ?? scopeNodeIds(scope, canvas)).filter((id) => present.has(id));
-}
-
-function scopeNodeIds(scope: RunScope, { nodes, edges, groups }: Pick<WorkflowStore, "nodes" | "edges" | "groups">): readonly string[] {
-  if (scope.kind === "nodes") return scope.nodeIds;
-  const unlocked = (node: WorkflowNode) => !(node.groupId && groups[node.groupId]?.locked);
-  if (scope.kind === "all") return nodes.filter(unlocked).map((node) => node.id);
-  const reached = new Set([scope.nodeId]);
-  const queue = [scope.nodeId];
-  while (queue.length > 0) {
-    const id = queue.shift()!;
-    for (const edge of edges) {
-      if (edge.source !== id || edge.data?.isLoop || reached.has(edge.target)) continue;
-      reached.add(edge.target);
-      queue.push(edge.target);
-    }
-  }
-  return nodes.filter((node) => reached.has(node.id) && unlocked(node)).map((node) => node.id);
 }
 
 /**
@@ -266,21 +234,6 @@ export interface TrackRunInput {
   plannedNodeIds: string[];
 }
 
-/**
- * What a record is called: the action, as the Run card's options name it
- * ("Run workflow", "Run Generate Image", "Run from Prompt"), which reads
- * right while it runs and after. The agent's tool summary says what it
- * started ("Started the workflow ×3"; older chats say "Running …"); the
- * card's meta counts the runs.
- */
-function runActionLabel(label: string): string {
-  if (!/^(Running|Started) /.test(label)) return label;
-  return label
-    .replace(/^(Running|Started) the workflow\b/, "Run workflow")
-    .replace(/^(Running|Started) /, "Run ")
-    .replace(/ ×\d+$/, "");
-}
-
 /** Records a run that has just started on the live tab, and follows it until it ends. */
 export function trackStartedRun(input: TrackRunInput): AgentRunRecord {
   // The run goes on the live tab: its workflow, given an id now if it had none (the asset recorder does the same).
@@ -294,7 +247,7 @@ export function trackStartedRun(input: TrackRunInput): AgentRunRecord {
     tabId: input.tabId,
     ...(state.workflowName ? { workflowName: state.workflowName } : {}),
     workflowId,
-    label: runActionLabel(input.label),
+    label: input.label,
     scope: input.scope,
     runs,
     startedAt: Date.now(),

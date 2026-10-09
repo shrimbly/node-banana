@@ -9,7 +9,6 @@ import { AGENT_CHAT_API } from "@/lib/agent/client/api";
 import { countRenderedParts } from "@/lib/agent/client/messages";
 import { HARNESS_LABELS } from "@/lib/agent/client/readiness";
 import { agentProviderHeaders, buildAgentChatRequestBody, whenProviderKeysReady } from "@/lib/agent/client/request";
-import { plannedRunNodeIds, trackStartedRun } from "@/lib/agent/client/runs";
 import { saveLiveWorkflow } from "@/lib/agent/client/save";
 import { AGENT_OPENING_STATUS } from "@/lib/agent/types";
 import type {
@@ -149,8 +148,8 @@ export function useAgentChat({
   // The canvasGeneration each turn was sent from (or its own last tab step moved it to): a turn's
   // queued steps fit only that canvas, even once a later turn is under way on another.
   const turnGenerationsRef = useRef(new Map<number, number>());
-  // Every turn up to this one was stopped (the Stop button, or the conversation left): a run they
-  // asked for must not start after that, even when it is still queued behind an earlier step.
+  // Every turn up to this one was stopped (the Stop button, or the conversation left): a tab step they
+  // asked for must not happen after that, even when it is still queued behind an earlier one.
   const stoppedThroughRef = useRef(0);
   const haltedTurnRef = useRef(-1);
   const stepsRef = useRef<Promise<void>>(Promise.resolve());
@@ -248,7 +247,7 @@ export function useAgentChat({
     if (turn === turnRef.current && activeChatRef.current?.id === chatId) void activeChatRef.current.stop();
   }, []);
 
-  /** Canvas edits (and a run) for the live tab. */
+  /** Canvas edits for the live tab. */
   const applyGraphBatch = useCallback(
     (batch: AgentGraphOpBatch, turn: number, chatId: string) => {
       const store = useWorkflowStore.getState();
@@ -256,11 +255,9 @@ export function useAgentChat({
         haltTurn(turn, chatId, "Stopped the agent: its changes were for a workflow that isn't the open tab");
         return;
       }
-      // Edits buffered before a stop still land; a run would spend the user's credits after they said stop.
-      const applying = turn <= stoppedThroughRef.current ? { ...batch, ops: batch.ops.filter((op) => op.op !== "run") } : batch;
       let result: ReturnType<typeof store.applyAgentGraphOps>;
       try {
-        result = store.applyAgentGraphOps(applying);
+        result = store.applyAgentGraphOps(batch);
       } catch (applyError) {
         const detail = applyError instanceof Error ? applyError.message : String(applyError);
         console.error("[agent] applying canvas changes failed", applyError);
@@ -277,20 +274,6 @@ export function useAgentChat({
             false,
             result.skipped.join("\n"),
           );
-      }
-      if (result.runRefused) useToast.getState().show(`The agent's run didn't start: ${lowerFirst(result.runRefused)}`, "warning");
-      if (result.runStarted && result.run) {
-        const live = useWorkflowStore.getState();
-        trackStartedRun({
-          chatId,
-          anchor: { toolCallId: batch.toolCallId },
-          label: batch.summary,
-          scope: result.run.scope,
-          runs: result.run.runs,
-          tabId: live.activeTabId,
-          // run_workflow's batch names the nodes the agent checked.
-          plannedNodeIds: plannedRunNodeIds(result.run.scope, live, batch.focusNodeIds),
-        });
       }
       if (result.applied > 0) handlersRef.current.onBatchApplied?.(batch);
     },
@@ -433,7 +416,7 @@ export function useAgentChat({
     setStatusLine(null);
   }, []);
 
-  /** Every turn so far is over: a run any of them still has queued must not start. */
+  /** Every turn so far is over: a tab step any of them still has queued must not happen. */
   const stopAllTurns = useCallback(() => {
     stoppedThroughRef.current = Math.max(stoppedThroughRef.current, turnRef.current);
     releaseWaitRef.current?.();
@@ -563,7 +546,7 @@ export function useAgentChat({
   }, [busy, beginTurn, showOpeningLine, regenerate]);
 
   const newChat = useCallback(() => {
-    // What the conversation being left still has queued (a run behind a slow save) is not for the next one.
+    // What the conversation being left still has queued (a tab step behind a slow save) is not for the next one.
     stopAllTurns();
     if (busy) {
       haltedTurnRef.current = turnRef.current;

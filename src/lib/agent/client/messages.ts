@@ -26,7 +26,7 @@ export function readToolOutput(output: unknown): AgentToolUIOutput | null {
   return { ok, summary: typeof summary === "string" ? summary : "" };
 }
 
-/** A run_workflow call: the results of the run it started show under the tool rows. */
+/** A run_workflow call: a run it started, before every run waited for the Run card, still shows its results. */
 export function isRunWorkflowPart(part: Pick<DynamicToolUIPart, "toolName">): boolean {
   return part.toolName.replace(MCP_PREFIX, "") === "run_workflow";
 }
@@ -135,7 +135,7 @@ export interface ToolGroupSummary {
   label: string;
   /** The call still running, by title ("Edit workflow…"): the folded line names it while it works. */
   running: string | null;
-  /** What came of the calls: the canvas change, else a lone call's result, else the run started. */
+  /** What came of the calls: the canvas change, else a lone call's result, else the run set up. */
   result: string | null;
   /** "1 failed", when a call failed or the tool refused it. */
   failed: string | null;

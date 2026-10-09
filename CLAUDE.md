@@ -396,24 +396,23 @@ strip, the menu, the chat's switcher, Open in canvas, Assets, a dropped
 workflow, the welcome dialog) ask first while a turn runs, and stop it only
 once they agree (`confirmStopAgent`, `src/lib/agent/client/stopGuard.ts`).
 
-Runs: when the user asks, `run_workflow` starts one (scope `nodes`, `all` or
+Runs: the agent never starts one; the user does, with the chat's Run card.
+When the user asks, `run_workflow` sets the card up (scope `nodes`, `all` or
 `from`, and a run count), checked against the draft: refused while the
-snapshot says `running`, or when a node the run reads from holds nothing. Its
-`run` op starts through `runBatch` after the call's edits, outside undo; the
-model reports the outcome from the next message's node `status` and `error`.
-Only a single run in the tab the user sent from starts by itself: more runs,
-or a run in another tab, start nothing and become the turn's Run card (its
-count set), so text injected into a workflow can't spend credits unseen.
-A turn that builds or changes runnable nodes without running them ends with a
-persisted `data-run-offer` part (`runtime.runOffer()`): the chat's Run card,
-scoped to the whole workflow, a group, or the changed nodes and what they feed.
+snapshot says `running`, or when a node the run reads from holds nothing.
+There is no graph op for a run, so text injected into a workflow can't spend
+credits. A turn that builds or changes runnable nodes without `run_workflow`
+still ends with the card (a persisted `data-run-offer` part,
+`runtime.runOffer()`), scoped to the whole workflow, a group, or the changed
+nodes and what they feed. The model reports the outcome from the next
+message's node `status` and `error`.
 
 Chat view: the Chat toggle at the head of the tab strip (bare `C`) shows the
 full-page chat (`appView === "chat"`, `AgentChatView`). It and the floating
 window are two surfaces of one session (`AgentSessionProvider` in page.tsx;
 `useAgentSession`, and `useAgentPresence` for chrome that must not re-render
-per token; `useAgentSurface` sizes the transcript). Runs the chat starts (the
-Run card, or the agent's `run_workflow`) are followed as `AgentRunRecord`s in
+per token; `useAgentSurface` sizes the transcript). Runs the chat starts (its
+Run card) are followed as `AgentRunRecord`s in
 `src/lib/agent/client/runs.ts`: progress, then outputs as asset ids and text,
 never media bytes, shown as results cards with the full-screen viewer. A
 `create_workflow` call's output carries its tab's graph in miniature (`graph`:

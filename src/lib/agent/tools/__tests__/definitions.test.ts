@@ -79,11 +79,12 @@ describe("tool definitions", () => {
     expect(schema.properties.scope.enum).toEqual(["nodes", "all", "from"]);
     expect(Object.keys(schema.properties)).toEqual(["scope", "nodeIds", "node", "runs"]);
     expect(schema.properties.runs.description).toContain("default 1");
-    // When to run, and that results arrive only with the next message.
+    // It never starts a run, and results arrive only with the next message.
+    expect(run.description).toContain("Set up the Run button under your reply for the user to press: nothing runs until they do.");
     expect(run.description).toContain("Only when the user asks to run");
     expect(run.description).toContain("Call it last, after this turn's edits, and once per turn");
     expect(run.description).toContain("Refused while a run is going");
-    expect(run.description).toContain("you do not see its results in this turn");
+    expect(run.description).toContain("The next message's canvas shows each node's status, error and output.");
   });
 
   it("are the runtime's definitions", () => {

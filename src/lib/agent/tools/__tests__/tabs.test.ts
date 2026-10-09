@@ -112,16 +112,16 @@ describe("switch_workflow", () => {
     expect(same.workspace).toBeUndefined();
   });
 
-  it("is refused while a run is going, after this turn started one, and without the tab list", async () => {
+  it("is refused while a run is going and without the tab list, never for a run only set up", async () => {
     const running = await call(workspace({ live: { running: true } }), "switch_workflow", { tab: "tab-b" });
     expect(running).toMatchObject({ ok: false, summary: "Not changed: a run is going", tabId: "tab-a" });
     expect(running.workspace).toBeUndefined();
 
+    // run_workflow starts nothing, so the tabs stay free.
     const runtime = workspace();
     expect((await call(runtime, "run_workflow", { scope: "all" })).ok).toBe(true);
-    const afterRun = await call(runtime, "switch_workflow", { tab: "tab-b" });
-    expect(afterRun).toMatchObject({ ok: false, summary: "Not changed: a run started this turn" });
-    expect((await call(runtime, "new_workflow", {})).summary).toBe("Not changed: a run started this turn");
+    expect((await call(runtime, "switch_workflow", { tab: "tab-b" })).ok).toBe(true);
+    expect((await call(runtime, "new_workflow", {})).ok).toBe(true);
 
     const old = createAgentToolRuntime(snapshotOf(A), { randomId: sequentialIds() });
     for (const [tool, args] of [["switch_workflow", { tab: "tab-b" }], ["new_workflow", {}], ["save_workflow", { name: "Fox" }]] as const) {
@@ -285,7 +285,7 @@ describe("save_workflow", () => {
     expect(await call(runtime, "save_workflow", {})).toMatchObject({ ok: true, tabId: "tab-b", workspace: { op: "save" }, summary: "Saving Haiku" });
   });
 
-  it("is allowed after a run started this turn", async () => {
+  it("is allowed after run_workflow", async () => {
     const runtime = workspace();
     await call(runtime, "run_workflow", { scope: "all" });
     expect((await call(runtime, "save_workflow", {})).ok).toBe(true);
@@ -331,16 +331,16 @@ describe("tab steps in order with the edits around them", () => {
     expect(finished).toEqual(["edit", "save"]);
   });
 
-  it("checks a run against the tab a pending switch leads to, and holds it for the user's click there", async () => {
+  it("checks a run against the tab a pending switch leads to, and sets up its card there", async () => {
     const runtime = workspace();
     const [switched, run] = await Promise.all([
       runtime.execute("switch_workflow", { tab: "tab-b" }),
       runtime.execute("run_workflow", { scope: "nodes", nodeIds: ["llmGenerate-7"] }),
     ]);
     expect(switched.ok).toBe(true);
-    // The user is in tab-a: a run in tab-b spends their credits where they are not looking.
     expect(run).toMatchObject({ ok: true, tabId: "tab-b", ops: [], summary: "Ready to run: press Run below" });
-    expect(run.text).toContain("a run in a workflow tab the user is not in waits for the user to press Run");
+    // The user sent from tab-a: the card runs in tab-b.
+    expect(run.text).toContain("set up for llmGenerate-7, in this workflow's tab.");
     expect(runtime.runOffer!()).toMatchObject({
       tabId: "tab-b",
       primary: { scope: { kind: "nodes", nodeIds: ["llmGenerate-7"] }, label: "Run LLM Generate", nodeIds: ["llmGenerate-7"] },

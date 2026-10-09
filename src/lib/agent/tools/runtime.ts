@@ -5,8 +5,9 @@
  * results are immediate and later calls in the same turn see earlier edits.
  * Mutating tools return the resolved graph ops the browser replays. Each open
  * tab the turn works in has a draft of its own; switching, opening and saving
- * tabs are steps the browser takes in order with the edits around them. At the
- * end of the turn, runOffer says what the chat's Run button should run.
+ * tabs are steps the browser takes in order with the edits around them. No
+ * tool starts a run: at the end of the turn, runOffer says what the chat's Run
+ * button should run, and the user presses it.
  * Nothing here throws: bad arguments, invalid edits and internal failures all
  * come back as `ok: false` with text the model can act on.
  */
@@ -18,7 +19,6 @@ import type { ProviderKeys } from "@/lib/providers/keys";
 import { groupNodesByLevel } from "@/store/utils/executionUtils";
 import { clampRunCount, type RunScope } from "@/store/utils/runBatch";
 import type {
-  AgentGraphOp,
   AgentRunOffer,
   AgentRunOption,
   AgentTabSummary,
@@ -118,14 +118,9 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
   const models = new AgentModels(providerKeys ?? {}, { source: modelSource, signal });
   const live = snapshot ?? { nodes: [], edges: [], groups: [], selectedNodeIds: [] };
   const workspace = new TurnWorkspace(live, { tabs, parkedWorkflows }, (seed) => new GraphDraft(seed, { ...draftOptions, models }));
-  // A run started (or is being started) this turn: the canvas must stay as the run found it.
-  let runStarted = false;
-  let runsStarting = 0;
-  // Settles once every run_workflow call being decided has been: an edit issued alongside one waits to hear whether it started.
-  let runsDecided: Promise<unknown> = Promise.resolve();
-  // A run the agent asked for that waits for the user's click (more than one, or in another tab): the turn's Run card.
-  let awaitingClick: AgentRunOffer | null = null;
-  // Draft edits still being resolved; a run or a tab step waits for them, so its result follows theirs.
+  // The run the agent set up with run_workflow: the turn's Run card, for the user to press.
+  let requestedRun: AgentRunOffer | null = null;
+  // Draft edits still being resolved; run_workflow or a tab step waits for them, so its result follows theirs.
   let editsInFlight: Promise<unknown> = Promise.resolve();
   // The last tab step; edits and reads wait for it, so none lands on the tab it is leaving.
   let workspaceStep: Promise<unknown> = Promise.resolve();
@@ -191,16 +186,8 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
         if (!parsed.success) {
           return workspace.stamp(failure(formatZodError(definition, parsed.error), `Invalid arguments for ${tool}`));
         }
-        if (MUTATING_TOOLS.has(tool) && !runStarted && runsStarting > 0) await runsDecided;
-        if (MUTATING_TOOLS.has(tool) && runStarted) {
-          return workspace.stamp(failure(
-            `Nothing was changed: you started a run earlier in this turn, and ${tool} would change the canvas under it. Tell the user what you started; make this change in a later message, once the run has finished.`,
-            "Not changed: a run started this turn",
-          ));
-        }
         if (WORKSPACE_TOOLS.has(tool)) {
-          const refused = tool === TOOL_NAMES.saveWorkflow ? null : tabChangeRefusal(live.running === true, runStarted || runsStarting > 0);
-          if (refused) return workspace.stamp(refused);
+          if (tool !== TOOL_NAMES.saveWorkflow && live.running === true) return workspace.stamp(tabsHeldByRun());
           // Stamped with the tab the step leaves live.
           const step = settled(editsInFlight, workspaceStep).then(async () => workspace.stamp(await handlers[tool](parsed.data, workspace.draft)));
           workspaceStep = settled(step);
@@ -216,25 +203,13 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
           return await edit;
         }
         if (tool === TOOL_NAMES.runWorkflow) {
-          runsStarting++;
-          let decided!: () => void;
-          runsDecided = Promise.all([runsDecided, new Promise<void>((resolve) => (decided = resolve))]);
-          try {
-            await settled(editsInFlight, workspaceStep);
-            const result = runWorkflow(workspace.draft, parsed.data as Args<typeof runWorkflowShape>, runStarted);
-            const run = result.ok ? result.ops.find((op): op is RunOp => op.op === "run") : undefined;
-            // Paid runs the user has not seen asked for: a batch, or a run in a tab they are not in, wait for their click.
-            const elsewhere = !!live.tabId && workspace.currentId !== live.tabId;
-            if (run && (run.runs > 1 || elsewhere)) {
-              awaitingClick = clickToRun(workspace.draft, workspace.currentId, run, result.focusNodeIds ?? []);
-              return workspace.stamp(waitForClick(result, run, elsewhere));
-            }
-            if (result.ok) runStarted = true;
-            return workspace.stamp(result);
-          } finally {
-            runsStarting--;
-            decided();
-          }
+          // Checked against the draft once this turn's edits and tab steps before it are in.
+          await settled(editsInFlight, workspaceStep);
+          const planned = planRun(workspace.draft, parsed.data as Args<typeof runWorkflowShape>);
+          if ("failure" in planned) return workspace.stamp(planned.failure);
+          const elsewhere = !!live.tabId && workspace.currentId !== live.tabId;
+          requestedRun = runCard(workspace.draft, workspace.currentId, planned);
+          return workspace.stamp(runSetUp(planned, elsewhere));
         }
         if (tool !== TOOL_NAMES.nameConversation) await workspaceStep;
         return await onLiveTab(tool, parsed.data);
@@ -244,27 +219,18 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
       }
     },
     runOffer() {
-      if (runStarted || runsStarting > 0 || live.running === true) return null;
-      return awaitingClick ?? buildRunOffer(workspace.draft, workspace.currentId);
+      if (live.running === true) return null;
+      return requestedRun ?? buildRunOffer(workspace.draft, workspace.currentId);
     },
   };
 }
 
-/** Why the open workflows can't change now (a run is going, or this turn started one), or null. */
-function tabChangeRefusal(running: boolean, startedThisTurn: boolean): AgentToolResult | null {
-  if (running) {
-    return failure(
-      "Nothing was changed: a run is going on the canvas, and the open workflows can't change until it finishes. Keep working in the live workflow, or tell the user to try again once the run is done.",
-      "Not changed: a run is going",
-    );
-  }
-  if (startedThisTurn) {
-    return failure(
-      "Nothing was changed: you started a run earlier in this turn, and the open workflows can't change while it goes. Tell the user what you started; do this in a later message, once the run has finished.",
-      "Not changed: a run started this turn",
-    );
-  }
-  return null;
+/** Why the open workflows can't change while a run is going. */
+function tabsHeldByRun(): AgentToolResult {
+  return failure(
+    "Nothing was changed: a run is going on the canvas, and the open workflows can't change until it finishes. Keep working in the live workflow, or tell the user to try again once the run is done.",
+    "Not changed: a run is going",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -845,29 +811,37 @@ function arrangeWorkflow(draft: GraphDraft, args: Args<typeof arrangeWorkflowSha
 // Running
 // ---------------------------------------------------------------------------
 
+/** A run run_workflow set up: what the Run card runs, and what to tell the agent about it. */
+interface RunPlan {
+  scope: RunScope;
+  runs: number;
+  /** What runs, in the agent's words. */
+  what: string;
+  /** What runs, in run order: the card's placeholders and Show on canvas. */
+  nodeIds: string[];
+  /** Other branches a "from" run takes along. */
+  others: string[];
+}
+
 /**
- * Starts a run through the browser's runBatch (the `run` op). Validated here
- * against the draft, which already holds this turn's edits: a scope that
- * would find an input empty is refused with the nodes to include instead.
+ * What the Run card should run, checked against the draft, which already
+ * holds this turn's edits: a scope that would find an input empty is refused
+ * with the nodes to include instead. Nothing runs until the user presses it.
  */
-function runWorkflow(draft: GraphDraft, args: Args<typeof runWorkflowShape>, alreadyStarted: boolean): AgentToolResult {
-  if (alreadyStarted) {
-    return failure("You already started a run in this turn; nothing more was started. Its results show on the canvas of the user's next message.", "Already started a run");
-  }
+function planRun(draft: GraphDraft, args: Args<typeof runWorkflowShape>): RunPlan | { failure: AgentToolResult } {
+  const refuse = (text: string, summary: string) => ({ failure: failure(text, summary) });
   if (draft.running) {
-    return failure(
-      "A run is already going on the canvas, so nothing was started. Tell the user; the next message's canvas shows how it went, and you can start another run then if they ask.",
+    return refuse(
+      "A run is already going on the canvas, so no Run button was set up. Tell the user; the next message's canvas shows how it went, and you can set up another run then if they ask.",
       "A run is already going",
     );
   }
-  if (draft.nodes.size === 0) return failure("The canvas is empty: there is nothing to run.", "Nothing to run");
+  if (draft.nodes.size === 0) return refuse("The canvas is empty: there is nothing to run.", "Nothing to run");
   const runs = clampRunCount(args.runs ?? 1);
-  const times = runs > 1 ? ` ×${runs}` : "";
   const find = (key: string) => draft.getNode(key.trim()) ?? draft.getNode(draft.refs.get(key.trim()) ?? "");
 
   let scope: RunScope;
   let what: string;
-  let summary: string;
   let ran: Set<string>;
   /** The nodes whose inputs must hold something: the scope, or what a "from" run leads to. */
   let checked: string[];
@@ -879,31 +853,28 @@ function runWorkflow(draft: GraphDraft, args: Args<typeof runWorkflowShape>, alr
       scope = { kind: "all" };
       ran = new Set([...draft.nodes.keys()].filter(unlocked));
       what = `the whole workflow (${ran.size} node${ran.size === 1 ? "" : "s"})`;
-      summary = `Started the workflow${times}`;
       checked = [...ran];
       break;
     case "nodes": {
       // A lone `node` is the same request.
       const keys = args.nodeIds ?? (args.node ? [args.node] : []);
-      if (keys.length === 0) return failure('scope "nodes" needs nodeIds: the ids of the nodes to run. Nothing was started.', "No nodes to run");
+      if (keys.length === 0) return refuse('scope "nodes" needs nodeIds: the ids of the nodes to run. Nothing was set up.', "No nodes to run");
       const missing = keys.filter((key) => !find(key));
-      if (missing.length > 0) return failure(`Not on the canvas: ${missing.join(", ")}. Nothing was started.`, "Unknown nodes");
+      if (missing.length > 0) return refuse(`Not on the canvas: ${missing.join(", ")}. Nothing was set up.`, "Unknown nodes");
       const ids = [...new Set(keys.map((key) => find(key)!.id))];
       scope = { kind: "nodes", nodeIds: ids };
       what = ids.join(", ");
-      summary = `Started ${ids.length === 1 ? nodeName(draft.getNode(ids[0])!) : `${ids.length} nodes`}${times}`;
       ran = new Set(ids);
       checked = ids;
       break;
     }
     case "from": {
       const key = args.node ?? (args.nodeIds?.length === 1 ? args.nodeIds[0] : undefined);
-      if (!key) return failure('scope "from" needs node: the id of the node to start from. Nothing was started.', "No node to start from");
+      if (!key) return refuse('scope "from" needs node: the id of the node to start from. Nothing was set up.', "No node to start from");
       const start = find(key);
-      if (!start) return failure(`Not on the canvas: ${key}. Nothing was started.`, "Unknown node");
+      if (!start) return refuse(`Not on the canvas: ${key}. Nothing was set up.`, "Unknown node");
       scope = { kind: "from", nodeId: start.id };
       what = `from ${start.id} on`;
-      summary = `Started from ${nodeName(start)}${times}`;
       ran = new Set([...runsFrom(draft, start.id)].filter(unlocked));
       const downstream = downstreamOf(draft, start.id);
       checked = [...downstream].filter((id) => ran.has(id));
@@ -915,22 +886,14 @@ function runWorkflow(draft: GraphDraft, args: Args<typeof runWorkflowShape>, alr
 
   const problems = emptyInputs(draft, checked, ran);
   if (problems.length > 0) {
-    return failure(
-      [`Nothing was started: these inputs of the run would be empty.`, ...problems.map((problem) => `- ${problem}`)].join("\n"),
+    return refuse(
+      [`Nothing was set up: these inputs of the run would be empty.`, ...problems.map((problem) => `- ${problem}`)].join("\n"),
       "Inputs not ready",
     );
   }
-  const text = [
-    `Started a run of ${what}${runs > 1 ? `, ${runs} times one after another` : ""}. It runs on the user's canvas after your edits; you do not see its results in this turn.`,
-    ...(others.length > 0
-      ? [`It also runs ${others.join(", ")}: other branches at the same depth or later, which a run from a node always includes. Tell the user.`]
-      : []),
-    "Tell the user briefly what you started. The canvas in their next message shows each node's status, error and output: report how it went from that, never before.",
-  ].join("\n");
-  // What runs, for the chat's placeholders and Show on canvas: a "from" run
-  // runs every later level, not only what it leads to.
+  // A "from" run runs every later level, not only what it leads to.
   const planned = new Set(scope.kind === "from" ? ran : checked);
-  return { ok: true, text, summary: clip(summary), ops: [{ op: "run", scope, runs }], focusNodeIds: levelOrder(draft).filter((id) => planned.has(id)) };
+  return { scope, runs, what, nodeIds: levelOrder(draft).filter((id) => planned.has(id)), others };
 }
 
 /**
@@ -996,11 +959,9 @@ function levelOrder(draft: GraphDraft): string[] {
   return [...order, ...[...draft.nodes.keys()].filter((id) => !placed.has(id))];
 }
 
-type RunOp = Extract<AgentGraphOp, { op: "run" }>;
-
-/** The Run card for a run that waits for the user: its scope and count, in the tab it is for. */
-function clickToRun(draft: GraphDraft, tabId: string | undefined, run: RunOp, planned: string[]): AgentRunOffer {
-  const { scope } = run;
+/** The Run card for the run the agent set up: its scope and count, in the tab it is for. */
+function runCard(draft: GraphDraft, tabId: string | undefined, plan: RunPlan): AgentRunOffer {
+  const { scope, runs } = plan;
   const label =
     scope.kind === "all"
       ? "Run workflow"
@@ -1014,22 +975,26 @@ function clickToRun(draft: GraphDraft, tabId: string | undefined, run: RunOp, pl
     ...(tabId ? { tabId } : {}),
     ...(draft.workflowName ? { workflowName: draft.workflowName } : {}),
     ...(draft.workflowId ? { workflowId: draft.workflowId } : {}),
-    primary: { scope, label: clip(label), nodeIds: planned, ...(run.runs > 1 ? { runs: run.runs } : {}) },
+    primary: { scope, label: clip(label), nodeIds: plan.nodeIds, ...(runs > 1 ? { runs } : {}) },
     alternatives: [],
   };
 }
 
-/** What run_workflow says when its run waits for the user's click instead of starting. */
-function waitForClick(result: AgentToolResult, run: RunOp, elsewhere: boolean): AgentToolResult {
-  const what = run.runs > 1 ? `${run.runs} runs one after another` : "a run in a workflow tab the user is not in";
+/** What run_workflow tells the agent once the Run card is set up. */
+function runSetUp(plan: RunPlan, elsewhere: boolean): AgentToolResult {
+  const { runs, what, others } = plan;
   return {
-    ...result,
-    ops: [],
+    ok: true,
     text: [
-      `Nothing has started: ${what} waits for the user to press Run. The Run button under your reply is set up for it${run.runs > 1 ? ` (${run.runs} runs)` : ""}${elsewhere ? " in that tab" : ""}.`,
-      "Tell the user to press it when they are ready. Do not call run_workflow again for it.",
+      `Nothing has started: runs wait for the user. The Run button under your reply is set up for ${what}${runs > 1 ? `, ${runs} runs one after another` : ""}${elsewhere ? ", in this workflow's tab" : ""}.`,
+      ...(others.length > 0
+        ? [`It also runs ${others.join(", ")}: other branches at the same depth or later, which a run from a node always includes. Tell the user.`]
+        : []),
+      "Tell the user to press it when they are ready; don't call run_workflow again for it. The canvas in their next message shows each node's status, error and output: report how it went from that, never before.",
     ].join("\n"),
-    summary: clip(`Ready to run${run.runs > 1 ? ` ×${run.runs}` : ""}: press Run below`),
+    summary: clip(`Ready to run${runs > 1 ? ` ×${runs}` : ""}: press Run below`),
+    ops: [],
+    focusNodeIds: plan.nodeIds,
   };
 }
 
@@ -1338,7 +1303,7 @@ function nextSteps(draft: GraphDraft, createdIds: string[], removed: RemovedNode
     hints.push(`${modelless.join(", ")} ha${modelless.length === 1 ? "s" : "ve"} no model: set one from search_models, or tell the user to pick one in the node (it needs a fal, Replicate, Kie, WaveSpeed or ComfyUI key).`);
   }
   if ([...types].some((t) => GENERATOR_TYPES.has(t))) {
-    hints.push("Nothing has run yet: the user presses Run (Ctrl/Cmd+Enter), or asks you to run it.");
+    hints.push("Nothing has run yet: runs wait for the user to press Run.");
   }
   return hints;
 }
