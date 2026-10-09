@@ -1759,14 +1759,58 @@ describe("run_workflow", () => {
       .execute("update_node", { node: "nanoBanana-3", settings: { model: { provider: "fal", modelId: "fal-ai/flux" } } })
       .then(() => finished.push("edit"));
     const run = runtime.execute("run_workflow", { scope: "all" }).then(() => finished.push("run"));
-    // An edit sent while the run waits would land under it.
-    const late = await runtime.execute("update_node", { node: "prompt-1", settings: { prompt: "a wolf" } });
-    expect(late.ok).toBe(false);
-    expect(late.ops).toEqual([]);
+    // An edit sent while the run is being decided waits to hear whether it started: it did, so the edit would land under it.
+    const late = runtime.execute("update_node", { node: "prompt-1", settings: { prompt: "a wolf" } });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(finished).toEqual([]);
     release();
-    await Promise.all([edit, run]);
+    const [, , refused] = await Promise.all([edit, run, late]);
     expect(finished).toEqual(["edit", "run"]);
+    expect(refused).toMatchObject({ ok: false, ops: [], summary: "Not changed: a run started this turn" });
+  });
+
+  it("knows a locked group's nodes never run: what they feed stays empty", async () => {
+    const state: StoreState = {
+      nodes: [
+        storeNode("prompt-1", "prompt", { x: 0, y: 0 }, { prompt: "a fox" }),
+        storeNode("llmGenerate-2", "llmGenerate", { x: 400, y: 0 }, {}, { groupId: "group-1" }),
+        storeNode("nanoBanana-3", "nanoBanana", { x: 800, y: 0 }),
+      ],
+      edges: [storeEdge("prompt-1", "text", "llmGenerate-2", "text"), storeEdge("llmGenerate-2", "text", "nanoBanana-3", "text")],
+      groups: { "group-1": { id: "group-1", name: "Writer", color: "blue", position: { x: 380, y: -20 }, size: { width: 360, height: 300 }, locked: true } },
+    };
+    for (const args of [{ scope: "all" }, { scope: "from", node: "prompt-1" }]) {
+      const result = await call(runtimeFor(state), "run_workflow", args);
+      expect(result.ok, JSON.stringify(args)).toBe(false);
+      expect(result.text).toContain("llmGenerate-2 (LLM Generate) feeds nanoBanana-3 but has no output yet, and its group is locked, so no run reaches it");
+    }
+  });
+
+  it("says when a run from a node also runs other branches", async () => {
+    const runtime = runtimeFor({
+      nodes: [
+        storeNode("prompt-1", "prompt", { x: 0, y: 0 }, { prompt: "a fox" }),
+        storeNode("nanoBanana-2", "nanoBanana", { x: 400, y: 0 }),
+        storeNode("prompt-3", "prompt", { x: 0, y: 400 }, { prompt: "a wolf" }),
+        storeNode("nanoBanana-4", "nanoBanana", { x: 400, y: 400 }),
+      ],
+      edges: [storeEdge("prompt-1", "text", "nanoBanana-2", "text"), storeEdge("prompt-3", "text", "nanoBanana-4", "text")],
+    });
+    const result = await call(runtime, "run_workflow", { scope: "from", node: "prompt-1" });
+    expect(result.ok, result.text).toBe(true);
+    expect(result.text).toContain("It also runs nanoBanana-4: other branches at the same depth or later");
+  });
+
+  it("lets an edit sent alongside a run go ahead when the run is refused", async () => {
+    const runtime = runtimeFor({
+      nodes: [storeNode("prompt-1", "prompt", { x: 0, y: 0 }, { prompt: "" }), storeNode("nanoBanana-2", "nanoBanana", { x: 400, y: 0 })],
+      edges: [storeEdge("prompt-1", "text", "nanoBanana-2", "text")],
+    });
+    const [run, edit] = await Promise.all([
+      runtime.execute("run_workflow", { scope: "all" }),
+      runtime.execute("update_node", { node: "prompt-1", settings: { prompt: "a fox" } }),
+    ]);
+    expect(run).toMatchObject({ ok: false, summary: "Inputs not ready" });
+    expect(edit.ok, edit.text).toBe(true);
   });
 });

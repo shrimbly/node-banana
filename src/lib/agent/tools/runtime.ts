@@ -90,6 +90,8 @@ const MUTATING_TOOLS: ReadonlySet<string> = new Set([TOOL_NAMES.createWorkflow, 
 const EDIT_TOOLS: ReadonlySet<string> = new Set([...MUTATING_TOOLS, TOOL_NAMES.arrangeWorkflow]);
 /** Tools that change the open workflows (`workspace` results), one after another with the edits around them. */
 const WORKSPACE_TOOLS: ReadonlySet<string> = new Set([TOOL_NAMES.switchWorkflow, TOOL_NAMES.newWorkflow, TOOL_NAMES.saveWorkflow]);
+/** Ops that change what the chat's map of a built workflow draws. */
+const SHAPE_OPS: ReadonlySet<string> = new Set(["clearCanvas", "addNode", "removeNode", "moveNode", "addEdge", "removeEdge"]);
 /** What a workflow built from scratch, and never saved, tells the agent to do next. */
 const SAVE_NEW_WORKFLOW =
   "This is a new workflow and it is not saved: once it is built, and before any run, save it with save_workflow, named for what it makes (keep a name it already has), unless the user said not to.";
@@ -118,6 +120,8 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
   // A run started (or is being started) this turn: the canvas must stay as the run found it.
   let runStarted = false;
   let runsStarting = 0;
+  // Settles once every run_workflow call being decided has been: an edit issued alongside one waits to hear whether it started.
+  let runsDecided: Promise<unknown> = Promise.resolve();
   // Draft edits still being resolved; a run or a tab step waits for them, so its result follows theirs.
   let editsInFlight: Promise<unknown> = Promise.resolve();
   // The last tab step; edits and reads wait for it, so none lands on the tab it is leaving.
@@ -156,7 +160,8 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
       // Built from scratch where no save will follow by itself: the agent saves it, as a user would.
       const fromScratch = (startedEmpty || result.replacedCanvas) && draft.nodes.size > 1;
       if (fromScratch && workspace.isSaved(tabId) === false) text = `${text}\n${SAVE_NEW_WORKFLOW}`;
-    } else if (!builtTabs.has(tabId)) {
+    } else if (!builtTabs.has(tabId) || !result.ops.some((op) => SHAPE_OPS.has(op.op))) {
+      // Only a change the map shows needs a new one: each copy is persisted, and re-sent with every later message.
       return result;
     }
     const graph = graphPreview(draft);
@@ -183,7 +188,8 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
         if (!parsed.success) {
           return workspace.stamp(failure(formatZodError(definition, parsed.error), `Invalid arguments for ${tool}`));
         }
-        if (MUTATING_TOOLS.has(tool) && (runStarted || runsStarting > 0)) {
+        if (MUTATING_TOOLS.has(tool) && !runStarted && runsStarting > 0) await runsDecided;
+        if (MUTATING_TOOLS.has(tool) && runStarted) {
           return workspace.stamp(failure(
             `Nothing was changed: you started a run earlier in this turn, and ${tool} would change the canvas under it. Tell the user what you started; make this change in a later message, once the run has finished.`,
             "Not changed: a run started this turn",
@@ -208,6 +214,8 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
         }
         if (tool === TOOL_NAMES.runWorkflow) {
           runsStarting++;
+          let decided!: () => void;
+          runsDecided = Promise.all([runsDecided, new Promise<void>((resolve) => (decided = resolve))]);
           try {
             await settled(editsInFlight, workspaceStep);
             const result = runWorkflow(workspace.draft, parsed.data as Args<typeof runWorkflowShape>, runStarted);
@@ -215,6 +223,7 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
             return workspace.stamp(result);
           } finally {
             runsStarting--;
+            decided();
           }
         }
         if (tool !== TOOL_NAMES.nameConversation) await workspaceStep;
@@ -852,15 +861,16 @@ function runWorkflow(draft: GraphDraft, args: Args<typeof runWorkflowShape>, alr
   let ran: Set<string>;
   /** The nodes whose inputs must hold something: the scope, or what a "from" run leads to. */
   let checked: string[];
-  // A whole-workflow run skips a locked group's nodes.
+  // A run skips a locked group's nodes: they never run, so what they would feed stays as it is.
   const unlocked = (id: string) => !draft.getGroup(draft.getNode(id)?.groupId)?.locked;
+  let others: string[] = [];
   switch (args.scope) {
     case "all":
       scope = { kind: "all" };
-      what = `the whole workflow (${draft.nodes.size} node${draft.nodes.size === 1 ? "" : "s"})`;
+      ran = new Set([...draft.nodes.keys()].filter(unlocked));
+      what = `the whole workflow (${ran.size} node${ran.size === 1 ? "" : "s"})`;
       summary = `Started the workflow${times}`;
-      ran = new Set(draft.nodes.keys());
-      checked = [...ran].filter(unlocked);
+      checked = [...ran];
       break;
     case "nodes": {
       // A lone `node` is the same request.
@@ -884,8 +894,11 @@ function runWorkflow(draft: GraphDraft, args: Args<typeof runWorkflowShape>, alr
       scope = { kind: "from", nodeId: start.id };
       what = `from ${start.id} on`;
       summary = `Started from ${nodeName(start)}${times}`;
-      ran = runsFrom(draft, start.id);
-      checked = [...downstreamOf(draft, start.id)].filter((id) => ran.has(id) && unlocked(id));
+      ran = new Set([...runsFrom(draft, start.id)].filter(unlocked));
+      const downstream = downstreamOf(draft, start.id);
+      checked = [...downstream].filter((id) => ran.has(id));
+      // The canvas's Run from runs every node at the start's depth or later, other branches too.
+      others = [...ran].filter((id) => !downstream.has(id) && GENERATOR_TYPES.has(draft.getNode(id)!.type));
       break;
     }
   }
@@ -899,11 +912,14 @@ function runWorkflow(draft: GraphDraft, args: Args<typeof runWorkflowShape>, alr
   }
   const text = [
     `Started a run of ${what}${runs > 1 ? `, ${runs} times one after another` : ""}. It runs on the user's canvas after your edits; you do not see its results in this turn.`,
+    ...(others.length > 0
+      ? [`It also runs ${others.join(", ")}: other branches at the same depth or later, which a run from a node always includes. Tell the user.`]
+      : []),
     "Tell the user briefly what you started. The canvas in their next message shows each node's status, error and output: report how it went from that, never before.",
   ].join("\n");
   // What runs, for the chat's placeholders and Show on canvas: a "from" run
   // runs every later level, not only what it leads to.
-  const planned = new Set(scope.kind === "from" ? [...ran].filter(unlocked) : checked);
+  const planned = new Set(scope.kind === "from" ? ran : checked);
   return { ok: true, text, summary: clip(summary), ops: [{ op: "run", scope, runs }], focusNodeIds: levelOrder(draft).filter((id) => planned.has(id)) };
 }
 
@@ -925,11 +941,12 @@ function buildRunOffer(draft: GraphDraft, tabId: string | undefined): AgentRunOf
   const order = levelOrder(draft);
   const runnable = order.filter(unlocked);
   const whole = (label: string): AgentRunOption => ({ scope: { kind: "all" }, label, nodeIds: runnable });
-  const wholeReady = emptyInputs(draft, runnable, new Set(draft.nodes.keys())).length === 0;
+  const wholeReady = emptyInputs(draft, runnable, new Set(runnable)).length === 0;
   const offer = (primary: AgentRunOption, alternatives: AgentRunOption[]): AgentRunOffer => ({
     offerId: `offer_${generateId()}`,
     ...(tabId ? { tabId } : {}),
     ...(draft.workflowName ? { workflowName: draft.workflowName } : {}),
+    ...(draft.workflowId ? { workflowId: draft.workflowId } : {}),
     primary,
     alternatives,
   });
@@ -1040,7 +1057,11 @@ function emptyInputs(draft: GraphDraft, checked: readonly string[], ran: Readonl
     } else if (lack === "text") {
       problems.set(source.id, `${feeds} has no text: write it first.`);
     } else if (!ran.has(source.id)) {
-      if (lack) problems.set(source.id, `${feeds} has no output yet: include ${source.id} in the run (in nodeIds, or start from it), or run the whole workflow.`);
+      if (lack && draft.getGroup(source.groupId)?.locked) {
+        problems.set(source.id, `${feeds} has no output yet, and its group is locked, so no run reaches it: ask the user to unlock the group.`);
+      } else if (lack) {
+        problems.set(source.id, `${feeds} has no output yet: include ${source.id} in the run (in nodeIds, or start from it), or run the whole workflow.`);
+      }
     } else if (via.length > 0) {
       const between = ids(via);
       problems.set(between, `${between} pass${via.length === 1 ? "es" : ""} ${source.id}'s output on to ${target}: include ${between} in the run too, so ${target} waits for ${source.id}.`);

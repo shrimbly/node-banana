@@ -309,7 +309,7 @@ describe("agent end to end (scripted harness, real bridge, runtime, prompts and 
 
     // The next turn sees the groups in its canvas block and edits one by name.
     const second = scriptedHarness(async function* (params) {
-      expect(params.prompt).toContain("- Scene set [group-ag1] blue box");
+      expect(params.prompt).toContain('- "Scene set" [group-ag1] blue box');
       const result = await params.tools.execute("node_banana.edit_workflow", JSON.stringify({ operations: [{ op: "update_group", group: "Scene set", name: "Establishing shot", color: "green" }] }));
       expect(result.ok, result.text).toBe(true);
       yield { type: "text-delta", id: "t", delta: "Renamed." };

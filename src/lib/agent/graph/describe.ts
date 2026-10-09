@@ -63,7 +63,7 @@ export function describeWorkflow(graph: DescribableGraph, options: DescribeOptio
   const shown = new Set(nodes.map((n) => n.id));
 
   const lines: string[] = [];
-  const heading = `${graph.workflowName ? `Workflow "${graph.workflowName}": ` : ""}${all.length} node${all.length === 1 ? "" : "s"}, ${graph.edges.length} connection${graph.edges.length === 1 ? "" : "s"}.`;
+  const heading = `${graph.workflowName ? `Workflow ${asName(graph.workflowName)}: ` : ""}${all.length} node${all.length === 1 ? "" : "s"}, ${graph.edges.length} connection${graph.edges.length === 1 ? "" : "s"}.`;
   lines.push(heading);
   if (graph.running) lines.push("A run is in progress: nodes with status loading are running now, and results may still change.");
   if (graph.selectedNodeIds.length > 0) lines.push(`Selected by the user: ${graph.selectedNodeIds.join(", ")}.`);
@@ -96,7 +96,7 @@ export function describeWorkflow(graph: DescribableGraph, options: DescribeOptio
       const box = group.position && group.size
         ? ` box (${Math.round(group.position.x)}, ${Math.round(group.position.y)}) ${Math.round(group.size.width)}×${Math.round(group.size.height)}`
         : "";
-      lines.push(`- ${group.name} [${group.id}]${group.color ? ` ${group.color}` : ""}${group.locked ? " locked" : ""}${box}${members.length ? `: ${members.join(", ")}` : ": no nodes"}`);
+      lines.push(`- ${asName(group.name)} [${group.id}]${group.color ? ` ${group.color}` : ""}${group.locked ? " locked" : ""}${box}${members.length ? `: ${members.join(", ")}` : ": no nodes"}`);
     }
   }
   return lines.join("\n");
@@ -114,7 +114,7 @@ export function describeTabs(tabs: readonly AgentTabSummary[]): string {
 
 /** A tab's workflow name as the model reads it: quoted, or "untitled". */
 export function tabName(tab: Pick<AgentTabSummary, "name">): string {
-  return tab.name ? `"${tab.name}"` : "untitled";
+  return tab.name ? asName(tab.name) : "untitled";
 }
 
 function prioritize(nodes: DraftNode[], graph: DescribableGraph): DraftNode[] {
@@ -133,7 +133,7 @@ export function edgeLine(edge: GraphEdgeLike): string {
 /** One line: id, type, title, key settings, content and status. */
 export function nodeLine(node: DraftNode, textPreview = DEFAULT_TEXT_PREVIEW): string {
   const entry = NODE_CATALOG[node.type];
-  const title = typeof node.data.customTitle === "string" && node.data.customTitle ? ` "${node.data.customTitle}"` : "";
+  const title = typeof node.data.customTitle === "string" && node.data.customTitle ? ` ${asName(node.data.customTitle)}` : "";
   const parts = [`${node.id} ${node.type} (${entry.displayName})${title}`];
   const settings = keySettings(node, textPreview);
   if (settings) parts.push(settings);
@@ -290,7 +290,7 @@ function keySettings(node: DraftNode, textPreview: number): string {
     case "switch": {
       const switches = Array.isArray(d.switches) ? (d.switches as Array<{ id: string; name: string; enabled: boolean }>) : [];
       const type = str(d.inputType);
-      bits.push(`${type ? `routes ${type}` : "no input"}; outputs ${switches.map((s) => `"${s.name}" [${s.id}]${s.enabled ? "" : " off"}`).join(", ")}`);
+      bits.push(`${type ? `routes ${type}` : "no input"}; outputs ${switches.map((s) => `${asName(String(s.name ?? ""))} [${s.id}]${s.enabled ? "" : " off"}`).join(", ")}`);
       break;
     }
     case "conditionalSwitch": {
@@ -351,8 +351,19 @@ function parameterText(value: unknown): string {
   return `modelParameters ${shown.join(", ")}${entries.length > PARAMETERS_SHOWN ? `, … (${entries.length - PARAMETERS_SHOWN} more; get_workflow detail "full" shows all)` : ""}`;
 }
 
+/**
+ * Text from the canvas or a file, as data: JSON-quoted, its angle brackets
+ * escaped, so it can never open or close a block of the prompt around it.
+ */
 function quote(text: string, max: number): string {
-  return JSON.stringify(text.length > max ? `${text.slice(0, max)}…` : text);
+  return asData(JSON.stringify(text.length > max ? `${text.slice(0, max)}…` : text));
+}
+
+const asData = (quoted: string) => quoted.replace(/</g, "\\u003c").replace(/>/g, "\\u003e");
+
+/** A name or title someone gave (a tab, node, group, file): one line, quoted, as data. */
+export function asName(text: string, max = 120): string {
+  return asData(JSON.stringify(oneLine(text, max)));
 }
 
 function oneLine(text: string, max: number): string {

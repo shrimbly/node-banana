@@ -27,6 +27,7 @@ export interface BuildAgentSnapshotInput {
   /** Visible area in flow coordinates. */
   viewport?: AgentWorkflowSnapshot["viewport"];
   workflowName?: string;
+  workflowId?: string;
   /** A run (or a batch of runs) is going on the canvas. */
   running?: boolean;
   /**
@@ -102,6 +103,7 @@ export function buildAgentSnapshot(input: BuildAgentSnapshotInput): AgentWorkflo
     selectedNodeIds,
     ...(validViewport(input.viewport) ? { viewport: roundViewport(input.viewport!) } : {}),
     ...(input.workflowName ? { workflowName: input.workflowName } : {}),
+    ...(input.workflowId ? { workflowId: input.workflowId } : {}),
     ...(input.running ? { running: true as const } : {}),
   };
   const nodeDefaults = stickyDefaults(input.createDefaultNodeData);
@@ -154,29 +156,32 @@ function snapshotNode(node: WorkflowNode): AgentSnapshotNode {
 /** How many of a node's results the snapshot names: view_outputs compares at most this many takes. */
 export const SNAPSHOT_OUTPUTS_PER_NODE = 4;
 
-/** The carousels a node keeps its results in, and the field that says which one it shows. */
-const OUTPUT_HISTORIES: Array<{ history: string; selected: string; kind: AgentSnapshotOutput["kind"] }> = [
-  { history: "imageHistory", selected: "selectedHistoryIndex", kind: "image" },
-  { history: "videoHistory", selected: "selectedVideoHistoryIndex", kind: "video" },
-  { history: "audioHistory", selected: "selectedAudioHistoryIndex", kind: "audio" },
+/** The carousels a node keeps its results in, the field that says which one it shows, and the fields that hold it. */
+const OUTPUT_HISTORIES: Array<{ history: string; selected: string; kind: AgentSnapshotOutput["kind"]; holds: string[] }> = [
+  { history: "imageHistory", selected: "selectedHistoryIndex", kind: "image", holds: ["outputImage", "outputImageRef"] },
+  { history: "videoHistory", selected: "selectedVideoHistoryIndex", kind: "video", holds: ["outputVideo", "outputVideoRef"] },
+  { history: "audioHistory", selected: "selectedAudioHistoryIndex", kind: "audio", holds: ["outputAudio", "outputAudioRef"] },
 ];
 
 /** The node's results the asset library holds: the one it shows, then the newest others (histories keep the newest first). */
 export function outputsOf(data: Record<string, unknown>): AgentSnapshotOutput[] {
   const outputs: AgentSnapshotOutput[] = [];
-  for (const { history, selected, kind } of OUTPUT_HISTORIES) {
+  for (const { history, selected, kind, holds } of OUTPUT_HISTORIES) {
     const entries = Array.isArray(data[history]) ? (data[history] as unknown[]) : [];
     const ids = entries.map((entry) =>
       entry && typeof entry === "object" && typeof (entry as { assetId?: unknown }).assetId === "string"
         ? (entry as { assetId: string }).assetId
         : null,
     );
+    // Clearing a node's output leaves its carousel as it was: then it shows none of them.
+    const showing = holds.some((field) => typeof data[field] === "string" && data[field]);
     const index = typeof data[selected] === "number" ? (data[selected] as number) : 0;
-    const shown = ids[index];
-    if (shown) outputs.push({ assetId: shown, kind, current: true });
+    const shown = showing ? ids[index] : null;
+    const newest = (id: string) => (id === ids[0] ? { newest: true as const } : {});
+    if (shown) outputs.push({ assetId: shown, kind, current: true, ...newest(shown) });
     for (const id of ids) {
       if (outputs.length >= SNAPSHOT_OUTPUTS_PER_NODE) break;
-      if (id && id !== shown) outputs.push({ assetId: id, kind });
+      if (id && id !== shown) outputs.push({ assetId: id, kind, ...newest(id) });
     }
   }
   return outputs.slice(0, SNAPSHOT_OUTPUTS_PER_NODE);

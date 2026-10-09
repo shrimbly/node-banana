@@ -194,9 +194,13 @@ describe("the graph of a built workflow", () => {
     expect(built.graph!.nodes[1].slice(1, 3)).toEqual([add.position.x, add.position.y]);
 
     expect((await call(runtime, "get_workflow", {})).graph).toBeUndefined();
-    const later = await call(runtime, "update_node", { node: "prompt-ag1", settings: { prompt: "a tabby cat" } });
-    expect(later.ok, later.text).toBe(true);
-    expect(later.graph?.nodes).toHaveLength(2);
+    // A settings change leaves the map as it was: no new copy to persist.
+    const setting = await call(runtime, "update_node", { node: "prompt-ag1", settings: { prompt: "a tabby cat" } });
+    expect(setting.ok, setting.text).toBe(true);
+    expect(setting.graph).toBeUndefined();
+    const added = await call(runtime, "edit_workflow", { operations: [{ op: "add_node", ref: "o", type: "output" }] });
+    expect(added.ok, added.text).toBe(true);
+    expect(added.graph?.nodes).toHaveLength(3);
 
     await call(runtime, "switch_workflow", { tab: "tab-a" });
     expect((await call(runtime, "update_node", { node: "prompt-1", settings: { prompt: "a grey fox" } })).graph).toBeUndefined();

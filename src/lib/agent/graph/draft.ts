@@ -186,6 +186,8 @@ export class GraphDraft {
   selectedNodeIds: string[];
   viewport: AgentWorkflowSnapshot["viewport"];
   workflowName?: string;
+  /** The store's workflowId when the turn began, if it had one. */
+  readonly workflowId?: string;
   /** A run was going on the canvas when the turn began. */
   readonly running: boolean;
   /** Next base36 suffix for `${type}-ag${suffix}` ids. */
@@ -241,6 +243,7 @@ export class GraphDraft {
     this.selectedNodeIds = (Array.isArray(snapshot?.selectedNodeIds) ? snapshot.selectedNodeIds : []).filter((id) => this.nodes.has(id));
     this.viewport = isRecord(snapshot?.viewport) ? { ...snapshot.viewport } : undefined;
     this.workflowName = typeof snapshot?.workflowName === "string" ? snapshot.workflowName : undefined;
+    this.workflowId = typeof snapshot?.workflowId === "string" && snapshot.workflowId ? snapshot.workflowId : undefined;
     this.running = snapshot?.running === true;
     this.nextSuffix = nextAgentSuffix([...this.nodes.keys()]);
     this.nextGroupSuffix = nextAgentSuffix(this.groups.map((g) => g.id));

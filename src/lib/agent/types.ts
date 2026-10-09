@@ -433,6 +433,8 @@ export interface AgentSnapshotOutput {
   kind: "image" | "video" | "audio";
   /** The result the node shows now. */
   current?: true;
+  /** The node's latest result. */
+  newest?: true;
 }
 
 export interface AgentSnapshotEdge {
@@ -471,6 +473,8 @@ export interface AgentWorkflowSnapshot {
   /** Visible area in flow coordinates, for placing new work where the user is looking. */
   viewport?: { x: number; y: number; width: number; height: number; zoom: number };
   workflowName?: string;
+  /** The store's workflowId: which workflow this is, so a Run offer can tell it from another loaded into the tab later. */
+  workflowId?: string;
   /**
    * A run (or a batch of runs) was going on the canvas when the message was
    * sent; nodes' `status` shows how far it got. Set only when true.
@@ -523,6 +527,8 @@ export interface AgentRunOffer {
   /** The tab the offer is for; running it from another tab switches there first. */
   tabId?: string;
   workflowName?: string;
+  /** The workflow it was made for, when it had an id: another loaded into the tab since is not run. */
+  workflowId?: string;
   primary: AgentRunOption;
   /** Other scopes worth offering, e.g. the whole workflow when the primary is narrower. */
   alternatives: AgentRunOption[];
@@ -571,6 +577,8 @@ export interface AgentRunRecord {
   anchor: { toolCallId: string } | { offerId: string };
   tabId: string;
   workflowName?: string;
+  /** The workflow the run started on: Run again refuses another loaded into that tab since. */
+  workflowId?: string;
   label: string;
   scope: RunScope;
   runs: number;

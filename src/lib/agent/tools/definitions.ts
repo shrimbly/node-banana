@@ -193,7 +193,7 @@ export const viewOutputsShape = {
     .min(1)
     .max(4)
     .optional()
-    .describe("Results per node: 1 (the default) is the one it shows; up to 4 adds its latest earlier takes, newest first, to compare runs."),
+    .describe("Results per node: 1 (the default) is the one it shows; up to 4 adds its other recent takes, newest first, to compare runs."),
 };
 
 export const getPromptGuideShape = {
@@ -220,7 +220,7 @@ export const getPromptGuideShape = {
 export const runWorkflowShape = {
   scope: z
     .enum(["nodes", "all", "from"])
-    .describe('"nodes": only nodeIds, fed by the outputs the nodes before them already hold. "all": the whole workflow, as the Run button does. "from": node and everything after it, fed by the outputs the nodes before it hold.'),
+    .describe('"nodes": only nodeIds, fed by the outputs the nodes before them already hold. "all": the whole workflow, as the Run button does. "from": node and everything after it, and every other node at its depth or later (other branches too, as Run from on the canvas does), fed by the outputs the nodes before it hold.'),
   nodeIds: z.array(z.string()).optional().describe('scope "nodes": the nodes to run (ids, or refs from this turn).'),
   node: z.string().optional().describe('scope "from": the node to start from (an id, or a ref from this turn).'),
   runs: z.number().optional().describe("How many runs, one after another (1-50, default 1). Only when the user asked for several."),

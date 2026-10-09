@@ -44,6 +44,16 @@ const withGroup = (locked = false): StoreState => {
 const ALL_CHAIN = ["prompt-1", "llmGenerate-2", "nanoBanana-3", "output-4"];
 
 describe("runOffer", () => {
+  it("names the workflow it was made for, so the browser never runs it on another loaded into the tab", async () => {
+    const runtime = createAgentToolRuntime(snapshotOf(EMPTY, { tabId: "tab-a" }), { randomId: sequentialIds() });
+    const plain = createAgentToolRuntime({ ...snapshotOf(EMPTY, { tabId: "tab-a" }), workflowId: "wf_123" }, { randomId: sequentialIds() });
+    for (const each of [runtime, plain]) {
+      await call(each, "create_workflow", { nodes: [{ ref: "p", type: "prompt", settings: { prompt: "a fox" } }, { ref: "g", type: "nanoBanana" }], connections: [{ from: "p", to: "g" }] });
+    }
+    expect(runtime.runOffer!()).not.toHaveProperty("workflowId");
+    expect(plain.runOffer!()).toMatchObject({ tabId: "tab-a", workflowId: "wf_123" });
+  });
+
   it("offers the whole workflow for one built from an empty canvas", async () => {
     const runtime = runtimeFor(EMPTY);
     expect(runtime.runOffer!()).toBeNull();

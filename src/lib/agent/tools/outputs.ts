@@ -7,6 +7,7 @@
 import type { AgentSnapshotOutput, AgentToolImage, AgentToolResult } from "../types";
 import type { DraftNode, GraphDraft } from "../graph/draft";
 import { titleOf } from "../graph/draft";
+import { asName } from "../graph/describe";
 
 /** Images per call: about 1,400 tokens each at 1024px, so a dozen stays well inside a turn. */
 export const VIEW_OUTPUTS_MAX_IMAGES = 12;
@@ -32,9 +33,13 @@ interface ViewOutputsArgs {
   takes?: number;
 }
 
-const clip = (text: string, limit: number) => (text.length > limit ? `${text.slice(0, limit - 1)}…` : text);
 const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? "" : "s"}`;
-const nameOf = (node: DraftNode) => `${titleOf(node) ?? node.type} (${node.id})`;
+const nameOf = (node: DraftNode) => {
+  const title = titleOf(node);
+  return `${title ? asName(title) : node.type} (${node.id})`;
+};
+/** Nodes that hold a file the user brought, never a generated result. */
+const UPLOAD_TYPES: ReadonlySet<string> = new Set(["imageInput", "videoInput", "audioInput"]);
 
 export async function viewOutputs(draft: GraphDraft, reader: AgentOutputReader, args: ViewOutputsArgs): Promise<AgentToolResult> {
   const notes: string[] = [];
@@ -54,14 +59,21 @@ export async function viewOutputs(draft: GraphDraft, reader: AgentOutputReader, 
   }
 
   const takes = Math.min(Math.max(args.takes ?? 1, 1), 4);
-  const wanted: Array<{ node: DraftNode; output: AgentSnapshotOutput; take: number }> = [];
+  const wanted: Array<{ node: DraftNode; output: AgentSnapshotOutput }> = [];
   for (const node of nodes) {
     const outputs = node.outputs ?? [];
     if (outputs.length === 0) {
-      notes.push(`${nameOf(node)} has no generated result to look at${node.content?.image || node.content?.video ? " (an uploaded or copied file is not viewable)" : ""}.`);
+      const holds = node.content?.image || node.content?.video;
+      notes.push(
+        !holds
+          ? `${nameOf(node)} has no generated result to look at.`
+          : UPLOAD_TYPES.has(node.type)
+            ? `${nameOf(node)} holds an uploaded file, which cannot be viewed.`
+            : `${nameOf(node)}'s result is not in the asset library (made before it, or while it was off), so it cannot be viewed.`,
+      );
       continue;
     }
-    outputs.slice(0, takes).forEach((output, take) => wanted.push({ node, output, take }));
+    for (const output of outputs.slice(0, takes)) wanted.push({ node, output });
   }
   const shown = wanted.slice(0, VIEW_OUTPUTS_MAX_IMAGES);
   if (wanted.length > shown.length) {
@@ -71,16 +83,26 @@ export async function viewOutputs(draft: GraphDraft, reader: AgentOutputReader, 
   const read = await Promise.all(shown.map(({ output }) => reader.read(output.assetId).catch(() => null)));
   const images: AgentToolImage[] = [];
   const seenNodes = new Set<string>();
-  shown.forEach(({ node, output, take }, index) => {
+  shown.forEach(({ node, output }, index) => {
     const found = read[index];
-    const which = output.current ? "the result it shows" : `an earlier take (${take + 1} of its latest)`;
+    const which = output.current
+      ? `the result it shows${output.newest ? "" : " (an older take)"}`
+      : output.newest
+        ? "its newest result, which it does not show"
+        : "an older take";
     if (!found) {
       notes.push(`${nameOf(node)}, ${which}: no longer in the asset library.`);
       return;
     }
     if (!found.image) {
       const why =
-        found.kind === "video" ? "the video has no captured frame yet" : found.kind === "audio" ? "audio cannot be viewed" : "3D models cannot be viewed";
+        found.kind === "video"
+          ? "the video has no captured frame yet"
+          : found.kind === "audio"
+            ? "audio cannot be viewed"
+            : found.kind === "3d"
+              ? "3D models cannot be viewed"
+              : "its picture could not be read";
       notes.push(`${nameOf(node)}, ${which}: ${why}.`);
       return;
     }
@@ -88,8 +110,8 @@ export async function viewOutputs(draft: GraphDraft, reader: AgentOutputReader, 
     const caption = [
       `Image ${images.length + 1}: ${nameOf(node)}, ${which}${found.kind === "video" ? ", the video's first frame" : ""}`,
       found.batch ? `run ${found.batch.index + 1} of ${found.batch.count}` : "",
-      found.model ? `model ${found.model}` : "",
-      found.prompt ? `prompt ${JSON.stringify(clip(found.prompt, PROMPT_LIMIT))}` : "",
+      found.model ? `model ${asName(found.model)}` : "",
+      found.prompt ? `prompt ${asName(found.prompt, PROMPT_LIMIT)}` : "",
     ]
       .filter(Boolean)
       .join(" · ");

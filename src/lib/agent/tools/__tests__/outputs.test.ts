@@ -30,7 +30,7 @@ function canvas(nodes: Array<{ id: string; x: number; title?: string; outputs?: 
   return snapshot;
 }
 
-const shown = (assetId: string): AgentSnapshotOutput => ({ assetId, kind: "image", current: true });
+const shown = (assetId: string): AgentSnapshotOutput => ({ assetId, kind: "image", current: true, newest: true });
 const earlier = (assetId: string): AgentSnapshotOutput => ({ assetId, kind: "image" });
 
 describe("view_outputs", () => {
@@ -46,7 +46,7 @@ describe("view_outputs", () => {
     expect(result.text).toBe("2 images from 2 nodes follow, each after its caption.");
     expect(result.images!.map((image) => image.data)).toEqual(["bytes-s1", "bytes-s2"]);
     expect(result.images![0].caption).toBe(
-      'Image 1: Scene 1 (nanoBanana-1), the result it shows · model GPT Image 2.5 Flare · prompt "prompt for s1"',
+      'Image 1: "Scene 1" (nanoBanana-1), the result it shows · model "GPT Image 2.5 Flare" · prompt "prompt for s1"',
     );
   });
 
@@ -56,8 +56,18 @@ describe("view_outputs", () => {
     const result = await viewOutputs(draft, reader, { takes: 2 });
     expect(reader.read).toHaveBeenCalledTimes(2);
     expect(result.images!.map((image) => image.caption.split(" · ").slice(0, 2).join(" · "))).toEqual([
-      "Image 1: nanoBanana (nanoBanana-1), the result it shows · model GPT Image 2.5 Flare",
-      "Image 2: nanoBanana (nanoBanana-1), an earlier take (2 of its latest) · run 2 of 4",
+      'Image 1: nanoBanana (nanoBanana-1), the result it shows · model "GPT Image 2.5 Flare"',
+      "Image 2: nanoBanana (nanoBanana-1), an older take · run 2 of 4",
+    ]);
+  });
+
+  it("tells a browsed-back result from the newest one", async () => {
+    const outputs: AgentSnapshotOutput[] = [{ assetId: "old", kind: "image", current: true }, { assetId: "new", kind: "image", newest: true }];
+    const draft = new GraphDraft(canvas([{ id: "nanoBanana-1", x: 0, outputs }]));
+    const result = await viewOutputs(draft, readerOf({ old: picture("old"), new: picture("new") }), { takes: 2 });
+    expect(result.images!.map((image) => image.caption.split(" · ")[0])).toEqual([
+      "Image 1: nanoBanana (nanoBanana-1), the result it shows (an older take)",
+      "Image 2: nanoBanana (nanoBanana-1), its newest result, which it does not show",
     ]);
   });
 
@@ -69,25 +79,29 @@ describe("view_outputs", () => {
         { id: "nanoBanana-1", x: 100, outputs: [shown("gone")] },
         { id: "nanoBanana-2", x: 200, outputs: [{ assetId: "clip", kind: "video", current: true }] },
         { id: "nanoBanana-3", x: 300, outputs: [{ assetId: "song", kind: "audio", current: true }] },
+        { id: "nanoBanana-4", x: 400, outputs: [shown("broken")] },
+        { id: "nanoBanana-5", x: 500, image: true },
         ...many,
       ]),
     );
-    const found: Record<string, ViewableOutput | null> = { clip: { kind: "video" }, song: { kind: "audio" } };
+    const found: Record<string, ViewableOutput | null> = { clip: { kind: "video" }, song: { kind: "audio" }, broken: { kind: "image" } };
     many.forEach((_, i) => (found[`m${i}`] = picture(`m${i}`)));
     const result = await viewOutputs(draft, readerOf(found), {
-      nodeIds: ["imageInput-1", "nanoBanana-1", "nanoBanana-2", "nanoBanana-3", "nope", ...many.map((m) => m.id)],
+      nodeIds: ["imageInput-1", "nanoBanana-1", "nanoBanana-2", "nanoBanana-3", "nanoBanana-4", "nanoBanana-5", "nope", ...many.map((m) => m.id)],
     });
-    expect(result.text).toContain("imageInput (imageInput-1) has no generated result to look at (an uploaded or copied file is not viewable).");
+    expect(result.text).toContain("imageInput (imageInput-1) holds an uploaded file, which cannot be viewed.");
+    expect(result.text).toContain("nanoBanana (nanoBanana-4), the result it shows: its picture could not be read.");
+    expect(result.text).toContain("nanoBanana (nanoBanana-5)'s result is not in the asset library (made before it, or while it was off), so it cannot be viewed.");
     expect(result.text).toContain("nanoBanana (nanoBanana-1), the result it shows: no longer in the asset library.");
     expect(result.text).toContain("the video has no captured frame yet");
     expect(result.text).toContain("audio cannot be viewed");
     expect(result.text).toContain('No node "nope" on the canvas.');
-    expect(result.text).toContain("5 more results were left out (at most 12 per call)");
-    expect(result.images).toHaveLength(9);
+    expect(result.text).toContain("6 more results were left out (at most 12 per call)");
+    expect(result.images).toHaveLength(8);
   });
 
   it("captions a video by its first frame, and has nothing to show on a canvas without results", async () => {
-    const draft = new GraphDraft(canvas([{ id: "nanoBanana-1", x: 0, outputs: [{ assetId: "clip", kind: "video", current: true }] }]));
+    const draft = new GraphDraft(canvas([{ id: "nanoBanana-1", x: 0, outputs: [{ assetId: "clip", kind: "video", current: true, newest: true }] }]));
     const result = await viewOutputs(draft, readerOf({ clip: { ...picture("clip"), kind: "video" } }), {});
     expect(result.images![0].caption).toContain("the result it shows, the video's first frame");
 

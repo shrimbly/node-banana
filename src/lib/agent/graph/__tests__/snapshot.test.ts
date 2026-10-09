@@ -242,19 +242,35 @@ describe("node outputs", () => {
     const snapshot = buildAgentSnapshot({ nodes: [node], edges: [] });
     expect(snapshot.nodes[0].outputs).toEqual([
       { assetId: "c-shown", kind: "image", current: true },
-      { assetId: "a-new", kind: "image" },
+      { assetId: "a-new", kind: "image", newest: true },
       { assetId: "b", kind: "image" },
       { assetId: "d", kind: "image" },
     ]);
     expect(containsMedia(snapshot)).toBe(false);
   });
 
+  it("shows none of them once the node's output is cleared, though its carousel stays", () => {
+    const node = storeNode("nanoBanana-1", "nanoBanana", { x: 0, y: 0 }, {
+      outputImage: null,
+      imageHistory: [item("a"), item("b")],
+      selectedHistoryIndex: 0,
+    });
+    expect(buildAgentSnapshot({ nodes: [node], edges: [] }).nodes[0].outputs).toEqual([
+      { assetId: "a", kind: "image", newest: true },
+      { assetId: "b", kind: "image" },
+    ]);
+  });
+
   it("reads video and audio carousels, and leaves out a node with none", () => {
-    const video = storeNode("generateVideo-1", "generateVideo", { x: 0, y: 0 }, { videoHistory: [item("v1"), item("v2")], selectedVideoHistoryIndex: 0 });
+    const video = storeNode("generateVideo-1", "generateVideo", { x: 0, y: 0 }, {
+      outputVideo: "https://example.com/v1.mp4",
+      videoHistory: [item("v1"), item("v2")],
+      selectedVideoHistoryIndex: 0,
+    });
     const prompt = storeNode("prompt-1", "prompt", { x: 0, y: 0 }, { prompt: "a cat" });
     const snapshot = buildAgentSnapshot({ nodes: [video, prompt], edges: [] });
     expect(snapshot.nodes[0].outputs).toEqual([
-      { assetId: "v1", kind: "video", current: true },
+      { assetId: "v1", kind: "video", current: true, newest: true },
       { assetId: "v2", kind: "video" },
     ]);
     expect(snapshot.nodes[1]).not.toHaveProperty("outputs");
