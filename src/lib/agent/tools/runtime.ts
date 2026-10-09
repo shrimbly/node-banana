@@ -18,6 +18,7 @@ import type { ProviderKeys } from "@/lib/providers/keys";
 import { groupNodesByLevel } from "@/store/utils/executionUtils";
 import { clampRunCount, type RunScope } from "@/store/utils/runBatch";
 import type {
+  AgentGraphOp,
   AgentRunOffer,
   AgentRunOption,
   AgentTabSummary,
@@ -122,6 +123,8 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
   let runsStarting = 0;
   // Settles once every run_workflow call being decided has been: an edit issued alongside one waits to hear whether it started.
   let runsDecided: Promise<unknown> = Promise.resolve();
+  // A run the agent asked for that waits for the user's click (more than one, or in another tab): the turn's Run card.
+  let awaitingClick: AgentRunOffer | null = null;
   // Draft edits still being resolved; a run or a tab step waits for them, so its result follows theirs.
   let editsInFlight: Promise<unknown> = Promise.resolve();
   // The last tab step; edits and reads wait for it, so none lands on the tab it is leaving.
@@ -219,6 +222,13 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
           try {
             await settled(editsInFlight, workspaceStep);
             const result = runWorkflow(workspace.draft, parsed.data as Args<typeof runWorkflowShape>, runStarted);
+            const run = result.ok ? result.ops.find((op): op is RunOp => op.op === "run") : undefined;
+            // Paid runs the user has not seen asked for: a batch, or a run in a tab they are not in, wait for their click.
+            const elsewhere = !!live.tabId && workspace.currentId !== live.tabId;
+            if (run && (run.runs > 1 || elsewhere)) {
+              awaitingClick = clickToRun(workspace.draft, workspace.currentId, run, result.focusNodeIds ?? []);
+              return workspace.stamp(waitForClick(result, run, elsewhere));
+            }
             if (result.ok) runStarted = true;
             return workspace.stamp(result);
           } finally {
@@ -235,7 +245,7 @@ export function createAgentToolRuntime(snapshot: AgentWorkflowSnapshot, options:
     },
     runOffer() {
       if (runStarted || runsStarting > 0 || live.running === true) return null;
-      return buildRunOffer(workspace.draft, workspace.currentId);
+      return awaitingClick ?? buildRunOffer(workspace.draft, workspace.currentId);
     },
   };
 }
@@ -984,6 +994,43 @@ function levelOrder(draft: GraphDraft): string[] {
   const order = groupNodesByLevel(nodes, edges).flatMap((level) => level.nodeIds);
   const placed = new Set(order);
   return [...order, ...[...draft.nodes.keys()].filter((id) => !placed.has(id))];
+}
+
+type RunOp = Extract<AgentGraphOp, { op: "run" }>;
+
+/** The Run card for a run that waits for the user: its scope and count, in the tab it is for. */
+function clickToRun(draft: GraphDraft, tabId: string | undefined, run: RunOp, planned: string[]): AgentRunOffer {
+  const { scope } = run;
+  const label =
+    scope.kind === "all"
+      ? "Run workflow"
+      : scope.kind === "from"
+        ? `Run from ${nodeName(draft.getNode(scope.nodeId)!)}`
+        : scope.nodeIds.length === 1
+          ? `Run ${nodeName(draft.getNode(scope.nodeIds[0])!)}`
+          : `Run ${scope.nodeIds.length} nodes`;
+  return {
+    offerId: `offer_${generateId()}`,
+    ...(tabId ? { tabId } : {}),
+    ...(draft.workflowName ? { workflowName: draft.workflowName } : {}),
+    ...(draft.workflowId ? { workflowId: draft.workflowId } : {}),
+    primary: { scope, label: clip(label), nodeIds: planned, ...(run.runs > 1 ? { runs: run.runs } : {}) },
+    alternatives: [],
+  };
+}
+
+/** What run_workflow says when its run waits for the user's click instead of starting. */
+function waitForClick(result: AgentToolResult, run: RunOp, elsewhere: boolean): AgentToolResult {
+  const what = run.runs > 1 ? `${run.runs} runs one after another` : "a run in a workflow tab the user is not in";
+  return {
+    ...result,
+    ops: [],
+    text: [
+      `Nothing has started: ${what} waits for the user to press Run. The Run button under your reply is set up for it${run.runs > 1 ? ` (${run.runs} runs)` : ""}${elsewhere ? " in that tab" : ""}.`,
+      "Tell the user to press it when they are ready. Do not call run_workflow again for it.",
+    ].join("\n"),
+    summary: clip(`Ready to run${run.runs > 1 ? ` ×${run.runs}` : ""}: press Run below`),
+  };
 }
 
 function nodeName(node: DraftNode): string {

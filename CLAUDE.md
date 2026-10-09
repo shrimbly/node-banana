@@ -398,6 +398,9 @@ Runs: when the user asks, `run_workflow` starts one (scope `nodes`, `all` or
 snapshot says `running`, or when a node the run reads from holds nothing. Its
 `run` op starts through `runBatch` after the call's edits, outside undo; the
 model reports the outcome from the next message's node `status` and `error`.
+Only a single run in the tab the user sent from starts by itself: more runs,
+or a run in another tab, start nothing and become the turn's Run card (its
+count set), so text injected into a workflow can't spend credits unseen.
 A turn that builds or changes runnable nodes without running them ends with a
 persisted `data-run-offer` part (`runtime.runOffer()`): the chat's Run card,
 scoped to the whole workflow, a group, or the changed nodes and what they feed.

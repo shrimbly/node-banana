@@ -518,6 +518,8 @@ export interface AgentRunOption {
    * progress; the scope decides what actually runs.
    */
   nodeIds: string[];
+  /** Runs the agent asked for, when more than one: the card's count starts there. */
+  runs?: number;
 }
 
 /** A Run button under a reply, for what the turn built or changed (`data-run-offer`). */

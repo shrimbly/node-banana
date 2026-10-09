@@ -207,7 +207,8 @@ export function AgentRunCard({ offer }: { offer: AgentRunOffer }) {
   const blockedFor = (option: AgentRunOption) =>
     reasons[options.indexOf(option)] ?? (!target.live && transcript?.busy ? AGENT_TURN_RUNNING : null);
   const blocked = blockedFor(current);
-  const [runs, setRuns] = useState(1);
+  // Set to what the agent asked for when it held a batch for the user's click.
+  const [runs, setRuns] = useState(() => current.runs ?? 1);
   const [failure, setFailure] = useState<string | null>(null);
 
   const run = (option: AgentRunOption) => {

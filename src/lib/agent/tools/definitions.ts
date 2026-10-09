@@ -319,7 +319,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     title: "Run workflow",
     readOnly: false,
     description:
-      "Start a run on the user's canvas, as their Run button does: generators call their models and spend the user's credits. Only when the user asks to run, try or generate. Call it last, after this turn's edits, and once per turn. scope \"nodes\" with the nodes you added or changed when every node feeding them holds its output; \"all\" for the whole workflow; \"from\" a node the user names. Refused while a run is going, and for nodes whose inputs have no output yet (the error says which to include). The run happens after this call: you do not see its results in this turn. The next message's canvas shows each node's status, error and output.",
+      "Start a run on the user's canvas, as their Run button does: generators call their models and spend the user's credits. Only when the user asks to run, try or generate. Call it last, after this turn's edits, and once per turn. scope \"nodes\" with the nodes you added or changed when every node feeding them holds its output; \"all\" for the whole workflow; \"from\" a node the user names. Refused while a run is going, and for nodes whose inputs have no output yet (the error says which to include). One run in the user's own workflow starts at once; more than one run, or a run in another tab, waits for the user to press Run under your reply. The run happens after this call: you do not see its results in this turn. The next message's canvas shows each node's status, error and output.",
     inputShape: runWorkflowShape,
   },
   {

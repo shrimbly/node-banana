@@ -1513,12 +1513,16 @@ describe("run_workflow", () => {
     expect(result.text).toContain("you do not see its results in this turn");
     expect(result.text).toContain("report how it went from that, never before");
 
-    const three = await call(runtimeFor(chain()), "run_workflow", { scope: "all", runs: 3 });
-    expect(three.ops).toEqual([{ op: "run", scope: { kind: "all" }, runs: 3 }]);
-    expect(three.summary).toBe("Started the workflow ×3");
-    expect(three.text).toContain("3 times one after another");
+    // A batch waits for the user's click: no run op, the turn's Run card set up for it.
+    const batch = runtimeFor(chain());
+    const three = await call(batch, "run_workflow", { scope: "all", runs: 3 });
+    expect(three).toMatchObject({ ok: true, ops: [], summary: "Ready to run ×3: press Run below" });
+    expect(three.text).toContain("Nothing has started: 3 runs one after another waits for the user to press Run.");
+    expect(batch.runOffer!()).toMatchObject({ primary: { scope: { kind: "all" }, label: "Run workflow", runs: 3 }, alternatives: [] });
     // Clamped like the Run menu.
-    expect((await call(runtimeFor(chain()), "run_workflow", { scope: "all", runs: 500 })).ops).toEqual([{ op: "run", scope: { kind: "all" }, runs: 50 }]);
+    const many = runtimeFor(chain());
+    await call(many, "run_workflow", { scope: "all", runs: 500 });
+    expect(many.runOffer!()?.primary.runs).toBe(50);
     expect((await call(runtimeFor(chain()), "run_workflow", { scope: "all", runs: 0 })).ops).toEqual([{ op: "run", scope: { kind: "all" }, runs: 1 }]);
   });
 
@@ -1681,10 +1685,10 @@ describe("run_workflow", () => {
   });
 
   it("runs from a node, checking what the run leads to", async () => {
-    const started = await call(runtimeFor(chain(false)), "run_workflow", { scope: "from", node: "llmGenerate-2", runs: 2 });
+    const started = await call(runtimeFor(chain(false)), "run_workflow", { scope: "from", node: "llmGenerate-2" });
     expect(started.ok, started.text).toBe(true);
-    expect(started.ops).toEqual([{ op: "run", scope: { kind: "from", nodeId: "llmGenerate-2" }, runs: 2 }]);
-    expect(started.summary).toBe(`Started from ${LLM} ×2`);
+    expect(started.ops).toEqual([{ op: "run", scope: { kind: "from", nodeId: "llmGenerate-2" }, runs: 1 }]);
+    expect(started.summary).toBe(`Started from ${LLM}`);
     // Starting after the LLM would read its empty output.
     const refused = await call(runtimeFor(chain(false)), "run_workflow", { scope: "from", node: "nanoBanana-3" });
     expect(refused.ok).toBe(false);

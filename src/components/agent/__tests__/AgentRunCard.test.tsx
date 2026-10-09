@@ -391,4 +391,11 @@ describe("estimateRunCost", () => {
     fireEvent.click(whole);
     expect(startOfferRun).toHaveBeenCalledWith(expect.objectContaining({ option: offer.alternatives[0] }));
   });
+
+  it("starts at the count the agent asked for, when it held a batch for the user's click", () => {
+    renderOffer({ ...offer, primary: { scope: { kind: "all" }, label: "Run workflow", nodeIds: ["prompt", "gen", "out"], runs: 3 }, alternatives: [] });
+    expect(runButton()).toHaveTextContent("Run ×3");
+    fireEvent.click(runButton());
+    expect(startOfferRun).toHaveBeenCalledWith(expect.objectContaining({ runs: 3 }));
+  });
 });

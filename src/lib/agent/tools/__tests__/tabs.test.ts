@@ -331,14 +331,20 @@ describe("tab steps in order with the edits around them", () => {
     expect(finished).toEqual(["edit", "save"]);
   });
 
-  it("runs the tab a pending switch leads to", async () => {
+  it("checks a run against the tab a pending switch leads to, and holds it for the user's click there", async () => {
     const runtime = workspace();
     const [switched, run] = await Promise.all([
       runtime.execute("switch_workflow", { tab: "tab-b" }),
       runtime.execute("run_workflow", { scope: "nodes", nodeIds: ["llmGenerate-7"] }),
     ]);
     expect(switched.ok).toBe(true);
-    expect(run).toMatchObject({ ok: true, tabId: "tab-b", ops: [{ op: "run", scope: { kind: "nodes", nodeIds: ["llmGenerate-7"] }, runs: 1 }] });
+    // The user is in tab-a: a run in tab-b spends their credits where they are not looking.
+    expect(run).toMatchObject({ ok: true, tabId: "tab-b", ops: [], summary: "Ready to run: press Run below" });
+    expect(run.text).toContain("a run in a workflow tab the user is not in waits for the user to press Run");
+    expect(runtime.runOffer!()).toMatchObject({
+      tabId: "tab-b",
+      primary: { scope: { kind: "nodes", nodeIds: ["llmGenerate-7"] }, label: "Run LLM Generate", nodeIds: ["llmGenerate-7"] },
+    });
   });
 
   it("stamps every result with the tab it worked in", async () => {
