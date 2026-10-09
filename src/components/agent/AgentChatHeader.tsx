@@ -11,7 +11,7 @@ import { AgentWorkflowSwitcher } from "./AgentWorkflowSwitcher";
 export interface AgentChatHeaderProps {
   /** The transcript has scrolled under the header: a hairline separates them. */
   scrolled: boolean;
-  /** A turn is running: the workflow can't change under it. */
+  /** A turn is running: switching the workflow stops it (the switcher asks first). */
   busy: boolean;
   /** The harness and model picker, as the window's header has it. */
   menu: Omit<AgentModelMenuProps, "align">;

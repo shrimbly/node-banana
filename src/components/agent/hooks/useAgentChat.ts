@@ -445,7 +445,10 @@ export function useAgentChat({
   useEffect(() => {
     if (!busy || canvasGeneration === turnGenerationRef.current) return;
     void chat.stop();
-    useToast.getState().show("Stopped the agent: a different workflow was opened", "warning");
+    // Already stopped by the user, who was asked before opening it: nothing to tell them.
+    if (turnRef.current > stoppedThroughRef.current) {
+      useToast.getState().show("Stopped the agent: a different workflow was opened", "warning");
+    }
   }, [busy, canvasGeneration, chat]);
 
   const clearQueue = useCallback(() => {
@@ -547,6 +550,11 @@ export function useAgentChat({
     startTurn(next.text, next.metadata);
   }, [busy, turnsFinished, startTurn]);
 
+  const stopTurns = useCallback(() => {
+    stopAllTurns();
+    void stop();
+  }, [stopAllTurns, stop]);
+
   const retry = useCallback(() => {
     if (busy) return;
     beginTurn();
@@ -599,10 +607,7 @@ export function useAgentChat({
     removeQueued,
     takeQueued,
     sendQueuedNow,
-    stop: () => {
-      stopAllTurns();
-      void stop();
-    },
+    stop: stopTurns,
     retry,
     clearError,
     newChat,

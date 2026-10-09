@@ -4,6 +4,7 @@ import { act, render, screen, fireEvent } from "@testing-library/react";
 import { WorkflowTabs } from "@/components/WorkflowTabs";
 import type { WorkflowTab } from "@/store/utils/workflowTabs";
 import { useAssetStore } from "@/store/assetStore";
+import { setAgentTurnStop } from "@/lib/agent/client/stopGuard";
 
 const mockSwitchTab = vi.fn();
 const mockCloseTab = vi.fn();
@@ -147,6 +148,52 @@ describe("WorkflowTabs", () => {
     render(<WorkflowTabs />);
     fireEvent.click(screen.getByRole("button", { name: "New tab" }));
     expect(mockNewTab).toHaveBeenCalledTimes(1);
+  });
+
+  describe("while an agent turn runs", () => {
+    const stopTurn = vi.fn();
+    beforeEach(() => setAgentTurnStop(stopTurn));
+    afterEach(() => setAgentTurnStop(null));
+
+    it("asks before switching, and stays put when the user keeps the agent working", () => {
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      render(<WorkflowTabs />);
+      fireEvent.click(screen.getByText("Summer campaign"));
+      expect(confirm).toHaveBeenCalledWith("The agent is still working. Switching workflows will stop it.");
+      expect(stopTurn).not.toHaveBeenCalled();
+      expect(mockSwitchTab).not.toHaveBeenCalled();
+    });
+
+    it("stops the turn, then switches, once the user agrees", () => {
+      vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<WorkflowTabs />);
+      fireEvent.click(screen.getByText("Summer campaign"));
+      expect(stopTurn).toHaveBeenCalledTimes(1);
+      expect(mockSwitchTab).toHaveBeenCalledWith("tab-1");
+      expect(stopTurn.mock.invocationCallOrder[0]).toBeLessThan(mockSwitchTab.mock.invocationCallOrder[0]);
+    });
+
+    it("asks before a new tab and before closing the live tab", () => {
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+      render(<WorkflowTabs />);
+      fireEvent.click(screen.getByRole("button", { name: "New tab" }));
+      fireEvent.click(screen.getByRole("button", { name: "Close Product shots" }));
+      expect(confirm).toHaveBeenNthCalledWith(1, "The agent is still working. Opening a new tab will stop it.");
+      expect(confirm).toHaveBeenNthCalledWith(2, "The agent is still working. Closing this tab will stop it.");
+      expect(mockNewTab).not.toHaveBeenCalled();
+      expect(mockCloseTab).not.toHaveBeenCalled();
+    });
+
+    it("closes a parked tab without asking about the agent, which works in the live one", () => {
+      // Only the unsaved-changes question: the parked tab holds them.
+      const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+      render(<WorkflowTabs />);
+      fireEvent.click(screen.getByRole("button", { name: "Close Summer campaign" }));
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(confirm).toHaveBeenCalledWith("Close Summer campaign and discard its unsaved changes?");
+      expect(stopTurn).not.toHaveBeenCalled();
+      expect(mockCloseTab).toHaveBeenCalledWith("tab-1");
+    });
   });
 
   it("blocks tab changes while a media save is still writing, and says so", () => {

@@ -10,10 +10,13 @@
  *   (GET /api/workflow?path=…&load=true) and open it bound to the folder,
  *   or switch to a tab that already has that workflow id bound to that folder.
  *
- * Never throws. Refuses (with the reason) while `tabsBusyReason()` is set.
- * The caller switches the app back to the canvas view on `ok`.
+ * Never throws. Refuses (with the reason) while `tabsBusyReason()` is set,
+ * and asks before leaving a workflow the agent is still working on (`kept`
+ * when the user keeps it working). The caller switches the app back to the
+ * canvas view on `ok`.
  */
 
+import { confirmStopAgent } from "@/lib/agent/client/stopGuard";
 import { useWorkflowStore, type WorkflowFile } from "@/store/workflowStore";
 import type { AssetView } from "../types";
 import { fetchAssetBlob, fetchAssetWorkflow } from "./api";
@@ -25,7 +28,10 @@ export type OpenWorkflowMode = "snapshot" | "project";
 
 export type OpenWorkflowResult =
   | { ok: true; tabId: string; nodeId: string | null }
-  | { ok: false; reason: string };
+  | { ok: false; reason: string; kept?: true };
+
+/** The user kept the agent working rather than open another workflow: nothing went wrong. */
+const KEPT_AGENT = { ok: false, reason: "The agent is still working", kept: true } as const;
 
 /**
  * runId → id of the copy opened from its snapshot, so a second open goes
@@ -107,7 +113,7 @@ export function openAssetWorkflow(asset: AssetView, mode: OpenWorkflowMode): Pro
 /* Tabs ---------------------------------------------------------------- */
 
 type TabMatch = (fields: { workflowId: string | null; saveDirectoryPath: string | null }) => boolean;
-type Focused = { ok: true; tabId: string } | { ok: false; reason: string };
+type Focused = { ok: true; tabId: string } | { ok: false; reason: string; kept?: true };
 
 /** Brings the tab matching `match` into the canvas. Null when no tab matches. */
 function focusTab(match: TabMatch): Focused | null {
@@ -115,6 +121,7 @@ function focusTab(match: TabMatch): Focused | null {
   if (match(state)) return { ok: true, tabId: state.activeTabId };
   const tab = state.tabs.find((candidate) => candidate.snapshot && match(candidate.snapshot));
   if (!tab) return null;
+  if (!state.tabsBusyReason() && !confirmStopAgent("Switching workflows")) return KEPT_AGENT;
   if (!state.switchTab(tab.id)) {
     return { ok: false, reason: useWorkflowStore.getState().tabsBusyReason() ?? "That tab couldn't be opened." };
   }
@@ -254,6 +261,10 @@ async function openCopy(prepared: WorkflowFile): Promise<OpenWorkflowResult> {
     revokeAll(patches);
     return fail(busy);
   }
+  if (!confirmStopAgent("Opening another workflow")) {
+    revokeAll(patches);
+    return KEPT_AGENT;
+  }
   await useWorkflowStore.getState().openWorkflowInNewTab(file);
   const live = useWorkflowStore.getState();
   if (live.workflowId !== prepared.id) {
@@ -371,6 +382,7 @@ async function openProject(asset: AssetView): Promise<OpenWorkflowResult> {
 
   const busy = useWorkflowStore.getState().tabsBusyReason();
   if (busy) return fail(busy);
+  if (!confirmStopAgent("Opening another workflow")) return KEPT_AGENT;
   await useWorkflowStore.getState().openWorkflowInNewTab(workflow, projectPath);
   const live = useWorkflowStore.getState();
   const opened = workflow.id ? live.workflowId === workflow.id : samePath(live.saveDirectoryPath, projectPath);

@@ -391,7 +391,10 @@ Flow: the panel sends a media-free canvas snapshot with each message →
 server-side draft and emit resolved graph ops → the browser applies them with
 `applyAgentGraphOps` (one undo step per tool call). Edits from a turn are
 dropped if the canvas is replaced mid-turn (`canvasGeneration`: load, clear,
-tab switch).
+tab switch), and the turn stops. The user's own ways of doing that (the tab
+strip, the menu, the chat's switcher, Open in canvas, Assets, a dropped
+workflow, the welcome dialog) ask first while a turn runs, and stop it only
+once they agree (`confirmStopAgent`, `src/lib/agent/client/stopGuard.ts`).
 
 Runs: when the user asks, `run_workflow` starts one (scope `nodes`, `all` or
 `from`, and a run count), checked against the draft: refused while the
