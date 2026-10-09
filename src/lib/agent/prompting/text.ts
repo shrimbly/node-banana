@@ -38,9 +38,9 @@ export const TEXT_GUIDE: ModalityGuide = {
       length: "3-6 sentences",
       example: {
         request: "an LLM that turns ideas into image prompts",
-        weak: "Make an image prompt for: a lighthouse",
+        weak: "Make an image prompt for: a bicycle",
         strong:
-          "Write one detailed prompt for an image model. Cover, in this order: the subject and its details, the setting and time of day, composition and camera angle, lighting, and the style or medium, in 1-3 sentences of 30-80 words. The idea: a lighthouse in a storm. Reply with only the prompt.",
+          "Write one detailed prompt for an image model. Cover, in this order: the subject and its details, the setting and time of day, composition and camera angle, lighting, and the style or medium, in 1-3 sentences of 30-80 words. The idea: a red bicycle leaning on a brick wall. Reply with only the prompt.",
       },
     },
   ],
