@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useVideoAutoplay, VIDEO_HOVER_DELAY_MS } from "../useVideoAutoplay";
+import { useVideoAutoplay, VIDEO_HOVER_DELAY_MS, VIDEO_PIN_EVENT } from "../useVideoAutoplay";
+import { useVideoSoundStore } from "@/store/videoSoundStore";
 
 let hoveredNodeId: string | null = null;
 vi.mock("@/store/workflowStore", () => ({
@@ -17,6 +18,9 @@ function fakeVideo() {
   const fire = (type: string) => listeners.get(type)?.forEach((fn) => fn());
   const video = {
     paused: true,
+    muted: true,
+    volume: 1,
+    dispatchEvent: (event: { type: string }) => { fire(event.type); return true; },
     play: vi.fn(() => {
       video.paused = false;
       fire("play");
@@ -57,6 +61,7 @@ const userPause = (video: Fake) => act(() => { video.pause(); });
 
 describe("useVideoAutoplay", () => {
   beforeEach(() => {
+    useVideoSoundStore.setState({ on: false, volume: 1 });
     vi.useFakeTimers();
     hoveredNodeId = null;
   });
@@ -135,5 +140,44 @@ describe("useVideoAutoplay", () => {
     hover(hook, true);
     vi.advanceTimersByTime(VIDEO_HOVER_DELAY_MS);
     expect(video.play).toHaveBeenCalledTimes(2);
+  });
+
+  describe("sound", () => {
+    it("keeps a hover preview silent even when sound is on", () => {
+      useVideoSoundStore.setState({ on: true, volume: 0.8 });
+      const { video, hook } = mount();
+      hover(hook, true);
+      act(() => { vi.advanceTimersByTime(VIDEO_HOVER_DELAY_MS); });
+      expect(video.paused).toBe(false);
+      expect(video.muted).toBe(true);
+    });
+
+    it("unmutes a video the user plays while sound is on, at the set volume", () => {
+      useVideoSoundStore.setState({ on: true, volume: 0.6 });
+      const { video } = mount();
+      userPlay(video);
+      expect(video.muted).toBe(false);
+      expect(video.volume).toBe(0.6);
+    });
+
+    it("keeps a pinned video silent while sound is off, and hears it as soon as sound comes on", () => {
+      const { video } = mount();
+      userPlay(video);
+      expect(video.muted).toBe(true);
+      act(() => { useVideoSoundStore.getState().setOn(true); });
+      expect(video.muted).toBe(false);
+      act(() => { useVideoSoundStore.getState().setVolume(0); });
+      expect(video.muted).toBe(true);
+    });
+
+    it("the pin event starts a paused video with sound and holds it against hover", () => {
+      useVideoSoundStore.setState({ on: true, volume: 1 });
+      const { video, hook } = mount();
+      act(() => { video.dispatchEvent(new Event(VIDEO_PIN_EVENT)); });
+      expect(video.paused).toBe(false);
+      expect(video.muted).toBe(false);
+      hover(hook, false);
+      expect(video.paused).toBe(false);
+    });
   });
 });
