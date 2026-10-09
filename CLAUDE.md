@@ -417,8 +417,9 @@ Run card) are followed as `AgentRunRecord`s in
 never media bytes, shown as results cards with the full-screen viewer. A
 `create_workflow` call's output carries its tab's graph in miniature (`graph`:
 node types and boxes, connections; the turn's later edits to that tab carry it
-too), which the full-page chat alone draws as a minimap under the call
-(`AgentWorkflowPreview`), with Open in canvas.
+too), which the full-page chat alone draws as a minimap (`AgentWorkflowPreview`),
+with Open in canvas. What a reply made (that minimap, then the Run card) comes
+after its text, so the summary reads first.
 
 Reviewing results: `view_outputs` shows the model what the nodes generated.
 The snapshot names each node's results by asset library id (`outputs`: the

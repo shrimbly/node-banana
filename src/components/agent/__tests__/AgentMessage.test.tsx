@@ -127,7 +127,7 @@ describe("AgentMessage runs", () => {
     expect(screen.getByRole("button", { name: "Run" })).toBeEnabled();
   });
 
-  it("shows a run_workflow call's results under the tool rows, once the run is recorded", () => {
+  it("shows the results of a run a run_workflow call once started, after the reply's text", () => {
     const message = reply([
       toolPart("edit_workflow", "call-edit", { ok: true, summary: "Added 2 nodes" }),
       toolPart("mcp__node_banana__run_workflow", "call-run", { ok: true, summary: "Started the run" }),
@@ -138,10 +138,8 @@ describe("AgentMessage runs", () => {
 
     act(() => useAgentRuns.setState({ records: [runRecord()] }));
     const results = screen.getByRole("group", { name: "Ran the workflow" });
-    const rows = container.querySelector("[data-agent-tool-group]")!;
-    // After the folded tool calls, in view without opening them, before the text that followed the calls.
-    expect(rows.compareDocumentPosition(results) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(results.compareDocumentPosition(screen.getByText("Running it now.")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // In view without opening the folded calls, under the summary.
+    expect(screen.getByText("Running it now.").compareDocumentPosition(results) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("puts Show on canvas on a tool row that changed nodes, without opening the row", () => {
@@ -266,7 +264,7 @@ describe("AgentMessage built workflow", () => {
     useWorkflowStore.setState({ tabs: [{ id: "tab-a", snapshot: null }], activeTabId: "tab-a", workflowName: "Cat posters" });
   });
 
-  it("draws the workflow a call built under the folded tool line, on the full page", () => {
+  it("draws the workflow a call built after the reply's text, on the full page", () => {
     const { container } = render(
       <AgentSurfaceProvider value="page">
         <AgentMessage message={message()} streaming={false} />
@@ -275,8 +273,22 @@ describe("AgentMessage built workflow", () => {
     const preview = screen.getByRole("group", { name: "Cat posters" });
     expect(preview).toHaveTextContent("2 nodes · 1 connection");
     const tools = container.querySelector("[data-agent-tool-group]")!;
-    expect(tools.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(preview.compareDocumentPosition(screen.getByText("I built Cat posters.")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const summary = screen.getByText("I built Cat posters.");
+    expect(tools.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(summary.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("puts the Run card under the workflow it runs, both after the summary", () => {
+    render(
+      <AgentSurfaceProvider value="page">
+        <AgentMessage message={{ ...message(), parts: [...message().parts, offerPart] }} streaming={false} />
+      </AgentSurfaceProvider>,
+    );
+    const summary = screen.getByText("I built Cat posters.");
+    const preview = screen.getByRole("group", { name: "Cat posters" });
+    const card = screen.getByRole("group", { name: "Run workflow" });
+    expect(summary.compareDocumentPosition(preview) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(preview.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("leaves it out of the floating window", () => {
