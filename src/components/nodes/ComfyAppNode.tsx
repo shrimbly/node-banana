@@ -560,7 +560,6 @@ function Preview({
         className="w-full h-full object-contain"
         controls
         loop
-        muted
         playsInline
       />
     );

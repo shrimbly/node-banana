@@ -48,6 +48,13 @@ the chosen frame, and hovering will not restart it; only play does. A new
 source, or the video ending on its own, returns it to hover previews. See
 `src/hooks/useVideoAutoplay.ts`.
 
+**Sound** is one setting shared by every player and kept between sessions
+(`src/store/videoSoundStore.ts`, `node-banana-video-sound`). The scrub row's
+sound button, after the time readout, toggles it and pins playback, so the
+video is heard from then on; resting on the button for 300ms opens the volume
+above it. Hover previews are always silent. Under 240px of row the time
+readout hides first and the button stays.
+
 Logic nodes (Router, Switch, ConditionalSwitch, Array) are a single card
 styled like the controls card, with their sockets on that card's border and
 rows laid out at the socket pitch.
