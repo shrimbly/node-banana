@@ -635,15 +635,15 @@ describe("createAgentChatStream: tool calls", () => {
     expect(statusLines(chunks)).toContain("Reading the canvas…");
   });
 
-  it("sends a run as an ops batch, with the nodes it runs, saying the run is starting while the call is written", async () => {
-    const started: AgentToolResult = {
+  it("sends nothing to the canvas for run_workflow, and names the nodes its Run card runs", async () => {
+    const setUp: AgentToolResult = {
       ok: true,
-      text: "Started a run of the whole workflow (2 nodes).",
-      summary: "Running the workflow",
-      ops: [{ op: "run", scope: { kind: "all" }, runs: 1 }],
+      text: "Nothing has started: runs wait for the user.",
+      summary: "Ready to run: press Run below",
+      ops: [],
       focusNodeIds: ["prompt-1", "nanoBanana-2"],
     };
-    const { runtime } = fakeRuntime({ run_workflow: started });
+    const { runtime } = fakeRuntime({ run_workflow: setUp });
     const { harness } = fakeHarness(async function* (params) {
       yield { type: "tool-pending", toolName: "mcp__node_banana__run_workflow" };
       await params.tools.execute("mcp__node_banana__run_workflow", { scope: "all" });
@@ -652,13 +652,12 @@ describe("createAgentChatStream: tool calls", () => {
 
     const { chunks, message } = await run({ harness, createToolRuntime: () => runtime });
 
-    expect(statusLines(chunks)).toContain("Starting the run…");
-    const batch = chunks.find((chunk) => chunk.type === "data-graph-ops") as { data: AgentGraphOpBatch } | undefined;
-    // The browser's placeholders read them; a run-only batch applies no edit, so nothing is brought into view.
-    expect(batch?.data).toMatchObject({ ops: started.ops, summary: "Running the workflow", focusNodeIds: ["prompt-1", "nanoBanana-2"] });
+    expect(statusLines(chunks)).toContain("Setting up the run…");
+    expect(types(chunks)).not.toContain("data-graph-ops");
+    // Show on canvas on its row brings those nodes into view.
     expect(partsOfType(message, "dynamic-tool")[0]).toMatchObject({
       title: "Run workflow",
-      output: { ok: true, summary: "Running the workflow", nodeIds: ["prompt-1", "nanoBanana-2"] },
+      output: { ok: true, summary: "Ready to run: press Run below", nodeIds: ["prompt-1", "nanoBanana-2"] },
     });
   });
 

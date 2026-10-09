@@ -724,7 +724,7 @@ function pendingToolStatus(definitions: readonly AgentToolDefinition[], toolName
   if (!definition) return "Working…";
   if (definition.name === TOOL_NAMES.nameConversation) return "Working…";
   if (definition.name === SAVE_PROMPT_NOTES) return "Saving the tips…";
-  if (definition.name === TOOL_NAMES.runWorkflow) return "Starting the run…";
+  if (definition.name === TOOL_NAMES.runWorkflow) return "Setting up the run…";
   if (definition.name === TOOL_NAMES.switchWorkflow) return "Switching workflows…";
   if (definition.name === TOOL_NAMES.newWorkflow) return "Opening a new workflow…";
   if (definition.name === TOOL_NAMES.saveWorkflow) return "Saving the workflow…";

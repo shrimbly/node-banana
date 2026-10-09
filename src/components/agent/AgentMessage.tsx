@@ -131,8 +131,8 @@ const PAGE_ASSISTANT_TEXT = "text-[15px] leading-[26px]";
 
 /**
  * One chat message: user text in a bubble; for the agent, text, reasoning,
- * tool calls (then the results of runs they started), notices and the Run
- * card, in order.
+ * tool calls and notices in order, then what the reply made under its last
+ * words: the workflows it built, and the Run card.
  */
 export const AgentMessage = memo(function AgentMessage({ message, streaming, onSignIn }: AgentMessageProps) {
   const page = useAgentSurface() === "page";
@@ -153,15 +153,13 @@ export const AgentMessage = memo(function AgentMessage({ message, streaming, onS
   // Runs of tool calls fold together; everything else in order, one per part.
   const blocks: ReactNode[] = [];
   let toolRun: ToolCall[] = [];
-  // What those calls made, always in view under the folded line: the workflow a call built
-  // (the full page only), the results of a run one started.
-  let made: ReactNode[] = [];
+  // What the reply made, after its text so the summary reads first: the workflow a call built
+  // (the full page only), the results of a run a call once started, the Run card.
+  const made: ReactNode[] = [];
   const built = page ? builtWorkflows(message.parts) : null;
   const flushTools = () => {
     if (toolRun.length) blocks.push(<AgentToolGroup key={`tools-${blocks.length}`} calls={toolRun} streaming={streaming} />);
-    blocks.push(...made);
     toolRun = [];
-    made = [];
   };
   message.parts.forEach((part, index) => {
     if (!isRenderedPart(part)) return;
@@ -199,11 +197,12 @@ export const AgentMessage = memo(function AgentMessage({ message, streaming, onS
         blocks.push(<AgentNotice key={key} notice={part.data} onSignIn={onSignIn} />);
         break;
       case "data-run-offer":
-        blocks.push(<AgentRunCard key={key} offer={part.data} />);
+        made.push(<AgentRunCard key={key} offer={part.data} />);
         break;
     }
   });
   flushTools();
+  blocks.push(...made);
 
   return (
     <Message from="assistant" className="max-w-full">

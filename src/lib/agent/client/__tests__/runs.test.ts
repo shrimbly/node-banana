@@ -37,7 +37,7 @@ vi.mock("@/utils/logger", () => ({
 }));
 
 import { useWorkflowStore } from "@/store/workflowStore";
-import type { NodeGroup, WorkflowEdge, WorkflowNode } from "@/types";
+import type { WorkflowNode } from "@/types";
 import type { AgentRunOffer, AgentRunRecord } from "../../types";
 import {
   AGENT_RUNS_KEY,
@@ -48,7 +48,6 @@ import {
   forgetChatRuns,
   latestRunFor,
   loadAgentRuns,
-  plannedRunNodeIds,
   rerunChatRun,
   startOfferRun,
   stopChatRun,
@@ -328,26 +327,6 @@ describe("chat run records", () => {
     expect(record(started.id).outputs[0]).toMatchObject({ assetId: "a-clip", hasPoster: true });
   });
 
-  it("names a run the agent started as the action, which reads right once it has ended too", () => {
-    // run_workflow's summaries say what it started (older chats: "Running …"); the card's meta counts the runs.
-    const labels = [
-      "Started the workflow",
-      "Started Generate Image ×3",
-      "Started from Hero prompt ×2",
-      "Running the workflow",
-      "Running 2 nodes",
-      "Run 2 changed nodes",
-    ];
-    expect(labels.map((label) => track({ label }).label)).toEqual([
-      "Run workflow",
-      "Run Generate Image",
-      "Run from Hero prompt",
-      "Run workflow",
-      "Run 2 nodes",
-      "Run 2 changed nodes",
-    ]);
-  });
-
   it("finds the latest record for an anchor", () => {
     const first = track({ anchor: { offerId: "offer-1" } });
     const second = track({ anchor: { offerId: "offer-1" } });
@@ -368,39 +347,6 @@ describe("chat run records", () => {
     const kept = track({ chatId: "chat-2" });
     forgetChatRuns("chat-1");
     expect(useAgentRuns.getState().records.map((entry) => entry.id)).toEqual([kept.id]);
-  });
-});
-
-describe("plannedRunNodeIds", () => {
-  const lockedGroup: NodeGroup = { id: "g-locked", name: "Locked", color: "neutral", position: { x: 0, y: 0 }, size: { width: 1, height: 1 }, locked: true };
-  const canvas = {
-    nodes: [
-      node("prompt-1", "prompt"),
-      node("gen-1", "nanoBanana"),
-      node("out-1", "output"),
-      { ...node("locked-1", "nanoBanana"), groupId: "g-locked" } as WorkflowNode,
-      node("other-1", "prompt"),
-    ],
-    edges: [
-      { id: "e1", source: "prompt-1", target: "gen-1" },
-      { id: "e2", source: "gen-1", target: "out-1" },
-      { id: "e3", source: "gen-1", target: "locked-1" },
-      { id: "e4", source: "out-1", target: "prompt-1", data: { isLoop: true } },
-    ] as WorkflowEdge[],
-    groups: { "g-locked": lockedGroup },
-  };
-
-  it("plans every node outside a locked group for the whole workflow", () => {
-    expect(plannedRunNodeIds({ kind: "all" }, canvas)).toEqual(["prompt-1", "gen-1", "out-1", "other-1"]);
-  });
-
-  it("plans the node and what it feeds for a run from it, not back round a loop", () => {
-    expect(plannedRunNodeIds({ kind: "from", nodeId: "gen-1" }, canvas)).toEqual(["gen-1", "out-1"]);
-  });
-
-  it("keeps only what is on the canvas, taking the agent's own list when it sent one", () => {
-    expect(plannedRunNodeIds({ kind: "nodes", nodeIds: ["gen-1", "gone-1"] }, canvas)).toEqual(["gen-1"]);
-    expect(plannedRunNodeIds({ kind: "all" }, canvas, ["gen-1", "gone-1"])).toEqual(["gen-1"]);
   });
 });
 

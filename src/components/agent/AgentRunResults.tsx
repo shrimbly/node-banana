@@ -694,6 +694,7 @@ function withoutKeys(sources: Readonly<Record<string, string>>, keys: ReadonlySe
   return Object.fromEntries(Object.entries(sources).filter(([key]) => !keys.has(key)));
 }
 
+/** The results of a run a run_workflow call started, from before every run waited for the Run card. */
 export function AgentToolRunResults({ toolCallId }: { toolCallId: string }) {
   const record = useLatestRun({ toolCallId });
   return record ? <AgentRunResults record={record} /> : null;

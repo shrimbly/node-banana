@@ -5,14 +5,12 @@
  * Pure. Ids, handles, positions and group boxes were decided on the server;
  * this only has to cope with the canvas having moved on since the snapshot
  * (the user deleted a node or a group mid-turn, …): such ops are skipped and
- * reported, never thrown. A `run` op is not applied here: it comes back as
- * `run`, for the store to start once the edits are in.
+ * reported, never thrown.
  */
 
 import type { NodeType, WorkflowNode, WorkflowNodeData } from "@/types";
 import type { GroupColor, NodeGroup, WorkflowEdge } from "@/types/workflow";
 import { GROUP_COLOR_ORDER } from "@/store/utils/nodeDefaults";
-import { clampRunCount, type RunScope } from "@/store/utils/runBatch";
 import type { AgentGraphOp } from "../types";
 
 export interface ApplyGraphOpsDeps {
@@ -40,8 +38,6 @@ export interface ApplyGraphOpsResult {
   applied: number;
   /** Ops that could not apply against the live canvas (e.g. the user deleted the node meanwhile), with reasons. */
   skipped: string[];
-  /** The run the batch asks for, checked against the canvas after its edits. Not counted in `applied`. */
-  run?: { scope: RunScope; runs: number };
 }
 
 /** Pure: applies resolved agent ops to live store nodes, edges and groups. */
@@ -65,7 +61,6 @@ export function applyGraphOps(
   let clearedCanvas = false;
   let applied = 0;
   const skipped: string[] = [];
-  let runOp: Extract<AgentGraphOp, { op: "run" }> | undefined;
   const now = deps.now ?? Date.now;
   // Strictly increasing timestamps keep edge order (array fan-out, galleries).
   let clock = now();
@@ -266,46 +261,12 @@ export function applyGraphOps(
         break;
       }
 
-      case "run":
-        // Checked once every edit of the batch is in: it may run nodes the batch adds.
-        runOp = op;
-        break;
-
       default:
         skipped.push(`unknown operation ${JSON.stringify((op as { op?: unknown })?.op)}`);
     }
   }
 
-  const run = runOp ? runRequest(runOp, nodes, skipped) : undefined;
-  return { nodes, edges, groups, clearedCanvas, applied, skipped, ...(run ? { run } : {}) };
-}
-
-/** The run as the live canvas allows it: nodes the user deleted meanwhile are left out. */
-function runRequest(op: Extract<AgentGraphOp, { op: "run" }>, nodes: WorkflowNode[], skipped: string[]): ApplyGraphOpsResult["run"] {
-  const onCanvas = new Set(nodes.map((node) => node.id));
-  const runs = clampRunCount(op.runs);
-  const scope = op.scope;
-  switch (scope?.kind) {
-    case "all":
-      if (onCanvas.size > 0) return { scope: { kind: "all" }, runs };
-      skipped.push("run: the canvas is empty");
-      return undefined;
-    case "from":
-      if (onCanvas.has(scope.nodeId)) return { scope: { kind: "from", nodeId: scope.nodeId }, runs };
-      skipped.push(`run from ${scope.nodeId}: the node is no longer on the canvas`);
-      return undefined;
-    case "nodes": {
-      const ids = Array.isArray(scope.nodeIds) ? scope.nodeIds : [];
-      const present = ids.filter((id) => onCanvas.has(id));
-      if (present.length < ids.length) {
-        skipped.push(`run: ${ids.filter((id) => !onCanvas.has(id)).join(", ")} ${ids.length - present.length === 1 ? "is" : "are"} no longer on the canvas`);
-      }
-      return present.length > 0 ? { scope: { kind: "nodes", nodeIds: present }, runs } : undefined;
-    }
-    default:
-      skipped.push(`run: unknown scope ${JSON.stringify((scope as { kind?: unknown } | undefined)?.kind)}`);
-      return undefined;
-  }
+  return { nodes, edges, groups, clearedCanvas, applied, skipped };
 }
 
 function groupColor(value: unknown): GroupColor | undefined {

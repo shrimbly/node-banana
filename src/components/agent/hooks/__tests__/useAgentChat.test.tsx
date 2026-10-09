@@ -11,11 +11,6 @@ const toastShow = vi.hoisted(() => vi.fn());
 vi.mock("@/components/Toast", () => ({ useToast: { getState: () => ({ show: toastShow }) } }));
 const saveLiveWorkflow = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/agent/client/save", () => ({ saveLiveWorkflow }));
-const trackStartedRun = vi.hoisted(() => vi.fn());
-vi.mock("@/lib/agent/client/runs", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/agent/client/runs")>()),
-  trackStartedRun,
-}));
 vi.mock("@/utils/logger", () => ({
   logger: {
     info: vi.fn(),
@@ -30,7 +25,7 @@ vi.mock("@/utils/logger", () => ({
 
 import { useWorkflowStore, type WorkflowFile } from "@/store/workflowStore";
 import { useAgentChat } from "@/components/agent/hooks/useAgentChat";
-import type { AgentGraphOpBatch } from "@/lib/agent/types";
+import type { AgentGraphOp, AgentGraphOpBatch } from "@/lib/agent/types";
 
 /** Two workflows with the store's counter-style ids, so A's ids also exist in B. */
 function workflow(id: string, name: string, promptText: string): WorkflowFile {
@@ -559,7 +554,6 @@ describe("useAgentChat: the turn's tab and save steps", () => {
   beforeEach(async () => {
     toastShow.mockClear();
     saveLiveWorkflow.mockReset();
-    trackStartedRun.mockReset();
     const store = useWorkflowStore.getState();
     useWorkflowStore.setState({ tabs: [{ id: store.activeTabId, snapshot: null }], isRunning: false, isSaving: false, batch: null });
     useWorkflowStore.getState().clearWorkflow();
@@ -698,86 +692,22 @@ describe("useAgentChat: the turn's tab and save steps", () => {
     stream.end();
   });
 
-  it("records the run a batch started, under its tool call, as the canvas allowed it", async () => {
-    const original = useWorkflowStore.getState().applyAgentGraphOps;
-    // The user deleted a node mid-turn: the store left it out of the run it started.
-    useWorkflowStore.setState((state) => ({ nodes: state.nodes.filter((node) => node.id !== "nanoBanana-2") }));
-    useWorkflowStore.setState({
-      applyAgentGraphOps: vi.fn(() => ({
-        applied: 0,
-        skipped: [],
-        runStarted: true as const,
-        run: { scope: { kind: "nodes" as const, nodeIds: ["prompt-1"] }, runs: 2 },
-      })),
-    });
-    try {
-      const { result, stream } = await startTurn();
-      await act(async () => {
-        push(stream, {
-          batchId: "run",
-          toolCallId: "call-run",
-          summary: "Run 2 nodes",
-          ops: [{ op: "run", scope: { kind: "nodes", nodeIds: ["prompt-1", "nanoBanana-2"] }, runs: 2 }],
-          focusNodeIds: ["prompt-1", "nanoBanana-2"],
-        });
-        await sleep(30);
-      });
-      expect(trackStartedRun).toHaveBeenCalledWith({
-        chatId: result.current.chatId,
-        anchor: { toolCallId: "call-run" },
-        label: "Run 2 nodes",
-        scope: { kind: "nodes", nodeIds: ["prompt-1"] },
-        runs: 2,
-        tabId: useWorkflowStore.getState().activeTabId,
-        plannedNodeIds: ["prompt-1"],
-      });
-      stream.end();
-    } finally {
-      useWorkflowStore.setState({ applyAgentGraphOps: original });
-    }
-  });
-
-  it("plans a whole-workflow run's nodes from the canvas when the batch names none", async () => {
-    const original = useWorkflowStore.getState().applyAgentGraphOps;
-    useWorkflowStore.setState({
-      applyAgentGraphOps: vi.fn(() => ({ applied: 0, skipped: [], runStarted: true as const, run: { scope: { kind: "all" as const }, runs: 1 } })),
-    });
+  it("never starts a run, whatever a batch holds", async () => {
+    const original = useWorkflowStore.getState().runBatch;
+    const runBatch = vi.fn(async () => {});
+    useWorkflowStore.setState({ runBatch });
     try {
       const { stream } = await startTurn();
+      const run = { op: "run", scope: { kind: "all" }, runs: 1 } as unknown as AgentGraphOp;
       await act(async () => {
-        push(stream, { batchId: "run", toolCallId: "call-run", summary: "Running the workflow", ops: [{ op: "run", scope: { kind: "all" }, runs: 1 }] });
+        push(stream, { batchId: "run", toolCallId: "call-run", summary: "Run workflow", ops: [run] });
         await sleep(30);
       });
-      expect(trackStartedRun).toHaveBeenCalledWith(
-        expect.objectContaining({ scope: { kind: "all" }, runs: 1, plannedNodeIds: ["prompt-1", "nanoBanana-2"] }),
-      );
+      expect(runBatch).not.toHaveBeenCalled();
+      expect(useWorkflowStore.getState().isRunning).toBe(false);
       stream.end();
     } finally {
-      useWorkflowStore.setState({ applyAgentGraphOps: original });
-    }
-  });
-
-  it("says why, and records nothing, when the canvas refuses the run", async () => {
-    useWorkflowStore.setState({ desktopConnected: false });
-    try {
-      const { stream } = await startTurn();
-      await act(async () => {
-        push(stream, {
-          batchId: "run",
-          toolCallId: "call-run",
-          summary: "Running the workflow ×3",
-          ops: [{ op: "run", scope: { kind: "all" }, runs: 3 }],
-        });
-        await sleep(30);
-      });
-      expect(toastShow).toHaveBeenLastCalledWith(
-        "The agent's run didn't start: local server disconnected. Use Help → Restart Local Server to reconnect.",
-        "warning",
-      );
-      expect(trackStartedRun).not.toHaveBeenCalled();
-      stream.end();
-    } finally {
-      useWorkflowStore.setState({ desktopConnected: true });
+      useWorkflowStore.setState({ runBatch: original });
     }
   });
 });
@@ -835,12 +765,7 @@ describe("useAgentChat: steps still pending when the turn ends", () => {
     ops: [{ op: "addNode", id: `prompt-${batchId}`, nodeType: "prompt", position: { x: 0, y: 0 }, data: { prompt: batchId } }],
     ...(tabId ? { tabId } : {}),
   });
-  const runAll: AgentGraphOpBatch = {
-    batchId: "run",
-    toolCallId: "call-run",
-    summary: "Running the workflow",
-    ops: [{ op: "run", scope: { kind: "all" }, runs: 1 }],
-  };
+  const openTab = () => step("open", { op: "newTab", tabId: "tab-agopen" });
   const nodeIds = () => useWorkflowStore.getState().nodes.map((node) => node.id);
   /** Two tabs, A live. */
   function twoTabs() {
@@ -850,35 +775,31 @@ describe("useAgentChat: steps still pending when the turn ends", () => {
     return { tabA, tabB };
   }
 
-  const originalRunBatch = useWorkflowStore.getState().runBatch;
-  const runBatch = vi.fn(async () => {});
-
   beforeEach(async () => {
     toastShow.mockClear();
     saveLiveWorkflow.mockReset();
-    trackStartedRun.mockReset();
-    runBatch.mockClear();
     const store = useWorkflowStore.getState();
-    useWorkflowStore.setState({ tabs: [{ id: store.activeTabId, snapshot: null }], isRunning: false, isSaving: false, batch: null, runBatch });
+    useWorkflowStore.setState({ tabs: [{ id: store.activeTabId, snapshot: null }], isRunning: false, isSaving: false, batch: null });
     useWorkflowStore.getState().clearWorkflow();
     await act(() => useWorkflowStore.getState().loadWorkflow(workflow("wf-A", "A", "a cat")));
   });
 
   afterEach(() => {
-    useWorkflowStore.setState({ isRunning: false, isSaving: false, runBatch: originalRunBatch });
+    useWorkflowStore.setState({ isRunning: false, isSaving: false });
     vi.unstubAllGlobals();
   });
 
   it.each([
     ["sends again", (chat: ReturnType<typeof useAgentChat>) => chat.send("and another")],
     ["starts a new chat", (chat: ReturnType<typeof useAgentChat>) => chat.newChat()],
-  ])("never starts a run asked for before Stop, even once the user %s", async (_what, next) => {
+  ])("never opens a tab asked for before Stop, even once the user %s", async (_what, next) => {
     let finishSave!: (result: { ok: true; name: string; path: string }) => void;
     saveLiveWorkflow.mockImplementation(() => new Promise((resolve) => (finishSave = resolve)));
+    const tabA = useWorkflowStore.getState().activeTabId;
     const { result, streams } = await busyChat();
     await act(async () => {
       push(streams[0], step("save", { op: "save", name: "Fox" }));
-      push(streams[0], runAll);
+      push(streams[0], openTab());
       await sleep(30);
     });
 
@@ -892,19 +813,17 @@ describe("useAgentChat: steps still pending when the turn ends", () => {
       await sleep(30);
     });
 
-    expect(runBatch).not.toHaveBeenCalled();
-    expect(trackStartedRun).not.toHaveBeenCalled();
+    expect(useWorkflowStore.getState().tabs.map((tab) => tab.id)).toEqual([tabA]);
     for (const stream of streams) stream.end();
   });
 
-  it("keeps an ended turn's queued edits and run off a workflow loaded into the tab since, once a new turn begins", async () => {
+  it("keeps an ended turn's queued edits off a workflow loaded into the tab since, once a new turn begins", async () => {
     let finishSave!: (result: { ok: false; reason: string }) => void;
     saveLiveWorkflow.mockImplementation(() => new Promise((resolve) => (finishSave = resolve)));
     const { result, streams } = await busyChat();
     await act(async () => {
       push(streams[0], step("save", { op: "save", name: "Fox" }));
       push(streams[0], edit("dog"));
-      push(streams[0], runAll);
       streams[0].push({ type: "finish" });
       streams[0].end();
       await sleep(30);
@@ -918,19 +837,19 @@ describe("useAgentChat: steps still pending when the turn ends", () => {
       await sleep(30);
     });
     expect(nodeIds()).not.toContain("prompt-dog");
-    expect(runBatch).not.toHaveBeenCalled();
   });
 
-  it("Stop also covers the last turn's run still queued behind its save, and lets the waiting turn go at once", async () => {
+  it("Stop also covers the last turn's tab step still queued behind its save, and lets the waiting turn go at once", async () => {
     let finishSave!: (result: { ok: true; name: string; path: string }) => void;
     saveLiveWorkflow.mockImplementation(() => new Promise((resolve) => (finishSave = resolve)));
+    const tabA = useWorkflowStore.getState().activeTabId;
     const { result, streams } = await busyChat();
     act(() => {
       result.current.send("then make it blue");
     });
     await act(async () => {
       push(streams[0], step("save", { op: "save", name: "Fox" }));
-      push(streams[0], runAll);
+      push(streams[0], openTab());
       streams[0].push({ type: "finish" });
       streams[0].end();
       await sleep(50);
@@ -942,17 +861,18 @@ describe("useAgentChat: steps still pending when the turn ends", () => {
       finishSave({ ok: true, name: "Fox", path: "/lib/Fox" });
       await sleep(30);
     });
-    expect(runBatch).not.toHaveBeenCalled();
+    expect(useWorkflowStore.getState().tabs.map((tab) => tab.id)).toEqual([tabA]);
     for (const stream of streams) stream.end();
   });
 
-  it("New chat after a turn ended drops the run it still had queued", async () => {
+  it("New chat after a turn ended drops the tab step it still had queued", async () => {
     let finishSave!: (result: { ok: true; name: string; path: string }) => void;
     saveLiveWorkflow.mockImplementation(() => new Promise((resolve) => (finishSave = resolve)));
+    const tabA = useWorkflowStore.getState().activeTabId;
     const { result, streams } = await busyChat();
     await act(async () => {
       push(streams[0], step("save", { op: "save", name: "Fox" }));
-      push(streams[0], runAll);
+      push(streams[0], openTab());
       streams[0].push({ type: "finish" });
       streams[0].end();
       await sleep(30);
@@ -963,8 +883,7 @@ describe("useAgentChat: steps still pending when the turn ends", () => {
       finishSave({ ok: true, name: "Fox", path: "/lib/Fox" });
       await sleep(30);
     });
-    expect(runBatch).not.toHaveBeenCalled();
-    expect(trackStartedRun).not.toHaveBeenCalled();
+    expect(useWorkflowStore.getState().tabs.map((tab) => tab.id)).toEqual([tabA]);
   });
 
   it("New chat mid-turn drops the old turn's remaining steps, a switch already waiting included", async () => {
@@ -974,7 +893,6 @@ describe("useAgentChat: steps still pending when the turn ends", () => {
     await act(async () => {
       push(streams[0], step("switch", { op: "switchTab", tabId: tabB }, tabB));
       push(streams[0], edit("in-b", tabB));
-      push(streams[0], { ...runAll, tabId: tabB });
       await sleep(30);
     });
 
@@ -988,7 +906,6 @@ describe("useAgentChat: steps still pending when the turn ends", () => {
     expect(state.activeTabId).toBe(tabA);
     expect(nodeIds()).not.toContain("prompt-in-b");
     expect(state.tabs.find((tab) => tab.id === tabB)?.snapshot?.nodes.map((node) => node.id)).not.toContain("prompt-in-b");
-    expect(runBatch).not.toHaveBeenCalled();
     expect(toastShow).not.toHaveBeenCalled();
     for (const stream of streams) stream.end();
   });

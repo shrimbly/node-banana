@@ -1504,41 +1504,50 @@ describe("run_workflow", () => {
     ],
   });
 
-  it("starts the whole workflow as one run op, once unless asked for more", async () => {
-    const result = await call(runtimeFor(chain(false)), "run_workflow", { scope: "all" });
+  it("sets up the Run card for the whole workflow and starts nothing, however many runs", async () => {
+    const runtime = runtimeFor(chain(false));
+    const result = await call(runtime, "run_workflow", { scope: "all" });
     expect(result.ok, result.text).toBe(true);
-    expect(result.ops).toEqual([{ op: "run", scope: { kind: "all" }, runs: 1 }]);
-    expect(result.summary).toBe("Started the workflow");
-    expect(result.text).toContain("Started a run of the whole workflow (4 nodes)");
-    expect(result.text).toContain("you do not see its results in this turn");
+    expect(result.ops).toEqual([]);
+    expect(result.summary).toBe("Ready to run: press Run below");
+    expect(result.text).toContain("Nothing has started: runs wait for the user. The Run button under your reply is set up for the whole workflow (4 nodes).");
     expect(result.text).toContain("report how it went from that, never before");
+    expect(runtime.runOffer!()).toMatchObject({ primary: { scope: { kind: "all" }, label: "Run workflow" }, alternatives: [] });
+    expect(runtime.runOffer!()?.primary).not.toHaveProperty("runs");
 
-    // A batch waits for the user's click: no run op, the turn's Run card set up for it.
     const batch = runtimeFor(chain());
     const three = await call(batch, "run_workflow", { scope: "all", runs: 3 });
     expect(three).toMatchObject({ ok: true, ops: [], summary: "Ready to run ×3: press Run below" });
-    expect(three.text).toContain("Nothing has started: 3 runs one after another waits for the user to press Run.");
+    expect(three.text).toContain("set up for the whole workflow (4 nodes), 3 runs one after another.");
     expect(batch.runOffer!()).toMatchObject({ primary: { scope: { kind: "all" }, label: "Run workflow", runs: 3 }, alternatives: [] });
     // Clamped like the Run menu.
     const many = runtimeFor(chain());
     await call(many, "run_workflow", { scope: "all", runs: 500 });
     expect(many.runOffer!()?.primary.runs).toBe(50);
-    expect((await call(runtimeFor(chain()), "run_workflow", { scope: "all", runs: 0 })).ops).toEqual([{ op: "run", scope: { kind: "all" }, runs: 1 }]);
+    const none = runtimeFor(chain());
+    expect((await call(none, "run_workflow", { scope: "all", runs: 0 })).summary).toBe("Ready to run: press Run below");
+    expect(none.runOffer!()?.primary).not.toHaveProperty("runs");
   });
 
-  it("runs only the named nodes when everything feeding them holds its output", async () => {
-    const result = await call(runtimeFor(chain()), "run_workflow", { scope: "nodes", nodeIds: ["nanoBanana-3"] });
-    expect(result.ok, result.text).toBe(true);
-    expect(result.ops).toEqual([{ op: "run", scope: { kind: "nodes", nodeIds: ["nanoBanana-3"] }, runs: 1 }]);
-    expect(result.summary).toBe(`Started ${NODE_CATALOG.nanoBanana.displayName}`);
-    const two = await call(runtimeFor(chain()), "run_workflow", { scope: "nodes", nodeIds: ["llmGenerate-2", "nanoBanana-3", "llmGenerate-2"] });
-    expect(two.ops).toEqual([{ op: "run", scope: { kind: "nodes", nodeIds: ["llmGenerate-2", "nanoBanana-3"] }, runs: 1 }]);
-    expect(two.summary).toBe("Started 2 nodes");
+  it("sets up only the named nodes when everything feeding them holds its output", async () => {
+    const scopeOf = async (args: Record<string, unknown>) => {
+      const runtime = runtimeFor(chain());
+      const result = await call(runtime, "run_workflow", args);
+      expect(result, result.text).toMatchObject({ ok: true, ops: [] });
+      const { scope, label } = runtime.runOffer!()!.primary;
+      return { scope, label };
+    };
+    expect(await scopeOf({ scope: "nodes", nodeIds: ["nanoBanana-3"] })).toEqual({
+      scope: { kind: "nodes", nodeIds: ["nanoBanana-3"] },
+      label: `Run ${NODE_CATALOG.nanoBanana.displayName}`,
+    });
+    expect(await scopeOf({ scope: "nodes", nodeIds: ["llmGenerate-2", "nanoBanana-3", "llmGenerate-2"] })).toEqual({
+      scope: { kind: "nodes", nodeIds: ["llmGenerate-2", "nanoBanana-3"] },
+      label: "Run 2 nodes",
+    });
     // The node fields mixed up still say which node is meant.
-    const lone = await call(runtimeFor(chain()), "run_workflow", { scope: "nodes", node: "nanoBanana-3" });
-    expect(lone.ops).toEqual([{ op: "run", scope: { kind: "nodes", nodeIds: ["nanoBanana-3"] }, runs: 1 }]);
-    const from = await call(runtimeFor(chain()), "run_workflow", { scope: "from", nodeIds: ["llmGenerate-2"] });
-    expect(from.ops).toEqual([{ op: "run", scope: { kind: "from", nodeId: "llmGenerate-2" }, runs: 1 }]);
+    expect((await scopeOf({ scope: "nodes", node: "nanoBanana-3" })).scope).toEqual({ kind: "nodes", nodeIds: ["nanoBanana-3"] });
+    expect((await scopeOf({ scope: "from", nodeIds: ["llmGenerate-2"] })).scope).toEqual({ kind: "from", nodeId: "llmGenerate-2" });
   });
 
   it("names the nodes the run runs, in run order", async () => {
@@ -1553,8 +1562,11 @@ describe("run_workflow", () => {
     state.edges.push(storeEdge("prompt-5", "text", "nanoBanana-6", "text"), storeEdge("prompt-7", "text", "nanoBanana-8", "text"));
     state.groups = { g1: { id: "g1", name: "Hares", color: "neutral", locked: true } };
 
-    const all = await call(runtimeFor(state), "run_workflow", { scope: "all" });
+    const runtime = runtimeFor(state);
+    const all = await call(runtime, "run_workflow", { scope: "all" });
     expect(all.focusNodeIds).toEqual(["prompt-1", "prompt-5", "llmGenerate-2", "nanoBanana-6", "nanoBanana-3", "output-4"]);
+    // The card's placeholders are the same nodes.
+    expect(runtime.runOffer!()?.primary.nodeIds).toEqual(all.focusNodeIds);
     const nodes = await call(runtimeFor(state), "run_workflow", { scope: "nodes", nodeIds: ["nanoBanana-3", "llmGenerate-2"] });
     expect(nodes.focusNodeIds).toEqual(["llmGenerate-2", "nanoBanana-3"]);
     // A run from a node runs its level and every later one, the other branch's generator too.
@@ -1684,18 +1696,18 @@ describe("run_workflow", () => {
     expect((await call(runtimeFor(state), "run_workflow", { scope: "from", node: "splitGrid-1" })).ok).toBe(true);
   });
 
-  it("runs from a node, checking what the run leads to", async () => {
-    const started = await call(runtimeFor(chain(false)), "run_workflow", { scope: "from", node: "llmGenerate-2" });
-    expect(started.ok, started.text).toBe(true);
-    expect(started.ops).toEqual([{ op: "run", scope: { kind: "from", nodeId: "llmGenerate-2" }, runs: 1 }]);
-    expect(started.summary).toBe(`Started from ${LLM}`);
+  it("sets up a run from a node, checking what the run leads to", async () => {
+    const runtime = runtimeFor(chain(false));
+    const set = await call(runtime, "run_workflow", { scope: "from", node: "llmGenerate-2" });
+    expect(set, set.text).toMatchObject({ ok: true, ops: [] });
+    expect(runtime.runOffer!()?.primary).toMatchObject({ scope: { kind: "from", nodeId: "llmGenerate-2" }, label: `Run from ${LLM}` });
     // Starting after the LLM would read its empty output.
     const refused = await call(runtimeFor(chain(false)), "run_workflow", { scope: "from", node: "nanoBanana-3" });
     expect(refused.ok).toBe(false);
     expect(refused.text).toContain("llmGenerate-2");
   });
 
-  it("runs what this turn just built, by ref, after the edits", async () => {
+  it("sets up a run of what this turn just built, by ref, after the edits", async () => {
     const runtime = runtimeFor(EMPTY);
     const built = await call(runtime, "create_workflow", {
       nodes: [
@@ -1705,16 +1717,16 @@ describe("run_workflow", () => {
       connections: [{ from: "p", to: "l" }],
     });
     expect(built.ok, built.text).toBe(true);
-    expect(built.text).toContain("Nothing has run yet: the user presses Run (Ctrl/Cmd+Enter), or asks you to run it.");
+    expect(built.text).toContain("Nothing has run yet: runs wait for the user to press Run.");
     const result = await call(runtime, "run_workflow", { scope: "nodes", nodeIds: ["l"] });
     expect(result.ok, result.text).toBe(true);
-    expect(result.ops).toEqual([{ op: "run", scope: { kind: "nodes", nodeIds: ["llmGenerate-ag2"] }, runs: 1 }]);
+    expect(runtime.runOffer!()?.primary.scope).toEqual({ kind: "nodes", nodeIds: ["llmGenerate-ag2"] });
   });
 
   it("refuses unknown nodes, a scope without its nodes, and an empty canvas", async () => {
     const unknown = await call(runtimeFor(chain()), "run_workflow", { scope: "nodes", nodeIds: ["nanoBanana-3", "ghost-9"] });
     expect(unknown.ok).toBe(false);
-    expect(unknown.text).toContain("Not on the canvas: ghost-9. Nothing was started.");
+    expect(unknown.text).toContain("Not on the canvas: ghost-9. Nothing was set up.");
     expect((await call(runtimeFor(chain()), "run_workflow", { scope: "nodes" })).text).toContain('scope "nodes" needs nodeIds');
     expect((await call(runtimeFor(chain()), "run_workflow", { scope: "from" })).text).toContain('scope "from" needs node');
     expect((await call(runtimeFor(chain()), "run_workflow", { scope: "from", node: "ghost-9" })).ok).toBe(false);
@@ -1723,28 +1735,24 @@ describe("run_workflow", () => {
   });
 
   it("refuses while a run is already going", async () => {
-    const result = await call(runtimeFor(chain(), { running: true }), "run_workflow", { scope: "all" });
+    const runtime = runtimeFor(chain(), { running: true });
+    const result = await call(runtime, "run_workflow", { scope: "all" });
     expect(result.ok).toBe(false);
     expect(result.ops).toEqual([]);
     expect(result.summary).toBe("A run is already going");
+    expect(runtime.runOffer!()).toBeNull();
   });
 
-  it("starts one run per turn, and changes nothing on the canvas after it", async () => {
+  it("leaves the canvas open to edits after it, and the latest call sets up the card", async () => {
     const runtime = runtimeFor(chain());
     expect((await call(runtime, "run_workflow", { scope: "all" })).ok).toBe(true);
-    const again = await call(runtime, "run_workflow", { scope: "all" });
-    expect(again.ok).toBe(false);
-    expect(again.summary).toBe("Already started a run");
     const edit = await call(runtime, "update_node", { node: "prompt-1", settings: { prompt: "a wolf" } });
-    expect(edit.ok).toBe(false);
-    expect(edit.ops).toEqual([]);
-    expect(edit.text).toContain("you started a run earlier in this turn");
-    // Reading and tidying the layout leave the run alone.
-    expect((await call(runtime, "get_workflow", {})).ok).toBe(true);
-    expect((await call(runtime, "arrange_workflow", {})).ok).toBe(true);
+    expect(edit.ok, edit.text).toBe(true);
+    expect((await call(runtime, "run_workflow", { scope: "nodes", nodeIds: ["nanoBanana-3"] })).ok).toBe(true);
+    expect(runtime.runOffer!()?.primary.scope).toEqual({ kind: "nodes", nodeIds: ["nanoBanana-3"] });
   });
 
-  it("waits for an edit still being resolved, so the run's op follows the edit's", async () => {
+  it("waits for an edit still being resolved, so the run is checked against it", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     const slowSource = {
@@ -1763,14 +1771,14 @@ describe("run_workflow", () => {
       .execute("update_node", { node: "nanoBanana-3", settings: { model: { provider: "fal", modelId: "fal-ai/flux" } } })
       .then(() => finished.push("edit"));
     const run = runtime.execute("run_workflow", { scope: "all" }).then(() => finished.push("run"));
-    // An edit sent while the run is being decided waits to hear whether it started: it did, so the edit would land under it.
+    // Nothing runs this turn, so an edit sent after it goes ahead.
     const late = runtime.execute("update_node", { node: "prompt-1", settings: { prompt: "a wolf" } });
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(finished).toEqual([]);
     release();
-    const [, , refused] = await Promise.all([edit, run, late]);
+    const [, , after] = await Promise.all([edit, run, late]);
     expect(finished).toEqual(["edit", "run"]);
-    expect(refused).toMatchObject({ ok: false, ops: [], summary: "Not changed: a run started this turn" });
+    expect(after.ok, after.text).toBe(true);
   });
 
   it("knows a locked group's nodes never run: what they feed stays empty", async () => {
@@ -1803,18 +1811,5 @@ describe("run_workflow", () => {
     const result = await call(runtime, "run_workflow", { scope: "from", node: "prompt-1" });
     expect(result.ok, result.text).toBe(true);
     expect(result.text).toContain("It also runs nanoBanana-4: other branches at the same depth or later");
-  });
-
-  it("lets an edit sent alongside a run go ahead when the run is refused", async () => {
-    const runtime = runtimeFor({
-      nodes: [storeNode("prompt-1", "prompt", { x: 0, y: 0 }, { prompt: "" }), storeNode("nanoBanana-2", "nanoBanana", { x: 400, y: 0 })],
-      edges: [storeEdge("prompt-1", "text", "nanoBanana-2", "text")],
-    });
-    const [run, edit] = await Promise.all([
-      runtime.execute("run_workflow", { scope: "all" }),
-      runtime.execute("update_node", { node: "prompt-1", settings: { prompt: "a fox" } }),
-    ]);
-    expect(run).toMatchObject({ ok: false, summary: "Inputs not ready" });
-    expect(edit.ok, edit.text).toBe(true);
   });
 });

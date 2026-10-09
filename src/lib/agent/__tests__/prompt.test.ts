@@ -19,7 +19,7 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("<canvas> block");
     expect(prompt).toContain("authoritative and fresh");
     expect(prompt).toContain("replaceCanvas deletes every node");
-    expect(prompt).toContain("Nothing runs until the user presses Run or asks you to run it.");
+    expect(prompt).toContain("You never start a run: the user presses the Run button under your reply.");
     expect(prompt).toContain("Keep replies short");
   });
 
@@ -70,7 +70,8 @@ describe("buildAgentSystemPrompt", () => {
     // then from 14.5k for the chat's Run button and the open workflows,
     // then from 15k for the button covering only the workflow the reply ends in (Claude 15,099, Codex 15,293),
     // then from 15.15k for saving a workflow built from scratch (Claude 15,226, Codex 15,420),
-    // then from 15.3k for looking at results with view_outputs (Claude 15,328, Codex 15,522).
+    // then from 15.3k for looking at results with view_outputs (Claude 15,328, Codex 15,522);
+    // every run waiting for the Run button added 58 (Claude 15,386).
     expect(prompt.length).toBeLessThan(15_400);
   });
 
@@ -78,10 +79,10 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).toContain("switch_workflow, new_workflow, save_workflow");
     // There is no button when the run would find an upload or a prompt empty: then the canvas's Run is the way.
     expect(prompt).toContain(
-      "What you build or change and leave unrun gets a Run button under your reply if it can run as it stands: point the user there, not to the canvas's Run button; if an upload or text is missing there is none, so say what to fill in, then to press Run on the canvas.",
+      "What you build or change also gets that button if it can run as it stands: point the user there, not to the canvas's Run button; if an upload or text is missing there is none, so say what to fill in, then to press Run on the canvas.",
     );
-    // The button runs the workflow the turn ended in: changes left in another tab have none.
-    expect(prompt).toContain("The button covers only the workflow you end in: for changes left in another tab, say which and to press Run on its canvas.");
+    // Unless run_workflow set it up, the button runs the workflow the turn ended in: changes left in another tab have none.
+    expect(prompt).toContain("Without run_workflow, the button covers only the workflow you end in: for changes left in another tab, say which and to press Run on its canvas.");
     expect(prompt).toContain("Each open workflow is a tab; the <canvas> block lists them when there are several, and your tools work in the live one.");
     expect(prompt).toContain("new_workflow opens an empty one: use it, not replaceCanvas, when the user asks for a new workflow and the live one holds other work");
     // A workflow built from scratch is named and saved, as a user would; the user's own work only when asked.
@@ -90,10 +91,10 @@ describe("buildAgentSystemPrompt", () => {
     );
   });
 
-  it("runs only when asked, picks what to run from the conversation, and reports from the canvas", () => {
-    expect(prompt).toContain("run_workflow");
-    expect(prompt).toContain("Then run the nodes you added or changed in this conversation if what feeds them holds its output");
-    expect(prompt).toContain("run everything if they ask, you built it all in this conversation, or inputs are missing");
+  it("never runs, sets up the Run button from the conversation when asked, and reports from the canvas", () => {
+    expect(prompt).toContain("When they ask to run, try or generate, set it up with run_workflow");
+    expect(prompt).toContain("the nodes you added or changed in this conversation if what feeds them holds its output");
+    expect(prompt).toContain("everything if they ask, you built it all in this conversation, or inputs are missing");
     expect(prompt).toContain("or from the node they name");
     expect(prompt).toContain(
       "Results arrive with their next message: report them from its canvas, and look at them with view_outputs before you judge them or change the workflow to fix them.",

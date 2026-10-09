@@ -311,7 +311,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     title: "Review outputs",
     readOnly: true,
     description:
-      "Look at the images the nodes generated, as the user sees them, each captioned with its node, model and prompt. Use it before judging results (quality, consistency, matching the brief) or changing a workflow to fix them, and say what you saw. A video shows its first frame only; audio, 3D models and uploaded images cannot be viewed. Shows what the nodes held when the user sent this message: a run you start this turn is not in it. At most 12 images per call; one call shows them all, so don't repeat it for the same nodes.",
+      "Look at the images the nodes generated, as the user sees them, each captioned with its node, model and prompt. Use it before judging results (quality, consistency, matching the brief) or changing a workflow to fix them, and say what you saw. A video shows its first frame only; audio, 3D models and uploaded images cannot be viewed. Shows what the nodes held when the user sent this message. At most 12 images per call; one call shows them all, so don't repeat it for the same nodes.",
     inputShape: viewOutputsShape,
   },
   {
@@ -319,7 +319,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     title: "Run workflow",
     readOnly: false,
     description:
-      "Start a run on the user's canvas, as their Run button does: generators call their models and spend the user's credits. Only when the user asks to run, try or generate. Call it last, after this turn's edits, and once per turn. scope \"nodes\" with the nodes you added or changed when every node feeding them holds its output; \"all\" for the whole workflow; \"from\" a node the user names. Refused while a run is going, and for nodes whose inputs have no output yet (the error says which to include). One run in the user's own workflow starts at once; more than one run, or a run in another tab, waits for the user to press Run under your reply. The run happens after this call: you do not see its results in this turn. The next message's canvas shows each node's status, error and output.",
+      "Set up the Run button under your reply for the user to press: nothing runs until they do. A run spends their credits, so you never start one yourself. Only when the user asks to run, try or generate. Call it last, after this turn's edits, and once per turn. scope \"nodes\" with the nodes you added or changed when every node feeding them holds its output; \"all\" for the whole workflow; \"from\" a node the user names. Refused while a run is going, and for nodes whose inputs have no output yet (the error says which to include). The next message's canvas shows each node's status, error and output.",
     inputShape: runWorkflowShape,
   },
   {
@@ -327,7 +327,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     title: "Switch workflow",
     readOnly: false,
     description:
-      "Make another open workflow (tab) the live one, as clicking its tab does: the user's canvas shows it, and your later tool calls this turn read and edit it. Returns its nodes. Refused while a run is going and after you started one.",
+      "Make another open workflow (tab) the live one, as clicking its tab does: the user's canvas shows it, and your later tool calls this turn read and edit it. Returns its nodes. Refused while a run is going.",
     inputShape: switchWorkflowShape,
   },
   {
@@ -335,7 +335,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     title: "New workflow",
     readOnly: false,
     description:
-      "Open an empty workflow in a new tab and make it the live one; the current workflow stays open in its own tab. Your later tool calls this turn build in the new one. Refused while a run is going and after you started one.",
+      "Open an empty workflow in a new tab and make it the live one; the current workflow stays open in its own tab. Your later tool calls this turn build in the new one. Refused while a run is going.",
     inputShape: newWorkflowShape,
   },
   {
