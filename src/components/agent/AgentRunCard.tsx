@@ -135,10 +135,6 @@ function plural(count: number, noun: string): string {
   return `${count} ${noun}${count === 1 ? "" : "s"}`;
 }
 
-function sameScope(a: RunScope, b: RunScope): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-
 /** Rows of the alternatives menu: the Instrument menu's 28px items (as the header's harness menu). */
 const MENU_ROW = cn(
   menuItemClass,
@@ -184,16 +180,33 @@ export function AgentRunCard({ offer }: { offer: AgentRunOffer }) {
   const reasonId = useId();
   const record = useLatestRun({ offerId: offer.offerId });
   const options = useMemo(() => [offer.primary, ...offer.alternatives], [offer]);
-  // After a run, the main button runs that option again; the menu has the rest.
-  const current = (record && options.find((option) => option.label === record.label && sameScope(option.scope, record.scope))) || offer.primary;
+  // After a run, the main button runs that option again; the menu has the rest. By label: a run that found
+  // some of its nodes gone ran (and recorded) a narrower scope than its option names.
+  const current = (record && options.find((option) => option.label === record.label)) || offer.primary;
   const others = options.filter((option) => option !== current);
 
   const targetKey = useWorkflowStore((state) => JSON.stringify(describeOfferTarget(offer, current, state)));
   const target = useMemo<OfferTarget>(() => JSON.parse(targetKey), [targetKey]);
-  const storeBlocked = useWorkflowStore((state) =>
-    chatRunBlockedReason({ ...(offer.tabId ? { tabId: offer.tabId } : {}), scope: current.scope, plannedNodeIds: current.nodeIds }, state),
+  // Each option on its own: one whose nodes are gone leaves the others runnable.
+  const reasonsKey = useWorkflowStore((state) =>
+    JSON.stringify(
+      options.map((option) =>
+        chatRunBlockedReason(
+          {
+            ...(offer.tabId ? { tabId: offer.tabId } : {}),
+            scope: option.scope,
+            plannedNodeIds: option.nodeIds,
+            ...(offer.workflowId ? { workflowId: offer.workflowId } : {}),
+          },
+          state,
+        ),
+      ),
+    ),
   );
-  const blocked = storeBlocked ?? (!target.live && transcript?.busy ? AGENT_TURN_RUNNING : null);
+  const reasons = useMemo<Array<string | null>>(() => JSON.parse(reasonsKey), [reasonsKey]);
+  const blockedFor = (option: AgentRunOption) =>
+    reasons[options.indexOf(option)] ?? (!target.live && transcript?.busy ? AGENT_TURN_RUNNING : null);
+  const blocked = blockedFor(current);
   const [runs, setRuns] = useState(1);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -304,7 +317,7 @@ export function AgentRunCard({ offer }: { offer: AgentRunOffer }) {
                   {others.map((option) => (
                     <DropdownMenuItem
                       key={`${option.label}:${JSON.stringify(option.scope)}`}
-                      disabled={!!blocked}
+                      disabled={!!blockedFor(option)}
                       className={MENU_ROW}
                       onSelect={() => run(option)}
                     >

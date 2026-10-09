@@ -240,6 +240,8 @@ export interface RunPreviewRowProps {
   /** The record ran more than once: each caption says which run (R1, R2…). */
   batched: boolean;
   onOpen: (outputId: string) => void;
+  /** Whether the viewer can show an output (it has a source): "+N" opens the first one that can. */
+  canOpen?: (outputId: string) => boolean;
   /** Bring a node into view on the canvas; absent outside the agent session. */
   onShowNode?: (nodeId: string) => void;
 }
@@ -252,14 +254,19 @@ export const PREVIEW_ROW_MAX_WIDTH = 1084;
 /** What the row measures before it has been laid out (and in tests): its usual width. */
 const ROW_WIDTH_FALLBACK: Record<AgentSurface, number> = { page: PREVIEW_ROW_MAX_WIDTH, window: 388 };
 
+/** A preview's frame width: its shape at the row's height, never wider than the row (a wider panorama is cropped). */
+export function frameWidthOf(aspect: number, height: number, width: number): number {
+  return Math.min(Math.round(height * aspect), Math.max(1, Math.floor(width)));
+}
+
 /**
  * How many of `aspects` fit side by side in `width` at `height`, each
- * `height × aspect` wide with `gap` between: always at least one.
+ * `height × aspect` wide (at most the row) with `gap` between: always at least one.
  */
 export function fitPreviews(aspects: readonly number[], height: number, width: number, gap = PREVIEW_GAP): number {
   let used = 0;
   for (let index = 0; index < aspects.length; index++) {
-    const next = used + (index > 0 ? gap : 0) + Math.round(height * aspects[index]);
+    const next = used + (index > 0 ? gap : 0) + frameWidthOf(aspects[index], height, width);
     if (next > width && index > 0) return index;
     used = next;
   }
@@ -300,7 +307,7 @@ function useRowWidth(shown: boolean, fallback: number) {
  * PREVIEW_ROW_MAX_WIDTH (the transcript is a size container, so `cqw` is the
  * chat's width); in the window it runs past the text's inset to the edges.
  */
-export function RunPreviewRow({ items, liveSources, surface, batched, onOpen, onShowNode }: RunPreviewRowProps) {
+export function RunPreviewRow({ items, liveSources, surface, batched, onOpen, canOpen, onShowNode }: RunPreviewRowProps) {
   const height = PREVIEW_HEIGHT[surface];
   const { ref, width } = useRowWidth(items.length > 0, ROW_WIDTH_FALLBACK[surface]);
   // Natural shapes of outputs whose record has none (a live output's image), once loaded.
@@ -314,7 +321,9 @@ export function RunPreviewRow({ items, liveSources, surface, batched, onOpen, on
   const fit = fitPreviews(aspects, height, width);
   const more = items.length - fit;
   // "+N" opens the first output it stands for that can be opened (a skeleton or 3D can't).
-  const firstHidden = items.slice(fit).find((item) => item.output && item.output.kind !== "model3d")?.output?.id;
+  const firstHidden = items
+    .slice(fit)
+    .find((item) => item.output && item.output.kind !== "model3d" && (canOpen?.(item.output.id) ?? true))?.output?.id;
 
   return (
     <div
@@ -332,7 +341,7 @@ export function RunPreviewRow({ items, liveSources, surface, batched, onOpen, on
       style={{ gap: PREVIEW_GAP }}
     >
       {items.slice(0, fit).map((item, index) => {
-        const frameWidth = Math.round(height * aspects[index]);
+        const frameWidth = frameWidthOf(aspects[index], height, width);
         const overflow = more > 0 && index === fit - 1;
         const batchIndex = item.output ? item.output.batchIndex : item.pending.batchIndex;
         const title = item.output ? item.output.nodeTitle : item.pending.nodeTitle;
@@ -645,6 +654,17 @@ export function withLineBreaks(text: string): string {
  * shorten copies whole from `fullText` (the node's, while it holds it), else
  * says it is shortened.
  */
+/**
+ * A node's text comes from a model the user's inputs steered: a markdown image
+ * in it would be fetched on sight, telling its host what the text says. It
+ * shows as its alt text and address instead.
+ */
+const NODE_TEXT_COMPONENTS = {
+  img: ({ alt, src }: { alt?: string; src?: string | Blob }) => (
+    <span className="text-neutral-500">{`[image${alt ? `: ${alt}` : ""}${typeof src === "string" && src ? ` ${src}` : ""}]`}</span>
+  ),
+};
+
 export function RunTextCard({ output, fullText }: { output: AgentRunOutput; fullText?: string }) {
   const text = output.text ?? "";
   const meta = [output.model, output.truncated && !fullText ? "Shortened" : undefined].filter(Boolean).join(" · ");
@@ -674,8 +694,10 @@ export function RunTextCard({ output, fullText }: { output: AgentRunOutput; full
           folded && "[mask-image:linear-gradient(to_bottom,#000_calc(100%_-_2.5rem),transparent)]",
         )}
       >
-        {/* Finished text: nothing to repair as it streams, so a stray "*" stays a "*". */}
-        <MessageResponse parseIncompleteMarkdown={false}>{withLineBreaks(text)}</MessageResponse>
+        {/* Finished text: nothing to repair as it streams, so a stray "*" stays a "*". A node's output is untrusted: no raw HTML, no images fetched. */}
+        <MessageResponse parseIncompleteMarkdown={false} skipHtml components={NODE_TEXT_COMPONENTS}>
+          {withLineBreaks(text)}
+        </MessageResponse>
       </div>
       {(overflows || expanded) && (
         <button

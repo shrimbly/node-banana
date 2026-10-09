@@ -15,7 +15,7 @@ import {
 import { useShallow } from "zustand/shallow";
 import { MediaViewer, type MediaViewerAction, type MediaViewerItem } from "@/components/MediaViewer";
 import { cn } from "@/components/agent/lib/utils";
-import { assetFileUrl } from "@/lib/assets/client/api";
+import { assetFileUrl, fetchAssetExistence } from "@/lib/assets/client/api";
 import { NODE_TITLES } from "@/lib/nodes/handles";
 import { MAX_RUN_OUTPUTS, chatRunBlockedReason, nodeTextOutputs, rerunChatRun, stopChatRun, useLatestRun } from "@/lib/agent/client/runs";
 import type { AgentRunOutput, AgentRunRecord, AgentRunStatus } from "@/lib/agent/types";
@@ -349,20 +349,31 @@ export interface AgentRunResultsProps {
 }
 
 /** The results card for one run record. */
-export function AgentRunResults({ record, embedded = false }: AgentRunResultsProps) {
+export function AgentRunResults({ record: stored, embedded = false }: AgentRunResultsProps) {
   const transcript = useAgentTranscriptActions();
   const surface = useAgentSurface();
   const headingId = useId();
+  const gone = useGoneAssets(stored);
+  const { record, goneOutputs } = useMemo(() => withoutGoneAssets(stored, gone), [stored, gone]);
   const running = record.status === "running";
 
   const pendingKey = useWorkflowStore((state) => (running ? JSON.stringify(pendingOutputs(record, state)) : ""));
   const pending = useMemo<PendingOutput[]>(() => (pendingKey ? JSON.parse(pendingKey) : []), [pendingKey]);
-  const sources = useWorkflowStore(useShallow((state) => liveSources(record, state)));
+  // A deleted output shows as unavailable: the node may hold another by now.
+  const sources = useWorkflowStore(useShallow((state) => withoutKeys(liveSources(record, state), goneOutputs)));
   // Only for this card's own Run again (an offer's card has its own button).
   const blocked = useWorkflowStore((state) =>
     embedded || running
       ? null
-      : chatRunBlockedReason({ tabId: record.tabId, scope: record.scope, plannedNodeIds: record.plannedNodeIds }, state) ??
+      : chatRunBlockedReason(
+          {
+            tabId: record.tabId,
+            scope: record.scope,
+            plannedNodeIds: record.plannedNodeIds,
+            ...(record.workflowId ? { workflowId: record.workflowId } : {}),
+          },
+          state,
+        ) ??
         (transcript?.busy && state.activeTabId !== record.tabId ? AGENT_TURN_RUNNING : null),
   );
   const stopLabel = useWorkflowStore(runStopLabel);
@@ -387,10 +398,14 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
   const pendingTexts = pending.filter((entry) => entry.kind === "text");
   const hasRows = audio.length + texts.length + pendingAudio.length + pendingTexts.length + record.errors.length > 0;
 
+  // In the row's order, so the viewer steps through them as the row reads.
   const viewerItems = useMemo<MediaViewerItem[]>(
     () =>
-      record.outputs.flatMap((output) => {
-        if (output.kind !== "image" && output.kind !== "video") return [];
+      orderPreviews(
+        record,
+        record.outputs.map((output) => ({ key: output.id, output })),
+      ).flatMap(({ output }) => {
+        if (!output || (output.kind !== "image" && output.kind !== "video")) return [];
         const src = outputFileSrc(output, sources[output.id]);
         if (!src) return [];
         const thumb = output.kind === "video" ? posterUrl(output) : undefined;
@@ -408,6 +423,12 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
     [record, sources],
   );
   const viewerIndex = viewing ? viewerItems.findIndex((item) => item.id === viewing) : -1;
+  // An output the viewer lost (its source went away) closes it, rather than reopening it once a source comes back.
+  if (viewing && viewerIndex < 0) setViewing(null);
+  const canOpen = (outputId: string) => viewerItems.some((item) => item.id === outputId);
+  const open = (outputId: string) => {
+    if (canOpen(outputId)) setViewing(outputId);
+  };
   const viewed = viewerIndex >= 0 ? record.outputs.find((output) => output.id === viewing) : undefined;
   const closeViewer = () => setViewing(null);
 
@@ -531,7 +552,15 @@ export function AgentRunResults({ record, embedded = false }: AgentRunResultsPro
         </p>
       )}
 
-      <RunPreviewRow items={visual} liveSources={sources} surface={surface} batched={record.runs > 1} onOpen={setViewing} onShowNode={showNode} />
+      <RunPreviewRow
+        items={visual}
+        liveSources={sources}
+        surface={surface}
+        batched={record.runs > 1}
+        onOpen={open}
+        canOpen={canOpen}
+        onShowNode={showNode}
+      />
 
       {hasRows && (
         <div className="flex flex-col gap-1.5">
@@ -616,6 +645,55 @@ function ErrorLine({ nodeTitle, message }: { nodeTitle: string; message: string 
 }
 
 /** Under a run_workflow call: the results of the run it started, once there is a record of it. */
+const NO_IDS: ReadonlySet<string> = new Set();
+
+/**
+ * The asset ids of a finished record's media the library no longer has
+ * (deleted in Assets, or the file gone): its cached thumbnail would still
+ * show and open on nothing. Asked once per card; none until the answer, and
+ * none when the library can't say.
+ */
+function useGoneAssets(record: AgentRunRecord): ReadonlySet<string> {
+  const ids =
+    record.status === "running"
+      ? ""
+      : record.outputs.flatMap((output) => ((output.kind === "image" || output.kind === "video") && output.assetId ? [output.assetId] : [])).join(",");
+  const [gone, setGone] = useState<{ ids: string; gone: ReadonlySet<string> }>({ ids: "", gone: NO_IDS });
+  useEffect(() => {
+    if (!ids) return;
+    let current = true;
+    void fetchAssetExistence(ids.split(",")).then((states) => {
+      if (!current) return;
+      const found = Object.entries(states).flatMap(([id, state]) => (state === "gone" ? [id] : []));
+      setGone({ ids, gone: found.length > 0 ? new Set(found) : NO_IDS });
+    });
+    return () => {
+      current = false;
+    };
+  }, [ids]);
+  return gone.ids === ids ? gone.gone : NO_IDS;
+}
+
+/** The record with its gone assets' ids taken off their outputs (they show as unavailable), and those outputs' ids. */
+function withoutGoneAssets(record: AgentRunRecord, gone: ReadonlySet<string>): { record: AgentRunRecord; goneOutputs: ReadonlySet<string> } {
+  if (gone.size === 0) return { record, goneOutputs: NO_IDS };
+  const goneOutputs = new Set<string>();
+  const outputs = record.outputs.map((output) => {
+    if (!output.assetId || !gone.has(output.assetId)) return output;
+    goneOutputs.add(output.id);
+    const rest = { ...output };
+    delete rest.assetId;
+    delete rest.sha256;
+    return rest;
+  });
+  return { record: { ...record, outputs }, goneOutputs };
+}
+
+function withoutKeys(sources: Readonly<Record<string, string>>, keys: ReadonlySet<string>): Readonly<Record<string, string>> {
+  if (keys.size === 0 || !Object.keys(sources).some((key) => keys.has(key))) return sources;
+  return Object.fromEntries(Object.entries(sources).filter(([key]) => !keys.has(key)));
+}
+
 export function AgentToolRunResults({ toolCallId }: { toolCallId: string }) {
   const record = useLatestRun({ toolCallId });
   return record ? <AgentRunResults record={record} /> : null;

@@ -92,8 +92,11 @@ interface ToolCall {
  * Consecutive tool calls folded under one line: how many and what came of
  * them, or the call still running, shimmering. Opens to a line per call.
  */
-function AgentToolGroup({ calls }: { calls: ToolCall[] }) {
-  const { label, running, result, failed } = toolGroupSummary(calls.map((call) => call.part));
+function AgentToolGroup({ calls, streaming }: { calls: ToolCall[]; streaming: boolean }) {
+  const summary = toolGroupSummary(calls.map((call) => call.part));
+  const { label, result, failed } = summary;
+  // A stopped turn leaves its last call open for good: once the reply has ended, nothing is running.
+  const running = streaming ? summary.running : null;
   return (
     <ToolGroup>
       <ToolGroupTrigger
@@ -155,7 +158,7 @@ export const AgentMessage = memo(function AgentMessage({ message, streaming, onS
   let made: ReactNode[] = [];
   const built = page ? builtWorkflows(message.parts) : null;
   const flushTools = () => {
-    if (toolRun.length) blocks.push(<AgentToolGroup key={`tools-${blocks.length}`} calls={toolRun} />);
+    if (toolRun.length) blocks.push(<AgentToolGroup key={`tools-${blocks.length}`} calls={toolRun} streaming={streaming} />);
     blocks.push(...made);
     toolRun = [];
     made = [];

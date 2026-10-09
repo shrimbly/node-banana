@@ -233,7 +233,9 @@ export function AgentPanel({ open, onClose, buttonRight, buttonBottom }: AgentPa
       />
     );
   } else if (hasMessages) {
-    body = (
+    // Hidden, the window would still re-render a streaming reply on every token, beside the
+    // full-page chat drawing the same one. It remounts at the newest line when it opens.
+    body = open && (
       <AgentConversation
         messages={messages}
         busy={busy}

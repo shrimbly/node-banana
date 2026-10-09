@@ -598,6 +598,15 @@ describe("AgentChatView", () => {
     });
   });
 
+  describe("drops", () => {
+    it("lets text dragged onto the message box drop in, and keeps a dropped file from replacing the app", async () => {
+      render(<Harness />);
+      const textarea = await waitForComposer();
+      expect(fireEvent.drop(textarea, { dataTransfer: { types: ["text/plain"], getData: () => "a fox" } })).toBe(true);
+      expect(fireEvent.drop(textarea, { dataTransfer: { types: ["Files"], files: [] } })).toBe(false);
+    });
+  });
+
   describe("keys", () => {
     /** A button in the tab strip: outside the view, where the window's keys still reach it. */
     function stripButton() {

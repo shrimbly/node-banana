@@ -140,6 +140,8 @@ interface ProjectSetupModalProps {
   onClose: () => void;
   onSave: (id: string, name: string, directoryPath: string) => void;
   mode: "new" | "settings";
+  /** The name a new project starts with: the workflow's own, or the one the agent chose. */
+  initialName?: string;
   /** Page to open on in settings mode; the menu's API keys entry passes "providers". */
   initialTab?: SettingsTab;
   /**
@@ -155,6 +157,7 @@ export function ProjectSetupModal({
   onClose,
   onSave,
   mode,
+  initialName,
   initialTab,
   pageRequest,
 }: ProjectSetupModalProps) {
@@ -288,7 +291,7 @@ export function ProjectSetupModal({
         setDirectoryPath(saveDirectoryPath || "");
         setExternalStorage(useExternalImageStorage);
       } else if (mode === "new") {
-        setName("");
+        setName(initialName ?? "");
         setDirectoryPath(getLastProjectBaseDir() || "");
         setExternalStorage(true);
       }

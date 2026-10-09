@@ -381,4 +381,14 @@ describe("estimateRunCost", () => {
     // An LLM isn't priced: the sum would leave it out.
     expect(estimateRunCost([NODES[1], node("l", "llmGenerate")], 2)).toBeNull();
   });
+
+  it("blocks each way to run on its own: with the changed nodes gone, the whole workflow can still run", () => {
+    useWorkflowStore.setState({ nodes: [NODES[0], NODES[2]] });
+    renderOffer({ ...offer, primary: { scope: { kind: "nodes", nodeIds: ["gen"] }, label: "Run Generate Image", nodeIds: ["gen"] } });
+    expectHeld();
+    const whole = within(openMenu()).getByRole("menuitem", { name: /Run whole workflow/ });
+    expect(whole).not.toHaveAttribute("aria-disabled");
+    fireEvent.click(whole);
+    expect(startOfferRun).toHaveBeenCalledWith(expect.objectContaining({ option: offer.alternatives[0] }));
+  });
 });

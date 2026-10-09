@@ -234,6 +234,13 @@ describe("AgentMessage tool rows", () => {
     expect(within(folded).getByText("· 1 failed")).toHaveClass("text-red-400");
   });
 
+  it("shows a stopped turn's tools as used, not running: the call cut off by Stop never finishes", () => {
+    const failed = toolPart("run_workflow", "call-fail", { ok: false, summary: "Inputs not ready" });
+    const cutOff = { type: "dynamic-tool", toolName: "edit_workflow", toolCallId: "call-cut", state: "input-available", input: {} } as Part;
+    render(<AgentMessage message={reply([failed, cutOff])} streaming={false} />);
+    expect(screen.getByRole("button", { name: /Used 2 tools/ })).toHaveTextContent(/^Used 2 tools· 1 failed$/);
+  });
+
   it("marks a running call with a dot and a failed one in red, at the end of its line", () => {
     const running = { type: "dynamic-tool", toolName: "edit_workflow", toolCallId: "call-run", state: "input-available", input: {} } as Part;
     const failed = toolPart("run_workflow", "call-fail", { ok: false, summary: "Inputs not ready" });

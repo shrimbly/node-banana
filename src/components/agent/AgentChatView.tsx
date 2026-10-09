@@ -200,7 +200,9 @@ export function AgentChatView() {
   }, []);
 
   // Files dropped on the view would otherwise be opened by the browser in place of the app.
+  // Text dragged into the message box keeps its default: it is inserted.
   const swallowDrag = useCallback((event: DragEvent<HTMLElement>) => {
+    if (!Array.from(event.dataTransfer?.types ?? []).includes("Files")) return;
     event.stopPropagation();
     event.preventDefault();
   }, []);
@@ -272,6 +274,8 @@ export function AgentChatView() {
         harness={harness}
         readiness={blocked}
         variant={variant}
+        // The dock under a conversation caps and scrolls; a percentage cap on the card itself has no height to resolve against there.
+        {...(variant === "inline" ? { className: "max-h-none overflow-visible" } : {})}
         startingSignIn={signInStarting === harness}
         checking={checking}
         signInStartedAt={signInStartedAt}
@@ -362,7 +366,7 @@ export function AgentChatView() {
   const dockChoice = hasMessages && mode !== "harness";
   const dock =
     composerShown || inlineSignIn || dockChoice ? (
-      <div className={cn(PAGE_COLUMN, "relative z-[1] shrink-0", !composerShown && "pb-4")}>
+      <div className={cn(PAGE_COLUMN, "relative z-[1] shrink-0", !composerShown && "max-h-[65%] overflow-y-auto pb-4")}>
         {alreadySignedInHint && <div className="pb-3">{alreadySignedInHint}</div>}
         {dockChoice ? (
           mode === "chooser" ? (
@@ -370,7 +374,15 @@ export function AgentChatView() {
               <AgentChooserCard readiness={readiness} onPick={pickHarness} onCheckAgain={() => void checkAgain()} checking={checking} />
             </div>
           ) : (
-            <AgentSignInCard harness={harness} readiness={{ kind: "loading" }} variant="inline" eyebrow="Agent" onSignIn={() => {}} onCheckAgain={() => {}} />
+            <AgentSignInCard
+              harness={harness}
+              readiness={{ kind: "loading" }}
+              variant="inline"
+              eyebrow="Agent"
+              className="max-h-none overflow-visible"
+              onSignIn={() => {}}
+              onCheckAgain={() => {}}
+            />
           )
         ) : composerShown ? (
           <AgentComposer
