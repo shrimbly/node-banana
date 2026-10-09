@@ -1083,6 +1083,7 @@
    "family": "elevenlabsSfx",
    "provider": "elevenlabs",
    "output": "audio",
+   "transport": "sync",
    "inputs": [
     {
      "name": "prompt",
@@ -1122,12 +1123,13 @@
      }
     }
    ],
-   "notes": "Response is raw audio bytes (*/*); Content-Type comes from ElevenLabs, audio/mpeg by default. duration_seconds is REQUIRED on this route (0.5-30, nullable but must be set) with no schema default; app should default 5. Params: duration_seconds, loop, prompt_influence (0-1, default 0.3)."
+   "notes": "Runs on the model's own route in one request: the Router refuses binary partners on the queued route (403 not_enabled, the queue cannot store the bytes). Response is raw audio bytes (*/*); Content-Type comes from ElevenLabs, audio/mpeg by default. duration_seconds is REQUIRED on this route (0.5-30, nullable but must be set) with no schema default; app should default 5. Params: duration_seconds, loop, prompt_influence (0-1, default 0.3)."
   },
   {
    "family": "elevenlabsDialogue",
    "provider": "elevenlabs",
    "output": "audio",
+   "transport": "sync",
    "inputs": [
     {
      "name": "prompt",
@@ -1197,7 +1199,7 @@
      ]
     }
    ],
-   "notes": "Route is ElevenLabs Text-to-Dialogue; the binding sends one dialogue line (the prompt) with one voice. voice_id is REQUIRED with no default; use \"21m00Tcm4TlvDq8ikWAM\" (Rachel, the schema's example) as the app default. Response is raw audio bytes (*/*), audio/mpeg by default. Other params: apply_text_normalization, language_code, seed.",
+   "notes": "Runs on the model's own route in one request (binary partners are refused on the queued route with 403 not_enabled). Route is ElevenLabs Text-to-Dialogue; the binding sends one dialogue line (the prompt) with one voice. voice_id is REQUIRED with no default; use \"21m00Tcm4TlvDq8ikWAM\" (Rachel, the schema's example) as the app default. Response is raw audio bytes (*/*), audio/mpeg by default. Other params: apply_text_normalization, language_code, seed.",
    "paramOverrides": {
     "voice_id": {
      "enum": [

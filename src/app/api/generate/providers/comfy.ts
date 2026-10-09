@@ -1,8 +1,10 @@
 /**
  * Comfy Router provider.
  *
- * Every model runs through the Router's queue: submit, poll the status URL,
- * collect the native result. What goes in the request and where the result
+ * Most models run through the Router's queue: submit, poll the status URL,
+ * collect the native result. A binary partner (ElevenLabs) runs on the
+ * model's own route in one request, since the queue cannot store its bytes
+ * (`transport` on the binding). What goes in the request and where the result
  * sits are described per wire format in src/lib/providers/comfyRouter
  * (families.json, read by template.ts), and each model's settings come from
  * its published schema. This module does the I/O around that: encoding the
@@ -26,6 +28,8 @@ const MAX_MEDIA_SIZE = 500 * 1024 * 1024;
 const INLINE_LIMIT = 20 * 1024 * 1024;
 const SUBMIT_TIMEOUT_MS = 60_000;
 const FETCH_TIMEOUT_MS = 120_000;
+/** A synchronous run is the whole render in one request. */
+const SYNC_TIMEOUT_MS = 180_000;
 
 export const COMFY_ROUTER_HEADER = "X-Comfy-Router-Key";
 
@@ -152,12 +156,12 @@ export function servingProvider(providers: string[], value: unknown): string | n
   return value;
 }
 
-/** Queue a run. Returns the Router request id, which the poll route carries. */
-export async function submitComfyTask(
+/** The model's binding, the request body the node's input fills, and the serving provider asked for. */
+async function prepareRouterRequest(
   requestId: string,
   apiKey: string,
   input: GenerationInput
-): Promise<{ taskId: string }> {
+): Promise<{ binding: RouterBinding; body: Json; provider: string | null }> {
   const resolved = await resolveRouterModel(input.model.id, apiKey);
   if (!resolved) throw new Error(`${input.model.id} is not a Comfy Router model this app can run`);
   const { binding, params, providers } = resolved;
@@ -166,8 +170,58 @@ export async function submitComfyTask(
   const prepared = await prepareRouterInput(binding, input, apiKey, provider);
   const missing = missingInputs(binding, prepared);
   if (missing) throw new Error(missing);
-  const body = buildRouterBody(binding, params, prepared);
-  console.log(`[API:${requestId}] Comfy Router submit ${binding.id} (${binding.family})${provider ? ` via ${provider}` : ""}`);
+  const body = buildRouterBody(binding, params, prepared) as Json;
+  console.log(`[API:${requestId}] Comfy Router ${binding.transport === "sync" ? "run" : "submit"} ${binding.id} (${binding.family})${provider ? ` via ${provider}` : ""}`);
+  return { binding, body, provider };
+}
+
+async function refusal(response: Response, provider: string | null): Promise<Error> {
+  const message = await routerErrorMessage(response);
+  // The Router's refusal names no field; through an alternate provider the
+  // usual cause is a setting that provider does not take.
+  if (provider && /invalid_input/.test(message)) {
+    return new Error(`${message}. Not every setting is available through ${provider}; try the comfy provider or fewer settings.`);
+  }
+  return new Error(message);
+}
+
+/** Does this model run in one request rather than through the queue? */
+export function comfyRunsSynchronously(modelId: string): boolean {
+  return routerBinding(modelId)?.transport === "sync";
+}
+
+/**
+ * Run a model on its own route and return the finished output: the whole
+ * render in one request, for the partners the queue cannot carry.
+ */
+export async function runComfySynchronously(
+  requestId: string,
+  apiKey: string,
+  input: GenerationInput
+): Promise<GenerationOutput> {
+  try {
+    const { binding, body, provider } = await prepareRouterRequest(requestId, apiKey, input);
+    const response = await fetch(`${modelPath(binding.id)}${provider ? `?model_provider=${encodeURIComponent(provider)}` : ""}`, {
+      method: "POST",
+      headers: headers(apiKey, { "Idempotency-Key": randomUUID() }),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(SYNC_TIMEOUT_MS),
+    });
+    if (!response.ok) throw await refusal(response, provider);
+    return await outputOf(requestId, binding, response);
+  } catch (error) {
+    return { success: false, error: error instanceof Error ? error.message : "Comfy Router generation failed" };
+  }
+}
+
+/** Queue a run. Returns the Router request id, which the poll route carries. */
+export async function submitComfyTask(
+  requestId: string,
+  apiKey: string,
+  input: GenerationInput
+): Promise<{ taskId: string }> {
+  const { binding, body, provider } = await prepareRouterRequest(requestId, apiKey, input);
+  if (binding.transport === "sync") throw new Error(`${binding.name} runs in one request, not through the queue`);
 
   const response = await fetch(`${modelPath(binding.id)}/requests${provider ? `?model_provider=${encodeURIComponent(provider)}` : ""}`, {
     method: "POST",
@@ -176,15 +230,7 @@ export async function submitComfyTask(
     signal: AbortSignal.timeout(SUBMIT_TIMEOUT_MS),
   });
 
-  if (!response.ok) {
-    const message = await routerErrorMessage(response);
-    // The Router's refusal names no field; through an alternate provider the
-    // usual cause is a setting that provider does not take.
-    if (provider && /invalid_input/.test(message)) {
-      throw new Error(`${message}. Not every setting is available through ${provider}; try the comfy provider or fewer settings.`);
-    }
-    throw new Error(message);
-  }
+  if (!response.ok) throw await refusal(response, provider);
 
   const submitted = (await response.json()) as { request_id?: string };
   if (!submitted.request_id) throw new Error("Comfy Router returned no request id");
@@ -334,7 +380,6 @@ export async function fetchComfyMediaResult(
 ): Promise<GenerationOutput> {
   const binding = routerBinding(modelId);
   if (!binding) return { success: false, error: `${modelId} is not a Comfy Router model this app can run` };
-  const type = outputType(binding.output);
 
   try {
     const response = await fetch(`${modelPath(modelId)}/requests/${encodeURIComponent(taskId)}`, {
@@ -345,27 +390,33 @@ export async function fetchComfyMediaResult(
     if (response.status === 410) return { success: false, error: "Comfy Router result expired" };
     if (!response.ok) return { success: false, error: await routerErrorMessage(response) };
 
-    const credits = response.headers.get("X-Comfy-Credits-Used");
-    if (credits) console.log(`[API:${requestId}] Comfy Router credits used: ${credits}`);
-
-    const contentType = response.headers.get("content-type")?.split(";")[0] ?? "";
-    // Binary partners (ElevenLabs, …) answer with the asset's own bytes.
-    if (binding.result.binary || (contentType && !contentType.includes("json"))) {
-      const buffer = await readBounded(response, MAX_MEDIA_SIZE);
-      if (!buffer) return { success: false, error: `Media too large: over the ${MAX_MEDIA_SIZE / 1048576}MB limit` };
-      const mime = binding.result.mime || (contentType && contentType !== "application/octet-stream" ? contentType : FALLBACK_MIME[type]);
-      console.log(`[API:${requestId}] Comfy Router output ${mime}, ${(buffer.byteLength / 1048576).toFixed(2)}MB`);
-      const data = `data:${mime};base64,${buffer.toString("base64")}`;
-      return { success: true, outputs: [type === "3d" ? { type, data: "", url: data } : { type, data }] };
-    }
-
-    const result = (await response.json()) as Json;
-    const found = readRouterResult(binding, result);
-    const output = await materialise(requestId, found, type);
-    return { success: true, outputs: [output] };
+    return await outputOf(requestId, binding, response);
   } catch (error) {
     return { success: false, error: error instanceof Error ? error.message : "Comfy Router result failed" };
   }
+}
+
+/** A 200 from the Router, collected from the queue or answered directly, as the app's output. */
+async function outputOf(requestId: string, binding: RouterBinding, response: Response): Promise<GenerationOutput> {
+  const type = outputType(binding.output);
+  const credits = response.headers.get("X-Comfy-Credits-Used");
+  if (credits) console.log(`[API:${requestId}] Comfy Router credits used: ${credits}`);
+
+  const contentType = response.headers.get("content-type")?.split(";")[0] ?? "";
+  // Binary partners (ElevenLabs, …) answer with the asset's own bytes.
+  if (binding.result.binary || (contentType && !contentType.includes("json"))) {
+    const buffer = await readBounded(response, MAX_MEDIA_SIZE);
+    if (!buffer) return { success: false, error: `Media too large: over the ${MAX_MEDIA_SIZE / 1048576}MB limit` };
+    const mime = binding.result.mime || (contentType && contentType !== "application/octet-stream" ? contentType : FALLBACK_MIME[type]);
+    console.log(`[API:${requestId}] Comfy Router output ${mime}, ${(buffer.byteLength / 1048576).toFixed(2)}MB`);
+    const data = `data:${mime};base64,${buffer.toString("base64")}`;
+    return { success: true, outputs: [type === "3d" ? { type, data: "", url: data } : { type, data }] };
+  }
+
+  const result = (await response.json()) as Json;
+  const found = readRouterResult(binding, result);
+  const output = await materialise(requestId, found, type);
+  return { success: true, outputs: [output] };
 }
 
 /**
@@ -379,6 +430,7 @@ export async function generateWithComfy(
   options: { maxWaitMs?: number } = {}
 ): Promise<GenerationOutput> {
   if (!apiKey) return { success: false, error: "Comfy API key not configured" };
+  if (comfyRunsSynchronously(input.model.id)) return runComfySynchronously(requestId, apiKey, input);
   try {
     const { taskId } = await submitComfyTask(requestId, apiKey, input);
     const deadline = Date.now() + (options.maxWaitMs ?? 4 * 60_000);

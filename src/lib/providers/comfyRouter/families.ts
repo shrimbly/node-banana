@@ -18,6 +18,15 @@ import data from "./families.json";
 
 export type RouterOutput = "image" | "video" | "audio" | "3d";
 
+/**
+ * How the Router runs the model: through its queue (submit, poll, collect),
+ * or on the model's own route in one request. The queue cannot hold a
+ * partner's raw bytes, so a family whose answer is the asset itself
+ * (ElevenLabs) is `sync`; the Router refuses it on the queued route with
+ * `not_enabled`.
+ */
+export type RouterTransport = "queue" | "sync";
+
 export interface RouterInput {
   name: string;
   type: "text" | "image" | "video" | "audio";
@@ -42,6 +51,7 @@ export interface RouterModelEntry {
   paramOverrides?: Record<string, ParamOverride>;
   body?: unknown;
   result?: ResultSpec;
+  transport?: RouterTransport;
   /**
    * Who can serve the model, first being the default. "comfy" is Comfy's own
    * routing to the model's maker; the others (fal, Higgsfield, Runware,
@@ -60,6 +70,7 @@ export interface RouterFamily {
   paramOverrides?: Record<string, ParamOverride>;
   body: unknown;
   result: ResultSpec;
+  transport?: RouterTransport;
   models: RouterModelEntry[];
   notes?: string;
 }
@@ -79,6 +90,7 @@ export interface RouterBinding {
   paramOverrides: Record<string, ParamOverride>;
   body: unknown;
   result: ResultSpec;
+  transport: RouterTransport;
   /** Serving providers, default first; empty when the model has one. */
   providers: string[];
 }
@@ -111,6 +123,7 @@ function bind(family: RouterFamily, model: RouterModelEntry): RouterBinding {
     paramOverrides: mergeOverrides(family.paramOverrides, model.paramOverrides),
     body: model.body ?? family.body,
     result: model.result ?? family.result,
+    transport: model.transport ?? family.transport ?? "queue",
     providers: model.providers ?? [],
   };
 }
