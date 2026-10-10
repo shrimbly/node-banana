@@ -332,6 +332,18 @@ body {
   pointer-events: none;
 }
 
+/* Edges and their labels too: every pointer move hit-tests each edge's wide
+   invisible stroke, and with hundreds of edges that costs milliseconds a
+   move. Nothing on an edge can be clicked mid-gesture. */
+.canvas-interacting .react-flow__edge,
+.canvas-interacting .react-flow__edge *,
+.canvas-interacting .react-flow__edgelabel-renderer *,
+.canvas-wheel-navigation-active .react-flow__edge,
+.canvas-wheel-navigation-active .react-flow__edge *,
+.canvas-wheel-navigation-active .react-flow__edgelabel-renderer * {
+  pointer-events: none !important;
+}
+
 /* Hide edges below 15% zoom while keeping nodes and images visible. */
 .canvas-overview .react-flow__edges,
 .canvas-overview .react-flow__edge {
