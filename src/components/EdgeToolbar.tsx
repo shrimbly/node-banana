@@ -103,7 +103,7 @@ export function EdgeToolbar({ edgeId, x, y, onGoUpstream }: EdgeToolbarProps) {
         <MenuSurface
           variant="bar"
           floating={false}
-          className="relative"
+          className="relative edge-overlay"
           style={{ transform: `translate(-50%, calc(-100% - 12px)) scale(${1 / zoom})`, transformOrigin: "bottom center", pointerEvents: "all" }}
         >
           {grouped && (

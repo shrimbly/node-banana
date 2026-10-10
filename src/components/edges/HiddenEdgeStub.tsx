@@ -106,7 +106,7 @@ export function HiddenEdgeStub({
   const anchor = direction === 1 ? "translate(0, -50%)" : "translate(-100%, -50%)";
   return (
     <div
-      className="nodrag nopan"
+      className="nodrag nopan edge-overlay"
       data-testid={`hidden-edge-stub-${side}`}
       // Flex, so the wrapper is exactly the pill's height and -50% centres it on
       // the handle. A selected node or edge lifts edge SVGs above the label

@@ -733,7 +733,7 @@ function BundleStem({ x, y, dir, reach, count, strokeOpacity, width, color, scre
             the label layer, so the clamp keeps a z-index above any elevated
             edge or it would lose the press to the stem. */}
         <div
-          className="nodrag nopan"
+          className="nodrag nopan edge-overlay"
           data-testid="edge-bundle-clamp"
           title={`${count} connections · drag to move where the bundle splits`}
           onMouseDown={startClampDrag}
