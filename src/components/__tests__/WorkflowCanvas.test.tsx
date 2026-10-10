@@ -472,6 +472,45 @@ describe("WorkflowCanvas", () => {
       pressed.remove();
     });
 
+    it("keeps a node drag's moves out of the store between the first move and the drop", () => {
+      const node = { id: "node-1", type: "prompt", position: { x: 0, y: 0 }, data: {} };
+      // The store applies what it is given, as the real one does
+      let storeNodes: typeof node[] = [node];
+      mockOnNodesChange.mockImplementation((changes: { id: string; position?: { x: number; y: number } }[]) => {
+        storeNodes = storeNodes.map((n) => {
+          const change = changes.find((c) => c.id === n.id && c.position);
+          return change ? { ...n, position: change.position! } : n;
+        });
+      });
+      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes: storeNodes })));
+      render(
+        <TestWrapper>
+          <WorkflowCanvas />
+        </TestWrapper>
+      );
+      const props = () => mockReactFlowProps.current as Record<string, (...args: unknown[]) => void> & { nodes: typeof node[] };
+      const move = (x: number, dragging: boolean) =>
+        act(() => props().onNodesChange([{ type: "position", id: "node-1", position: { x, y: 0 }, dragging }]));
+
+      move(10, true);
+      expect(mockOnNodesChange).toHaveBeenCalledTimes(1);
+      move(20, true);
+      move(30, true);
+      // React Flow is handed each move; the store is not
+      expect(mockOnNodesChange).toHaveBeenCalledTimes(1);
+      expect(props().nodes.find((n) => n.id === "node-1")?.position).toEqual({ x: 30, y: 0 });
+      move(30, false);
+      expect(mockOnNodesChange).toHaveBeenCalledTimes(2);
+      expect(storeNodes[0].position).toEqual({ x: 30, y: 0 });
+
+      // A drag that stops without React Flow's drop change still lands where it was left
+      move(40, true);
+      move(50, true);
+      act(() => props().onNodeDragStop({}, node));
+      expect(mockOnNodesChange).toHaveBeenLastCalledWith([{ type: "position", id: "node-1", position: { x: 50, y: 0 }, dragging: false }]);
+      mockOnNodesChange.mockReset();
+    });
+
     it("keeps pointer events off for the whole of a node drag that follows a pan", () => {
       vi.useFakeTimers();
       try {
