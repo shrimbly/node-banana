@@ -463,6 +463,8 @@ export const createDefaultNodeData = (type: NodeType): WorkflowNodeData => {
         outputAudio: null,
         outputText: null,
         output3dUrl: null,
+        runHistory: [],
+        selectedRunHistoryIndex: 0,
         jobId: null,
         runStatus: null,
         parametersExpanded: false,

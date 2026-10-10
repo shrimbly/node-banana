@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- **Comfy app history** — A node made from a ComfyUI workflow kept only its last result. It now has the same carousel as the image and video nodes: every run is kept, and the arrows under the picture go back through them, restoring each output the run produced.
 - **ElevenLabs on ComfyUI** — The ElevenLabs voices and sound effects served by Comfy Router failed with "cannot run this model on the queued route yet (not_enabled)": the Router's queue cannot store a partner's raw audio bytes. Those models now run on their own route in one request and the audio comes straight back.
 - **fal.ai settings** — A fal.ai model's settings card could come up blank, with no message, after the model browser had just been opened: fal's model API rate-limits bursts, the app read a refusal as "no settings" and remembered it for two days. The settings and the generate path now share one schema lookup per model, a rate limit is waited out and retried, a refusal shows its reason on the node with a Retry, and nothing empty is remembered.
 
