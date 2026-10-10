@@ -693,7 +693,7 @@ export function WorkflowCanvas() {
 
   // Check if a node was dropped into a group and add it to that group
   const handleNodeDragStop = useCallback(
-    (_event: React.MouseEvent, node: Node) => {
+    (_event: MouseEvent | TouchEvent, node: Node) => {
       const { groups, nodes } = useWorkflowStore.getState();
       // Skip if it's a group node
       if (node.id.startsWith("group-")) return;
@@ -2144,7 +2144,7 @@ export function WorkflowCanvas() {
     isDraggingNodeRef.current = true;
     document.documentElement.classList.add("canvas-interacting");
   }, []);
-  const handleNodeDragEnd = useCallback((event: React.MouseEvent, node: Node) => {
+  const handleNodeDragEnd = useCallback((event: MouseEvent | TouchEvent, node: Node) => {
     isDraggingNodeRef.current = false;
     // A pan just before the drag may still hold the tracker active; resetting
     // it drops its classes now and lets the next pan put them back
