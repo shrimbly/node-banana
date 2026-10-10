@@ -15,8 +15,8 @@ import {
 } from "@xyflow/react";
 import { shallow, useShallow } from "zustand/shallow";
 import { EdgeLabelRenderer } from "@/components/flowPortals";
-import { useWorkflowStore } from "@/store/workflowStore";
-import { ArrayNodeData, WorkflowEdgeData } from "@/types";
+import { useWorkflowStore, type WorkflowStore } from "@/store/workflowStore";
+import { ArrayNodeData, WorkflowEdgeData, type WorkflowEdge, type WorkflowNode } from "@/types";
 import { getSharedGradientId } from "./SharedEdgeGradients";
 import { EDGE_COLORS, edgeColorKeyForHandles, edgeHighlightColor } from "@/lib/edges/colors";
 import { EDGE_THICKNESS_PX } from "@/lib/edges/appearance";
@@ -30,11 +30,13 @@ import {
   hiddenStubRole,
   parallelEdgePosition,
   stubGroupKey,
+  type HiddenStubRole,
 } from "@/lib/edges/labels";
 import { EdgeLabel } from "./EdgeLabel";
 import { arrayEdgeLabel, arrayLabelRows } from "@/lib/edges/arrayItems";
 import { edgeBundles, bundleReach, bundleClampKey, type BundleMembership } from "@/lib/edges/bundles";
 import { edgeGraphIndex, nodeGraphIndex } from "@/lib/edges/graphIndex";
+import { lastResult } from "@/store/selectors/lastResult";
 import { bundleClampStyle } from "./BundleClamp";
 import { HookBundleClamp } from "./HookBundleClamp";
 import { hookHandles, insertHookHandle } from "@/lib/edges/hook";
@@ -68,6 +70,26 @@ function useHandleY(nodeId: string, side: "source" | "target", enabled: boolean)
   );
 }
 
+type WorkflowSliceState = Pick<WorkflowStore, "edges" | "hoveredHandle" | "expandedStubGroup" | "stubGroupWidths">;
+interface EdgeSlice {
+  displayLabel: string;
+  parallel: number;
+  bundleKey: string;
+  bundleExpanded: boolean;
+  sourceRole: HiddenStubRole;
+  targetRole: HiddenStubRole;
+  sourceGroupWidth: number;
+  targetGroupWidth: number;
+  handleHovered: boolean;
+}
+interface NodeSlice {
+  sourceReach: number;
+  targetReach: number;
+  isConnectedToSelection: boolean;
+  isTargetLoading: boolean;
+  arrayLabel: string | null;
+}
+
 export function EditableEdge({
   id,
   sourceX,
@@ -91,8 +113,15 @@ export function EditableEdge({
   const [isDragging, setIsDragging] = useState(false);
   const carriesToolbar = useIsToolbarEdge(id);
   const hookData = useMemo(() => hookHandles(data as EdgeData | undefined), [data]);
-  const hookGroups = useWorkflowStore(useShallow((state) => hookData.map((handle) =>
-    edgeGraphIndex(state.edges).hookBundles.get(handle.id))));
+  // Selectors on this edge run for every edge on every store update, a drag
+  // frame included. Those that read only the edges hand back their last
+  // result while the edges are the same array (lastResult), so the shallow
+  // compare ends at its first check instead of rebuilding the slice.
+  const selectHookGroups = useMemo(() => lastResult(
+    (state: { edges: WorkflowEdge[] }) => [state.edges],
+    (state) => hookData.map((handle) => edgeGraphIndex(state.edges).hookBundles.get(handle.id)),
+  ), [hookData]);
+  const hookGroups = useWorkflowStore(useShallow(selectHookGroups));
   const hookBundles = useMemo(() => hookData.filter((_, index) => (hookGroups[index]?.length ?? 0) > 1), [hookData, hookGroups]);
   // Mid-sweep, a caught noodle is carried on the fork: it routes through the
   // pointer as if a handle sat there, and the handle itself appears on release
@@ -134,18 +163,11 @@ export function EditableEdge({
   // lookup, and the shallow compare keeps a store update that left this
   // slice alone from re-rendering the edge. Bundles are packed as a string
   // for the same reason.
-  const {
-    displayLabel,
-    parallel,
-    bundleKey,
-    bundleExpanded,
-    sourceRole,
-    targetRole,
-    sourceGroupWidth,
-    targetGroupWidth,
-    handleHovered,
-  } = useWorkflowStore(
-    useShallow((state) => {
+  // It reads only the edges and three fields beside them, none of which a
+  // node drag changes.
+  const selectEdgeSlice = useMemo(() => lastResult(
+    (state: WorkflowSliceState) => [state.edges, isHidden ? state.hoveredHandle : null, state.expandedStubGroup, state.stubGroupWidths],
+    (state): EdgeSlice => {
       const { source: sb, target: tb } = edgeBundles(id, state.edges);
       const pack = (m: BundleMembership | null) => (m ? `${m.index}|${m.count}|${m.members.join(",")}` : "");
       const members = [...(sb?.members ?? []), ...(tb?.members ?? [])];
@@ -167,12 +189,26 @@ export function EditableEdge({
           ((h!.type === "source" && h!.nodeId === source && (h!.handleId ?? null) === (sourceHandleId ?? null)) ||
             (h!.type === "target" && h!.nodeId === target && (h!.handleId ?? null) === (targetHandleId ?? null))),
       };
-    })
-  );
+    },
+  ), [id, isHidden, source, target, sourceHandleId, targetHandleId, sourceGroupKey, targetGroupKey]);
+  const {
+    displayLabel,
+    parallel,
+    bundleKey,
+    bundleExpanded,
+    sourceRole,
+    targetRole,
+    sourceGroupWidth,
+    targetGroupWidth,
+    handleHovered,
+  } = useWorkflowStore(useShallow(selectEdgeSlice));
   // And from the nodes: the clamp position for each end lives on the node
-  // that owns the handle, and selection and loading state drive the stroke
-  const { sourceReach, targetReach, isConnectedToSelection, isTargetLoading, arrayLabel } = useWorkflowStore(
-    useShallow((state) => {
+  // that owns the handle, and selection and loading state drive the stroke.
+  // All of it comes from this edge's two nodes, so it is rebuilt only when
+  // one of them changes, not when another node moves.
+  const selectNodeSlice = useMemo(() => lastResult(
+    (state: { nodes: WorkflowNode[] }) => { const { byId } = nodeGraphIndex(state.nodes); return [byId.get(source), byId.get(target)]; },
+    (state): NodeSlice => {
       const { byId, selectedIds } = nodeGraphIndex(state.nodes);
       const targetNode = byId.get(target);
       const sourceNode = byId.get(source);
@@ -188,18 +224,11 @@ export function EditableEdge({
             ? arrayEdgeLabel({ id, source, target, sourceHandle: sourceHandleId, data: data as EdgeData | undefined }, sourceNode.data as ArrayNodeData)
             : null,
       };
-    })
-  );
-  const { setBundleClamp, setExpandedStubGroup, setHoveredHandle, setStubGroupWidth, setEdgeLabel, setEdgesLabel } = useWorkflowStore(
-    useShallow((state) => ({
-      setEdgeLabel: state.setEdgeLabel,
-      setEdgesLabel: state.setEdgesLabel,
-      setBundleClamp: state.setBundleClamp,
-      setExpandedStubGroup: state.setExpandedStubGroup,
-      setHoveredHandle: state.setHoveredHandle,
-      setStubGroupWidth: state.setStubGroupWidth,
-    }))
-  );
+    },
+  ), [id, source, target, sourceHandleId, targetHandleId, data]);
+  const { sourceReach, targetReach, isConnectedToSelection, isTargetLoading, arrayLabel } = useWorkflowStore(useShallow(selectNodeSlice));
+  // Store actions never change: read once, not subscribed to
+  const { setBundleClamp, setExpandedStubGroup, setHoveredHandle, setStubGroupWidth, setEdgeLabel, setEdgesLabel } = useWorkflowStore.getState();
   const stubLabel = hasOwnLabel || !arrayLabel ? displayLabel : arrayLabel;
 
   // Bundles: the noodles sharing a handle leave it as one short stem and
