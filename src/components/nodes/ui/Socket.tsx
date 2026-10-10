@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { Handle, Position, useNodeConnections } from "@xyflow/react";
+import React, { useCallback } from "react";
+import { Handle, Position, useStore, type ReactFlowState } from "@xyflow/react";
 import type { HandleType } from "@/types";
 import { cn } from "./cn";
 import { SOCKET_H, SOCKET_HOLE_R, SOCKET_RING_W, SOCKET_W, socketCenter } from "./tokens";
@@ -76,8 +76,11 @@ interface SocketProps {
  */
 export function Socket({ nodeId, side, row, spec, showLabel = false, outline = "none" }: SocketProps) {
   const handleType = side === "left" ? "target" : "source";
-  const connections = useNodeConnections({ id: nodeId, handleType, handleId: spec.id });
-  const connected = connections.length > 0;
+  // Whether any edge ends here, as React Flow's own connection lookup keys it.
+  // One map lookup per store update: useNodeConnections also builds the key,
+  // compares connection maps and copies them into an array every time.
+  const connectionKey = spec.id ? `${nodeId}-${handleType}-${spec.id}` : `${nodeId}-${handleType}`;
+  const connected = useStore(useCallback((s: ReactFlowState) => (s.connectionLookup.get(connectionKey)?.size ?? 0) > 0, [connectionKey]));
   const color = socketColor(spec.type);
   const position = side === "left" ? Position.Left : Position.Right;
   const edge = outline === "none" ? null : OUTLINE[outline];
