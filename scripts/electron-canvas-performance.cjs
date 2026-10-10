@@ -143,7 +143,9 @@ async function main() {
     if (!executable) await fs.access(path.join(root, ".next/BUILD_ID"));
     const restored = restoreTab ? await seedRecoveredTab({ from: recoveryFrom, profile, name: restoreTab }) : undefined;
     stage('launching');
-    app = await launchElectron({ executable: executable || require('electron'), args: executable ? [] : [root], cwd: executable ? undefined : root,
+    // --chromium-flags passes switches to Chromium, e.g. "--enable-features=SkiaGraphite", to try one without changing the app.
+    const flags = option('--chromium-flags', '').split(' ').filter(Boolean);
+    app = await launchElectron({ executable: executable || require('electron'), args: executable ? flags : [...flags, root], cwd: executable ? undefined : root,
       env: { ...process.env, NODE_BANANA_ELECTRON_USER_DATA: profile, NODE_BANANA_ELECTRON_PORT: String(port) } });
     const { page } = app;
     await app.run(({ dialog }) => { dialog.showMessageBoxSync = () => 1; });
@@ -303,7 +305,8 @@ async function main() {
       await debug('Profiler.start');
     }
     async function measure(name, action) {
-      const categories = detail ? [...PERF_TRACE_CATEGORIES, ...DETAIL_CATEGORIES] : PERF_TRACE_CATEGORIES;
+      // --categories adds more, e.g. disabled-by-default-devtools.timeline.invalidationTracking.
+      const categories = [...PERF_TRACE_CATEGORIES, ...(detail ? DETAIL_CATEGORIES : []), ...(option('--categories', '').split(',').filter(Boolean))];
       await app.run(({ contentTracing }, categories) => contentTracing.startRecording({ included_categories: categories, excluded_categories: ['*'] }), categories);
       await page.evaluate(name => {
         performance.mark(`banana:gesture ${name}`);
@@ -483,7 +486,7 @@ async function main() {
         displaySize: display.size, windowContentSize: window.getContentSize(), maximized: window.isMaximized(), packaged: app.isPackaged, versions: process.versions };
     });
     const workload = restored ? `restored:${restored.name}` : workflowFile ? `workflow:${path.basename(workflowFile)}` : fixtureName === 'realistic' ? 'realistic' : process.argv.includes('--media') ? 'images-1024px' : 'empty-nodes';
-    const report = { workload, zoom, tabs, agentOpen: process.argv.includes('--agent-open'), devtoolsAttached: cdpMetrics || cpuProfile, input: inputMode, inputHz: hz, gestureDurationMs: seconds * 1000, gestures: gestureNames,
+    const report = { workload, zoom, tabs, agentOpen: process.argv.includes('--agent-open'), devtoolsAttached: cdpMetrics || cpuProfile, chromiumFlags: flags, input: inputMode, inputHz: hz, gestureDurationMs: seconds * 1000, gestures: gestureNames,
       ...(osInput ? { osInputWorstLateMs: Math.max(...lateness) } : {}), nodes: nodeCount, edges: workflow.edges.length, rounds,
       platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model, ...environment, trace, ...(detailTimes ? { detail: detailTimes } : {}), results };
     await fs.writeFile(output, JSON.stringify(report, null, 2));
