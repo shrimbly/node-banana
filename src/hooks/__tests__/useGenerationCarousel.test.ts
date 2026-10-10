@@ -18,6 +18,19 @@ describe("useGenerationCarousel", () => {
     useWorkflowStore.setState({ ...initial, updateNodeData });
   });
 
+  it("carries whatever the loader returns to the update, so a run of several outputs loads together", async () => {
+    const loadFn = vi.fn().mockResolvedValue([{ handleId: "9", type: "image", value: "data:image/png;base64,x" }]);
+    const buildUpdate = vi.fn((outputs: unknown[], index: number) => ({ outputs: { count: outputs.length }, selectedRunHistoryIndex: index }));
+    const { result } = renderHook(() =>
+      useGenerationCarousel<(typeof history)[number], unknown[]>({ nodeId: "comfy-1", history, currentIndex: 0, loadFn, buildUpdate })
+    );
+
+    await act(() => result.current.handleNext());
+
+    expect(buildUpdate).toHaveBeenCalledWith([{ handleId: "9", type: "image", value: "data:image/png;base64,x" }], 1);
+    expect(updateNodeData).toHaveBeenCalledWith("comfy-1", { outputs: { count: 1 }, selectedRunHistoryIndex: 1 });
+  });
+
   it("hands the loader the whole entry, so it can use the asset id", async () => {
     const loadFn = vi.fn().mockResolvedValue("data:image/png;base64,older");
     const buildUpdate = (media: string, index: number) => ({ outputImage: media, selectedHistoryIndex: index });

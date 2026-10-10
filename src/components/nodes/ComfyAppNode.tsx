@@ -5,7 +5,7 @@ import { NodeProps, Node, useUpdateNodeInternals } from "@xyflow/react";
 
 import { NodeShell } from "./NodeShell";
 import { ComfyAppParameters } from "./ComfyAppParameters";
-import { ControlsCard, HeightGrip, SummaryValues, type SocketSpec, type SocketType } from "./ui";
+import { CarouselControls, ControlsCard, HeightGrip, SummaryValues, type SocketSpec, type SocketType } from "./ui";
 import {
   ComfyWorkflowImportModal,
   type ComfyReconfigureTarget,
@@ -14,6 +14,8 @@ import {
 import { ComfyWordmark } from "@/components/icons/ComfyWordmark";
 import { RefreshCw, Settings, type LucideIcon } from "lucide-react";
 import { useComfyPreview } from "@/hooks/useComfyPreview";
+import { useGenerationCarousel } from "@/hooks/useGenerationCarousel";
+import { useLoadGenerationById } from "@/hooks/useLoadGenerationById";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { outputsToNodeData } from "@/store/execution/comfyAppExecutor";
 import { appInputHandles, appToInputSchema } from "@/lib/comfy/nodeSchema";
@@ -22,9 +24,10 @@ import type {
   ComfyAppDefinition,
   ComfyInputType,
   ComfyOutputType,
+  ComfyResolvedOutput,
   ComfyWorkflowInspection,
 } from "@/lib/comfy/types";
-import type { ComfyAppNodeData } from "@/types";
+import type { ComfyAppNodeData, ComfyRunHistoryItem } from "@/types";
 import { downloadMedia } from "@/utils/downloadMedia";
 
 type ComfyAppNodeType = Node<ComfyAppNodeData, "comfyApp">;
@@ -157,6 +160,9 @@ export function ComfyAppNode({ id, data, selected }: NodeProps<ComfyAppNodeType>
         outputAudio: null,
         outputText: null,
         output3dUrl: null,
+        // Past runs were another workflow's: their outputs mean nothing here.
+        runHistory: [],
+        selectedRunHistoryIndex: 0,
         status: "idle",
         error: null,
         runStatus: null,
@@ -228,6 +234,61 @@ export function ComfyAppNode({ id, data, selected }: NodeProps<ComfyAppNodeType>
   // on a stock ComfyUI and the node keeps its spinner.
   const livePreview = useComfyPreview(nodeData.jobId, isRunning);
 
+  // The carousel of past runs. A run has every output the app declared, so
+  // going back to one reloads each media output by its handle (from the
+  // library, else the project's folder) and keeps its text as it was.
+  const loadImageById = useLoadGenerationById("image", "Image");
+  const loadVideoById = useLoadGenerationById("video", "Video");
+  const loadAudioById = useLoadGenerationById("audio", "Audio");
+  const loadRun = useCallback(
+    async (item: ComfyRunHistoryItem): Promise<ComfyResolvedOutput[] | null> => {
+      const loaders = { image: loadImageById, video: loadVideoById, audio: loadAudioById } as const;
+      const resolved: ComfyResolvedOutput[] = [];
+      let anyMedia = false;
+      for (const [handleId, output] of Object.entries(item.outputs)) {
+        if (output.type === "text") {
+          if (output.text) resolved.push({ handleId, type: "text", value: output.text });
+          continue;
+        }
+        if (output.type === "3d") continue;
+        const value = await loaders[output.type]({ id: output.id ?? "", assetId: output.assetId });
+        if (!value) continue;
+        resolved.push({ handleId, type: output.type, value });
+        anyMedia = true;
+      }
+      return anyMedia ? resolved : null;
+    },
+    [loadImageById, loadVideoById, loadAudioById]
+  );
+  const {
+    isLoading: isLoadingRun,
+    handlePrevious: handlePreviousRun,
+    handleNext: handleNextRun,
+  } = useGenerationCarousel<ComfyRunHistoryItem, ComfyResolvedOutput[]>({
+    nodeId: id,
+    history: nodeData.runHistory,
+    currentIndex: nodeData.selectedRunHistoryIndex,
+    loadFn: loadRun,
+    buildUpdate: (resolved, newIndex) => ({
+      ...(app ? outputsToNodeData(app.outputs, resolved) : {}),
+      selectedRunHistoryIndex: newIndex,
+      status: "idle",
+      error: null,
+    }),
+  });
+  const runCount = (nodeData.runHistory ?? []).length;
+  const historyNav =
+    app && runCount > 1 ? (
+      <CarouselControls
+        index={nodeData.selectedRunHistoryIndex ?? 0}
+        count={runCount}
+        onPrev={handlePreviousRun}
+        onNext={handleNextRun}
+        loading={isLoadingRun || isRunning}
+        noun="run"
+      />
+    ) : undefined;
+
   // Sockets: one per connectable input the workflow exposes, one per bound output.
   const inputSockets = useMemo<SocketSpec[]>(
     () =>
@@ -288,6 +349,7 @@ export function ComfyAppNode({ id, data, selected }: NodeProps<ComfyAppNodeType>
         outputs={outputSockets}
         minWidth={260}
         mediaClassName={app ? "bg-neutral-900/60" : undefined}
+        gap={historyNav}
         controls={
           app ? (
             <ControlsCard

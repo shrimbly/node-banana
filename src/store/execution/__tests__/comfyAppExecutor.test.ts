@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 
-import { ComfyRouteError, outputsToNodeData, readError } from "../comfyAppExecutor";
+import { ComfyRouteError, comfyRunHistoryEntry, outputsToNodeData, readError, recordedIntoHistory } from "../comfyAppExecutor";
 
 describe("outputsToNodeData", () => {
   const declared = [
@@ -92,5 +92,58 @@ describe("readError", () => {
   it("treats a 4xx with no route body as terminal", async () => {
     const error = await readError(response("Payload too large", 413), "ComfyUI run failed");
     expect(error).toBeInstanceOf(ComfyRouteError);
+  });
+});
+
+describe("run history", () => {
+  const outputs = [
+    { handleId: "9", type: "image" as const, value: "data:image/png;base64,AAA" },
+    { handleId: "20", type: "text" as const, value: "a caption" },
+    { handleId: "30", type: "video" as const, value: "data:video/mp4;base64,BBB" },
+    { handleId: "40", type: "3d" as const, value: "https://cdn.example.com/model.glb" },
+  ];
+
+  it("keeps every reloadable output of a run by its handle, text as it is, and nothing for 3D", () => {
+    const entry = comfyRunHistoryEntry({
+      outputs, timestamp: 1700, prompt: "p", model: "My app", batch: { id: "b", index: 1, count: 2 },
+      assetIds: { "9": "asset-img", "30": "asset-vid" }, folderImageId: "1700", primaryImage: outputs[0].value,
+    });
+    expect(entry).toEqual({
+      id: "1700", timestamp: 1700, prompt: "p", model: "My app", batch: { id: "b", index: 1, count: 2 },
+      outputs: {
+        "9": { type: "image", assetId: "asset-img", id: "1700" },
+        "20": { type: "text", text: "a caption" },
+        "30": { type: "video", assetId: "asset-vid" },
+      },
+    });
+  });
+
+  it("makes no entry for a run nothing can reload", () => {
+    expect(comfyRunHistoryEntry({ outputs, timestamp: 1, prompt: "p", model: "m", assetIds: {} })).toBeNull();
+    expect(comfyRunHistoryEntry({ outputs: [outputs[1]], timestamp: 1, prompt: "p", model: "m", assetIds: { "20": "x" } })).toBeNull();
+  });
+
+  it("gives an output its folder file name once recorded, drops a failed asset id, and drops an entry left with no media", () => {
+    const history = [
+      { id: "2", timestamp: 2, prompt: "", model: "m", outputs: { "9": { type: "image" as const, assetId: "a2" }, "20": { type: "text" as const, text: "t" } } },
+      { id: "1", timestamp: 1, prompt: "", model: "m", outputs: { "9": { type: "image" as const, assetId: "a1", id: "1" } } },
+    ];
+    const updates: unknown[] = [];
+    let data: Record<string, unknown> = { runHistory: history, selectedRunHistoryIndex: 0 };
+    const ctx = {
+      node: { id: "n" },
+      getFreshNode: () => ({ data }),
+      updateNodeData: (_id: string, patch: Record<string, unknown>) => { updates.push(patch); data = { ...data, ...patch }; },
+    } as unknown as Parameters<typeof recordedIntoHistory>[0];
+
+    recordedIntoHistory(ctx, "1", "9", { assetId: "a1", legacyId: "1-named.png" } as never);
+    expect((data.runHistory as typeof history)[1].outputs["9"]).toEqual({ type: "image", assetId: "a1", id: "1-named.png" });
+
+    recordedIntoHistory(ctx, "2", "9", null);
+    expect((data.runHistory as typeof history).map((e) => e.id)).toEqual(["1"]);
+    expect(data.selectedRunHistoryIndex).toBe(-1);
+
+    recordedIntoHistory(ctx, "missing", "9", null);
+    expect(updates).toHaveLength(2);
   });
 });

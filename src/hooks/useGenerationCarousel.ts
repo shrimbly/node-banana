@@ -8,17 +8,21 @@ interface HistoryItem {
   assetId?: string;
 }
 
-interface UseGenerationCarouselParams<T extends HistoryItem> {
+interface UseGenerationCarouselParams<T extends HistoryItem, R> {
   nodeId: string;
   history: T[] | undefined;
   currentIndex: number | undefined;
-  /** Loads an entry's media; gets the whole entry, so it can use its asset id or its file name. */
-  loadFn: (item: T) => Promise<string | null>;
+  /**
+   * Loads an entry's media; gets the whole entry, so it can use its asset id
+   * or its file name. Usually one data URL; a node whose runs produce several
+   * outputs loads them all and returns them together.
+   */
+  loadFn: (item: T) => Promise<R | null>;
   /**
    * Builds the `updateNodeData` payload for a successfully loaded asset.
    * Kept node-specific so each node can write its own output/index fields.
    */
-  buildUpdate: (media: string, newIndex: number) => Partial<WorkflowNodeData>;
+  buildUpdate: (media: R, newIndex: number) => Partial<WorkflowNodeData>;
 }
 
 /**
@@ -39,13 +43,13 @@ export function carouselTarget(current: number | undefined, count: number, direc
  * Manages its own loading flag; returns handlers wired to load an asset by ID
  * and update the node on success.
  */
-export function useGenerationCarousel<T extends HistoryItem>({
+export function useGenerationCarousel<T extends HistoryItem, R = string>({
   nodeId,
   history,
   currentIndex,
   loadFn,
   buildUpdate,
-}: UseGenerationCarouselParams<T>) {
+}: UseGenerationCarouselParams<T, R>) {
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const [isLoading, setIsLoading] = useState(false);
 

@@ -19,7 +19,7 @@ export type { AnnotationNodeData, BaseNodeData };
 import type { ImageGenerationMetadata } from "./api";
 import type { AspectRatio, Resolution, ModelType } from "./models";
 import type { LLMProvider, LLMModelType, SelectedModel, ProviderType } from "./providers";
-import type { ComfyAppDefinition, ComfyWorkflowInspection } from "@/lib/comfy/types";
+import type { ComfyAppDefinition, ComfyOutputType, ComfyWorkflowInspection } from "@/lib/comfy/types";
 
 export type { ComfyAppDefinition, ComfyWorkflowInspection };
 
@@ -690,6 +690,31 @@ export interface GLBViewerNodeData extends BaseNodeData {
  * workflow stays runnable without the original ComfyUI file — and so sharing a
  * workflow shares the pipeline with it.
  */
+/** One output of a past Comfy app run, as the carousel reloads it. */
+export interface ComfyRunHistoryOutput {
+  type: ComfyOutputType;
+  /** The asset library's id; the carousel loads it from the library first. */
+  assetId?: string;
+  /** Its file name in the project's generations folder, when it was saved there. */
+  id?: string;
+  /** A text output is kept as it is: it has no file to reload. */
+  text?: string;
+}
+
+/**
+ * Carousel entry for a Comfy app run: every output it produced, keyed by the
+ * app's output handle id, so going back to a run restores all of them.
+ */
+export interface ComfyRunHistoryItem {
+  id: string;
+  timestamp: number;
+  prompt: string;
+  /** The app's name. */
+  model: string;
+  batch?: RunBatchTag;
+  outputs: Record<string, ComfyRunHistoryOutput>;
+}
+
 export interface ComfyAppNodeData extends BaseNodeData {
   app: ComfyAppDefinition | null;
   /**
@@ -726,6 +751,10 @@ export interface ComfyAppNodeData extends BaseNodeData {
   outputAudio: string | null;
   outputText: string | null;
   output3dUrl: string | null;
+  /** Carousel history of past runs (ids only); absent on nodes saved before it existed. */
+  runHistory?: ComfyRunHistoryItem[];
+  /** The run the node shows; -1 when it shows an output that is not in the list. */
+  selectedRunHistoryIndex?: number;
   /** Engine job id, kept so a run survives a page refresh mid-render. */
   jobId?: string | null;
   /** Engine-reported status while running (e.g. "queued", "in_progress"). */
