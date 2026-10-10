@@ -12,6 +12,11 @@
 // moves the real cursor through the OS at --hz (default 1000, a gaming mouse)
 // in a maximised window, which is how the app is actually used; do not touch
 // the mouse while it runs.
+//
+// The canvas is the generated grid (--nodes, --media), --fixture realistic
+// (scripts/lib/perf-fixtures.cjs), or --workflow <file.json>, one of your own.
+// --zoom sets the working zoom, --agent-open opens the agent panel and
+// --tabs N holds N copies of the workflow in tabs.
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -21,6 +26,7 @@ const { _electron } = require('playwright-core');
 const { PERF_TRACE_CATEGORIES, PAGE_PROBE } = require('../electron/lib/perf-trace.cjs');
 const { readTrace, analyzeTrace, keepAnalyzed, selfTime, formatReport } = require('./lib/trace-analysis.cjs');
 const { createOsInput } = require('./lib/os-input.cjs');
+const { realisticWorkflow, fillRealisticMedia } = require('./lib/perf-fixtures.cjs');
 const option = (name, fallback) => {
   const index = process.argv.indexOf(name);
   return index < 0 ? fallback : process.argv[index + 1];
@@ -89,13 +95,18 @@ async function main() {
   const seconds = Number(option('--seconds', 4));
   const windowOption = option('--window', inputMode === 'os' ? 'maximized' : '1440x900');
   const executable = option('--executable');
+  const fixtureName = option('--fixture', 'synthetic');
+  const workflowFile = option('--workflow');
+  const zoom = Number(option('--zoom', 45));
+  const tabs = Number(option('--tabs', 1));
   const gestureNames = (option('--gestures') || (inputMode === 'os'
     ? ['drag-sweep', 'drag-circle', process.platform === 'darwin' ? 'pan-wheel' : 'pan-sweep']
     : ['rapid-drag', process.platform === 'darwin' ? 'pan-wheel' : 'rapid-pan']).join(',')).split(',');
   assert.ok(Number.isInteger(count) && count >= 12);
   assert.ok(Number.isInteger(rounds) && rounds > 0);
   assert.ok(['synthetic', 'os'].includes(inputMode), '--input is synthetic or os');
-  assert.ok(hz > 0 && seconds > 0);
+  assert.ok(hz > 0 && seconds > 0 && zoom > 0 && Number.isInteger(tabs) && tabs > 0);
+  assert.ok(['synthetic', 'realistic'].includes(fixtureName), '--fixture is synthetic or realistic');
   for (const name of gestureNames) assert.ok(GESTURES[name], `Unknown gesture ${name}; one of ${Object.keys(GESTURES).join(', ')}`);
   const osInput = inputMode === 'os' ? createOsInput() : undefined;
   assert.ok(!osInput || osInput.available, '--input os needs Windows or macOS');
@@ -115,9 +126,13 @@ async function main() {
     await app.evaluate(({ dialog }) => { dialog.showMessageBoxSync = () => 1; });
     const page = await app.firstWindow({ timeout: 120000 });
     const [width, height] = windowOption === 'maximized' ? [] : windowOption.split('x').map(Number);
+    // On top for the whole run: Chromium stops producing frames for a
+    // covered window, which would stall the run or flatter its numbers.
     await app.evaluate(({ BrowserWindow }, { width, height }) => {
       const window = BrowserWindow.getAllWindows()[0];
       if (width) { window.unmaximize(); window.setContentSize(width, height); window.center(); } else window.maximize();
+      window.setAlwaysOnTop(true);
+      window.focus();
     }, { width, height });
     await delay(500);
     page.setDefaultTimeout(30000);
@@ -130,7 +145,35 @@ async function main() {
     const skip = page.getByRole('button', { name: 'Skip', exact: true });
     if (await skip.isVisible()) await skip.click();
     await page.keyboard.press('Escape');
-    await page.evaluate(({ workflow, media }) => {
+    // The workflow goes in the way a user's does: dropped on the canvas as a
+    // file. It stays in the page, media and all, for further tabs.
+    await page.evaluate(() => {
+      window.__perfDrop = (overrides = {}) => {
+        const transfer = new DataTransfer();
+        transfer.items.add(new File([JSON.stringify({ ...window.__perfWorkflow, ...overrides })], 'canvas-performance.json', { type: 'application/json' }));
+        document.querySelector('.react-flow').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
+      };
+    });
+    console.log('Loading the workflow…');
+    let workflow;
+    if (workflowFile) {
+      workflow = JSON.parse(await fs.readFile(workflowFile, 'utf8'));
+      // Saved media refs hydrate from the workflow's folder.
+      workflow.directoryPath ||= path.dirname(path.resolve(workflowFile));
+      await page.evaluate(workflow => { window.__perfWorkflow = workflow; window.__perfDrop(); }, workflow);
+    } else if (fixtureName === 'realistic') {
+      const input = await realisticWorkflow(root);
+      await page.evaluate(input => { window.__perfFixture = input; }, input);
+      // Filled in the page: the media never comes back over CDP.
+      await page.evaluate(`(async () => {
+        window.__perfWorkflow = await (${fillRealisticMedia})(window.__perfFixture);
+        delete window.__perfFixture;
+        window.__perfDrop();
+      })()`);
+      workflow = input.workflow;
+    } else {
+      workflow = fixture(count);
+      await page.evaluate(({ workflow, media }) => {
       if (media) {
         const canvas = document.createElement('canvas');
         canvas.width = canvas.height = 1024;
@@ -151,18 +194,33 @@ async function main() {
           else node.data.image = image;
         }
       }
-      const transfer = new DataTransfer();
-      transfer.items.add(new File([JSON.stringify(workflow)], 'canvas-performance.json', { type: 'application/json' }));
-      document.querySelector('.react-flow').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
-    }, { workflow: fixture(count), media: process.argv.includes('--media') });
-    await page.waitForFunction(count => document.querySelectorAll('.react-flow__node').length === count, count);
+      window.__perfWorkflow = workflow;
+      window.__perfDrop();
+      }, { workflow, media: process.argv.includes('--media') });
+    }
+    const nodeCount = workflow.nodes.length, workflowName = workflow.name || 'Untitled';
+    await page.waitForFunction(count => document.querySelectorAll('.react-flow__node').length === count, nodeCount, { timeout: 120000 });
+    // Further tabs hold copies of the workflow, as when several are open.
+    for (let tab = 2; tab <= tabs; tab++) {
+      await page.getByRole('button', { name: 'New tab', exact: true }).click();
+      await page.waitForFunction(() => document.querySelectorAll('.react-flow__node').length === 0);
+      const closeWelcome = page.getByRole('button', { name: 'Close', exact: true }).last();
+      if (await closeWelcome.isVisible()) await closeWelcome.click();
+      await page.evaluate(overrides => window.__perfDrop(overrides), { id: `${workflow.id || 'perf'}-${tab}`, name: `${workflowName} ${tab}` });
+      await page.waitForFunction(count => document.querySelectorAll('.react-flow__node').length === count, nodeCount, { timeout: 120000 });
+    }
+    if (tabs > 1) {
+      await page.getByRole('tab').filter({ hasText: workflowName }).first().click();
+      await page.waitForFunction(count => document.querySelectorAll('.react-flow__node').length === count, nodeCount);
+    }
     await page.getByRole('button', { name: 'Fit view', exact: true }).click();
     await delay(700);
     // Keep a representative working zoom, with both visible and culled nodes.
-    while (Number((await page.getByLabel('Zoom level').textContent()).replace('%', '')) < 45) {
+    while (Number((await page.getByLabel('Zoom level').textContent()).replace('%', '')) < zoom) {
       await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
       await delay(150);
     }
+    if (process.argv.includes('--agent-open')) await page.getByRole('button', { name: /^(Open agent|Agent — )/ }).click();
     await delay(1500);
     await page.evaluate(PAGE_PROBE);
     const cdp = await page.context().newCDPSession(page);
@@ -272,12 +330,18 @@ async function main() {
       const room = (x, y) => ({ ax: Math.max(40, Math.min(innerWidth * .3, x - 60, innerWidth - x - 60)), ay: Math.max(20, Math.min(innerHeight * .15, y - 140, innerHeight - y - 140)),
         r: Math.max(30, Math.min(innerWidth, innerHeight) * .18) });
       if (kind === 'node') {
+        // A point that drags the node: on it, and not on a field, handle or button.
+        // Generate nodes come first so the default canvas drags what it always has.
         let best;
-        for (const element of document.querySelectorAll('.react-flow__node-nanoBanana')) {
+        for (const element of document.querySelectorAll('.react-flow__node')) {
           const box = element.getBoundingClientRect();
           if (box.x < 150 || box.y < 180 || box.right > innerWidth - 250 || box.bottom > innerHeight - 250) continue;
-          const point = { x: box.x + box.width / 2, y: box.y + 40 };
-          const distance = Math.hypot(point.x - cx, point.y - cy);
+          const point = [40, box.height / 2, box.height / 4, box.height * .75].map(dy => ({ x: box.x + box.width / 2, y: box.y + dy })).find(({ x, y }) => {
+            const hit = document.elementFromPoint(x, y);
+            return hit && element.contains(hit) && !hit.closest('.nodrag, input, textarea, select, button, [contenteditable="true"], .react-flow__handle');
+          });
+          if (!point) continue;
+          const distance = Math.hypot(point.x - cx, point.y - cy) + (element.classList.contains('react-flow__node-nanoBanana') ? 0 : 1e5);
           if (!best || distance < best.distance) best = { ...point, distance, id: element.dataset.id, transform: element.style.transform };
         }
         return best && { ...best, ...room(best.x, best.y) };
@@ -289,15 +353,12 @@ async function main() {
         }
       }
     }, kind);
-    await app.evaluate(({ BrowserWindow }, os) => {
-      const window = BrowserWindow.getAllWindows()[0];
-      if (os) window.setAlwaysOnTop(true);
-      window.focus();
-    }, !!osInput);
+    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].focus());
     if (osInput) {
       console.log('Driving the real mouse: do not touch it until the run finishes.');
       await delay(3000);
     }
+    console.log(`Measuring ${rounds} round(s) of ${gestureNames.join(', ')}…`);
     await page.mouse.move(Math.round((await page.evaluate(() => innerWidth)) * .7), 40);
     await delay(300);
     await page.screenshot({ path: output.replace(/\.json$/, '') + '.png' });
@@ -316,12 +377,11 @@ async function main() {
           assert.notEqual(moved, origin.transform, `${name} did not move the node`);
           lastDrag = { ...origin, moved };
         } else {
-          assert.equal(await page.locator('.react-flow__node').count(), count, 'Panning lost node wrappers');
+          assert.equal(await page.locator('.react-flow__node').count(), nodeCount, 'Panning lost node wrappers');
           assert.notEqual(await page.locator('.react-flow__viewport').evaluate(el => el.style.transform), viewportBefore, `${name} did not move the viewport`);
         }
       }
     }
-    if (osInput) await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setAlwaysOnTop(false));
     // Interaction checks run after the measured intervals.
     const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
     if (lastDrag) {
@@ -338,8 +398,8 @@ async function main() {
     await page.waitForFunction(() => document.querySelectorAll('.react-flow__node').length === 0);
     const closeWelcome = page.getByRole('button', { name: 'Close', exact: true }).last();
     if (await closeWelcome.isVisible()) await closeWelcome.click();
-    await page.getByRole('tab').filter({ hasText: 'Canvas performance fixture' }).click();
-    await page.waitForFunction(count => document.querySelectorAll('.react-flow__node').length === count, count);
+    await page.getByRole('tab').filter({ hasText: workflowName }).first().click();
+    await page.waitForFunction(count => document.querySelectorAll('.react-flow__node').length === count, nodeCount);
     await page.waitForFunction(expected => document.querySelector('.react-flow__viewport')?.style.transform === expected, savedViewport, { timeout: 5000 });
     assert.equal(await page.locator('.react-flow__node [role="alert"]').count(), 0, 'Node failed to render');
     assert.deepEqual(pageErrors, [], 'Renderer errors during interaction');
@@ -354,8 +414,9 @@ async function main() {
       return { gpu: app.getGPUFeatureStatus(), displayHz: display.displayFrequency, scaleFactor: display.scaleFactor,
         displaySize: display.size, windowContentSize: window.getContentSize(), maximized: window.isMaximized(), packaged: app.isPackaged, versions: process.versions };
     });
-    const report = { workload: process.argv.includes('--media') ? 'images-1024px' : 'empty-nodes', input: inputMode, inputHz: hz, gestureDurationMs: seconds * 1000, gestures: gestureNames,
-      ...(osInput ? { osInputWorstLateMs: Math.max(...lateness) } : {}), nodes: count, edges: fixture(count).edges.length, rounds,
+    const workload = workflowFile ? `workflow:${path.basename(workflowFile)}` : fixtureName === 'realistic' ? 'realistic' : process.argv.includes('--media') ? 'images-1024px' : 'empty-nodes';
+    const report = { workload, zoom, tabs, agentOpen: process.argv.includes('--agent-open'), input: inputMode, inputHz: hz, gestureDurationMs: seconds * 1000, gestures: gestureNames,
+      ...(osInput ? { osInputWorstLateMs: Math.max(...lateness) } : {}), nodes: nodeCount, edges: workflow.edges.length, rounds,
       platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model, ...environment, trace, ...(detailTimes ? { detail: detailTimes } : {}), results };
     await fs.writeFile(output, JSON.stringify(report, null, 2));
     console.log(`\n${formatReport(trace)}`);
