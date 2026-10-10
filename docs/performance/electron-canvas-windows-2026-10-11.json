@@ -1,0 +1,4909 @@
+{
+  "recordedOn": "2026-10-11",
+  "machine": {
+    "platform": "win32",
+    "arch": "x64",
+    "cpu": "Intel(R) Core(TM) i9-14900KF",
+    "gpu": "NVIDIA GeForce RTX 4090",
+    "displayHz": 180,
+    "scaleFactor": 1,
+    "displaySize": {
+      "width": 2560,
+      "height": 1440
+    },
+    "gpuFeatureStatus": {
+      "2d_canvas": "enabled",
+      "direct_rendering_display_compositor": "disabled_off_ok",
+      "gpu_compositing": "enabled",
+      "multiple_raster_threads": "enabled_on",
+      "opengl": "enabled_on",
+      "rasterization": "enabled",
+      "raw_draw": "disabled_off_ok",
+      "skia_graphite": "disabled_off",
+      "trees_in_viz": "disabled_off",
+      "video_decode": "enabled",
+      "video_encode": "enabled",
+      "webgl": "enabled",
+      "webgpu": "enabled",
+      "webnn": "disabled_off"
+    }
+  },
+  "runtime": {
+    "electron": "44.2.0",
+    "chromium": "152.0.7977.76"
+  },
+  "method": "scripts/electron-canvas-performance.cjs --input os (SendInput at 1000 Hz), maximised, no DevTools attached, 2 rounds per workload; baseline and branch alternated per workload. Metrics from Chromium traces (scripts/lib/trace-analysis.cjs).",
+  "builds": {
+    "baseline": "develop at b65cabfd with the measurement commits (app code unchanged)",
+    "branch": "fix/windows-canvas-performance"
+  },
+  "workloads": {
+    "cars": {
+      "baseline": {
+        "workload": "restored:Cars",
+        "nodes": 67,
+        "edges": 94,
+        "zoom": 45,
+        "input": "os",
+        "inputHz": 1000,
+        "gestureDurationMs": 4000,
+        "rounds": 2,
+        "windowContentSize": [
+          2560,
+          1392
+        ],
+        "trace": {
+          "vsyncMs": 5.55,
+          "refreshHz": 180.1,
+          "gestures": [
+            {
+              "label": "drag-sweep",
+              "durationMs": 3999,
+              "inputs": 3800,
+              "inputHz": 950,
+              "inputLimited": false,
+              "droppedPct": 43.1,
+              "presentedFps": 102.2,
+              "vsyncsPresentedPct": 56.8,
+              "missedVsyncs": 368,
+              "jankyFrames": 268,
+              "frameMs": {
+                "p50": 11.07,
+                "p95": 16.69,
+                "p99": 22.22,
+                "max": 55.54
+              },
+              "latencyMs": {
+                "p50": 35.1,
+                "p95": 79.7,
+                "max": 146.4,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 415,
+                "partial": 435,
+                "dropped": 287,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.2,
+                  "longestTaskMs": 46.7,
+                  "tasksOver16ms": 1,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 8.1,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 53.5,
+                  "longestTaskMs": 14,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 6.9,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            },
+            {
+              "label": "drag-circle",
+              "durationMs": 3999,
+              "inputs": 4000,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 42,
+              "presentedFps": 104.2,
+              "vsyncsPresentedPct": 57.9,
+              "missedVsyncs": 357,
+              "jankyFrames": 262,
+              "frameMs": {
+                "p50": 11.01,
+                "p95": 16.68,
+                "p99": 22.25,
+                "max": 27.76
+              },
+              "latencyMs": {
+                "p50": 31.9,
+                "p95": 71.6,
+                "max": 127.3,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 422,
+                "partial": 439,
+                "dropped": 284,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 98.9,
+                  "longestTaskMs": 48.9,
+                  "tasksOver16ms": 1,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 8,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1.1,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 54.5,
+                  "longestTaskMs": 18.3,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 6.9,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            },
+            {
+              "label": "pan-sweep",
+              "durationMs": 3999,
+              "inputs": 3814,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 62.1,
+              "presentedFps": 68.1,
+              "vsyncsPresentedPct": 37.8,
+              "missedVsyncs": 444,
+              "jankyFrames": 218,
+              "frameMs": {
+                "p50": 12.37,
+                "p95": 27.78,
+                "p99": 38.87,
+                "max": 49.98
+              },
+              "latencyMs": {
+                "p50": 45.2,
+                "p95": 93.5,
+                "max": 146.4,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 284,
+                "partial": 344,
+                "dropped": 385,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 75.2,
+                  "longestTaskMs": 17.1,
+                  "tasksOver16ms": 1,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 7.2,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 2.9,
+                  "longestTaskMs": 0.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 99.1,
+                  "longestTaskMs": 32.5,
+                  "tasksOver16ms": 11,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 6.7,
+                  "longestTaskMs": 1.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            },
+            {
+              "label": "drag-sweep",
+              "durationMs": 3999,
+              "inputs": 3801,
+              "inputHz": 951,
+              "inputLimited": false,
+              "droppedPct": 43.1,
+              "presentedFps": 102.2,
+              "vsyncsPresentedPct": 56.8,
+              "missedVsyncs": 382,
+              "jankyFrames": 261,
+              "frameMs": {
+                "p50": 11.01,
+                "p95": 16.81,
+                "p99": 27.76,
+                "max": 44.44
+              },
+              "latencyMs": {
+                "p50": 32.9,
+                "p95": 76.2,
+                "max": 130.2,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 418,
+                "partial": 437,
+                "dropped": 285,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 98.9,
+                  "longestTaskMs": 47.7,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 8.2,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.9,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 54.8,
+                  "longestTaskMs": 27.5,
+                  "tasksOver16ms": 1,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 7,
+                  "longestTaskMs": 0.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            },
+            {
+              "label": "drag-circle",
+              "durationMs": 3999,
+              "inputs": 4000,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 41.9,
+              "presentedFps": 104.5,
+              "vsyncsPresentedPct": 58,
+              "missedVsyncs": 361,
+              "jankyFrames": 259,
+              "frameMs": {
+                "p50": 11,
+                "p95": 16.68,
+                "p99": 22.14,
+                "max": 33.32
+              },
+              "latencyMs": {
+                "p50": 31.5,
+                "p95": 69.2,
+                "max": 105.4,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 424,
+                "partial": 443,
+                "dropped": 279,
+                "noUpdate": 1,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 98.9,
+                  "longestTaskMs": 46.1,
+                  "tasksOver16ms": 1,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 8.2,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 53.7,
+                  "longestTaskMs": 20.8,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 6.9,
+                  "longestTaskMs": 1.4,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            },
+            {
+              "label": "pan-sweep",
+              "durationMs": 3999,
+              "inputs": 3813,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 59.6,
+              "presentedFps": 72.6,
+              "vsyncsPresentedPct": 40.3,
+              "missedVsyncs": 432,
+              "jankyFrames": 225,
+              "frameMs": {
+                "p50": 11.13,
+                "p95": 26.62,
+                "p99": 33.59,
+                "max": 60.98
+              },
+              "latencyMs": {
+                "p50": 45.2,
+                "p95": 75.7,
+                "max": 130.7,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 304,
+                "partial": 347,
+                "dropped": 380,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 79.2,
+                  "longestTaskMs": 16.8,
+                  "tasksOver16ms": 1,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 7.6,
+                  "longestTaskMs": 1.4,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 3,
+                  "longestTaskMs": 1.4,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 99.4,
+                  "longestTaskMs": 20.5,
+                  "tasksOver16ms": 3,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 7.1,
+                  "longestTaskMs": 1.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            }
+          ],
+          "summary": {
+            "drag-sweep": {
+              "label": "drag-sweep",
+              "gestures": 2,
+              "durationMs": 7998,
+              "inputs": 7601,
+              "inputHz": 950,
+              "inputLimited": false,
+              "droppedPct": 43.1,
+              "presentedFps": 102.2,
+              "vsyncsPresentedPct": 56.8,
+              "missedVsyncs": 750,
+              "jankyFrames": 529,
+              "frameMs": {
+                "p50": 11.01,
+                "p95": 16.78,
+                "p99": 27.71,
+                "max": 55.54
+              },
+              "latencyMs": {
+                "p50": 33.9,
+                "p95": 77.9,
+                "max": 146.4,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 833,
+                "partial": 872,
+                "dropped": 572,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99,
+                  "longestTaskMs": 47.7,
+                  "tasksOver16ms": 3,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 8.1,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 54.2,
+                  "longestTaskMs": 27.5,
+                  "tasksOver16ms": 1,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 6.9,
+                  "longestTaskMs": 0.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            },
+            "drag-circle": {
+              "label": "drag-circle",
+              "gestures": 2,
+              "durationMs": 7997,
+              "inputs": 8000,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 42,
+              "presentedFps": 104.4,
+              "vsyncsPresentedPct": 58,
+              "missedVsyncs": 718,
+              "jankyFrames": 521,
+              "frameMs": {
+                "p50": 11.01,
+                "p95": 16.68,
+                "p99": 22.23,
+                "max": 33.32
+              },
+              "latencyMs": {
+                "p50": 31.7,
+                "p95": 70.4,
+                "max": 127.3,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 846,
+                "partial": 882,
+                "dropped": 563,
+                "noUpdate": 1,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 98.9,
+                  "longestTaskMs": 48.9,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 8.1,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 54.1,
+                  "longestTaskMs": 20.8,
+                  "tasksOver16ms": 4,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 6.9,
+                  "longestTaskMs": 1.4,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            },
+            "pan-sweep": {
+              "label": "pan-sweep",
+              "gestures": 2,
+              "durationMs": 7997,
+              "inputs": 7627,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 60.9,
+              "presentedFps": 70.3,
+              "vsyncsPresentedPct": 39.1,
+              "missedVsyncs": 876,
+              "jankyFrames": 443,
+              "frameMs": {
+                "p50": 11.35,
+                "p95": 27.72,
+                "p99": 33.85,
+                "max": 60.98
+              },
+              "latencyMs": {
+                "p50": 45.2,
+                "p95": 85.2,
+                "max": 146.4,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 588,
+                "partial": 691,
+                "dropped": 765,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 77.2,
+                  "longestTaskMs": 17.1,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 7.4,
+                  "longestTaskMs": 1.4,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 2.9,
+                  "longestTaskMs": 1.4,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 99.2,
+                  "longestTaskMs": 32.5,
+                  "tasksOver16ms": 14,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 6.9,
+                  "longestTaskMs": 1.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            }
+          }
+        },
+        "legacyAnimationFrameResults": [
+          {
+            "name": "drag-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4398,
+            "fps": 107.8,
+            "frameMsP50": 11,
+            "frameMsP95": 11.2,
+            "frameMsMax": 44.5,
+            "framesOver25ms": 3
+          },
+          {
+            "name": "drag-circle",
+            "inputEvents": 4003,
+            "durationMs": 4398,
+            "fps": 110.5,
+            "frameMsP50": 11,
+            "frameMsP95": 11.2,
+            "frameMsMax": 44.4,
+            "framesOver25ms": 3
+          },
+          {
+            "name": "pan-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4370,
+            "fps": 79.2,
+            "frameMsP50": 11.1,
+            "frameMsP95": 22.2,
+            "frameMsMax": 33.3,
+            "framesOver25ms": 10
+          },
+          {
+            "name": "drag-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4398,
+            "fps": 109.4,
+            "frameMsP50": 11,
+            "frameMsP95": 11.3,
+            "frameMsMax": 44.4,
+            "framesOver25ms": 2
+          },
+          {
+            "name": "drag-circle",
+            "inputEvents": 4003,
+            "durationMs": 4398,
+            "fps": 110.7,
+            "frameMsP50": 11,
+            "frameMsP95": 11.2,
+            "frameMsMax": 44.5,
+            "framesOver25ms": 3
+          },
+          {
+            "name": "pan-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4370,
+            "fps": 82.4,
+            "frameMsP50": 11.1,
+            "frameMsP95": 16.8,
+            "frameMsMax": 33.3,
+            "framesOver25ms": 3
+          }
+        ]
+      },
+      "branch": {
+        "workload": "restored:Cars",
+        "nodes": 67,
+        "edges": 94,
+        "zoom": 45,
+        "input": "os",
+        "inputHz": 1000,
+        "gestureDurationMs": 4000,
+        "rounds": 2,
+        "windowContentSize": [
+          2560,
+          1392
+        ],
+        "trace": {
+          "vsyncMs": 5.55,
+          "refreshHz": 180.1,
+          "gestures": [
+            {
+              "label": "drag-sweep",
+              "durationMs": 3999,
+              "inputs": 3800,
+              "inputHz": 950,
+              "inputLimited": false,
+              "droppedPct": 21.2,
+              "presentedFps": 141.7,
+              "vsyncsPresentedPct": 78.7,
+              "missedVsyncs": 161,
+              "jankyFrames": 142,
+              "frameMs": {
+                "p50": 5.56,
+                "p95": 11.16,
+                "p99": 22.06,
+                "max": 22.31
+              },
+              "latencyMs": {
+                "p50": 30.2,
+                "p95": 209.9,
+                "max": 249.9,
+                "unanswered": 586
+              },
+              "reports": {
+                "presented": 683,
+                "partial": 689,
+                "dropped": 33,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 98.5,
+                  "longestTaskMs": 23.8,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 10.1,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.8,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 52,
+                  "longestTaskMs": 19.9,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 8.1,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            },
+            {
+              "label": "drag-circle",
+              "durationMs": 3999,
+              "inputs": 4000,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 25,
+              "presentedFps": 134.9,
+              "vsyncsPresentedPct": 74.9,
+              "missedVsyncs": 169,
+              "jankyFrames": 160,
+              "frameMs": {
+                "p50": 5.56,
+                "p95": 11.15,
+                "p99": 11.26,
+                "max": 33.3
+              },
+              "latencyMs": {
+                "p50": 26.4,
+                "p95": 202.9,
+                "max": 249.7,
+                "unanswered": 315
+              },
+              "reports": {
+                "presented": 702,
+                "partial": 701,
+                "dropped": 18,
+                "noUpdate": 5,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 97.3,
+                  "longestTaskMs": 24.7,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 10.4,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.9,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 55.7,
+                  "longestTaskMs": 29.1,
+                  "tasksOver16ms": 1,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 8.3,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0.1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            },
+            {
+              "label": "pan-sweep",
+              "durationMs": 3998,
+              "inputs": 3814,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 61.3,
+              "presentedFps": 69.6,
+              "vsyncsPresentedPct": 38.6,
+              "missedVsyncs": 442,
+              "jankyFrames": 243,
+              "frameMs": {
+                "p50": 11.13,
+                "p95": 27.85,
+                "p99": 45.38,
+                "max": 50.68
+              },
+              "latencyMs": {
+                "p50": 49.4,
+                "p95": 92.4,
+                "max": 131.2,
+                "unanswered": 11
+              },
+              "reports": {
+                "presented": 298,
+                "partial": 298,
+                "dropped": 432,
+                "noUpdate": 1,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 57.4,
+                  "longestTaskMs": 12.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 6.6,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.6,
+                  "longestTaskMs": 0.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 99.4,
+                  "longestTaskMs": 31.8,
+                  "tasksOver16ms": 15,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 6.3,
+                  "longestTaskMs": 1.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            },
+            {
+              "label": "drag-sweep",
+              "durationMs": 3998,
+              "inputs": 3801,
+              "inputHz": 951,
+              "inputLimited": false,
+              "droppedPct": 33.2,
+              "presentedFps": 120.2,
+              "vsyncsPresentedPct": 66.8,
+              "missedVsyncs": 249,
+              "jankyFrames": 217,
+              "frameMs": {
+                "p50": 5.67,
+                "p95": 11.26,
+                "p99": 17,
+                "max": 55.53
+              },
+              "latencyMs": {
+                "p50": 22.8,
+                "p95": 76.3,
+                "max": 137.1,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 671,
+                "partial": 678,
+                "dropped": 45,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 97.5,
+                  "longestTaskMs": 25.5,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 10.3,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.8,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 55,
+                  "longestTaskMs": 31.9,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 8.4,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            },
+            {
+              "label": "drag-circle",
+              "durationMs": 3998,
+              "inputs": 4000,
+              "inputHz": 1001,
+              "inputLimited": false,
+              "droppedPct": 4.7,
+              "presentedFps": 171.4,
+              "vsyncsPresentedPct": 95.2,
+              "missedVsyncs": 23,
+              "jankyFrames": 21,
+              "frameMs": {
+                "p50": 5.55,
+                "p95": 5.71,
+                "p99": 11.13,
+                "max": 22.34
+              },
+              "latencyMs": {
+                "p50": 63.9,
+                "p95": 223.7,
+                "max": 249.6,
+                "unanswered": 2949
+              },
+              "reports": {
+                "presented": 711,
+                "partial": 710,
+                "dropped": 8,
+                "noUpdate": 5,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 97.6,
+                  "longestTaskMs": 24.1,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 10.7,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.9,
+                  "longestTaskMs": 0.4,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 55.7,
+                  "longestTaskMs": 13.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 8.7,
+                  "longestTaskMs": 0.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            },
+            {
+              "label": "pan-sweep",
+              "durationMs": 3999,
+              "inputs": 3814,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 58.3,
+              "presentedFps": 75.1,
+              "vsyncsPresentedPct": 41.7,
+              "missedVsyncs": 421,
+              "jankyFrames": 265,
+              "frameMs": {
+                "p50": 11.11,
+                "p95": 22.84,
+                "p99": 33.53,
+                "max": 38.88
+              },
+              "latencyMs": {
+                "p50": 47.1,
+                "p95": 75.9,
+                "max": 136.7,
+                "unanswered": 15
+              },
+              "reports": {
+                "presented": 312,
+                "partial": 313,
+                "dropped": 416,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 59.8,
+                  "longestTaskMs": 11.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 6.9,
+                  "longestTaskMs": 0.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.6,
+                  "longestTaskMs": 0.5,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 99.5,
+                  "longestTaskMs": 22.5,
+                  "tasksOver16ms": 3,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 6.6,
+                  "longestTaskMs": 1.2,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            }
+          ],
+          "summary": {
+            "drag-sweep": {
+              "label": "drag-sweep",
+              "gestures": 2,
+              "durationMs": 7997,
+              "inputs": 7601,
+              "inputHz": 950,
+              "inputLimited": false,
+              "droppedPct": 27.2,
+              "presentedFps": 130.9,
+              "vsyncsPresentedPct": 72.7,
+              "missedVsyncs": 410,
+              "jankyFrames": 359,
+              "frameMs": {
+                "p50": 5.57,
+                "p95": 11.23,
+                "p99": 17,
+                "max": 55.53
+              },
+              "latencyMs": {
+                "p50": 25.6,
+                "p95": 157.9,
+                "max": 249.9,
+                "unanswered": 586
+              },
+              "reports": {
+                "presented": 1354,
+                "partial": 1367,
+                "dropped": 78,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 98,
+                  "longestTaskMs": 25.5,
+                  "tasksOver16ms": 4,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 10.2,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.8,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 53.5,
+                  "longestTaskMs": 31.9,
+                  "tasksOver16ms": 4,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 8.3,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            },
+            "drag-circle": {
+              "label": "drag-circle",
+              "gestures": 2,
+              "durationMs": 7997,
+              "inputs": 8000,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 14.8,
+              "presentedFps": 153.1,
+              "vsyncsPresentedPct": 85,
+              "missedVsyncs": 192,
+              "jankyFrames": 181,
+              "frameMs": {
+                "p50": 5.56,
+                "p95": 11.11,
+                "p99": 11.23,
+                "max": 33.3
+              },
+              "latencyMs": {
+                "p50": 30.7,
+                "p95": 210,
+                "max": 249.7,
+                "unanswered": 3264
+              },
+              "reports": {
+                "presented": 1413,
+                "partial": 1411,
+                "dropped": 26,
+                "noUpdate": 10,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 97.5,
+                  "longestTaskMs": 24.7,
+                  "tasksOver16ms": 4,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 10.6,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.9,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 55.7,
+                  "longestTaskMs": 29.1,
+                  "tasksOver16ms": 1,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 8.5,
+                  "longestTaskMs": 0.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0.1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            },
+            "pan-sweep": {
+              "label": "pan-sweep",
+              "gestures": 2,
+              "durationMs": 7997,
+              "inputs": 7628,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 59.8,
+              "presentedFps": 72.3,
+              "vsyncsPresentedPct": 40.2,
+              "missedVsyncs": 863,
+              "jankyFrames": 508,
+              "frameMs": {
+                "p50": 11.12,
+                "p95": 27.74,
+                "p99": 38.88,
+                "max": 50.68
+              },
+              "latencyMs": {
+                "p50": 48.2,
+                "p95": 84.4,
+                "max": 136.7,
+                "unanswered": 26
+              },
+              "reports": {
+                "presented": 610,
+                "partial": 611,
+                "dropped": 848,
+                "noUpdate": 1,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 58.6,
+                  "longestTaskMs": 12.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "compositor": {
+                  "busyPct": 6.8,
+                  "longestTaskMs": 0.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.6,
+                  "longestTaskMs": 0.5,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 99.5,
+                  "longestTaskMs": 31.8,
+                  "tasksOver16ms": 18,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 6.5,
+                  "longestTaskMs": 1.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            }
+          }
+        },
+        "legacyAnimationFrameResults": [
+          {
+            "name": "drag-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4381,
+            "fps": 169.8,
+            "frameMsP50": 5.6,
+            "frameMsP95": 5.8,
+            "frameMsMax": 22.4,
+            "framesOver25ms": 0
+          },
+          {
+            "name": "drag-circle",
+            "inputEvents": 4003,
+            "durationMs": 4381,
+            "fps": 175.1,
+            "frameMsP50": 5.6,
+            "frameMsP95": 5.7,
+            "frameMsMax": 22.3,
+            "framesOver25ms": 0
+          },
+          {
+            "name": "pan-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4370,
+            "fps": 81.2,
+            "frameMsP50": 11.1,
+            "frameMsP95": 22.1,
+            "frameMsMax": 39,
+            "framesOver25ms": 9
+          },
+          {
+            "name": "drag-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4409,
+            "fps": 167.6,
+            "frameMsP50": 5.6,
+            "frameMsP95": 11,
+            "frameMsMax": 44.4,
+            "framesOver25ms": 2
+          },
+          {
+            "name": "drag-circle",
+            "inputEvents": 4003,
+            "durationMs": 4381,
+            "fps": 177.1,
+            "frameMsP50": 5.6,
+            "frameMsP95": 5.7,
+            "frameMsMax": 22,
+            "framesOver25ms": 0
+          },
+          {
+            "name": "pan-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4359,
+            "fps": 84.9,
+            "frameMsP50": 11.1,
+            "frameMsP95": 16.7,
+            "frameMsMax": 27.8,
+            "framesOver25ms": 2
+          }
+        ]
+      }
+    },
+    "realistic": {
+      "baseline": {
+        "workload": "realistic",
+        "nodes": 303,
+        "edges": 398,
+        "zoom": 45,
+        "input": "os",
+        "inputHz": 1000,
+        "gestureDurationMs": 4000,
+        "rounds": 2,
+        "windowContentSize": [
+          2560,
+          1392
+        ],
+        "trace": {
+          "vsyncMs": 5.55,
+          "refreshHz": 180.1,
+          "gestures": [
+            {
+              "label": "drag-sweep",
+              "durationMs": 3999,
+              "inputs": 3739,
+              "inputHz": 935,
+              "inputLimited": false,
+              "droppedPct": 82.5,
+              "presentedFps": 31.4,
+              "vsyncsPresentedPct": 17.4,
+              "missedVsyncs": 592,
+              "jankyFrames": 123,
+              "frameMs": {
+                "p50": 27.77,
+                "p95": 55.52,
+                "p99": 155.21,
+                "max": 200.27
+              },
+              "latencyMs": {
+                "p50": 32.4,
+                "p95": 124.5,
+                "max": 227.2,
+                "unanswered": 1
+              },
+              "reports": {
+                "presented": 127,
+                "partial": 216,
+                "dropped": 508,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.8,
+                  "longestTaskMs": 169.9,
+                  "tasksOver16ms": 127,
+                  "tasksOver50ms": 3
+                },
+                "compositor": {
+                  "busyPct": 3.5,
+                  "longestTaskMs": 1.5,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1.2,
+                  "longestTaskMs": 1.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 20.1,
+                  "longestTaskMs": 20.5,
+                  "tasksOver16ms": 3,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 2.8,
+                  "longestTaskMs": 2.1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0.2,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 3,
+                "totalMs": 396,
+                "worst": [
+                  {
+                    "ms": 156,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 134,
+                    "name": "user-callback FrameRequestCallback 2bsjlb_yc-6_4.js C"
+                  },
+                  {
+                    "ms": 107,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "drag-circle",
+              "durationMs": 3998,
+              "inputs": 3999,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 81.8,
+              "presentedFps": 32.7,
+              "vsyncsPresentedPct": 18.1,
+              "missedVsyncs": 554,
+              "jankyFrames": 129,
+              "frameMs": {
+                "p50": 27.85,
+                "p95": 38.95,
+                "p99": 49.9,
+                "max": 55.4
+              },
+              "latencyMs": {
+                "p50": 29.7,
+                "p95": 70.1,
+                "max": 209.9,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 133,
+                "partial": 144,
+                "dropped": 577,
+                "noUpdate": 2,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.8,
+                  "longestTaskMs": 144.5,
+                  "tasksOver16ms": 133,
+                  "tasksOver50ms": 1
+                },
+                "compositor": {
+                  "busyPct": 3.3,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1.4,
+                  "longestTaskMs": 1.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 17.7,
+                  "longestTaskMs": 13.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 2.5,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0.2,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 1,
+                "totalMs": 133,
+                "worst": [
+                  {
+                    "ms": 133,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "pan-sweep",
+              "durationMs": 3999,
+              "inputs": 3814,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 88.8,
+              "presentedFps": 20.2,
+              "vsyncsPresentedPct": 11.2,
+              "missedVsyncs": 617,
+              "jankyFrames": 80,
+              "frameMs": {
+                "p50": 33.25,
+                "p95": 155.39,
+                "p99": 161.29,
+                "max": 161.29
+              },
+              "latencyMs": {
+                "p50": 59.7,
+                "p95": 164.4,
+                "max": 245.5,
+                "unanswered": 2
+              },
+              "reports": {
+                "presented": 81,
+                "partial": 105,
+                "dropped": 621,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.9,
+                  "longestTaskMs": 162.8,
+                  "tasksOver16ms": 83,
+                  "tasksOver50ms": 28
+                },
+                "compositor": {
+                  "busyPct": 2.3,
+                  "longestTaskMs": 0.5,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.5,
+                  "longestTaskMs": 0.5,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 35.5,
+                  "longestTaskMs": 35.9,
+                  "tasksOver16ms": 15,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 2.2,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0.2,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 16,
+                "totalMs": 1642,
+                "worst": [
+                  {
+                    "ms": 153,
+                    "name": "user-callback FrameRequestCallback 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 152,
+                    "name": "user-callback FrameRequestCallback 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 150,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 147,
+                    "name": "user-callback FrameRequestCallback 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 141,
+                    "name": "user-callback FrameRequestCallback 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "drag-sweep",
+              "durationMs": 3999,
+              "inputs": 3677,
+              "inputHz": 920,
+              "inputLimited": false,
+              "droppedPct": 82.2,
+              "presentedFps": 31.9,
+              "vsyncsPresentedPct": 17.7,
+              "missedVsyncs": 592,
+              "jankyFrames": 125,
+              "frameMs": {
+                "p50": 27.8,
+                "p95": 44.58,
+                "p99": 155.64,
+                "max": 199.75
+              },
+              "latencyMs": {
+                "p50": 31.2,
+                "p95": 153.5,
+                "max": 249.5,
+                "unanswered": 6
+              },
+              "reports": {
+                "presented": 129,
+                "partial": 192,
+                "dropped": 534,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.8,
+                  "longestTaskMs": 172.7,
+                  "tasksOver16ms": 128,
+                  "tasksOver50ms": 3
+                },
+                "compositor": {
+                  "busyPct": 3.3,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.8,
+                  "longestTaskMs": 1.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 18.7,
+                  "longestTaskMs": 24.6,
+                  "tasksOver16ms": 1,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 2.7,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0.1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 3,
+                "totalMs": 396,
+                "worst": [
+                  {
+                    "ms": 168,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 126,
+                    "name": "user-callback FrameRequestCallback 2bsjlb_yc-6_4.js C"
+                  },
+                  {
+                    "ms": 102,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "drag-circle",
+              "durationMs": 3999,
+              "inputs": 4000,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 81.1,
+              "presentedFps": 33.9,
+              "vsyncsPresentedPct": 18.8,
+              "missedVsyncs": 550,
+              "jankyFrames": 135,
+              "frameMs": {
+                "p50": 27.77,
+                "p95": 33.4,
+                "p99": 34.13,
+                "max": 72.21
+              },
+              "latencyMs": {
+                "p50": 28.8,
+                "p95": 69.9,
+                "max": 216.1,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 137,
+                "partial": 136,
+                "dropped": 588,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.8,
+                  "longestTaskMs": 165.4,
+                  "tasksOver16ms": 138,
+                  "tasksOver50ms": 1
+                },
+                "compositor": {
+                  "busyPct": 3.3,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 17.9,
+                  "longestTaskMs": 18.9,
+                  "tasksOver16ms": 1,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 2.6,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0.1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 2,
+                "totalMs": 217,
+                "worst": [
+                  {
+                    "ms": 157,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 60,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "pan-sweep",
+              "durationMs": 3999,
+              "inputs": 3814,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 88.2,
+              "presentedFps": 21.2,
+              "vsyncsPresentedPct": 11.8,
+              "missedVsyncs": 614,
+              "jankyFrames": 82,
+              "frameMs": {
+                "p50": 33.28,
+                "p95": 139.89,
+                "p99": 172.1,
+                "max": 172.1
+              },
+              "latencyMs": {
+                "p50": 52.8,
+                "p95": 155.7,
+                "max": 225.4,
+                "unanswered": 2
+              },
+              "reports": {
+                "presented": 86,
+                "partial": 110,
+                "dropped": 613,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.6,
+                  "longestTaskMs": 170,
+                  "tasksOver16ms": 87,
+                  "tasksOver50ms": 24
+                },
+                "compositor": {
+                  "busyPct": 2.4,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.5,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 34.4,
+                  "longestTaskMs": 43.3,
+                  "tasksOver16ms": 7,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 2.3,
+                  "longestTaskMs": 0.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 11,
+                "totalMs": 1313,
+                "worst": [
+                  {
+                    "ms": 166,
+                    "name": "user-callback FrameRequestCallback 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 150,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 138,
+                    "name": "user-callback FrameRequestCallback 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 135,
+                    "name": "user-callback FrameRequestCallback 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 130,
+                    "name": "user-callback FrameRequestCallback 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            }
+          ],
+          "summary": {
+            "drag-sweep": {
+              "label": "drag-sweep",
+              "gestures": 2,
+              "durationMs": 7998,
+              "inputs": 7416,
+              "inputHz": 927,
+              "inputLimited": false,
+              "droppedPct": 82.4,
+              "presentedFps": 31.7,
+              "vsyncsPresentedPct": 17.6,
+              "missedVsyncs": 1184,
+              "jankyFrames": 248,
+              "frameMs": {
+                "p50": 27.78,
+                "p95": 49.89,
+                "p99": 155.64,
+                "max": 200.27
+              },
+              "latencyMs": {
+                "p50": 31.8,
+                "p95": 138.1,
+                "max": 249.5,
+                "unanswered": 7
+              },
+              "reports": {
+                "presented": 256,
+                "partial": 408,
+                "dropped": 1042,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.8,
+                  "longestTaskMs": 172.7,
+                  "tasksOver16ms": 255,
+                  "tasksOver50ms": 6
+                },
+                "compositor": {
+                  "busyPct": 3.4,
+                  "longestTaskMs": 1.5,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1,
+                  "longestTaskMs": 1.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 19.4,
+                  "longestTaskMs": 24.6,
+                  "tasksOver16ms": 4,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 2.8,
+                  "longestTaskMs": 2.1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0.2,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 6,
+                "totalMs": 792,
+                "worst": [
+                  {
+                    "ms": 168,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 156,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 134,
+                    "name": "user-callback FrameRequestCallback 2bsjlb_yc-6_4.js C"
+                  },
+                  {
+                    "ms": 126,
+                    "name": "user-callback FrameRequestCallback 2bsjlb_yc-6_4.js C"
+                  },
+                  {
+                    "ms": 107,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            },
+            "drag-circle": {
+              "label": "drag-circle",
+              "gestures": 2,
+              "durationMs": 7996,
+              "inputs": 7999,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 81.5,
+              "presentedFps": 33.3,
+              "vsyncsPresentedPct": 18.5,
+              "missedVsyncs": 1104,
+              "jankyFrames": 264,
+              "frameMs": {
+                "p50": 27.77,
+                "p95": 34.13,
+                "p99": 49.9,
+                "max": 72.21
+              },
+              "latencyMs": {
+                "p50": 29.2,
+                "p95": 70,
+                "max": 216.1,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 270,
+                "partial": 280,
+                "dropped": 1165,
+                "noUpdate": 2,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.8,
+                  "longestTaskMs": 165.4,
+                  "tasksOver16ms": 271,
+                  "tasksOver50ms": 2
+                },
+                "compositor": {
+                  "busyPct": 3.3,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1.2,
+                  "longestTaskMs": 1.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 17.8,
+                  "longestTaskMs": 18.9,
+                  "tasksOver16ms": 1,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 2.6,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0.2,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 3,
+                "totalMs": 350,
+                "worst": [
+                  {
+                    "ms": 157,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 133,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 60,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            },
+            "pan-sweep": {
+              "label": "pan-sweep",
+              "gestures": 2,
+              "durationMs": 7997,
+              "inputs": 7628,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 88.5,
+              "presentedFps": 20.7,
+              "vsyncsPresentedPct": 11.5,
+              "missedVsyncs": 1231,
+              "jankyFrames": 162,
+              "frameMs": {
+                "p50": 33.26,
+                "p95": 144.51,
+                "p99": 161.29,
+                "max": 172.1
+              },
+              "latencyMs": {
+                "p50": 56,
+                "p95": 159.9,
+                "max": 245.5,
+                "unanswered": 4
+              },
+              "reports": {
+                "presented": 167,
+                "partial": 215,
+                "dropped": 1234,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.8,
+                  "longestTaskMs": 170,
+                  "tasksOver16ms": 170,
+                  "tasksOver50ms": 52
+                },
+                "compositor": {
+                  "busyPct": 2.4,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.5,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 35,
+                  "longestTaskMs": 43.3,
+                  "tasksOver16ms": 22,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 2.2,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 27,
+                "totalMs": 2954,
+                "worst": [
+                  {
+                    "ms": 166,
+                    "name": "user-callback FrameRequestCallback 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 153,
+                    "name": "user-callback FrameRequestCallback 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 152,
+                    "name": "user-callback FrameRequestCallback 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 150,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 150,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "legacyAnimationFrameResults": [
+          {
+            "name": "drag-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4526,
+            "fps": 42.2,
+            "frameMsP50": 27.7,
+            "frameMsP95": 38.8,
+            "frameMsMax": 161,
+            "framesOver25ms": 123
+          },
+          {
+            "name": "drag-circle",
+            "inputEvents": 4003,
+            "durationMs": 4509,
+            "fps": 43.2,
+            "frameMsP50": 27.7,
+            "frameMsP95": 33.5,
+            "frameMsMax": 144.2,
+            "framesOver25ms": 128
+          },
+          {
+            "name": "pan-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4426,
+            "fps": 30.5,
+            "frameMsP50": 27.7,
+            "frameMsP95": 127.7,
+            "frameMsMax": 161.1,
+            "framesOver25ms": 77
+          },
+          {
+            "name": "drag-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4532,
+            "fps": 41.7,
+            "frameMsP50": 27.7,
+            "frameMsP95": 33.6,
+            "frameMsMax": 171.9,
+            "framesOver25ms": 123
+          },
+          {
+            "name": "drag-circle",
+            "inputEvents": 4003,
+            "durationMs": 4520,
+            "fps": 44,
+            "frameMsP50": 27.7,
+            "frameMsP95": 33.3,
+            "frameMsMax": 161,
+            "framesOver25ms": 130
+          },
+          {
+            "name": "pan-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4437,
+            "fps": 31.6,
+            "frameMsP50": 27.7,
+            "frameMsP95": 111.1,
+            "frameMsMax": 183,
+            "framesOver25ms": 83
+          }
+        ]
+      },
+      "branch": {
+        "workload": "realistic",
+        "nodes": 303,
+        "edges": 398,
+        "zoom": 45,
+        "input": "os",
+        "inputHz": 1000,
+        "gestureDurationMs": 4000,
+        "rounds": 2,
+        "windowContentSize": [
+          2560,
+          1392
+        ],
+        "trace": {
+          "vsyncMs": 5.55,
+          "refreshHz": 180.1,
+          "gestures": [
+            {
+              "label": "drag-sweep",
+              "durationMs": 3998,
+              "inputs": 3739,
+              "inputHz": 935,
+              "inputLimited": false,
+              "droppedPct": 70,
+              "presentedFps": 53.9,
+              "vsyncsPresentedPct": 29.9,
+              "missedVsyncs": 504,
+              "jankyFrames": 187,
+              "frameMs": {
+                "p50": 16.81,
+                "p95": 33.36,
+                "p99": 55.55,
+                "max": 70.55
+              },
+              "latencyMs": {
+                "p50": 27.6,
+                "p95": 106.1,
+                "max": 227.1,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 218,
+                "partial": 267,
+                "dropped": 457,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.7,
+                  "longestTaskMs": 69.7,
+                  "tasksOver16ms": 10,
+                  "tasksOver50ms": 2
+                },
+                "compositor": {
+                  "busyPct": 4.7,
+                  "longestTaskMs": 1.1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.5,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 23,
+                  "longestTaskMs": 20.2,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.2,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0.3,
+                  "longestTaskMs": 3.4,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 1,
+                "totalMs": 64,
+                "worst": [
+                  {
+                    "ms": 64,
+                    "name": "rendering"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "drag-circle",
+              "durationMs": 3999,
+              "inputs": 4000,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 69.4,
+              "presentedFps": 55.1,
+              "vsyncsPresentedPct": 30.6,
+              "missedVsyncs": 486,
+              "jankyFrames": 189,
+              "frameMs": {
+                "p50": 16.88,
+                "p95": 27.87,
+                "p99": 33.47,
+                "max": 66.4
+              },
+              "latencyMs": {
+                "p50": 26.1,
+                "p95": 48.2,
+                "max": 148.2,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 225,
+                "partial": 224,
+                "dropped": 500,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.7,
+                  "longestTaskMs": 74.3,
+                  "tasksOver16ms": 7,
+                  "tasksOver50ms": 2
+                },
+                "compositor": {
+                  "busyPct": 4.6,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.6,
+                  "longestTaskMs": 0.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 21.8,
+                  "longestTaskMs": 18,
+                  "tasksOver16ms": 1,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 1,
+                "totalMs": 70,
+                "worst": [
+                  {
+                    "ms": 70,
+                    "name": "rendering"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "pan-sweep",
+              "durationMs": 3998,
+              "inputs": 3814,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 74.5,
+              "presentedFps": 45.9,
+              "vsyncsPresentedPct": 25.5,
+              "missedVsyncs": 512,
+              "jankyFrames": 153,
+              "frameMs": {
+                "p50": 22.06,
+                "p95": 38.87,
+                "p99": 66.72,
+                "max": 149.54
+              },
+              "latencyMs": {
+                "p50": 50.4,
+                "p95": 118.4,
+                "max": 219.6,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 191,
+                "partial": 191,
+                "dropped": 535,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 97.5,
+                  "longestTaskMs": 113.4,
+                  "tasksOver16ms": 189,
+                  "tasksOver50ms": 2
+                },
+                "compositor": {
+                  "busyPct": 4.6,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.6,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 74.8,
+                  "longestTaskMs": 41,
+                  "tasksOver16ms": 18,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 4,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 3,
+                "totalMs": 286,
+                "worst": [
+                  {
+                    "ms": 121,
+                    "name": "event-listener DIV.onmousedown 1fs-s3i_t5fhu.js"
+                  },
+                  {
+                    "ms": 114,
+                    "name": "user-callback FrameRequestCallback 1fs-s3i_t5fhu.js"
+                  },
+                  {
+                    "ms": 50,
+                    "name": "user-callback ResizeObserverCallback 1fs-s3i_t5fhu.js"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "drag-sweep",
+              "durationMs": 3999,
+              "inputs": 3682,
+              "inputHz": 921,
+              "inputLimited": false,
+              "droppedPct": 69.6,
+              "presentedFps": 54.6,
+              "vsyncsPresentedPct": 30.3,
+              "missedVsyncs": 502,
+              "jankyFrames": 186,
+              "frameMs": {
+                "p50": 16.73,
+                "p95": 28,
+                "p99": 49.93,
+                "max": 127.73
+              },
+              "latencyMs": {
+                "p50": 27.4,
+                "p95": 66.5,
+                "max": 152.2,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 221,
+                "partial": 267,
+                "dropped": 460,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.8,
+                  "longestTaskMs": 75.9,
+                  "tasksOver16ms": 9,
+                  "tasksOver50ms": 2
+                },
+                "compositor": {
+                  "busyPct": 4.7,
+                  "longestTaskMs": 1.5,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.5,
+                  "longestTaskMs": 0.5,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 21.9,
+                  "longestTaskMs": 15.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.3,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 1,
+                "totalMs": 70,
+                "worst": [
+                  {
+                    "ms": 70,
+                    "name": "rendering"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "drag-circle",
+              "durationMs": 3998,
+              "inputs": 4000,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 69.6,
+              "presentedFps": 54.6,
+              "vsyncsPresentedPct": 30.3,
+              "missedVsyncs": 484,
+              "jankyFrames": 190,
+              "frameMs": {
+                "p50": 16.75,
+                "p95": 33.3,
+                "p99": 39.57,
+                "max": 44.63
+              },
+              "latencyMs": {
+                "p50": 27.1,
+                "p95": 49.1,
+                "max": 142.3,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 223,
+                "partial": 222,
+                "dropped": 502,
+                "noUpdate": 2,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.8,
+                  "longestTaskMs": 66.6,
+                  "tasksOver16ms": 8,
+                  "tasksOver50ms": 2
+                },
+                "compositor": {
+                  "busyPct": 4.7,
+                  "longestTaskMs": 0.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.5,
+                  "longestTaskMs": 0.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 22.6,
+                  "longestTaskMs": 19.8,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 1,
+                "totalMs": 56,
+                "worst": [
+                  {
+                    "ms": 56,
+                    "name": "rendering"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "pan-sweep",
+              "durationMs": 3999,
+              "inputs": 3814,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 75.5,
+              "presentedFps": 44.1,
+              "vsyncsPresentedPct": 24.5,
+              "missedVsyncs": 520,
+              "jankyFrames": 152,
+              "frameMs": {
+                "p50": 22.21,
+                "p95": 44.3,
+                "p99": 61.18,
+                "max": 72.18
+              },
+              "latencyMs": {
+                "p50": 48.1,
+                "p95": 120,
+                "max": 232.1,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 188,
+                "partial": 188,
+                "dropped": 542,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.3,
+                  "longestTaskMs": 109.4,
+                  "tasksOver16ms": 189,
+                  "tasksOver50ms": 2
+                },
+                "compositor": {
+                  "busyPct": 4.6,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.6,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 71,
+                  "longestTaskMs": 45.5,
+                  "tasksOver16ms": 6,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 4.1,
+                  "longestTaskMs": 1.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 3,
+                "totalMs": 273,
+                "worst": [
+                  {
+                    "ms": 121,
+                    "name": "event-listener DIV.onmousedown 1fs-s3i_t5fhu.js"
+                  },
+                  {
+                    "ms": 99,
+                    "name": "event-listener DOMWindow.onmousemove 1fs-s3i_t5fhu.js"
+                  },
+                  {
+                    "ms": 54,
+                    "name": "event-listener DOMWindow.onmousemove 1fs-s3i_t5fhu.js"
+                  }
+                ]
+              }
+            }
+          ],
+          "summary": {
+            "drag-sweep": {
+              "label": "drag-sweep",
+              "gestures": 2,
+              "durationMs": 7997,
+              "inputs": 7421,
+              "inputHz": 928,
+              "inputLimited": false,
+              "droppedPct": 69.8,
+              "presentedFps": 54.2,
+              "vsyncsPresentedPct": 30.1,
+              "missedVsyncs": 1006,
+              "jankyFrames": 373,
+              "frameMs": {
+                "p50": 16.75,
+                "p95": 33.12,
+                "p99": 50.09,
+                "max": 127.73
+              },
+              "latencyMs": {
+                "p50": 27.5,
+                "p95": 83.9,
+                "max": 227.1,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 439,
+                "partial": 534,
+                "dropped": 917,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.8,
+                  "longestTaskMs": 75.9,
+                  "tasksOver16ms": 19,
+                  "tasksOver50ms": 4
+                },
+                "compositor": {
+                  "busyPct": 4.7,
+                  "longestTaskMs": 1.5,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.5,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 22.4,
+                  "longestTaskMs": 20.2,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.2,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0.1,
+                  "longestTaskMs": 3.4,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 2,
+                "totalMs": 134,
+                "worst": [
+                  {
+                    "ms": 70,
+                    "name": "rendering"
+                  },
+                  {
+                    "ms": 64,
+                    "name": "rendering"
+                  }
+                ]
+              }
+            },
+            "drag-circle": {
+              "label": "drag-circle",
+              "gestures": 2,
+              "durationMs": 7997,
+              "inputs": 8000,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 69.5,
+              "presentedFps": 54.9,
+              "vsyncsPresentedPct": 30.5,
+              "missedVsyncs": 970,
+              "jankyFrames": 379,
+              "frameMs": {
+                "p50": 16.77,
+                "p95": 28.01,
+                "p99": 39.57,
+                "max": 66.4
+              },
+              "latencyMs": {
+                "p50": 26.6,
+                "p95": 48.6,
+                "max": 148.2,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 448,
+                "partial": 446,
+                "dropped": 1002,
+                "noUpdate": 2,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.8,
+                  "longestTaskMs": 74.3,
+                  "tasksOver16ms": 15,
+                  "tasksOver50ms": 4
+                },
+                "compositor": {
+                  "busyPct": 4.6,
+                  "longestTaskMs": 0.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.6,
+                  "longestTaskMs": 0.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 22.2,
+                  "longestTaskMs": 19.8,
+                  "tasksOver16ms": 3,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 2,
+                "totalMs": 125,
+                "worst": [
+                  {
+                    "ms": 70,
+                    "name": "rendering"
+                  },
+                  {
+                    "ms": 56,
+                    "name": "rendering"
+                  }
+                ]
+              }
+            },
+            "pan-sweep": {
+              "label": "pan-sweep",
+              "gestures": 2,
+              "durationMs": 7997,
+              "inputs": 7628,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 75,
+              "presentedFps": 45,
+              "vsyncsPresentedPct": 25,
+              "missedVsyncs": 1032,
+              "jankyFrames": 305,
+              "frameMs": {
+                "p50": 22.2,
+                "p95": 38.95,
+                "p99": 61.18,
+                "max": 149.54
+              },
+              "latencyMs": {
+                "p50": 49.2,
+                "p95": 119.1,
+                "max": 232.1,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 379,
+                "partial": 379,
+                "dropped": 1077,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 98.4,
+                  "longestTaskMs": 113.4,
+                  "tasksOver16ms": 378,
+                  "tasksOver50ms": 4
+                },
+                "compositor": {
+                  "busyPct": 4.6,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.6,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 72.9,
+                  "longestTaskMs": 45.5,
+                  "tasksOver16ms": 24,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 4.1,
+                  "longestTaskMs": 1.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 6,
+                "totalMs": 559,
+                "worst": [
+                  {
+                    "ms": 121,
+                    "name": "event-listener DIV.onmousedown 1fs-s3i_t5fhu.js"
+                  },
+                  {
+                    "ms": 121,
+                    "name": "event-listener DIV.onmousedown 1fs-s3i_t5fhu.js"
+                  },
+                  {
+                    "ms": 114,
+                    "name": "user-callback FrameRequestCallback 1fs-s3i_t5fhu.js"
+                  },
+                  {
+                    "ms": 99,
+                    "name": "event-listener DOMWindow.onmousemove 1fs-s3i_t5fhu.js"
+                  },
+                  {
+                    "ms": 54,
+                    "name": "event-listener DOMWindow.onmousemove 1fs-s3i_t5fhu.js"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "legacyAnimationFrameResults": [
+          {
+            "name": "drag-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4448,
+            "fps": 62.5,
+            "frameMsP50": 16.6,
+            "frameMsP95": 27.6,
+            "frameMsMax": 89,
+            "framesOver25ms": 15
+          },
+          {
+            "name": "drag-circle",
+            "inputEvents": 4003,
+            "durationMs": 4470,
+            "fps": 64.4,
+            "frameMsP50": 16.6,
+            "frameMsP95": 22.4,
+            "frameMsMax": 88.7,
+            "framesOver25ms": 11
+          },
+          {
+            "name": "pan-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4387,
+            "fps": 57,
+            "frameMsP50": 16.7,
+            "frameMsP95": 27.8,
+            "frameMsMax": 127.7,
+            "framesOver25ms": 18
+          },
+          {
+            "name": "drag-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4454,
+            "fps": 63.3,
+            "frameMsP50": 16.6,
+            "frameMsP95": 22.4,
+            "frameMsMax": 88.8,
+            "framesOver25ms": 13
+          },
+          {
+            "name": "drag-circle",
+            "inputEvents": 4003,
+            "durationMs": 4459,
+            "fps": 64.4,
+            "frameMsP50": 16.5,
+            "frameMsP95": 22.4,
+            "frameMsMax": 83.3,
+            "framesOver25ms": 12
+          },
+          {
+            "name": "pan-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4381,
+            "fps": 56.4,
+            "frameMsP50": 16.7,
+            "frameMsP95": 27.8,
+            "frameMsMax": 127.5,
+            "framesOver25ms": 24
+          }
+        ]
+      }
+    },
+    "grid": {
+      "baseline": {
+        "workload": "images-1024px",
+        "nodes": 240,
+        "edges": 160,
+        "zoom": 45,
+        "input": "os",
+        "inputHz": 1000,
+        "gestureDurationMs": 4000,
+        "rounds": 2,
+        "windowContentSize": [
+          2560,
+          1392
+        ],
+        "trace": {
+          "vsyncMs": 5.55,
+          "refreshHz": 180.1,
+          "gestures": [
+            {
+              "label": "drag-sweep",
+              "durationMs": 3999,
+              "inputs": 3805,
+              "inputHz": 952,
+              "inputLimited": false,
+              "droppedPct": 68.5,
+              "presentedFps": 56.6,
+              "vsyncsPresentedPct": 31.4,
+              "missedVsyncs": 494,
+              "jankyFrames": 212,
+              "frameMs": {
+                "p50": 16.67,
+                "p95": 27.83,
+                "p99": 33.37,
+                "max": 155.7
+              },
+              "latencyMs": {
+                "p50": 22.3,
+                "p95": 49.3,
+                "max": 183.1,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 228,
+                "partial": 278,
+                "dropped": 446,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.5,
+                  "longestTaskMs": 115.1,
+                  "tasksOver16ms": 198,
+                  "tasksOver50ms": 1
+                },
+                "compositor": {
+                  "busyPct": 4.4,
+                  "longestTaskMs": 0.5,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1.1,
+                  "longestTaskMs": 1.1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 23.9,
+                  "longestTaskMs": 18.3,
+                  "tasksOver16ms": 1,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 1,
+                "totalMs": 112,
+                "worst": [
+                  {
+                    "ms": 112,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "drag-circle",
+              "durationMs": 3999,
+              "inputs": 4000,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 68.4,
+              "presentedFps": 56.9,
+              "vsyncsPresentedPct": 31.6,
+              "missedVsyncs": 492,
+              "jankyFrames": 210,
+              "frameMs": {
+                "p50": 16.67,
+                "p95": 27.96,
+                "p99": 33.28,
+                "max": 111.08
+              },
+              "latencyMs": {
+                "p50": 21.3,
+                "p95": 47.8,
+                "max": 170.8,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 229,
+                "partial": 260,
+                "dropped": 463,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.6,
+                  "longestTaskMs": 111.9,
+                  "tasksOver16ms": 176,
+                  "tasksOver50ms": 1
+                },
+                "compositor": {
+                  "busyPct": 4.6,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1.1,
+                  "longestTaskMs": 1.2,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 23.3,
+                  "longestTaskMs": 17.9,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0.2,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 1,
+                "totalMs": 109,
+                "worst": [
+                  {
+                    "ms": 109,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "pan-sweep",
+              "durationMs": 3999,
+              "inputs": 3814,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 75,
+              "presentedFps": 44.9,
+              "vsyncsPresentedPct": 24.9,
+              "missedVsyncs": 529,
+              "jankyFrames": 158,
+              "frameMs": {
+                "p50": 22.2,
+                "p95": 39,
+                "p99": 49.98,
+                "max": 55.52
+              },
+              "latencyMs": {
+                "p50": 47.4,
+                "p95": 110.6,
+                "max": 192.6,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 200,
+                "partial": 296,
+                "dropped": 428,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 97.4,
+                  "longestTaskMs": 81.5,
+                  "tasksOver16ms": 201,
+                  "tasksOver50ms": 2
+                },
+                "compositor": {
+                  "busyPct": 4.3,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1.3,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 78.3,
+                  "longestTaskMs": 31.8,
+                  "tasksOver16ms": 21,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.5,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 2,
+                "totalMs": 154,
+                "worst": [
+                  {
+                    "ms": 96,
+                    "name": "rendering"
+                  },
+                  {
+                    "ms": 58,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "drag-sweep",
+              "durationMs": 3999,
+              "inputs": 3805,
+              "inputHz": 952,
+              "inputLimited": false,
+              "droppedPct": 68.8,
+              "presentedFps": 56.1,
+              "vsyncsPresentedPct": 31.2,
+              "missedVsyncs": 494,
+              "jankyFrames": 212,
+              "frameMs": {
+                "p50": 16.67,
+                "p95": 27.83,
+                "p99": 38.9,
+                "max": 105.52
+              },
+              "latencyMs": {
+                "p50": 21.4,
+                "p95": 51.2,
+                "max": 182.8,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 226,
+                "partial": 284,
+                "dropped": 442,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.3,
+                  "longestTaskMs": 110,
+                  "tasksOver16ms": 192,
+                  "tasksOver50ms": 1
+                },
+                "compositor": {
+                  "busyPct": 4.6,
+                  "longestTaskMs": 1.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1.5,
+                  "longestTaskMs": 1.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 23.9,
+                  "longestTaskMs": 28.2,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.1,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0.3,
+                  "longestTaskMs": 4.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 1,
+                "totalMs": 107,
+                "worst": [
+                  {
+                    "ms": 107,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "drag-circle",
+              "durationMs": 3998,
+              "inputs": 4000,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 68.2,
+              "presentedFps": 57.1,
+              "vsyncsPresentedPct": 31.7,
+              "missedVsyncs": 467,
+              "jankyFrames": 210,
+              "frameMs": {
+                "p50": 16.66,
+                "p95": 27.91,
+                "p99": 39.09,
+                "max": 50.23
+              },
+              "latencyMs": {
+                "p50": 22.7,
+                "p95": 58.5,
+                "max": 159.1,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 230,
+                "partial": 304,
+                "dropped": 420,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.6,
+                  "longestTaskMs": 104.1,
+                  "tasksOver16ms": 181,
+                  "tasksOver50ms": 1
+                },
+                "compositor": {
+                  "busyPct": 4.6,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1.2,
+                  "longestTaskMs": 1.4,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 23.6,
+                  "longestTaskMs": 22.1,
+                  "tasksOver16ms": 1,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.1,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 1,
+                "totalMs": 101,
+                "worst": [
+                  {
+                    "ms": 101,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "pan-sweep",
+              "durationMs": 3999,
+              "inputs": 3814,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 75.3,
+              "presentedFps": 44.4,
+              "vsyncsPresentedPct": 24.6,
+              "missedVsyncs": 532,
+              "jankyFrames": 158,
+              "frameMs": {
+                "p50": 22.19,
+                "p95": 39.02,
+                "p99": 61.06,
+                "max": 61.07
+              },
+              "latencyMs": {
+                "p50": 43.1,
+                "p95": 108.3,
+                "max": 204,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 203,
+                "partial": 289,
+                "dropped": 435,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.3,
+                  "longestTaskMs": 83,
+                  "tasksOver16ms": 205,
+                  "tasksOver50ms": 1
+                },
+                "compositor": {
+                  "busyPct": 4.4,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1.3,
+                  "longestTaskMs": 1.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 76.5,
+                  "longestTaskMs": 18.3,
+                  "tasksOver16ms": 12,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.6,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 1,
+                "totalMs": 94,
+                "worst": [
+                  {
+                    "ms": 94,
+                    "name": "rendering"
+                  }
+                ]
+              }
+            }
+          ],
+          "summary": {
+            "drag-sweep": {
+              "label": "drag-sweep",
+              "gestures": 2,
+              "durationMs": 7997,
+              "inputs": 7610,
+              "inputHz": 952,
+              "inputLimited": false,
+              "droppedPct": 68.7,
+              "presentedFps": 56.4,
+              "vsyncsPresentedPct": 31.3,
+              "missedVsyncs": 988,
+              "jankyFrames": 424,
+              "frameMs": {
+                "p50": 16.67,
+                "p95": 27.83,
+                "p99": 38.84,
+                "max": 155.7
+              },
+              "latencyMs": {
+                "p50": 21.9,
+                "p95": 50.1,
+                "max": 183.1,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 454,
+                "partial": 562,
+                "dropped": 888,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.4,
+                  "longestTaskMs": 115.1,
+                  "tasksOver16ms": 390,
+                  "tasksOver50ms": 2
+                },
+                "compositor": {
+                  "busyPct": 4.5,
+                  "longestTaskMs": 1.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1.3,
+                  "longestTaskMs": 1.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 23.9,
+                  "longestTaskMs": 28.2,
+                  "tasksOver16ms": 3,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.1,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0.2,
+                  "longestTaskMs": 4.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 2,
+                "totalMs": 220,
+                "worst": [
+                  {
+                    "ms": 112,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 107,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            },
+            "drag-circle": {
+              "label": "drag-circle",
+              "gestures": 2,
+              "durationMs": 7997,
+              "inputs": 8000,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 68.3,
+              "presentedFps": 57,
+              "vsyncsPresentedPct": 31.6,
+              "missedVsyncs": 959,
+              "jankyFrames": 420,
+              "frameMs": {
+                "p50": 16.67,
+                "p95": 27.96,
+                "p99": 39,
+                "max": 111.08
+              },
+              "latencyMs": {
+                "p50": 22,
+                "p95": 52,
+                "max": 170.8,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 459,
+                "partial": 564,
+                "dropped": 883,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.6,
+                  "longestTaskMs": 111.9,
+                  "tasksOver16ms": 357,
+                  "tasksOver50ms": 2
+                },
+                "compositor": {
+                  "busyPct": 4.6,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1.2,
+                  "longestTaskMs": 1.4,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 23.5,
+                  "longestTaskMs": 22.1,
+                  "tasksOver16ms": 3,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.1,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0.2,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 2,
+                "totalMs": 209,
+                "worst": [
+                  {
+                    "ms": 109,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  },
+                  {
+                    "ms": 101,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            },
+            "pan-sweep": {
+              "label": "pan-sweep",
+              "gestures": 2,
+              "durationMs": 7998,
+              "inputs": 7628,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 75.2,
+              "presentedFps": 44.6,
+              "vsyncsPresentedPct": 24.8,
+              "missedVsyncs": 1061,
+              "jankyFrames": 316,
+              "frameMs": {
+                "p50": 22.19,
+                "p95": 39.02,
+                "p99": 55.52,
+                "max": 61.07
+              },
+              "latencyMs": {
+                "p50": 45.2,
+                "p95": 109.6,
+                "max": 204,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 403,
+                "partial": 585,
+                "dropped": 863,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 98.4,
+                  "longestTaskMs": 83,
+                  "tasksOver16ms": 406,
+                  "tasksOver50ms": 3
+                },
+                "compositor": {
+                  "busyPct": 4.3,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 1.3,
+                  "longestTaskMs": 1.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 77.4,
+                  "longestTaskMs": 31.8,
+                  "tasksOver16ms": 33,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.6,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 3,
+                "totalMs": 248,
+                "worst": [
+                  {
+                    "ms": 96,
+                    "name": "rendering"
+                  },
+                  {
+                    "ms": 94,
+                    "name": "rendering"
+                  },
+                  {
+                    "ms": 58,
+                    "name": "event-listener DOMWindow.onmousemove 2bsjlb_yc-6_4.js"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "legacyAnimationFrameResults": [
+          {
+            "name": "drag-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4470,
+            "fps": 64.7,
+            "frameMsP50": 16.6,
+            "frameMsP95": 22.3,
+            "frameMsMax": 110.9,
+            "framesOver25ms": 5
+          },
+          {
+            "name": "drag-circle",
+            "inputEvents": 4003,
+            "durationMs": 4470,
+            "fps": 65.1,
+            "frameMsP50": 16.6,
+            "frameMsP95": 22.2,
+            "frameMsMax": 111,
+            "framesOver25ms": 4
+          },
+          {
+            "name": "pan-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4420,
+            "fps": 58.4,
+            "frameMsP50": 16.7,
+            "frameMsP95": 22.4,
+            "frameMsMax": 99.9,
+            "framesOver25ms": 13
+          },
+          {
+            "name": "drag-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4454,
+            "fps": 65.1,
+            "frameMsP50": 16.6,
+            "frameMsP95": 22.2,
+            "frameMsMax": 105.5,
+            "framesOver25ms": 4
+          },
+          {
+            "name": "drag-circle",
+            "inputEvents": 4003,
+            "durationMs": 4454,
+            "fps": 66,
+            "frameMsP50": 16.6,
+            "frameMsP95": 22.2,
+            "frameMsMax": 100,
+            "framesOver25ms": 3
+          },
+          {
+            "name": "pan-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4409,
+            "fps": 59,
+            "frameMsP50": 16.7,
+            "frameMsP95": 22.3,
+            "frameMsMax": 94.3,
+            "framesOver25ms": 6
+          }
+        ]
+      },
+      "branch": {
+        "workload": "images-1024px",
+        "nodes": 240,
+        "edges": 160,
+        "zoom": 45,
+        "input": "os",
+        "inputHz": 1000,
+        "gestureDurationMs": 4000,
+        "rounds": 2,
+        "windowContentSize": [
+          2560,
+          1392
+        ],
+        "trace": {
+          "vsyncMs": 5.55,
+          "refreshHz": 180.1,
+          "gestures": [
+            {
+              "label": "drag-sweep",
+              "durationMs": 3999,
+              "inputs": 3805,
+              "inputHz": 952,
+              "inputLimited": false,
+              "droppedPct": 26.6,
+              "presentedFps": 131.9,
+              "vsyncsPresentedPct": 73.3,
+              "missedVsyncs": 204,
+              "jankyFrames": 165,
+              "frameMs": {
+                "p50": 5.58,
+                "p95": 11.23,
+                "p99": 22.2,
+                "max": 61.1
+              },
+              "latencyMs": {
+                "p50": 26.8,
+                "p95": 76.9,
+                "max": 171.6,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 608,
+                "partial": 626,
+                "dropped": 96,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 98.6,
+                  "longestTaskMs": 61.5,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 1
+                },
+                "compositor": {
+                  "busyPct": 5.6,
+                  "longestTaskMs": 0.5,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.7,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 23.5,
+                  "longestTaskMs": 22.1,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.7,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 1,
+                "totalMs": 54,
+                "worst": [
+                  {
+                    "ms": 54,
+                    "name": "event-listener DOMWindow.onmousemove 1fs-s3i_t5fhu.js"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "drag-circle",
+              "durationMs": 3999,
+              "inputs": 4000,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 50.6,
+              "presentedFps": 88.8,
+              "vsyncsPresentedPct": 49.3,
+              "missedVsyncs": 375,
+              "jankyFrames": 191,
+              "frameMs": {
+                "p50": 10.87,
+                "p95": 22.37,
+                "p99": 33.26,
+                "max": 77.74
+              },
+              "latencyMs": {
+                "p50": 20.3,
+                "p95": 44.1,
+                "max": 139,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 359,
+                "partial": 377,
+                "dropped": 347,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.6,
+                  "longestTaskMs": 54.1,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 1
+                },
+                "compositor": {
+                  "busyPct": 6.2,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.7,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 28.7,
+                  "longestTaskMs": 26.6,
+                  "tasksOver16ms": 4,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.2,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 1,
+                "totalMs": 52,
+                "worst": [
+                  {
+                    "ms": 52,
+                    "name": "rendering"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "pan-sweep",
+              "durationMs": 3998,
+              "inputs": 3814,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 64.9,
+              "presentedFps": 63.1,
+              "vsyncsPresentedPct": 35,
+              "missedVsyncs": 457,
+              "jankyFrames": 190,
+              "frameMs": {
+                "p50": 16.5,
+                "p95": 33.31,
+                "p99": 38.36,
+                "max": 110.91
+              },
+              "latencyMs": {
+                "p50": 51.3,
+                "p95": 91.1,
+                "max": 186.5,
+                "unanswered": 9
+              },
+              "reports": {
+                "presented": 260,
+                "partial": 273,
+                "dropped": 449,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 82.9,
+                  "longestTaskMs": 77.5,
+                  "tasksOver16ms": 10,
+                  "tasksOver50ms": 1
+                },
+                "compositor": {
+                  "busyPct": 5.2,
+                  "longestTaskMs": 0.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.6,
+                  "longestTaskMs": 0.4,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 98.1,
+                  "longestTaskMs": 46.2,
+                  "tasksOver16ms": 22,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 4,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 2,
+                "totalMs": 138,
+                "worst": [
+                  {
+                    "ms": 85,
+                    "name": "event-listener DIV.onmousedown 1fs-s3i_t5fhu.js"
+                  },
+                  {
+                    "ms": 54,
+                    "name": "rendering"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "drag-sweep",
+              "durationMs": 3999,
+              "inputs": 3806,
+              "inputHz": 952,
+              "inputLimited": false,
+              "droppedPct": 52.2,
+              "presentedFps": 86,
+              "vsyncsPresentedPct": 47.8,
+              "missedVsyncs": 380,
+              "jankyFrames": 205,
+              "frameMs": {
+                "p50": 11.04,
+                "p95": 22.16,
+                "p99": 27.5,
+                "max": 88.84
+              },
+              "latencyMs": {
+                "p50": 21.1,
+                "p95": 43.2,
+                "max": 128.3,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 351,
+                "partial": 365,
+                "dropped": 358,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.5,
+                  "longestTaskMs": 51.1,
+                  "tasksOver16ms": 3,
+                  "tasksOver50ms": 1
+                },
+                "compositor": {
+                  "busyPct": 6,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.8,
+                  "longestTaskMs": 1.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 27.5,
+                  "longestTaskMs": 14.4,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.2,
+                  "longestTaskMs": 0.7,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0.3,
+                  "longestTaskMs": 3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 0,
+                "totalMs": 0,
+                "worst": []
+              }
+            },
+            {
+              "label": "drag-circle",
+              "durationMs": 3998,
+              "inputs": 4000,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 47,
+              "presentedFps": 95.3,
+              "vsyncsPresentedPct": 52.9,
+              "missedVsyncs": 323,
+              "jankyFrames": 197,
+              "frameMs": {
+                "p50": 10.76,
+                "p95": 22.21,
+                "p99": 27.78,
+                "max": 33.33
+              },
+              "latencyMs": {
+                "p50": 20.6,
+                "p95": 48.2,
+                "max": 116.3,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 417,
+                "partial": 416,
+                "dropped": 301,
+                "noUpdate": 10,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.6,
+                  "longestTaskMs": 54.7,
+                  "tasksOver16ms": 3,
+                  "tasksOver50ms": 1
+                },
+                "compositor": {
+                  "busyPct": 6,
+                  "longestTaskMs": 0.5,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.7,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 26.3,
+                  "longestTaskMs": 14.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.2,
+                  "longestTaskMs": 0.5,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 1,
+                "totalMs": 53,
+                "worst": [
+                  {
+                    "ms": 53,
+                    "name": "rendering"
+                  }
+                ]
+              }
+            },
+            {
+              "label": "pan-sweep",
+              "durationMs": 3999,
+              "inputs": 3814,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 64.1,
+              "presentedFps": 64.6,
+              "vsyncsPresentedPct": 35.9,
+              "missedVsyncs": 453,
+              "jankyFrames": 209,
+              "frameMs": {
+                "p50": 16.51,
+                "p95": 27.75,
+                "p99": 38.87,
+                "max": 55.55
+              },
+              "latencyMs": {
+                "p50": 39.6,
+                "p95": 76.2,
+                "max": 157.5,
+                "unanswered": 2
+              },
+              "reports": {
+                "presented": 264,
+                "partial": 278,
+                "dropped": 444,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 85,
+                  "longestTaskMs": 77.2,
+                  "tasksOver16ms": 8,
+                  "tasksOver50ms": 1
+                },
+                "compositor": {
+                  "busyPct": 5.3,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.6,
+                  "longestTaskMs": 0.3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 97.1,
+                  "longestTaskMs": 23,
+                  "tasksOver16ms": 21,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 4.1,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 1,
+                "totalMs": 84,
+                "worst": [
+                  {
+                    "ms": 84,
+                    "name": "event-listener DIV.onmousedown 1fs-s3i_t5fhu.js"
+                  }
+                ]
+              }
+            }
+          ],
+          "summary": {
+            "drag-sweep": {
+              "label": "drag-sweep",
+              "gestures": 2,
+              "durationMs": 7998,
+              "inputs": 7611,
+              "inputHz": 952,
+              "inputLimited": false,
+              "droppedPct": 39.4,
+              "presentedFps": 109,
+              "vsyncsPresentedPct": 60.5,
+              "missedVsyncs": 584,
+              "jankyFrames": 370,
+              "frameMs": {
+                "p50": 5.69,
+                "p95": 16.85,
+                "p99": 22.65,
+                "max": 88.84
+              },
+              "latencyMs": {
+                "p50": 23.4,
+                "p95": 64.7,
+                "max": 171.6,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 959,
+                "partial": 991,
+                "dropped": 454,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.1,
+                  "longestTaskMs": 61.5,
+                  "tasksOver16ms": 5,
+                  "tasksOver50ms": 2
+                },
+                "compositor": {
+                  "busyPct": 5.8,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.7,
+                  "longestTaskMs": 1.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 25.5,
+                  "longestTaskMs": 22.1,
+                  "tasksOver16ms": 2,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.4,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0.1,
+                  "longestTaskMs": 3,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 1,
+                "totalMs": 54,
+                "worst": [
+                  {
+                    "ms": 54,
+                    "name": "event-listener DOMWindow.onmousemove 1fs-s3i_t5fhu.js"
+                  }
+                ]
+              }
+            },
+            "drag-circle": {
+              "label": "drag-circle",
+              "gestures": 2,
+              "durationMs": 7997,
+              "inputs": 8000,
+              "inputHz": 1000,
+              "inputLimited": false,
+              "droppedPct": 48.8,
+              "presentedFps": 92,
+              "vsyncsPresentedPct": 51.1,
+              "missedVsyncs": 698,
+              "jankyFrames": 388,
+              "frameMs": {
+                "p50": 10.83,
+                "p95": 22.32,
+                "p99": 28.45,
+                "max": 77.74
+              },
+              "latencyMs": {
+                "p50": 20.4,
+                "p95": 46,
+                "max": 139,
+                "unanswered": 0
+              },
+              "reports": {
+                "presented": 776,
+                "partial": 793,
+                "dropped": 648,
+                "noUpdate": 10,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 99.6,
+                  "longestTaskMs": 54.7,
+                  "tasksOver16ms": 5,
+                  "tasksOver50ms": 2
+                },
+                "compositor": {
+                  "busyPct": 6.1,
+                  "longestTaskMs": 1,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.7,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 27.5,
+                  "longestTaskMs": 26.6,
+                  "tasksOver16ms": 4,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 3.2,
+                  "longestTaskMs": 0.6,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 2,
+                "totalMs": 104,
+                "worst": [
+                  {
+                    "ms": 53,
+                    "name": "rendering"
+                  },
+                  {
+                    "ms": 52,
+                    "name": "rendering"
+                  }
+                ]
+              }
+            },
+            "pan-sweep": {
+              "label": "pan-sweep",
+              "gestures": 2,
+              "durationMs": 7997,
+              "inputs": 7628,
+              "inputHz": 954,
+              "inputLimited": false,
+              "droppedPct": 64.5,
+              "presentedFps": 63.8,
+              "vsyncsPresentedPct": 35.5,
+              "missedVsyncs": 910,
+              "jankyFrames": 399,
+              "frameMs": {
+                "p50": 16.51,
+                "p95": 28.1,
+                "p99": 38.36,
+                "max": 110.91
+              },
+              "latencyMs": {
+                "p50": 45.9,
+                "p95": 85.9,
+                "max": 186.5,
+                "unanswered": 11
+              },
+              "reports": {
+                "presented": 524,
+                "partial": 551,
+                "dropped": 893,
+                "noUpdate": 0,
+                "checkerboarded": 0
+              },
+              "threads": {
+                "rendererMain": {
+                  "busyPct": 83.9,
+                  "longestTaskMs": 77.5,
+                  "tasksOver16ms": 18,
+                  "tasksOver50ms": 2
+                },
+                "compositor": {
+                  "busyPct": 5.2,
+                  "longestTaskMs": 0.9,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "browserMain": {
+                  "busyPct": 0.6,
+                  "longestTaskMs": 0.4,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "gpuMain": {
+                  "busyPct": 97.6,
+                  "longestTaskMs": 46.2,
+                  "tasksOver16ms": 43,
+                  "tasksOver50ms": 0
+                },
+                "viz": {
+                  "busyPct": 4,
+                  "longestTaskMs": 0.8,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                },
+                "server": {
+                  "busyPct": 0,
+                  "longestTaskMs": 0,
+                  "tasksOver16ms": 0,
+                  "tasksOver50ms": 0
+                }
+              },
+              "longFrames": {
+                "count": 3,
+                "totalMs": 223,
+                "worst": [
+                  {
+                    "ms": 85,
+                    "name": "event-listener DIV.onmousedown 1fs-s3i_t5fhu.js"
+                  },
+                  {
+                    "ms": 84,
+                    "name": "event-listener DIV.onmousedown 1fs-s3i_t5fhu.js"
+                  },
+                  {
+                    "ms": 54,
+                    "name": "rendering"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "legacyAnimationFrameResults": [
+          {
+            "name": "drag-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4409,
+            "fps": 152.2,
+            "frameMsP50": 5.6,
+            "frameMsP95": 11.1,
+            "frameMsMax": 61.1,
+            "framesOver25ms": 4
+          },
+          {
+            "name": "drag-circle",
+            "inputEvents": 4003,
+            "durationMs": 4415,
+            "fps": 95.1,
+            "frameMsP50": 11.1,
+            "frameMsP95": 16.8,
+            "frameMsMax": 55.6,
+            "framesOver25ms": 3
+          },
+          {
+            "name": "pan-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4376,
+            "fps": 72.4,
+            "frameMsP50": 16.5,
+            "frameMsP95": 22.1,
+            "frameMsMax": 89,
+            "framesOver25ms": 5
+          },
+          {
+            "name": "drag-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4409,
+            "fps": 93.7,
+            "frameMsP50": 11.1,
+            "frameMsP95": 16.8,
+            "frameMsMax": 55.7,
+            "framesOver25ms": 3
+          },
+          {
+            "name": "drag-circle",
+            "inputEvents": 4003,
+            "durationMs": 4420,
+            "fps": 109.3,
+            "frameMsP50": 5.7,
+            "frameMsP95": 16.7,
+            "frameMsMax": 55.4,
+            "framesOver25ms": 3
+          },
+          {
+            "name": "pan-sweep",
+            "inputEvents": 4003,
+            "durationMs": 4376,
+            "fps": 73.4,
+            "frameMsP50": 16.6,
+            "frameMsP95": 16.8,
+            "frameMsMax": 88.7,
+            "framesOver25ms": 3
+          }
+        ]
+      }
+    }
+  }
+}
