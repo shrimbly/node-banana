@@ -122,6 +122,28 @@ test('reports forked while the main thread was busy do not count as the canvas m
   assert.ok(drag.vsyncsPresentedPct <= 100);
 });
 
+test('a report forked inside its parent with the same id keeps both', () => {
+  const events = metadata();
+  events.push(mark(900, 'banana:gesture drag'));
+  for (let i = 0; i < 20; i++) events.push(...input(1000 + 5000 * i, i % 3));
+  // Each vsync's parent report stays open while a forked one opens and closes
+  // inside it under the same id; the parent is the one that carries the update.
+  for (let k = 0; k < 12; k++) {
+    const begin = 1000 + 10000 * k, id2 = { local: '0x1' }, report = state => ({ frame_reporter: { state, layer_tree_host_id: 1 } });
+    events.push(
+      { ph: 'b', cat: FRAME, name: 'PipelineReporter', pid: RENDERER, tid: COMPOSITOR, ts: begin, id2, args: report('STATE_PRESENTED_ALL') },
+      { ph: 'b', cat: FRAME, name: 'PipelineReporter', pid: RENDERER, tid: COMPOSITOR, ts: begin + 1000, id2, args: report('STATE_PRESENTED_PARTIAL') },
+      { ph: 'e', cat: FRAME, name: 'PipelineReporter', pid: RENDERER, tid: COMPOSITOR, ts: begin + 6000, id2 },
+      { ph: 'b', cat: FRAME, name: 'SendBeginMainFrameToCommit', pid: RENDERER, tid: COMPOSITOR, ts: begin + 6500, id2 },
+      { ph: 'e', cat: FRAME, name: 'SendBeginMainFrameToCommit', pid: RENDERER, tid: COMPOSITOR, ts: begin + 7000, id2 },
+      { ph: 'e', cat: FRAME, name: 'PipelineReporter', pid: RENDERER, tid: COMPOSITOR, ts: begin + 8000, id2 },
+    );
+  }
+  const drag = analyzeTrace(events).summary.drag;
+  assert.deepEqual(drag.reports, { presented: 12, partial: 12, dropped: 0, noUpdate: 0, checkerboarded: 0 });
+  assert.deepEqual([drag.frameMs.p50, drag.frameMs.max, drag.droppedPct, drag.latencyMs.unanswered], [10, 10, 0, 0]);
+});
+
 test('the filtered trace gives the same report, and a trace without input says why', () => {
   const events = trace();
   assert.deepEqual(analyzeTrace(events.filter(keepAnalyzed)), analyzeTrace(events));

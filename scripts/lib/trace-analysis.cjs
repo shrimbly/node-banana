@@ -30,8 +30,10 @@ const percentile = (sorted, p) => sorted.length ? sorted[Math.min(sorted.length 
 const round = (value, places = 2) => value == null ? null : Math.round(value * 10 ** places) / 10 ** places;
 const median = values => percentile([...values].sort((a, b) => a - b), .5);
 
-// Async spans reuse their local ids once closed, so a span's stages are the
-// events with its id between its own begin and end, in time order.
+// Async spans reuse their local ids once closed, and a span can nest in
+// another with the same id (Chromium forks a frame report inside the one it
+// came from). Begins and ends pair last-in-first-out per id, as the trace
+// format defines, and a stage belongs to the innermost open span.
 function spans(events, pid, root) {
   const byId = new Map();
   for (const event of events) {
@@ -42,12 +44,12 @@ function spans(events, pid, root) {
   const result = [];
   for (const list of byId.values()) {
     list.sort((a, b) => a.ts - b.ts || (a.ph === 'b' ? -1 : 1));
-    let open;
+    const open = [];
     for (const event of list) {
-      if (event.name === root && event.ph === 'b') open = { begin: event, stages: {} };
-      else if (!open) continue;
-      else if (event.name === root) { open.end = event.ts; result.push(open); open = undefined; }
-      else (open.stages[event.name] ||= {})[event.ph] = event.ts;
+      if (event.name === root && event.ph === 'b') open.push({ begin: event, stages: {} });
+      else if (!open.length) continue;
+      else if (event.name === root) { const span = open.pop(); span.end = event.ts; result.push(span); }
+      else (open.at(-1).stages[event.name] ||= {})[event.ph] = event.ts;
     }
   }
   return result.sort((a, b) => a.begin.ts - b.begin.ts);
