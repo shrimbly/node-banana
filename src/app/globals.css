@@ -318,6 +318,13 @@ body {
   font-family: inherit;
 }
 
+/* The empty canvas cannot start a text selection either way (React Flow
+   cancels it), but unless the pressed element says so, Chromium hit-tests the
+   whole canvas on every move of a drag to extend one. Nodes already say so. */
+.react-flow__pane {
+  user-select: none;
+}
+
 /* Skip hit-testing on images inside nodes — parent containers handle all
    click/hover events. Prevents expensive bitmap decoding during mouse movement. */
 .react-flow__node img {
