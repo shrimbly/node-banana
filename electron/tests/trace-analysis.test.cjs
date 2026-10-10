@@ -53,27 +53,28 @@ function trace() {
   return events;
 }
 
-test('a gesture is judged by the frames presented while its input arrived', () => {
+test('a gesture is judged by how often the screen showed the canvas move', () => {
   const report = analyzeTrace(trace());
   assert.equal(report.vsyncMs, 10);
   assert.equal(report.gestures.length, 1);
   const drag = report.summary.drag;
   assert.equal(drag.inputs, 20);
-  // 12 frames began in the window; the second compositor's frame is ignored.
-  assert.deepEqual(drag.frames, { presented: 10, partial: 1, dropped: 1, noUpdate: 0, checkerboarded: 0 });
-  assert.equal(drag.droppedPct, 16.7);
-  // Presented at 10 ms intervals except across the dropped frame.
+  // 12 reports began in the window; the second compositor's frame is ignored.
+  assert.deepEqual(drag.reports, { presented: 10, partial: 1, dropped: 1, noUpdate: 0, checkerboarded: 0 });
+  // Input spanned 10.5 vsyncs; 9 of them showed the move. The partly
+  // presented frame showed none of it.
+  assert.equal(drag.droppedPct, 14.3);
   assert.deepEqual(drag.frameMs, { p50: 10, p95: 20, p99: 20, max: 20 });
-  assert.equal(drag.missedVsyncs, 1);
-  assert.equal(drag.jankyFrames, 1);
+  assert.equal(drag.missedVsyncs, 2);
+  assert.equal(drag.jankyFrames, 2);
   assert.equal(drag.inputLimited, false);
 });
 
 test('input latency runs to the first presented frame committed after the input was handled', () => {
   const { latencyMs } = analyzeTrace(trace()).summary.drag;
   // Inputs handled before a commit show 8 ms later, the others 13 ms later;
-  // the two whose frame was dropped wait 10 ms longer for the next one.
-  assert.deepEqual(latencyMs, { p50: 13, p95: 18, max: 23, unanswered: 0 });
+  // the four whose frame was dropped or partial wait 10 ms longer.
+  assert.deepEqual(latencyMs, { p50: 13, p95: 23, max: 23, unanswered: 0 });
 });
 
 test('thread time merges nested tasks and keeps to the gesture window', () => {
@@ -94,6 +95,31 @@ test('gestures split at input gaps, short ones are ignored, and the page probe n
   for (let k = 0; k < 100; k++) events.push(...frame(k));
   const report = analyzeTrace(events);
   assert.deepEqual(report.gestures.map(g => [g.label, g.inputs]), [['mouse_dragged', 10], ['pan', 10]]);
+});
+
+test('reports forked while the main thread was busy do not count as the canvas moving', () => {
+  const events = metadata();
+  events.push(mark(900, 'banana:gesture drag'));
+  for (let i = 0; i < 20; i++) events.push(...input(1000 + 5000 * i, i % 3));
+  const report = (k, state, extra = {}) => {
+    const begin = 1000 + 10000 * k, id2 = { local: `0x${k}${extra.frame_type ? 'f' : ''}` };
+    return [
+      { ph: 'b', cat: FRAME, name: 'PipelineReporter', pid: RENDERER, tid: COMPOSITOR, ts: begin, id2, args: { frame_reporter: { state, layer_tree_host_id: 1, frame_source: 7, frame_sequence: k, ...extra } } },
+      { ph: 'e', cat: FRAME, name: 'PipelineReporter', pid: RENDERER, tid: COMPOSITOR, ts: begin + (extra.frame_type ? 6000 : 8000), id2 },
+    ];
+  };
+  // Every vsync shows fully; every other one also has a forked partial report
+  // that reached the screen first, without the main thread's update.
+  for (let k = 0; k < 12; k++) {
+    events.push(...report(k, 'STATE_PRESENTED_ALL'));
+    if (k % 2) events.push(...report(k, 'STATE_PRESENTED_PARTIAL', { frame_type: 'FORKED' }));
+  }
+  const drag = analyzeTrace(events).summary.drag;
+  assert.deepEqual(drag.reports, { presented: 12, partial: 6, dropped: 0, noUpdate: 0, checkerboarded: 0 });
+  // Only the full reports moved the canvas, every 10 ms.
+  assert.deepEqual([drag.frameMs.p50, drag.frameMs.max], [10, 10]);
+  assert.equal(drag.droppedPct, 0);
+  assert.ok(drag.vsyncsPresentedPct <= 100);
 });
 
 test('the filtered trace gives the same report, and a trace without input says why', () => {

@@ -1,7 +1,7 @@
 // Turns a Chromium trace (electron/lib/perf-trace.cjs categories) into what a
-// person feels during a drag or pan: frames the screen actually presented,
-// vsyncs missed while input was arriving, time from input to the frame that
-// showed it, and which threads were busy. Animation-frame callback counts and
+// person feels during a drag or pan: how often the screen showed the canvas
+// move, vsyncs that should have and did not, time from input to the frame
+// that showed it, and which threads were busy. Animation-frame callback counts and
 // CDP task totals miss compositor and GPU drops; presentation does not.
 //
 // Gestures are found from the input itself (drag moves and wheel events with
@@ -11,7 +11,6 @@
 const fs = require('node:fs');
 
 const GESTURE_INPUT = new Set(['MOUSE_DRAGGED', 'MOUSE_WHEEL']);
-const PRESENTED = new Set(['STATE_PRESENTED_ALL', 'STATE_PRESENTED_PARTIAL']);
 const THREADS = {
   rendererMain: ['Renderer', 'CrRendererMain'],
   compositor: ['Renderer', 'Compositor'],
@@ -101,13 +100,19 @@ function analyzeTrace(events, { gapMs = 250, minInputs = 8 } = {}) {
   for (const frame of frames) hostCounts.set(frame.host, (hostCounts.get(frame.host) || 0) + 1);
   const host = [...hostCounts].sort((a, b) => b[1] - a[1])[0][0];
   const canvasFrames = frames.filter(frame => frame.host === host);
-  const presented = canvasFrames.filter(frame => PRESENTED.has(frame.state)).sort((a, b) => a.end - b.end);
-  const committed = presented.filter(frame => frame.commit != null).sort((a, b) => a.commit - b.commit);
+  // A drag or pan moves on screen when a frame carrying the main thread's
+  // update is presented (STATE_PRESENTED_ALL). Partly presented frames,
+  // including the reports Chromium forks for a vsync while the main thread is
+  // still busy, show only compositor changes: the node or canvas has not
+  // moved. Updates that reach the same display frame count once.
+  const full = canvasFrames.filter(frame => frame.state === 'STATE_PRESENTED_ALL');
+  const updates = [...new Set(full.map(frame => frame.end))].sort((a, b) => a - b);
+  const committed = full.filter(frame => frame.commit != null).sort((a, b) => a.commit - b.commit);
   const inputs = spans(events, renderer, 'EventLatency').map(span => {
     const latency = span.begin.args?.event_latency || {};
     return { type: latency.event_type, generated: span.begin.ts, handled: span.stages.RendererMainProcessing?.e ?? span.end, vsyncMs: latency.vsync_interval_ms };
   });
-  const vsyncMs = median(inputs.map(input => input.vsyncMs).filter(Number.isFinite)) || median(presented.slice(1).map((frame, i) => (frame.end - presented[i].end) / 1000));
+  const vsyncMs = median(inputs.map(input => input.vsyncMs).filter(Number.isFinite)) || median(updates.slice(1).map((ts, i) => (ts - updates[i]) / 1000));
   const marks = events.filter(event => event.cat === 'blink.user_timing' && event.ph === 'I' && /^banana:(gesture|auto) /.test(event.name))
     .map(event => ({ ts: event.ts, explicit: event.name.startsWith('banana:gesture '), label: event.name.replace(/^banana:(gesture|auto) /, '') })).sort((a, b) => a.ts - b.ts);
   // Long animation frames arrive as user timing measures, back-dated to the
@@ -143,7 +148,7 @@ function analyzeTrace(events, { gapMs = 250, minInputs = 8 } = {}) {
     const named = marks.filter(mark => mark.ts > previousEnd && mark.ts <= start + 50_000);
     previousEnd = last;
     const label = (named.filter(mark => mark.explicit).at(-1) || named.at(-1))?.label || gesture.inputs[0].type.toLowerCase();
-    measured.push(measureWindow({ label, start, end, last, inputs: gesture.inputs, canvasFrames, presented, committed, vsyncMs, tasks, threadKeys, longFrames }));
+    measured.push(measureWindow({ label, start, end, last, inputs: gesture.inputs, canvasFrames, updates, committed, vsyncMs, tasks, threadKeys, longFrames }));
   }
   const byLabel = {};
   for (const gesture of measured) (byLabel[gesture.label] ||= []).push(gesture);
@@ -154,11 +159,14 @@ function analyzeTrace(events, { gapMs = 250, minInputs = 8 } = {}) {
   };
 }
 
-function measureWindow({ label, start, end, last, inputs, canvasFrames, presented, committed, vsyncMs, tasks, threadKeys, longFrames }) {
+function measureWindow({ label, start, end, last, inputs, canvasFrames, updates, committed, vsyncMs, tasks, threadKeys, longFrames }) {
   const durationMs = (last - start) / 1000;
   const inWindow = canvasFrames.filter(frame => frame.begin >= start && frame.begin <= end);
-  const shown = presented.filter(frame => frame.end >= start && frame.end <= end);
-  const intervals = shown.slice(1).map((frame, i) => (frame.end - shown[i].end) / 1000);
+  const shown = updates.filter(ts => ts >= start && ts <= end);
+  const intervals = shown.slice(1).map((ts, i) => (ts - shown[i]) / 1000);
+  // Every vsync while input arrived should show the canvas move, unless the
+  // input itself arrived more slowly.
+  const expected = Math.min((last - start) / 1000 / vsyncMs + 1, inputs.length);
   // The frame that showed an input is the first presented frame committed
   // after the main thread handled it; one later than 250 ms showed nothing.
   const latencies = [];
@@ -183,7 +191,7 @@ function measureWindow({ label, start, end, last, inputs, canvasFrames, presente
     threads[name] = { busyMs: busy / 1000, longestTaskMs: longest, tasksOver16ms: over16, tasksOver50ms: over50 };
   }
   return { label, durationMs, windowMs: (end - start) / 1000, inputs: inputs.length, intervals, latencies, unanswered, threads,
-    frames: count(inWindow), presented: shown.length,
+    reports: count(inWindow), updates: shown.length, expected,
     longFrames: longFrames.filter(frame => frame.end != null && frame.end >= start && frame.ts <= end).map(frame => ({ ms: (frame.end - frame.ts) / 1000, name: frame.name })),
     vsyncMs };
 }
@@ -207,12 +215,12 @@ function combine(label, list, vsyncMs) {
     total.busyMs += stats.busyMs; total.longestTaskMs = Math.max(total.longestTaskMs, stats.longestTaskMs);
     total.tasksOver16ms += stats.tasksOver16ms; total.tasksOver50ms += stats.tasksOver50ms;
   }
-  const frames = { presented: 0, partial: 0, dropped: 0, noUpdate: 0, checkerboarded: 0 };
-  for (const gesture of list) for (const key of Object.keys(frames)) frames[key] += gesture.frames[key];
+  const reports = { presented: 0, partial: 0, dropped: 0, noUpdate: 0, checkerboarded: 0 };
+  for (const gesture of list) for (const key of Object.keys(reports)) reports[key] += gesture.reports[key];
   return { label, gestures: list.length, durationMs: list.reduce((sum, g) => sum + g.durationMs, 0), windowMs: list.reduce((sum, g) => sum + g.windowMs, 0),
-    inputs: list.reduce((sum, g) => sum + g.inputs, 0), presented: list.reduce((sum, g) => sum + g.presented, 0),
+    inputs: list.reduce((sum, g) => sum + g.inputs, 0), updates: list.reduce((sum, g) => sum + g.updates, 0), expected: list.reduce((sum, g) => sum + g.expected, 0),
     intervals: list.flatMap(g => g.intervals), latencies: list.flatMap(g => g.latencies), unanswered: list.reduce((sum, g) => sum + g.unanswered, 0),
-    frames, threads, longFrames: list.flatMap(g => g.longFrames), vsyncMs };
+    reports, threads, longFrames: list.flatMap(g => g.longFrames), vsyncMs };
 }
 
 // Raw samples become the figures a report compares.
@@ -229,15 +237,15 @@ function strip(window) {
     durationMs: round(window.durationMs, 0), inputs: window.inputs, inputHz: round(window.inputs / (window.durationMs / 1000), 0),
     // Below the display rate some vsyncs have no new input, so misses are expected.
     inputLimited: window.inputs / (window.durationMs / 1000) < 1.2 * 1000 / vsyncMs,
-    // Chromium's own smoothness measure: of the frames that had an update to
-    // show, the share that missed their vsync entirely or showed it partly.
-    droppedPct: round((window.frames.dropped + window.frames.partial) / Math.max(1, window.frames.presented + window.frames.partial + window.frames.dropped) * 100, 1),
-    presentedFps: round(window.presented / (window.windowMs / 1000), 1),
-    vsyncsPresentedPct: round(window.presented / (window.windowMs / vsyncMs) * 100, 1),
+    // Of the vsyncs that should have shown the canvas move, the share that did not.
+    droppedPct: round(Math.max(0, 1 - window.updates / Math.max(1, window.expected)) * 100, 1),
+    presentedFps: round(window.updates / (window.windowMs / 1000), 1),
+    vsyncsPresentedPct: round(window.updates / (window.windowMs / vsyncMs) * 100, 1),
     missedVsyncs: missed, jankyFrames: window.intervals.filter(ms => ms > vsyncMs * 1.5).length,
     frameMs: { p50: round(percentile(intervals, .5)), p95: round(percentile(intervals, .95)), p99: round(percentile(intervals, .99)), max: round(intervals.at(-1)) },
     latencyMs: { p50: round(percentile(latencies, .5), 1), p95: round(percentile(latencies, .95), 1), max: round(latencies.at(-1), 1), unanswered: window.unanswered },
-    frames: window.frames, threads,
+    // Chromium's frame reports in the window, forked ones included: for diagnosis.
+    reports: window.reports, threads,
     longFrames: { count: longFrames.length, totalMs: round(longFrames.reduce((sum, f) => sum + f.ms, 0), 0), worst: longFrames.slice(0, 5).map(f => ({ ms: round(f.ms, 0), name: f.name })) },
   };
 }
