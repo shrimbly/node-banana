@@ -3,8 +3,9 @@
 import { Box, ChevronDown, Columns2, Download, LayoutGrid, Play, Rows2, SquareArrowRightExit, SquareDashed } from "lucide-react";
 import { MenuDivider, MenuIconButton, MenuSurface } from "@/components/ui/Menu";
 import { Tooltip, type TooltipPlacement } from "@/components/ui/Tooltip";
-import { ViewportPortal, useStore } from "@xyflow/react";
-import { useShallow } from "zustand/shallow";
+import { useStore, type ReactFlowState } from "@xyflow/react";
+import { ViewportPortal } from "@/components/flowPortals";
+import { shallow, useShallow } from "zustand/shallow";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { memo, useMemo, useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes } from "react";
 import JSZip from "jszip";
@@ -133,6 +134,14 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
 
   const someInGroup = selectedNodeGroups.length > 0;
 
+  // Where the selected nodes are now. React Flow has every move of a drag;
+  // the store has the positions only once the drag drops (WorkflowCanvas).
+  const selectedIds = useMemo(() => selectedNodes.map((node) => node.id), [selectedNodes]);
+  const livePositions = useStore(
+    useCallback((state: ReactFlowState) => selectedIds.map((id) => state.nodeLookup.get(id)?.position), [selectedIds]),
+    shallow
+  );
+
   // Where the bar hangs: the top centre of the selection, in flow units. A bar
   // anchored to the canvas can always be panned into view, unlike one fixed to
   // the screen, which a selection near the top pushed under the tab strip.
@@ -143,15 +152,16 @@ export const MultiSelectToolbar = memo(function MultiSelectToolbar() {
     let minY = Infinity;
     let maxX = -Infinity;
 
-    selectedNodes.forEach((node) => {
+    selectedNodes.forEach((node, index) => {
       const nodeWidth = getNodeSize(node).width;
-      minX = Math.min(minX, node.position.x);
-      minY = Math.min(minY, node.position.y);
-      maxX = Math.max(maxX, node.position.x + nodeWidth);
+      const position = livePositions[index] ?? node.position;
+      minX = Math.min(minX, position.x);
+      minY = Math.min(minY, position.y);
+      maxX = Math.max(maxX, position.x + nodeWidth);
     });
 
     return { x: (minX + maxX) / 2, y: minY };
-  }, [selectedNodes]);
+  }, [selectedNodes, livePositions]);
 
   const applyArrangement = (mode: Arrangement, gap: number, nodes = selectedNodes) => {
     if (selectedNodes.length < 2) return;

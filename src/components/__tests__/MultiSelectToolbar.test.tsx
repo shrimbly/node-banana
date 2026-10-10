@@ -32,6 +32,13 @@ vi.mock("@/store/workflowStore", () => ({
 // Mock useReactFlow
 const mockGetViewport = vi.fn(() => ({ x: 0, y: 0, zoom: 1 }));
 
+// React Flow's own node positions, which a drag moves before the store hears of it
+const mockNodeLookup = new Map<string, { position: { x: number; y: number } }>();
+
+vi.mock("@/components/flowPortals", () => ({
+  ViewportPortal: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
   return {
@@ -41,7 +48,8 @@ vi.mock("@xyflow/react", async () => {
     }),
     // No <ReactFlow> here: the portal renders in place, at zoom 1.
     ViewportPortal: ({ children }: { children: React.ReactNode }) => children,
-    useStore: (selector: (state: { transform: number[] }) => unknown) => selector({ transform: [0, 0, 1] }),
+    useStore: (selector: (state: { transform: number[]; nodeLookup: Map<string, unknown> }) => unknown) =>
+      selector({ transform: [0, 0, 1], nodeLookup: mockNodeLookup }),
   };
 });
 
@@ -172,6 +180,32 @@ describe("MultiSelectToolbar", () => {
       while (anchor && !anchor.style.transform) anchor = anchor.parentElement;
       expect(anchor?.style.transform).toContain("translate(260px, 0px)");
       expect(anchor?.style.transform).toContain("scale(1)");
+    });
+
+    it("follows the selection while a drag moves it, before the store has the positions", () => {
+      mockUseWorkflowStore.mockImplementation((selector) => {
+        return selector(createDefaultState({
+          nodes: [
+            createMockNode("node-1", { position: { x: 0, y: 0 } }),
+            createMockNode("node-2", { position: { x: 300, y: 0 } }),
+          ],
+        }));
+      });
+      // Mid-drag: React Flow has both nodes 100 to the right and 40 down
+      mockNodeLookup.set("node-1", { position: { x: 100, y: 40 } });
+      mockNodeLookup.set("node-2", { position: { x: 400, y: 40 } });
+      try {
+        render(
+          <TestWrapper>
+            <MultiSelectToolbar />
+          </TestWrapper>
+        );
+        let anchor: HTMLElement | null = screen.getByRole("button", { name: "Arrange nodes" });
+        while (anchor && !anchor.style.transform) anchor = anchor.parentElement;
+        expect(anchor?.style.transform).toContain("translate(360px, 40px)");
+      } finally {
+        mockNodeLookup.clear();
+      }
     });
 
     it("should not render when nodes are selected but less than 2", () => {

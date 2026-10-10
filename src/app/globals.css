@@ -318,6 +318,13 @@ body {
   font-family: inherit;
 }
 
+/* The empty canvas cannot start a text selection either way (React Flow
+   cancels it), but unless the pressed element says so, Chromium hit-tests the
+   whole canvas on every move of a drag to extend one. Nodes already say so. */
+.react-flow__pane {
+  user-select: none;
+}
+
 /* Skip hit-testing on images inside nodes — parent containers handle all
    click/hover events. Prevents expensive bitmap decoding during mouse movement. */
 .react-flow__node img {
@@ -326,10 +333,31 @@ body {
 
 /* During active panning or node dragging, disable pointer events on all node
    content to eliminate expensive browser hit-testing against the DOM tree.
-   The class is toggled on <html> via direct DOM access (no React re-render). */
-.canvas-interacting .react-flow__node > *,
-.canvas-wheel-navigation-active .react-flow__node > * {
+   The class is toggled on <html> via direct DOM access (no React re-render).
+
+   Rules keyed on the interaction classes end in a class or attribute, never
+   `*`: Chromium restyles only the elements that match the end of a selector
+   when a class changes, but a selector ending in `*` makes it restyle the
+   whole subtree, which on a large canvas is every element of the page (25,000
+   of them, ~90 ms) at the start and end of each gesture. */
+.canvas-interacting .react-flow__node > [data-node-shell],
+.canvas-wheel-navigation-active .react-flow__node > [data-node-shell] {
   pointer-events: none;
+}
+
+/* Edges and their labels too: every pointer move hit-tests each edge's wide
+   invisible stroke, and with hundreds of edges that costs milliseconds a
+   move. Nothing on an edge can be clicked mid-gesture. Edge paths inherit
+   from the edge; the label layer's interactive roots carry .edge-overlay. */
+.canvas-interacting .react-flow__edge,
+.canvas-interacting .react-flow__edgeupdater,
+.canvas-interacting .react-flow__edge-textwrapper,
+.canvas-interacting .edge-overlay,
+.canvas-wheel-navigation-active .react-flow__edge,
+.canvas-wheel-navigation-active .react-flow__edgeupdater,
+.canvas-wheel-navigation-active .react-flow__edge-textwrapper,
+.canvas-wheel-navigation-active .edge-overlay {
+  pointer-events: none !important;
 }
 
 /* Hide edges below 15% zoom while keeping nodes and images visible. */
@@ -348,12 +376,12 @@ body {
   visibility: hidden;
 }
 
-.canvas-native-navigation-active .react-flow__node > * {
+.canvas-native-navigation-active .react-flow__node > [data-node-shell] {
   box-shadow: none !important;
   transition: none !important;
 }
 
-.canvas-wheel-navigation-active .react-flow__node > * {
+.canvas-wheel-navigation-active .react-flow__node > [data-node-shell] {
   box-shadow: none !important;
   transition: none !important;
 }
@@ -604,9 +632,12 @@ html {
 }
 
 /* Hold the comet where it is while the canvas pans or a node drags */
-.canvas-interacting .edge-running path,
-.canvas-native-navigation-active .edge-running path,
-.canvas-wheel-navigation-active .edge-running path {
+.canvas-interacting .edge-running-tail,
+.canvas-interacting .edge-running-head,
+.canvas-native-navigation-active .edge-running-tail,
+.canvas-native-navigation-active .edge-running-head,
+.canvas-wheel-navigation-active .edge-running-tail,
+.canvas-wheel-navigation-active .edge-running-head {
   animation-play-state: paused;
 }
 

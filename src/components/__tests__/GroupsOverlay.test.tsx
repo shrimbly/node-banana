@@ -11,6 +11,12 @@ import { Group } from "@/types";
 const mockViewport = vi.hoisted(() => ({ zoom: 1 }));
 
 // Mock ReactFlow hooks and components
+vi.mock("@/components/flowPortals", () => ({
+  ViewportPortal: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="viewport-portal">{children}</div>
+  ),
+}));
+
 vi.mock("@xyflow/react", () => ({
   useReactFlow: () => ({
     getViewport: () => ({ zoom: 1, x: 0, y: 0 }),

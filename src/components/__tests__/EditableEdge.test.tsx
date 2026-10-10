@@ -32,6 +32,10 @@ vi.mock("@/store/workflowStore", () => ({
 }));
 
 // Mock useReactFlow
+vi.mock("@/components/flowPortals", () => ({
+  EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <foreignObject><div>{children}</div></foreignObject>,
+}));
+
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
   return {
@@ -563,9 +567,10 @@ describe("running noodle styles", () => {
 
   it("pauses the comet while the canvas pans or a node drags", () => {
     for (const cls of ["canvas-interacting", "canvas-native-navigation-active", "canvas-wheel-navigation-active"]) {
-      expect(css).toContain(`.${cls} .edge-running path`);
+      expect(css).toContain(`.${cls} .edge-running-tail`);
+      expect(css).toContain(`.${cls} .edge-running-head`);
     }
-    expect(css).toMatch(/\.canvas-wheel-navigation-active \.edge-running path \{\s*animation-play-state: paused;/);
+    expect(css).toMatch(/\.canvas-wheel-navigation-active \.edge-running-head \{\s*animation-play-state: paused;/);
   });
 
   it("holds a static highlight under reduced motion", () => {

@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef } from "react";
-import { EdgeLabelRenderer, useReactFlow, useViewport } from "@xyflow/react";
+import { useReactFlow, useViewport } from "@xyflow/react";
+import { EdgeLabelRenderer } from "@/components/flowPortals";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { MenuSurface, MenuIconButton, MenuBarLabel } from "@/components/ui/Menu";
 import { bundleClampStyle } from "./BundleClamp";
@@ -20,7 +21,7 @@ export function HookBundleClamp({ bundle, members, selected }: {
   };
   return (
     <EdgeLabelRenderer>
-      <div className="nodrag nopan nokey" style={{ position: "absolute", transform: `translate(${bundle.x}px, ${bundle.y}px)`, pointerEvents: "all", zIndex: 2100 }}
+      <div className="nodrag nopan nokey edge-overlay" style={{ position: "absolute", transform: `translate(${bundle.x}px, ${bundle.y}px)`, pointerEvents: "all", zIndex: 2100 }}
         onMouseDown={(e) => e.stopPropagation()} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
         {selected && (
           <MenuSurface variant="bar" floating={false} className="absolute w-max"

@@ -16,6 +16,7 @@ import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import type { NodeType } from "@/types";
 import { getNodeSize, type ShellMedia } from "@/utils/nodeDimensions";
+import { nodeGraphIndex } from "@/lib/edges/graphIndex";
 import { cn } from "./ui/cn";
 import { ControlsSizingContext, type ControlsSizing } from "./ui/ControlsCard";
 import { SocketColumn, socketRowCount, type SocketOutline, type SocketSpec } from "./ui/Socket";
@@ -181,12 +182,14 @@ export function NodeShell({
   const currentNodeIds = useWorkflowStore((state) => state.currentNodeIds);
   const setHoveredNodeId = useWorkflowStore((state) => state.setHoveredNodeId);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
+  // These run for every node on every store update, a drag frame included:
+  // a lookup in the index shared by the nodes array, not a scan of it.
   const controlsWidth = useWorkflowStore((state) => {
-    const value = state.nodes?.find((n) => n.id === id)?.data?.controlsWidth;
+    const value = state.nodes && nodeGraphIndex(state.nodes).byId.get(id)?.data?.controlsWidth;
     return typeof value === "number" && Number.isFinite(value) ? value : undefined;
   });
   const nodeWidth = useWorkflowStore((state) => {
-    const node = state.nodes?.find((n) => n.id === id);
+    const node = state.nodes && nodeGraphIndex(state.nodes).byId.get(id);
     return node ? getNodeSize(node).width : 300;
   });
   const running = isExecuting || (currentNodeIds?.includes(id) ?? false);

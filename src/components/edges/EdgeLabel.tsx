@@ -1,6 +1,6 @@
 "use client";
 
-import { EdgeLabelRenderer } from "@xyflow/react";
+import { EdgeLabelRenderer } from "@/components/flowPortals";
 
 /**
  * The pill a connection wears: the user's own label or the automatic one

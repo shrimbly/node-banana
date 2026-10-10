@@ -1,7 +1,8 @@
 "use client";
 
 import { memo, useMemo } from "react";
-import { ViewportPortal, useStore, type Node } from "@xyflow/react";
+import { useStore, type Node } from "@xyflow/react";
+import { ViewportPortal } from "@/components/flowPortals";
 import { FloatingNodeHeader } from "./FloatingNodeHeader";
 import { selectMountedArea } from "./nodeCulling";
 import { ComfyWordmark } from "../icons/ComfyWordmark";

@@ -1,27 +1,25 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
+import { useLayoutEffect, useState } from "react";
 import { render, screen } from "@testing-library/react";
-import { ReactFlowProvider } from "@xyflow/react";
+import { ReactFlowProvider, useStoreApi } from "@xyflow/react";
 import { Socket, SocketColumn, assignSocketRows, socketRowCount } from "../Socket";
 
-const mockConnections = vi.fn<(args: { handleType?: string; handleId?: string }) => unknown[]>(() => []);
+/** Puts edges ending at the given handles (React Flow's connection lookup keys) in the store first. */
+function Connected({ handles, children }: { handles: string[]; children: React.ReactNode }) {
+  const store = useStoreApi();
+  const [ready, setReady] = useState(false);
+  useLayoutEffect(() => {
+    store.setState({ connectionLookup: new Map(handles.map((key) => [key, new Map([["e1", { edgeId: "e1", source: "a", target: "b", sourceHandle: null, targetHandle: null }]])])) });
+    setReady(true);
+  }, [store, handles]);
+  return ready ? <>{children}</> : null;
+}
 
-vi.mock("@xyflow/react", async () => {
-  const actual = await vi.importActual<typeof import("@xyflow/react")>("@xyflow/react");
-  return {
-    ...actual,
-    useNodeConnections: (args: { handleType?: string; handleId?: string }) => mockConnections(args),
-  };
-});
-
-function wrap(ui: React.ReactElement) {
-  return render(<ReactFlowProvider>{ui}</ReactFlowProvider>);
+function wrap(ui: React.ReactElement, connected: string[] = []) {
+  return render(<ReactFlowProvider><Connected handles={connected}>{ui}</Connected></ReactFlowProvider>);
 }
 
 describe("Socket", () => {
-  beforeEach(() => {
-    mockConnections.mockReset();
-    mockConnections.mockReturnValue([]);
-  });
 
   it("renders a target handle with the id, type and geometry of its row", () => {
     const { container } = wrap(<Socket nodeId="n1" side="left" row={1} spec={{ id: "image", type: "image", label: "Image" }} />);
@@ -39,14 +37,12 @@ describe("Socket", () => {
   });
 
   it("mirrors on the right and fills the hole when connected", () => {
-    mockConnections.mockReturnValue([{}]);
-    const { container } = wrap(<Socket nodeId="n1" side="right" row={0} spec={{ id: "video", type: "video" }} />);
+    const { container } = wrap(<Socket nodeId="n1" side="right" row={0} spec={{ id: "video", type: "video" }} />, ["n1-source-video"]);
     const handle = container.querySelector('[data-handletype="video"]') as HTMLElement;
     expect(handle.className).toContain("source");
     expect(handle.style.right).toBe("-15px");
     expect(handle.style.transform).toBe("scaleX(-1)");
     expect(handle).toHaveAttribute("data-connected", "true");
-    expect(mockConnections).toHaveBeenCalledWith({ id: "n1", handleType: "source", handleId: "video" });
     const hole = handle.querySelector("[data-socket-hole]") as SVGCircleElement;
     expect(hole.getAttribute("fill")).toBe("currentColor");
   });

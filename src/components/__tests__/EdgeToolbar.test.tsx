@@ -26,6 +26,10 @@ vi.mock("@/store/workflowStore", () => ({
 
 // The label renderer needs a mounted ReactFlow; render its children in place.
 let mockZoom = 1;
+vi.mock("@/components/flowPortals", () => ({
+  EdgeLabelRenderer: ({ children }: { children: ReactNode }) => <div data-testid="label-renderer">{children}</div>,
+}));
+
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
   return {
