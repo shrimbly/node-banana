@@ -1,8 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { useLayoutEffect, useState } from "react";
 import { render, screen, act, fireEvent } from "@testing-library/react";
 import { ReactFlowProvider, useStoreApi, Position } from "@xyflow/react";
-import { mountedArea, useNodeMounted, NodePlaceholder, CULL_STEP } from "@/components/nodes/nodeCulling";
+import { mountedArea, useNodeMounted, NodePlaceholder, CULL_STEP, CULL_SETTLE_MS, setCanvasMoving } from "@/components/nodes/nodeCulling";
 
 describe("mountedArea", () => {
   it("covers the view plus a viewport on every side, snapped to the grid", () => {
@@ -46,6 +46,13 @@ function Seed({ children }: { children: React.ReactNode }) {
     setReady(true);
   }, [store]);
   return ready ? <>{children}</> : null;
+}
+
+/** Hands the test React Flow's store, to move the view. */
+function StoreHandle({ onStore }: { onStore: (store: ReturnType<typeof useStoreApi>) => void }) {
+  const store = useStoreApi();
+  useLayoutEffect(() => onStore(store), [store, onStore]);
+  return null;
 }
 
 const renderProbes = (probes: React.ReactNode) =>
@@ -114,6 +121,34 @@ describe("useNodeMounted", () => {
       expect(screen.getByTestId("probe-far")).toHaveTextContent("placeholder");
     } finally {
       host.remove();
+    }
+  });
+
+  it("keeps a node that leaves the area while the canvas moves, and culls it once the canvas settles", () => {
+    vi.useFakeTimers();
+    try {
+      let store: ReturnType<typeof useStoreApi> | undefined;
+      renderProbes(<><Probe id="near" /><Probe id="far" /><StoreHandle onStore={(s) => { store = s; }} /></>);
+      expect(screen.getByTestId("probe-near")).toHaveTextContent("component");
+      act(() => setCanvasMoving(true));
+      // Pan far away: "near" leaves the area mid-move but keeps its component;
+      // "far", never rendered, is not brought in by the hold
+      act(() => store!.setState({ transform: [-20000, -20000, 1] }));
+      expect(screen.getByTestId("probe-near")).toHaveTextContent("component");
+      expect(screen.getByTestId("probe-far")).toHaveTextContent("placeholder");
+      act(() => setCanvasMoving(false));
+      act(() => { vi.advanceTimersByTime(CULL_SETTLE_MS - 1); });
+      expect(screen.getByTestId("probe-near")).toHaveTextContent("component");
+      // Moving again before it settles keeps it
+      act(() => setCanvasMoving(true));
+      act(() => { vi.advanceTimersByTime(CULL_SETTLE_MS * 2); });
+      expect(screen.getByTestId("probe-near")).toHaveTextContent("component");
+      act(() => setCanvasMoving(false));
+      act(() => { vi.advanceTimersByTime(CULL_SETTLE_MS); });
+      expect(screen.getByTestId("probe-near")).toHaveTextContent("placeholder");
+    } finally {
+      act(() => { setCanvasMoving(false); vi.runOnlyPendingTimers(); });
+      vi.useRealTimers();
     }
   });
 });

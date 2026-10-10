@@ -94,7 +94,7 @@ import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import { getNodeSize } from "@/utils/nodeDimensions";
 import { arrangeNodes } from "@/utils/arrangeNodes";
 import { FloatingNodeHeaders } from "./nodes/FloatingNodeHeaders";
-import { NodePlaceholder, useNodeMounted } from "./nodes/nodeCulling";
+import { NodePlaceholder, setCanvasMoving, useNodeMounted } from "./nodes/nodeCulling";
 import { detectAndSplitGrid } from "@/utils/gridSplitter";
 import { logger } from "@/utils/logger";
 import { WelcomeModal } from "./quickstart";
@@ -2125,6 +2125,7 @@ export function WorkflowCanvas() {
           // during the drag must not take it away
           if (active || !isDraggingNodeRef.current) {
             document.documentElement.classList.toggle("canvas-interacting", active);
+            setCanvasMoving(active);
           }
         },
       }),
@@ -2143,6 +2144,7 @@ export function WorkflowCanvas() {
   const handleNodeDragBegin = useCallback(() => {
     isDraggingNodeRef.current = true;
     document.documentElement.classList.add("canvas-interacting");
+    setCanvasMoving(true);
   }, []);
   const handleNodeDragEnd = useCallback((event: MouseEvent | TouchEvent, node: Node) => {
     isDraggingNodeRef.current = false;
@@ -2150,6 +2152,7 @@ export function WorkflowCanvas() {
     // it drops its classes now and lets the next pan put them back
     interactionClasses.dispose();
     document.documentElement.classList.remove("canvas-interacting");
+    setCanvasMoving(false);
     handleNodeDragStop(event, node);
   }, [handleNodeDragStop, interactionClasses]);
 
