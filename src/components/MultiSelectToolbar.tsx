@@ -3,7 +3,8 @@
 import { Box, ChevronDown, Columns2, Download, LayoutGrid, Play, Rows2, SquareArrowRightExit, SquareDashed } from "lucide-react";
 import { MenuDivider, MenuIconButton, MenuSurface } from "@/components/ui/Menu";
 import { Tooltip, type TooltipPlacement } from "@/components/ui/Tooltip";
-import { ViewportPortal, useStore } from "@xyflow/react";
+import { useStore } from "@xyflow/react";
+import { ViewportPortal } from "@/components/flowPortals";
 import { useShallow } from "zustand/shallow";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { memo, useMemo, useCallback, useEffect, useRef, useState, type ButtonHTMLAttributes } from "react";

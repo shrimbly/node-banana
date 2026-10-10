@@ -32,6 +32,10 @@ vi.mock("@/store/workflowStore", () => ({
 // Mock useReactFlow
 const mockGetViewport = vi.fn(() => ({ x: 0, y: 0, zoom: 1 }));
 
+vi.mock("@/components/flowPortals", () => ({
+  ViewportPortal: ({ children }: { children: React.ReactNode }) => children,
+}));
+
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
   return {
