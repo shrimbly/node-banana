@@ -95,4 +95,29 @@ async function fillRealisticMedia({ workflow, photos, prompt }) {
   return workflow;
 }
 
-module.exports = { realisticWorkflow, fillRealisticMedia };
+// One tab of the installed app's last session, set up in a disposable profile
+// for the app to restore at launch, the way the user's own canvas loads. The
+// installed app's recovery store is only read. Returns the tab's workflow.
+async function seedRecoveredTab({ from, profile, name }) {
+  const source = path.join(from, 'recovery');
+  const record = JSON.parse(await fs.readFile(path.join(source, 'checkpoint-v1.json'), 'utf8'));
+  const checkpoint = JSON.parse(record.payload);
+  const tab = checkpoint.tabs.find(t => t.snapshot?.workflowName === name);
+  if (!tab) throw new Error(`No tab named "${name}" in ${source}; tabs are ${checkpoint.tabs.map(t => JSON.stringify(t.snapshot?.workflowName)).join(', ')}`);
+  const assets = new Set();
+  (function visit(value) {
+    if (!value || typeof value !== 'object') return;
+    if (typeof value.$recoveryAsset === 'string') assets.add(value.$recoveryAsset);
+    else for (const child of Object.values(value)) visit(child);
+  })(tab.snapshot);
+  const target = path.join(profile, 'recovery');
+  await fs.mkdir(path.join(target, 'assets'), { recursive: true });
+  for (const asset of assets) await fs.copyFile(path.join(source, 'assets', asset), path.join(target, 'assets', asset));
+  const payload = JSON.stringify({ ...checkpoint, activeTabId: tab.id, tabs: [tab] });
+  await fs.writeFile(path.join(target, 'checkpoint-v1.json'), JSON.stringify({ sha256: require('node:crypto').createHash('sha256').update(payload).digest('hex'), payload }));
+  // An unclean session is what makes the app offer its checkpoint.
+  await fs.writeFile(path.join(target, 'session-v1.json'), JSON.stringify({ clean: false, discarded: [] }));
+  return { name, nodes: tab.snapshot.nodes, edges: tab.snapshot.edges, assets: assets.size };
+}
+
+module.exports = { realisticWorkflow, fillRealisticMedia, seedRecoveredTab };

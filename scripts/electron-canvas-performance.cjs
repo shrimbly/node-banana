@@ -14,24 +14,35 @@
 // the mouse while it runs.
 //
 // The canvas is the generated grid (--nodes, --media), --fixture realistic
-// (scripts/lib/perf-fixtures.cjs), or --workflow <file.json>, one of your own.
+// (scripts/lib/perf-fixtures.cjs), --workflow <file.json>, one of your own, or
+// --restore-tab <name>: a tab of the installed app's last session, restored
+// at launch as the app restores it (the installed app's data is only read;
+// --recovery-from <userData> if it is not in the default place).
 // --zoom sets the working zoom, --agent-open opens the agent panel and
 // --tabs N holds N copies of the workflow in tabs.
+//
+// No DevTools connection is attached (scripts/lib/electron-driver.cjs), so the
+// app runs as it does for a user. --cdp-metrics adds Chrome's script, layout
+// and style totals and --profile a CPU profile, through Electron's own
+// debugger; both observe the page, so leave them off for comparisons.
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const net = require('node:net');
-const { _electron } = require('playwright-core');
+const { launchElectron } = require('./lib/electron-driver.cjs');
 const { PERF_TRACE_CATEGORIES, PAGE_PROBE } = require('../electron/lib/perf-trace.cjs');
 const { readTrace, analyzeTrace, keepAnalyzed, selfTime, formatReport } = require('./lib/trace-analysis.cjs');
 const { createOsInput } = require('./lib/os-input.cjs');
-const { realisticWorkflow, fillRealisticMedia } = require('./lib/perf-fixtures.cjs');
+const { realisticWorkflow, fillRealisticMedia, seedRecoveredTab } = require('./lib/perf-fixtures.cjs');
+const { strayElectron } = require('./lib/processes.cjs');
 const option = (name, fallback) => {
   const index = process.argv.indexOf(name);
   return index < 0 ? fallback : process.argv[index + 1];
 };
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const started = Date.now();
+const stage = name => { if (process.argv.includes('--verbose')) console.log(`[${((Date.now() - started) / 1000).toFixed(1)}s] ${name}`); };
 const root = path.resolve(option('--app-root', path.join(__dirname, '..')));
 // --detail adds the categories that say what each thread spent its time on.
 // Traces then grow by hundreds of MB a second, so use it for diagnosis only.
@@ -97,6 +108,9 @@ async function main() {
   const executable = option('--executable');
   const fixtureName = option('--fixture', 'synthetic');
   const workflowFile = option('--workflow');
+  const restoreTab = option('--restore-tab');
+  const recoveryFrom = option('--recovery-from', path.join(process.platform === 'win32' ? process.env.APPDATA
+    : process.platform === 'darwin' ? path.join(os.homedir(), 'Library', 'Application Support') : path.join(os.homedir(), '.config'), 'Node Banana'));
   const zoom = Number(option('--zoom', 45));
   const tabs = Number(option('--tabs', 1));
   const gestureNames = (option('--gestures') || (inputMode === 'os'
@@ -107,7 +121,13 @@ async function main() {
   assert.ok(['synthetic', 'os'].includes(inputMode), '--input is synthetic or os');
   assert.ok(hz > 0 && seconds > 0 && zoom > 0 && Number.isInteger(tabs) && tabs > 0);
   assert.ok(['synthetic', 'realistic'].includes(fixtureName), '--fixture is synthetic or realistic');
+  assert.ok(!(restoreTab && tabs > 1), '--tabs copies a loaded workflow; a restored tab cannot be copied');
   for (const name of gestureNames) assert.ok(GESTURES[name], `Unknown gesture ${name}; one of ${Object.keys(GESTURES).join(', ')}`);
+  const strays = strayElectron();
+  if (strays.length && !process.argv.includes('--allow-others')) {
+    const list = strays.map(p => `  ${p.pid} ${p.path}`).join('\n');
+    throw new Error(`Electron is still running from a Node Banana checkout, which would skew the measurement:\n${list}\nClose it (or pass --allow-others).`);
+  }
   const osInput = inputMode === 'os' ? createOsInput() : undefined;
   assert.ok(!osInput || osInput.available, '--input os needs Windows or macOS');
   const output = path.resolve(option('--output', path.join(os.tmpdir(), 'banana-canvas-performance.json')));
@@ -121,50 +141,81 @@ async function main() {
   let app;
   try {
     if (!executable) await fs.access(path.join(root, ".next/BUILD_ID"));
-    app = await _electron.launch({ ...(executable ? { executablePath: executable, args: [] } : { args: [root], cwd: root }), timeout: 120000,
+    const restored = restoreTab ? await seedRecoveredTab({ from: recoveryFrom, profile, name: restoreTab }) : undefined;
+    stage('launching');
+    app = await launchElectron({ executable: executable || require('electron'), args: executable ? [] : [root], cwd: executable ? undefined : root,
       env: { ...process.env, NODE_BANANA_ELECTRON_USER_DATA: profile, NODE_BANANA_ELECTRON_PORT: String(port) } });
-    await app.evaluate(({ dialog }) => { dialog.showMessageBoxSync = () => 1; });
-    const page = await app.firstWindow({ timeout: 120000 });
+    const { page } = app;
+    await app.run(({ dialog }) => { dialog.showMessageBoxSync = () => 1; });
+    await app.window();
+    stage('window open');
     const [width, height] = windowOption === 'maximized' ? [] : windowOption.split('x').map(Number);
     // On top for the whole run: Chromium stops producing frames for a
     // covered window, which would stall the run or flatter its numbers.
-    await app.evaluate(({ BrowserWindow }, { width, height }) => {
+    await app.run(({ BrowserWindow }, { width, height }) => {
       const window = BrowserWindow.getAllWindows()[0];
       if (width) { window.unmaximize(); window.setContentSize(width, height); window.center(); } else window.maximize();
       window.setAlwaysOnTop(true);
       window.focus();
     }, { width, height });
     await delay(500);
-    page.setDefaultTimeout(30000);
-    const pageErrors = [];
-    page.on('pageerror', error => pageErrors.push(error.message));
-    page.on('dialog', dialog => dialog.accept().catch(() => {}));
-    await page.route('**/api/**', route => route.request().method() === 'POST' ? route.abort() : route.continue());
-    await page.locator('.react-flow').waitFor();
-    await page.getByRole('button', { name: 'Close', exact: true }).last().click();
-    const skip = page.getByRole('button', { name: 'Skip', exact: true });
-    if (await skip.isVisible()) await skip.click();
-    await page.keyboard.press('Escape');
+    // Uncaught page errors are a failure; page dialogs are accepted so none
+    // can hold the run.
+    const watchPage = () => page.evaluate(() => {
+      if (window.__perfErrors) return;
+      window.__perfErrors = [];
+      // The ResizeObserver loop notice is a browser warning, not an exception.
+      addEventListener('error', event => { if (!/^ResizeObserver loop/.test(event.message)) window.__perfErrors.push(event.message); });
+      addEventListener('unhandledrejection', event => window.__perfErrors.push(String(event.reason?.message || event.reason)));
+      window.confirm = () => true;
+      window.alert = () => {};
+    });
+    await watchPage();
+    // No request leaves for a provider: API POSTs are refused in the session.
+    await app.run(({ session }, port) => {
+      globalThis.__perfBlocked = [];
+      session.defaultSession.webRequest.onBeforeRequest({ urls: [`http://127.0.0.1:${port}/api/*`] }, (details, callback) => {
+        const blocked = details.method === 'POST';
+        if (blocked) globalThis.__perfBlocked.push(`${new URL(details.url).pathname} ${Math.round((details.uploadData || []).reduce((n, part) => n + (part.bytes?.length || 0), 0) / 1024)} KB`);
+        callback({ cancel: blocked });
+      });
+    }, port);
+    if (restored) await page.click('Restore session', { timeout: 60000 });
+    stage('restore chosen');
+    await page.waitFor(() => !!document.querySelector('.react-flow'), null, { timeout: 120000, message: 'the canvas' });
+    await watchPage();
+    stage('canvas ready');
+    await page.click('Close', { last: true });
+    await page.click('Skip', { optional: true, timeout: 2000 });
+    await page.key('Escape');
     // The workflow goes in the way a user's does: dropped on the canvas as a
     // file. It stays in the page, media and all, for further tabs.
     await page.evaluate(() => {
-      window.__perfDrop = (overrides = {}) => {
+      window.__perfDrop = async (overrides = {}) => {
+        // A saved workflow arrives as text, and is only parsed here for a copy.
+        const parts = window.__perfText && !Object.keys(overrides).length ? window.__perfText
+          : [JSON.stringify({ ...(window.__perfWorkflow || JSON.parse(await new Blob(window.__perfText).text())), ...overrides })];
         const transfer = new DataTransfer();
-        transfer.items.add(new File([JSON.stringify({ ...window.__perfWorkflow, ...overrides })], 'canvas-performance.json', { type: 'application/json' }));
+        transfer.items.add(new File(parts, 'canvas-performance.json', { type: 'application/json' }));
         document.querySelector('.react-flow').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer }));
       };
     });
     console.log('Loading the workflow…');
     let workflow;
-    if (workflowFile) {
-      workflow = JSON.parse(await fs.readFile(workflowFile, 'utf8'));
+    if (restored) workflow = restored;
+    else if (workflowFile) {
+      let text = await fs.readFile(workflowFile, 'utf8');
+      workflow = JSON.parse(text);
       // Saved media refs hydrate from the workflow's folder.
-      workflow.directoryPath ||= path.dirname(path.resolve(workflowFile));
-      await page.evaluate(workflow => { window.__perfWorkflow = workflow; window.__perfDrop(); }, workflow);
+      if (!workflow.directoryPath) text = `{"directoryPath":${JSON.stringify(path.dirname(path.resolve(workflowFile)))},${text.slice(text.indexOf('{') + 1)}`;
+      // Sent in pieces: a workflow with its media inlined can be hundreds of MB.
+      await page.evaluate(() => { window.__perfText = []; });
+      for (let i = 0; i < text.length; i += 32 << 20) await page.evaluate(part => { window.__perfText.push(part); }, text.slice(i, i + (32 << 20)));
+      await page.evaluate(() => window.__perfDrop());
     } else if (fixtureName === 'realistic') {
       const input = await realisticWorkflow(root);
       await page.evaluate(input => { window.__perfFixture = input; }, input);
-      // Filled in the page: the media never comes back over CDP.
+      // Filled in the page: the media never comes back to the runner.
       await page.evaluate(`(async () => {
         window.__perfWorkflow = await (${fillRealisticMedia})(window.__perfFixture);
         delete window.__perfFixture;
@@ -198,33 +249,43 @@ async function main() {
       window.__perfDrop();
       }, { workflow, media: process.argv.includes('--media') });
     }
+    stage('workflow sent');
     const nodeCount = workflow.nodes.length, workflowName = workflow.name || 'Untitled';
-    await page.waitForFunction(count => document.querySelectorAll('.react-flow__node').length === count, nodeCount, { timeout: 120000 });
+    const rendered = count => page.waitFor(count => document.querySelectorAll('.react-flow__node').length === count, count, { timeout: 120000, message: `${count} nodes` });
+    await rendered(nodeCount);
     // Further tabs hold copies of the workflow, as when several are open.
     for (let tab = 2; tab <= tabs; tab++) {
-      await page.getByRole('button', { name: 'New tab', exact: true }).click();
-      await page.waitForFunction(() => document.querySelectorAll('.react-flow__node').length === 0);
-      const closeWelcome = page.getByRole('button', { name: 'Close', exact: true }).last();
-      if (await closeWelcome.isVisible()) await closeWelcome.click();
+      await page.click('New tab');
+      await rendered(0);
+      await page.click('Close', { last: true, optional: true, timeout: 2000 });
       await page.evaluate(overrides => window.__perfDrop(overrides), { id: `${workflow.id || 'perf'}-${tab}`, name: `${workflowName} ${tab}` });
-      await page.waitForFunction(count => document.querySelectorAll('.react-flow__node').length === count, nodeCount, { timeout: 120000 });
+      await rendered(nodeCount);
     }
     if (tabs > 1) {
-      await page.getByRole('tab').filter({ hasText: workflowName }).first().click();
-      await page.waitForFunction(count => document.querySelectorAll('.react-flow__node').length === count, nodeCount);
+      await page.click({ contains: workflowName }, { role: 'tab' });
+      await rendered(nodeCount);
     }
-    await page.getByRole('button', { name: 'Fit view', exact: true }).click();
+    stage('nodes rendered');
+    if (process.argv.includes('--verbose')) console.log('Refused POSTs so far:', await app.run(() => globalThis.__perfBlocked));
+    await page.click('Fit view');
     await delay(700);
     // Keep a representative working zoom, with both visible and culled nodes.
-    while (Number((await page.getByLabel('Zoom level').textContent()).replace('%', '')) < zoom) {
-      await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+    const zoomLevel = async () => Number((await page.evaluate(() => document.querySelector('[aria-label="Zoom level"]')?.textContent || '0')).replace('%', ''));
+    while (await zoomLevel() < zoom) {
+      await page.click('Zoom in');
       await delay(150);
     }
-    if (process.argv.includes('--agent-open')) await page.getByRole('button', { name: /^(Open agent|Agent — )/ }).click();
+    if (process.argv.includes('--agent-open')) await page.click({ pattern: '^(Open agent|Agent — )' });
     await delay(1500);
     await page.evaluate(PAGE_PROBE);
-    const cdp = await page.context().newCDPSession(page);
-    await cdp.send('Performance.enable');
+    // Chrome's own totals and the CPU profile need a debugger on the page;
+    // only when asked for.
+    const cdpMetrics = process.argv.includes('--cdp-metrics'), cpuProfile = process.argv.includes('--profile');
+    const debug = (method, params) => app.run(({ BrowserWindow }, { method, params }) => BrowserWindow.getAllWindows()[0].webContents.debugger.sendCommand(method, params), { method, params });
+    if (cdpMetrics || cpuProfile) {
+      await app.run(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.debugger.attach('1.3'));
+      if (cdpMetrics) await debug('Performance.enable');
+    }
     await page.evaluate(() => {
       window.__canvasInput = {};
       // Chromium sends synthetic moves when content shifts under a still
@@ -232,18 +293,18 @@ async function main() {
       window.addEventListener('mouseup', event => { window.__canvasInput.up = { x: event.clientX, y: event.clientY }; }, { passive: true, capture: true });
       document.addEventListener('wheel', event => { if (event.deltaY !== 0) window.__canvasInput.wheelEnded = true; }, { passive: true, capture: true });
     });
-    const readMetrics = async () => Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(m => [m.name, m.value]));
+    const readMetrics = async () => cdpMetrics ? Object.fromEntries((await debug('Performance.getMetrics')).metrics.map(m => [m.name, m.value])) : {};
     const results = [];
     const traced = [];
     const lateness = [];
     let detailTimes;
-    if (process.argv.includes('--profile')) {
-      await cdp.send('Profiler.enable');
-      await cdp.send('Profiler.start');
+    if (cpuProfile) {
+      await debug('Profiler.enable');
+      await debug('Profiler.start');
     }
     async function measure(name, action) {
       const categories = detail ? [...PERF_TRACE_CATEGORIES, ...DETAIL_CATEGORIES] : PERF_TRACE_CATEGORIES;
-      await app.evaluate(({ contentTracing }, categories) => contentTracing.startRecording({ included_categories: categories, excluded_categories: ['*'] }), categories);
+      await app.run(({ contentTracing }, categories) => contentTracing.startRecording({ included_categories: categories, excluded_categories: ['*'] }), categories);
       await page.evaluate(name => {
         performance.mark(`banana:gesture ${name}`);
         window.__canvasFrames = { times: [], running: true };
@@ -254,7 +315,7 @@ async function main() {
       const inputEvents = await action();
       const after = await readMetrics();
       const frames = await page.evaluate(() => { window.__canvasFrames.running = false; return window.__canvasFrames.times; });
-      const traceFile = await app.evaluate(({ contentTracing }, file) => contentTracing.stopRecording(file), path.join(traceDir, `${name}-${results.length + 1}.json`));
+      const traceFile = await app.run(({ contentTracing }, file) => contentTracing.stopRecording(file), path.join(traceDir, `${name}-${results.length + 1}.json`));
       const events = readTrace(traceFile);
       if (detail && !detailTimes) detailTimes = selfTime(events);
       for (const event of events) if (keepAnalyzed(event)) traced.push(event);
@@ -265,16 +326,17 @@ async function main() {
       const result = { name, inputEvents, durationMs: Math.round(seconds * 1000), fps: Math.round((frames.length - 1) / seconds * 10) / 10,
         frameMsP50: percentile(.5), frameMsP95: percentile(.95), frameMsMax: percentile(1),
         framesOver25ms: intervals.filter(ms => ms > 25).length,
-        scriptMs: Math.round((after.ScriptDuration - before.ScriptDuration) * 1000),
-        layoutMs: Math.round((after.LayoutDuration - before.LayoutDuration) * 1000),
-        styleMs: Math.round((after.RecalcStyleDuration - before.RecalcStyleDuration) * 1000),
-        taskMs: Math.round((after.TaskDuration - before.TaskDuration) * 1000) };
+        ...(cdpMetrics ? {
+          scriptMs: Math.round((after.ScriptDuration - before.ScriptDuration) * 1000),
+          layoutMs: Math.round((after.LayoutDuration - before.LayoutDuration) * 1000),
+          styleMs: Math.round((after.RecalcStyleDuration - before.RecalcStyleDuration) * 1000),
+          taskMs: Math.round((after.TaskDuration - before.TaskDuration) * 1000) } : {}) };
       results.push(result); console.log(JSON.stringify(result));
       await delay(350);
     }
     // Page pixels to the units each player needs. Windows SendInput takes
     // physical screen pixels; the Mac's CGEvent takes points.
-    const geometry = await app.evaluate(({ BrowserWindow, screen }) => {
+    const geometry = await app.run(({ BrowserWindow, screen }) => {
       const bounds = BrowserWindow.getAllWindows()[0].getContentBounds();
       const display = screen.getDisplayMatching(bounds);
       return { origin: process.platform === 'win32' ? screen.dipToScreenPoint({ x: bounds.x, y: bounds.y }) : { x: bounds.x, y: bounds.y }, scaleFactor: display.scaleFactor };
@@ -282,8 +344,8 @@ async function main() {
     const devicePixelRatio = await page.evaluate(() => window.devicePixelRatio);
     const pageToScreen = process.platform === 'win32' ? devicePixelRatio : devicePixelRatio / geometry.scaleFactor;
     // Synthetic input is produced from Electron's main process without
-    // awaiting the renderer: awaiting page.mouse.move serializes input behind
-    // slow frames and hides precisely the stalls this benchmark exposes.
+    // awaiting the renderer: awaiting each event would serialize input behind
+    // slow frames and hide precisely the stalls this benchmark exposes.
     // Main-process timers tick every ~15.6 ms on Windows, so events arrive
     // there in bursts at that cadence.
     async function play(events) {
@@ -292,7 +354,7 @@ async function main() {
         lateness.push(result.worstLateMs);
         return result.sent;
       }
-      return app.evaluate(async ({ BrowserWindow }, events) => {
+      return app.run(async ({ BrowserWindow }, events) => {
         const contents = BrowserWindow.getAllWindows()[0].webContents;
         const start = performance.now();
         let sent = 0, down = false;
@@ -317,8 +379,8 @@ async function main() {
       const sent = await play(events);
       const last = events.at(-1);
       // The page saw the gesture end: the wheel marker, or the button release where it was sent.
-      await page.waitForFunction(({ type, x, y }) => type === 'wheel' ? window.__canvasInput.wheelEnded
-        : window.__canvasInput.up && Math.abs(window.__canvasInput.up.x - x) <= 2 && Math.abs(window.__canvasInput.up.y - y) <= 2, last);
+      await page.waitFor(({ type, x, y }) => type === 'wheel' ? window.__canvasInput.wheelEnded
+        : window.__canvasInput.up && Math.abs(window.__canvasInput.up.x - x) <= 2 && Math.abs(window.__canvasInput.up.y - y) <= 2, last, { message: 'the gesture to reach the page' });
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       return sent;
     }
@@ -353,15 +415,18 @@ async function main() {
         }
       }
     }, kind);
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].focus());
+    await app.run(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].focus());
     if (osInput) {
       console.log('Driving the real mouse: do not touch it until the run finishes.');
       await delay(3000);
     }
     console.log(`Measuring ${rounds} round(s) of ${gestureNames.join(', ')}…`);
-    await page.mouse.move(Math.round((await page.evaluate(() => innerWidth)) * .7), 40);
+    await page.mouseMove((await page.evaluate(() => innerWidth)) * .7, 40);
     await delay(300);
-    await page.screenshot({ path: output.replace(/\.json$/, '') + '.png' });
+    await fs.writeFile(output.replace(/\.json$/, '') + '.png', await page.screenshot());
+    const viewport = () => page.evaluate(() => document.querySelector('.react-flow__viewport')?.style.transform);
+    const nodeTransform = id => page.evaluate(id => document.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`)?.style.transform, id);
+    const nodeTotal = () => page.evaluate(() => document.querySelectorAll('.react-flow__node').length);
     let lastDrag;
     for (let round = 0; round < rounds; round++) {
       for (const name of gestureNames) {
@@ -369,16 +434,16 @@ async function main() {
         const origin = await target(spec.target);
         assert.ok(origin, `No ${spec.target === 'node' ? 'visible node to drag' : 'empty pane to pan from'} for ${name}`);
         const events = schedule(spec, origin, { hz, seconds });
-        const viewportBefore = await page.locator('.react-flow__viewport').evaluate(el => el.style.transform);
+        const viewportBefore = await viewport();
         await measure(name, () => gesture(events));
         await delay(200);
         if (spec.target === 'node') {
-          const moved = await page.locator(`.react-flow__node[data-id="${origin.id}"]`).evaluate(el => el.style.transform);
+          const moved = await nodeTransform(origin.id);
           assert.notEqual(moved, origin.transform, `${name} did not move the node`);
           lastDrag = { ...origin, moved };
         } else {
-          assert.equal(await page.locator('.react-flow__node').count(), nodeCount, 'Panning lost node wrappers');
-          assert.notEqual(await page.locator('.react-flow__viewport').evaluate(el => el.style.transform), viewportBefore, `${name} did not move the viewport`);
+          assert.equal(await nodeTotal(), nodeCount, 'Panning lost node wrappers');
+          assert.notEqual(await viewport(), viewportBefore, `${name} did not move the viewport`);
         }
       }
     }
@@ -387,35 +452,38 @@ async function main() {
     if (lastDrag) {
       // Undo every drag since the last one and redo it; only the last drag's
       // own move must round-trip.
-      await page.keyboard.press(`${modifier}+z`);
-      await page.waitForFunction(({ id, moved }) => document.querySelector(`.react-flow__node[data-id="${id}"]`)?.style.transform !== moved, lastDrag);
-      await page.keyboard.press(`${modifier}+Shift+z`);
-      await page.waitForFunction(({ id, moved }) => document.querySelector(`.react-flow__node[data-id="${id}"]`)?.style.transform === moved, lastDrag);
+      const transformIs = (want, equal) => page.waitFor(({ id, want, equal }) => (document.querySelector(`.react-flow__node[data-id="${CSS.escape(id)}"]`)?.style.transform === want) === equal,
+        { id: lastDrag.id, want, equal }, { message: equal ? 'redo' : 'undo' });
+      await page.key(`${modifier}+z`);
+      await transformIs(lastDrag.moved, false);
+      await page.key(`${modifier}+Shift+z`);
+      await transformIs(lastDrag.moved, true);
     }
     await delay(800);
-    const savedViewport = await page.locator('.react-flow__viewport').evaluate(el => el.style.transform);
-    await page.getByRole('button', { name: 'New tab', exact: true }).click();
-    await page.waitForFunction(() => document.querySelectorAll('.react-flow__node').length === 0);
-    const closeWelcome = page.getByRole('button', { name: 'Close', exact: true }).last();
-    if (await closeWelcome.isVisible()) await closeWelcome.click();
-    await page.getByRole('tab').filter({ hasText: workflowName }).first().click();
-    await page.waitForFunction(count => document.querySelectorAll('.react-flow__node').length === count, nodeCount);
-    await page.waitForFunction(expected => document.querySelector('.react-flow__viewport')?.style.transform === expected, savedViewport, { timeout: 5000 });
-    assert.equal(await page.locator('.react-flow__node [role="alert"]').count(), 0, 'Node failed to render');
-    assert.deepEqual(pageErrors, [], 'Renderer errors during interaction');
+    const savedViewport = await viewport();
+    await page.click('New tab');
+    await rendered(0);
+    await page.click('Close', { last: true, optional: true, timeout: 2000 });
+    await page.click({ contains: workflowName }, { role: 'tab' });
+    await rendered(nodeCount);
+    await page.waitFor(expected => document.querySelector('.react-flow__viewport')?.style.transform === expected, savedViewport, { timeout: 5000, message: 'the tab viewport to return' });
+    assert.equal(await page.evaluate(() => document.querySelectorAll('.react-flow__node [role="alert"]').length), 0, 'Node failed to render');
+    assert.deepEqual(await page.evaluate(() => window.__perfErrors), [], 'Renderer errors during interaction');
     console.log('PASS: drag/pan gestures, undo/redo and tab viewport restoration');
-    if (process.argv.includes('--profile')) {
-      const { profile: cpuProfile } = await cdp.send('Profiler.stop');
-      await fs.writeFile(output.replace(/\.json$/, '') + '.cpuprofile', JSON.stringify(cpuProfile));
+    if (cpuProfile) {
+      await app.run(async ({ BrowserWindow }, file, require) => {
+        const { profile } = await BrowserWindow.getAllWindows()[0].webContents.debugger.sendCommand('Profiler.stop');
+        require('node:fs').writeFileSync(file, JSON.stringify(profile));
+      }, output.replace(/\.json$/, '') + '.cpuprofile');
     }
     const trace = analyzeTrace(traced);
-    const environment = await app.evaluate(({ app, screen, BrowserWindow }) => {
+    const environment = await app.run(({ app, screen, BrowserWindow }) => {
       const display = screen.getPrimaryDisplay(), window = BrowserWindow.getAllWindows()[0];
       return { gpu: app.getGPUFeatureStatus(), displayHz: display.displayFrequency, scaleFactor: display.scaleFactor,
         displaySize: display.size, windowContentSize: window.getContentSize(), maximized: window.isMaximized(), packaged: app.isPackaged, versions: process.versions };
     });
-    const workload = workflowFile ? `workflow:${path.basename(workflowFile)}` : fixtureName === 'realistic' ? 'realistic' : process.argv.includes('--media') ? 'images-1024px' : 'empty-nodes';
-    const report = { workload, zoom, tabs, agentOpen: process.argv.includes('--agent-open'), input: inputMode, inputHz: hz, gestureDurationMs: seconds * 1000, gestures: gestureNames,
+    const workload = restored ? `restored:${restored.name}` : workflowFile ? `workflow:${path.basename(workflowFile)}` : fixtureName === 'realistic' ? 'realistic' : process.argv.includes('--media') ? 'images-1024px' : 'empty-nodes';
+    const report = { workload, zoom, tabs, agentOpen: process.argv.includes('--agent-open'), devtoolsAttached: cdpMetrics || cpuProfile, input: inputMode, inputHz: hz, gestureDurationMs: seconds * 1000, gestures: gestureNames,
       ...(osInput ? { osInputWorstLateMs: Math.max(...lateness) } : {}), nodes: nodeCount, edges: workflow.edges.length, rounds,
       platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model, ...environment, trace, ...(detailTimes ? { detail: detailTimes } : {}), results };
     await fs.writeFile(output, JSON.stringify(report, null, 2));
@@ -423,9 +491,17 @@ async function main() {
     if (detailTimes) for (const [thread, { totalMs, top }] of Object.entries(detailTimes)) console.log(`\n${thread}: ${totalMs} ms\n${top.map(t => `  ${String(t.ms).padStart(8)} ms  ${t.name}`).join('\n')}`);
     console.log(`\nSaved ${output}`);
   } finally {
-    if (app) await app.close();
-    await fs.rm(profile, { recursive: true, force: true });
-    if (!process.argv.includes('--keep-traces')) await fs.rm(traceDir, { recursive: true, force: true });
+    // Cleanup never replaces the error that ended the run. Electron can hold
+    // profile files for a moment after it exits, and on Windows that blocks
+    // removing them.
+    if (app) {
+      await app.close();
+      // Its GPU, renderer and server processes go with it, not after the next run starts.
+      for (let wait = 0; wait < 20 && strayElectron().length > strays.length; wait++) await delay(250);
+    }
+    const remove = dir => fs.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 }).catch(error => console.warn(`Could not remove ${dir}: ${error.message}`));
+    await remove(profile);
+    if (!process.argv.includes('--keep-traces')) await remove(traceDir);
   }
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });
