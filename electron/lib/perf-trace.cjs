@@ -38,4 +38,30 @@ const PAGE_PROBE = `(() => {
   } catch {}
 })();`;
 
-module.exports = { PERF_TRACE_CATEGORIES, PAGE_PROBE };
+// NODE_BANANA_PERF_TRACE=<dir>: trace the session from launch into a ring
+// buffer holding about the last minute and a half, and write it to <dir> as
+// the app quits. Use the app as normal, make it stutter, then quit; npm run
+// perf:analyze reads the file. Nothing is recorded unless the variable is set.
+function createSessionTrace({ dir, contentTracing, log = () => {} }) {
+  let recording, saved = false;
+  return {
+    start() {
+      recording = contentTracing.startRecording({ included_categories: PERF_TRACE_CATEGORIES, excluded_categories: ['*'],
+        record_mode: 'record-continuously', trace_buffer_size_in_kb: 256 * 1024 }).catch(error => { log(error); recording = undefined; });
+    },
+    attach(contents) {
+      contents.on('did-finish-load', () => { contents.executeJavaScript(PAGE_PROBE).catch(log); });
+    },
+    // For app.on('will-quit'): hold the quit once while the trace is written.
+    willQuit(event, quit) {
+      if (saved || !recording) return;
+      event.preventDefault();
+      saved = true;
+      const file = require('node:path').join(dir, `node-banana-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+      require('node:fs').mkdirSync(dir, { recursive: true });
+      recording.then(() => contentTracing.stopRecording(file)).then(written => log(`Performance trace written to ${written}`), log).finally(quit);
+    },
+  };
+}
+
+module.exports = { PERF_TRACE_CATEGORIES, PAGE_PROBE, createSessionTrace };

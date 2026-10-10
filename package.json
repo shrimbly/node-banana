@@ -21,7 +21,8 @@
     "electron:package": "node scripts/package-electron.cjs",
     "electron:test": "node --test electron/tests/*.test.cjs",
     "electron:acceptance": "node scripts/electron-acceptance.cjs",
-    "electron:performance": "node scripts/electron-canvas-performance.cjs"
+    "electron:performance": "node scripts/electron-canvas-performance.cjs",
+    "perf:analyze": "node scripts/perf-analyze.cjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.13",

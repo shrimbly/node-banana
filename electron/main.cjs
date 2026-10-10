@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, Menu, session, shell, utilityProcess, safeStorage, screen } = require('electron');
+const { app, BrowserWindow, contentTracing, dialog, ipcMain, Menu, session, shell, utilityProcess, safeStorage, screen } = require('electron');
 const { randomBytes } = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -17,9 +17,10 @@ const { libraryEnv } = require('./lib/library.cjs');
 const { createServerMessageHandler } = require('./lib/bridge-main.cjs');
 const { UNLOAD_PROMPT } = require('./lib/unload-prompt.cjs');
 const { createUpdates, createUnsupportedUpdates, createPreviewUpdater, readReleasesUrl } = require('./lib/updates.cjs');
+const { createSessionTrace } = require('./lib/perf-trace.cjs');
 let root = path.resolve(__dirname, '..');
 let runtime, backend, window, credentialStore, recoveryStore, diagnostics, updates;
-let quitting = false, rendererCrashed = false, starting;
+let quitting = false, rendererCrashed = false, starting, sessionTrace;
 const dev = !app.isPackaged && process.argv.includes('--dev');
 const port = Number(process.env.NODE_BANANA_ELECTRON_PORT || 47831);
 const origin = `http://127.0.0.1:${port}`;
@@ -134,6 +135,7 @@ async function createWindow() {
     webPreferences: { nodeIntegration: false, contextIsolation: true, sandbox: true, preload: path.join(__dirname, 'preload.cjs') },
   });
   const current = window;
+  sessionTrace?.attach(current.webContents);
   let saveTimer;
   const boundsRecord = () => JSON.stringify({ version: 1, bounds: current.getNormalBounds(), maximized: current.isMaximized() });
   // While the window is being moved or resized the record is written off the
@@ -265,13 +267,17 @@ else {
   registerBridge();
   app.on('second-instance', () => { if (window?.isMinimized()) window.restore(); window?.show(); window?.focus(); });
   app.on('before-quit', () => { quitting = true; });
-  app.on('will-quit', () => backend?.kill());
+  app.on('will-quit', event => { backend?.kill(); sessionTrace?.willQuit(event, () => app.quit()); });
   app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
   app.on('activate', () => { if (!window && backend?.online()) createWindow().catch(fail); });
   process.on('uncaughtException', error => { void fail(error); });
   process.on('unhandledRejection', log);
   app.whenReady().then(async () => {
     diagnostics = createDiagnostics(app.getPath('logs'), redactor);
+    if (process.env.NODE_BANANA_PERF_TRACE) {
+      sessionTrace = createSessionTrace({ dir: path.resolve(process.env.NODE_BANANA_PERF_TRACE), contentTracing, log });
+      sessionTrace.start();
+    }
     credentialStore = createCredentialStore(app.getPath('userData'), safeStorage, values => {
       redactor.add(values); backend?.post({ type: 'secrets', values });
     });
