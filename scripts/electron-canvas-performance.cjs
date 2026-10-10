@@ -6,6 +6,12 @@
 // screen presented: dropped frames, frame pacing and input-to-frame latency
 // (scripts/lib/trace-analysis.cjs). The animation-frame callback figures are
 // kept for comparison with older results; they miss compositor and GPU drops.
+//
+// --input synthetic (default) sends events from Electron's main process at
+// 125 Hz in a 1440×900 window, as earlier recorded results did. --input os
+// moves the real cursor through the OS at --hz (default 1000, a gaming mouse)
+// in a maximised window, which is how the app is actually used; do not touch
+// the mouse while it runs.
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
@@ -14,6 +20,7 @@ const net = require('node:net');
 const { _electron } = require('playwright-core');
 const { PERF_TRACE_CATEGORIES, PAGE_PROBE } = require('../electron/lib/perf-trace.cjs');
 const { readTrace, analyzeTrace, keepAnalyzed, selfTime, formatReport } = require('./lib/trace-analysis.cjs');
+const { createOsInput } = require('./lib/os-input.cjs');
 const option = (name, fallback) => {
   const index = process.argv.indexOf(name);
   return index < 0 ? fallback : process.argv[index + 1];
@@ -38,12 +45,60 @@ function fixture(count) {
   return { version: 1, name: 'Canvas performance fixture', nodes, edges, groups: {} };
 }
 
+// Gestures are schedules in page (CSS) pixels: { t ms, type, x, y, dx, dy }.
+// rapid-* are the paths earlier results used. The sweeps and circles are what
+// hands do: long fast flicks across most of the window, and continuous loops.
+const GESTURES = {
+  'rapid-drag': { target: 'node', path: (o, u) => ({ x: o.x + 240 * Math.sin(u * Math.PI * 12) + 20 * u, y: o.y + 100 * Math.sin(u * Math.PI * 8) }) },
+  // The wheel pan's path for a drag: 24 px steps reversing every 50 events.
+  'rapid-pan': { target: 'pane', path: (o, u, i) => { const step = Math.floor(i / 50), within = i % 50 + 1, size = o.ax / 25;
+    return { x: o.x - o.ax + (step % 2 ? size * (50 - within) : size * within), y: o.y }; } },
+  'drag-sweep': { target: 'node', path: (o, u) => ({ x: o.x + o.ax * Math.sin(u * Math.PI * 6) + 30 * u, y: o.y + o.ay * Math.sin(u * Math.PI * 4) }) },
+  'drag-circle': { target: 'node', path: (o, u) => ({ x: o.x - o.r + o.r * Math.cos(u * Math.PI * 10) + 30 * u, y: o.y + o.r * Math.sin(u * Math.PI * 10) }) },
+  'pan-sweep': { target: 'pane', path: (o, u) => ({ x: o.x + o.ax * Math.sin(u * Math.PI * 6) + 30 * u, y: o.y + o.ay * Math.sin(u * Math.PI * 4) }) },
+  // The Mac pans with the wheel (trackpad): 24 px steps reversing every 50 events.
+  'pan-wheel': { target: 'pane', wheel: i => Math.floor(i / 50) % 2 ? -23 : 24 },
+};
+
+function schedule(gesture, origin, { hz, seconds }) {
+  const n = Math.round(hz * seconds), interval = 1000 / hz, events = [];
+  if (gesture.wheel) {
+    events.push({ t: 0, type: 'move', x: origin.x, y: origin.y });
+    for (let i = 0; i < n; i++) events.push({ t: 40 + i * interval, type: 'wheel', x: origin.x, y: origin.y, dx: gesture.wheel(i), dy: 0 });
+    // A distinct final vertical component is an ordered marker: Chromium may
+    // still have queued or coalesced wheel events after the producer stops.
+    events.push({ t: 40 + n * interval, type: 'wheel', x: origin.x, y: origin.y, dx: 0, dy: 1 });
+    return events;
+  }
+  events.push({ t: 0, type: 'move', x: origin.x, y: origin.y }, { t: 40, type: 'down', x: origin.x, y: origin.y });
+  let point = origin;
+  for (let i = 0; i < n; i++) {
+    point = gesture.path(origin, (i + 1) / n, i);
+    events.push({ t: 80 + i * interval, type: 'move', x: point.x, y: point.y });
+  }
+  events.push({ t: 80 + n * interval + 20, type: 'up', x: point.x, y: point.y });
+  return events;
+}
+
 async function main() {
   const count = Number(option('--nodes', 240));
   const rounds = Number(option('--rounds', 3));
   const detail = process.argv.includes('--detail');
+  const inputMode = option('--input', 'synthetic');
+  const hz = Number(option('--hz', inputMode === 'os' ? 1000 : 125));
+  const seconds = Number(option('--seconds', 4));
+  const windowOption = option('--window', inputMode === 'os' ? 'maximized' : '1440x900');
+  const executable = option('--executable');
+  const gestureNames = (option('--gestures') || (inputMode === 'os'
+    ? ['drag-sweep', 'drag-circle', process.platform === 'darwin' ? 'pan-wheel' : 'pan-sweep']
+    : ['rapid-drag', process.platform === 'darwin' ? 'pan-wheel' : 'rapid-pan']).join(',')).split(',');
   assert.ok(Number.isInteger(count) && count >= 12);
   assert.ok(Number.isInteger(rounds) && rounds > 0);
+  assert.ok(['synthetic', 'os'].includes(inputMode), '--input is synthetic or os');
+  assert.ok(hz > 0 && seconds > 0);
+  for (const name of gestureNames) assert.ok(GESTURES[name], `Unknown gesture ${name}; one of ${Object.keys(GESTURES).join(', ')}`);
+  const osInput = inputMode === 'os' ? createOsInput() : undefined;
+  assert.ok(!osInput || osInput.available, '--input os needs Windows or macOS');
   const output = path.resolve(option('--output', path.join(os.tmpdir(), 'banana-canvas-performance.json')));
   const traceDir = process.argv.includes('--keep-traces') ? output.replace(/\.json$/, '') + '-traces' : await fs.mkdtemp(path.join(os.tmpdir(), 'banana-canvas-traces-'));
   await fs.mkdir(traceDir, { recursive: true });
@@ -54,12 +109,17 @@ async function main() {
   await new Promise(resolve => probe.close(resolve));
   let app;
   try {
-    await fs.access(path.join(root, ".next/BUILD_ID"));
-    app = await _electron.launch({ args: [root], cwd: root, timeout: 120000,
+    if (!executable) await fs.access(path.join(root, ".next/BUILD_ID"));
+    app = await _electron.launch({ ...(executable ? { executablePath: executable, args: [] } : { args: [root], cwd: root }), timeout: 120000,
       env: { ...process.env, NODE_BANANA_ELECTRON_USER_DATA: profile, NODE_BANANA_ELECTRON_PORT: String(port) } });
     await app.evaluate(({ dialog }) => { dialog.showMessageBoxSync = () => 1; });
     const page = await app.firstWindow({ timeout: 120000 });
-    await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1440, 900));
+    const [width, height] = windowOption === 'maximized' ? [] : windowOption.split('x').map(Number);
+    await app.evaluate(({ BrowserWindow }, { width, height }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      if (width) { window.unmaximize(); window.setContentSize(width, height); window.center(); } else window.maximize();
+    }, { width, height });
+    await delay(500);
     page.setDefaultTimeout(30000);
     const pageErrors = [];
     page.on('pageerror', error => pageErrors.push(error.message));
@@ -109,12 +169,15 @@ async function main() {
     await cdp.send('Performance.enable');
     await page.evaluate(() => {
       window.__canvasInput = {};
-      window.addEventListener('mousemove', event => { window.__canvasInput.mouse = { x: event.clientX, y: event.clientY }; }, { passive: true, capture: true });
+      // Chromium sends synthetic moves when content shifts under a still
+      // cursor, so the release is kept apart from the latest move.
+      window.addEventListener('mouseup', event => { window.__canvasInput.up = { x: event.clientX, y: event.clientY }; }, { passive: true, capture: true });
       document.addEventListener('wheel', event => { if (event.deltaY !== 0) window.__canvasInput.wheelEnded = true; }, { passive: true, capture: true });
     });
     const readMetrics = async () => Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map(m => [m.name, m.value]));
     const results = [];
     const traced = [];
+    const lateness = [];
     let detailTimes;
     if (process.argv.includes('--profile')) {
       await cdp.send('Profiler.enable');
@@ -151,100 +214,124 @@ async function main() {
       results.push(result); console.log(JSON.stringify(result));
       await delay(350);
     }
-    // Windows pans by dragging the empty pane (panOnDrag); the Mac by wheel.
-    const panByWheel = process.platform === 'darwin';
-    // Drive native input from the main process independently of renderer/CDP
-    // acknowledgements. Awaiting page.mouse.move serializes input behind slow
-    // frames and hides precisely the stalls this benchmark needs to expose.
-    // Main-process timers tick every ~15.6 ms on Windows, so the 125 Hz
-    // schedule arrives there as pairs of events at ~64 Hz.
-    async function gesture(kind, origin) {
-      await page.evaluate(() => { window.__canvasInput = {}; });
-      const sent = await app.evaluate(async ({ BrowserWindow }, { kind, origin, panByWheel }) => {
+    // Page pixels to the units each player needs. Windows SendInput takes
+    // physical screen pixels; the Mac's CGEvent takes points.
+    const geometry = await app.evaluate(({ BrowserWindow, screen }) => {
+      const bounds = BrowserWindow.getAllWindows()[0].getContentBounds();
+      const display = screen.getDisplayMatching(bounds);
+      return { origin: process.platform === 'win32' ? screen.dipToScreenPoint({ x: bounds.x, y: bounds.y }) : { x: bounds.x, y: bounds.y }, scaleFactor: display.scaleFactor };
+    });
+    const devicePixelRatio = await page.evaluate(() => window.devicePixelRatio);
+    const pageToScreen = process.platform === 'win32' ? devicePixelRatio : devicePixelRatio / geometry.scaleFactor;
+    // Synthetic input is produced from Electron's main process without
+    // awaiting the renderer: awaiting page.mouse.move serializes input behind
+    // slow frames and hides precisely the stalls this benchmark exposes.
+    // Main-process timers tick every ~15.6 ms on Windows, so events arrive
+    // there in bursts at that cadence.
+    async function play(events) {
+      if (osInput) {
+        const result = await osInput.play(events.map(e => ({ ...e, x: geometry.origin.x + e.x * pageToScreen, y: geometry.origin.y + e.y * pageToScreen })));
+        lateness.push(result.worstLateMs);
+        return result.sent;
+      }
+      return app.evaluate(async ({ BrowserWindow }, events) => {
         const contents = BrowserWindow.getAllWindows()[0].webContents;
         const start = performance.now();
-        let sent = 0;
-        if (kind === 'pan' && !panByWheel) contents.sendInputEvent({ type: 'mouseDown', button: 'left', x: origin.x, y: origin.y, clickCount: 1 });
+        let sent = 0, down = false;
         await new Promise(resolve => {
           const timer = setInterval(() => {
-            const due = Math.min(500, Math.floor((performance.now() - start) / 8));
-            // Catch up after main-process timer jitter so before/after runs
-            // receive the same 500 events and the same motion path.
-            while (sent < due) {
-              sent++;
-              const t = sent / 500;
-              if (kind === 'drag') {
-                contents.sendInputEvent({ type: 'mouseMove', button: 'left', modifiers: ['leftButtonDown'],
-                  x: Math.round(origin.x + 240 * Math.sin(t * Math.PI * 12) + 20 * t),
-                  y: Math.round(origin.y + 100 * Math.sin(t * Math.PI * 8)) });
-              } else if (panByWheel) {
-                contents.sendInputEvent({ type: 'mouseWheel', x: 1100, y: 120,
-                  deltaX: Math.floor((sent - 1) / 50) % 2 ? -23 : 24, deltaY: 0, canScroll: true });
-              } else {
-                // The wheel pan's path where the window allows: steps reversing every 50 events.
-                const step = Math.floor((sent - 1) / 50), within = (sent - 1) % 50 + 1, size = origin.amplitude / 25;
-                const x = origin.x + (step % 2 ? size * (50 - within) : size * within) - origin.amplitude;
-                contents.sendInputEvent({ type: 'mouseMove', button: 'left', modifiers: ['leftButtonDown'], x: Math.round(x), y: origin.y });
-              }
+            while (sent < events.length && events[sent].t <= performance.now() - start) {
+              const { type, x, y, dx, dy } = events[sent++];
+              const at = { x: Math.round(x), y: Math.round(y) };
+              if (type === 'wheel') contents.sendInputEvent({ type: 'mouseWheel', ...at, deltaX: dx, deltaY: dy, canScroll: true });
+              else if (type === 'down') { down = true; contents.sendInputEvent({ type: 'mouseDown', button: 'left', ...at, clickCount: 1 }); }
+              else if (type === 'up') { down = false; contents.sendInputEvent({ type: 'mouseUp', button: 'left', ...at, clickCount: 1 }); }
+              else contents.sendInputEvent({ type: 'mouseMove', ...(down ? { button: 'left', modifiers: ['leftButtonDown'] } : {}), ...at });
             }
-            if (sent === 500) { clearInterval(timer); resolve(); }
-          }, 8);
+            if (sent === events.length) { clearInterval(timer); resolve(); }
+          }, 4);
         });
-        // A distinct final wheel component is an ordered marker. Chromium may
-        // still have queued/coalesced wheel events after the producer stops.
-        if (kind === 'pan' && panByWheel) contents.sendInputEvent({ type: 'mouseWheel', x: 1100, y: 120, deltaX: 0, deltaY: 1, canScroll: true });
-        if (kind === 'pan' && !panByWheel) contents.sendInputEvent({ type: 'mouseUp', button: 'left', x: origin.x - origin.amplitude, y: origin.y, clickCount: 1 });
         return sent;
-      }, { kind, origin, panByWheel });
-      await page.waitForFunction(({ kind, origin, panByWheel }) => kind === 'pan'
-        ? (panByWheel ? window.__canvasInput.wheelEnded : window.__canvasInput.mouse?.x === Math.round(origin.x - origin.amplitude))
-        : window.__canvasInput.mouse?.x === Math.round(origin.x + 20) && window.__canvasInput.mouse?.y === Math.round(origin.y), { kind, origin, panByWheel });
+      }, events);
+    }
+    async function gesture(events) {
+      await page.evaluate(() => { window.__canvasInput = {}; });
+      const sent = await play(events);
+      const last = events.at(-1);
+      // The page saw the gesture end: the wheel marker, or the button release where it was sent.
+      await page.waitForFunction(({ type, x, y }) => type === 'wheel' ? window.__canvasInput.wheelEnded
+        : window.__canvasInput.up && Math.abs(window.__canvasInput.up.x - x) <= 2 && Math.abs(window.__canvasInput.up.y - y) <= 2, last);
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       return sent;
     }
-    // A point on the empty pane with room for the drag-pan's sweep either side.
-    const emptyPane = () => page.evaluate(() => {
-      const amplitude = Math.min(600, Math.floor((innerWidth - 80) / 2));
-      for (let y = 160; y < innerHeight - 200; y += 4) for (let x = amplitude + 40; x <= innerWidth - amplitude - 40; x += 4) {
-        if (document.elementFromPoint(x, y)?.classList.contains('react-flow__pane')) return { x, y, amplitude };
+    // Where each kind of gesture starts, near the middle of the canvas so
+    // sweeps have room either side, keeping clear of the tab strip and the
+    // bottom bar.
+    const target = kind => page.evaluate(kind => {
+      const cx = innerWidth / 2, cy = innerHeight / 2;
+      const room = (x, y) => ({ ax: Math.max(40, Math.min(innerWidth * .3, x - 60, innerWidth - x - 60)), ay: Math.max(20, Math.min(innerHeight * .15, y - 140, innerHeight - y - 140)),
+        r: Math.max(30, Math.min(innerWidth, innerHeight) * .18) });
+      if (kind === 'node') {
+        let best;
+        for (const element of document.querySelectorAll('.react-flow__node-nanoBanana')) {
+          const box = element.getBoundingClientRect();
+          if (box.x < 150 || box.y < 180 || box.right > innerWidth - 250 || box.bottom > innerHeight - 250) continue;
+          const point = { x: box.x + box.width / 2, y: box.y + 40 };
+          const distance = Math.hypot(point.x - cx, point.y - cy);
+          if (!best || distance < best.distance) best = { ...point, distance, id: element.dataset.id, transform: element.style.transform };
+        }
+        return best && { ...best, ...room(best.x, best.y) };
       }
-    });
-    await page.mouse.move(1000, 40);
+      for (let radius = 0; radius < Math.min(cx, cy) - 100; radius += 6) {
+        for (let angle = 0; angle < Math.PI * 2; angle += Math.max(.05, 6 / Math.max(radius, 1))) {
+          const x = Math.round(cx + radius * Math.cos(angle)), y = Math.round(cy + radius * Math.sin(angle));
+          if (document.elementFromPoint(x, y)?.classList.contains('react-flow__pane')) return { x, y, ...room(x, y) };
+        }
+      }
+    }, kind);
+    await app.evaluate(({ BrowserWindow }, os) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      if (os) window.setAlwaysOnTop(true);
+      window.focus();
+    }, !!osInput);
+    if (osInput) {
+      console.log('Driving the real mouse: do not touch it until the run finishes.');
+      await delay(3000);
+    }
+    await page.mouse.move(Math.round((await page.evaluate(() => innerWidth)) * .7), 40);
     await delay(300);
     await page.screenshot({ path: output.replace(/\.json$/, '') + '.png' });
     let lastDrag;
     for (let round = 0; round < rounds; round++) {
-      const node = await page.evaluate(() => {
-        for (const element of document.querySelectorAll('.react-flow__node-nanoBanana')) {
-          const box = element.getBoundingClientRect();
-          if (box.x > 150 && box.y > 180 && box.right < innerWidth - 250 && box.bottom < innerHeight - 250) {
-            return { id: element.dataset.id, x: box.x + box.width / 2, y: box.y + 40, transform: element.style.transform };
-          }
+      for (const name of gestureNames) {
+        const spec = GESTURES[name];
+        const origin = await target(spec.target);
+        assert.ok(origin, `No ${spec.target === 'node' ? 'visible node to drag' : 'empty pane to pan from'} for ${name}`);
+        const events = schedule(spec, origin, { hz, seconds });
+        const viewportBefore = await page.locator('.react-flow__viewport').evaluate(el => el.style.transform);
+        await measure(name, () => gesture(events));
+        await delay(200);
+        if (spec.target === 'node') {
+          const moved = await page.locator(`.react-flow__node[data-id="${origin.id}"]`).evaluate(el => el.style.transform);
+          assert.notEqual(moved, origin.transform, `${name} did not move the node`);
+          lastDrag = { ...origin, moved };
+        } else {
+          assert.equal(await page.locator('.react-flow__node').count(), count, 'Panning lost node wrappers');
+          assert.notEqual(await page.locator('.react-flow__viewport').evaluate(el => el.style.transform), viewportBefore, `${name} did not move the viewport`);
         }
-      });
-      assert.ok(node, 'No visible node available to drag');
-      await page.mouse.move(node.x, node.y);
-      await page.mouse.down();
-      await measure('rapid-drag', () => gesture('drag', node));
-      await page.mouse.up();
-      const moved = await page.locator(`.react-flow__node[data-id="${node.id}"]`).evaluate(el => el.style.transform);
-      assert.notEqual(moved, node.transform, 'Node drag did not change its position');
-      lastDrag = { ...node, moved };
-      const viewportBefore = await page.locator('.react-flow__viewport').evaluate(el => el.style.transform);
-      const spot = panByWheel ? { x: 1100, y: 120 } : await emptyPane();
-      assert.ok(spot, 'No empty pane to drag-pan from');
-      await page.mouse.move(spot.x, spot.y);
-      await measure('rapid-pan', () => gesture('pan', spot));
-      await delay(200);
-      assert.equal(await page.locator('.react-flow__node').count(), count, 'Panning lost node wrappers');
-      assert.notEqual(await page.locator('.react-flow__viewport').evaluate(el => el.style.transform), viewportBefore, 'Pan did not move the viewport');
+      }
     }
+    if (osInput) await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setAlwaysOnTop(false));
     // Interaction checks run after the measured intervals.
     const modifier = process.platform === 'darwin' ? 'Meta' : 'Control';
-    await page.keyboard.press(`${modifier}+z`);
-    await page.waitForFunction(({ id, transform }) => document.querySelector(`.react-flow__node[data-id="${id}"]`)?.style.transform === transform, lastDrag);
-    await page.keyboard.press(`${modifier}+Shift+z`);
-    await page.waitForFunction(({ id, moved }) => document.querySelector(`.react-flow__node[data-id="${id}"]`)?.style.transform === moved, lastDrag);
+    if (lastDrag) {
+      // Undo every drag since the last one and redo it; only the last drag's
+      // own move must round-trip.
+      await page.keyboard.press(`${modifier}+z`);
+      await page.waitForFunction(({ id, moved }) => document.querySelector(`.react-flow__node[data-id="${id}"]`)?.style.transform !== moved, lastDrag);
+      await page.keyboard.press(`${modifier}+Shift+z`);
+      await page.waitForFunction(({ id, moved }) => document.querySelector(`.react-flow__node[data-id="${id}"]`)?.style.transform === moved, lastDrag);
+    }
     await delay(800);
     const savedViewport = await page.locator('.react-flow__viewport').evaluate(el => el.style.transform);
     await page.getByRole('button', { name: 'New tab', exact: true }).click();
@@ -256,7 +343,7 @@ async function main() {
     await page.waitForFunction(expected => document.querySelector('.react-flow__viewport')?.style.transform === expected, savedViewport, { timeout: 5000 });
     assert.equal(await page.locator('.react-flow__node [role="alert"]').count(), 0, 'Node failed to render');
     assert.deepEqual(pageErrors, [], 'Renderer errors during interaction');
-    console.log('PASS: rapid drag/pan, undo/redo and tab viewport restoration');
+    console.log('PASS: drag/pan gestures, undo/redo and tab viewport restoration');
     if (process.argv.includes('--profile')) {
       const { profile: cpuProfile } = await cdp.send('Profiler.stop');
       await fs.writeFile(output.replace(/\.json$/, '') + '.cpuprofile', JSON.stringify(cpuProfile));
@@ -265,9 +352,10 @@ async function main() {
     const environment = await app.evaluate(({ app, screen, BrowserWindow }) => {
       const display = screen.getPrimaryDisplay(), window = BrowserWindow.getAllWindows()[0];
       return { gpu: app.getGPUFeatureStatus(), displayHz: display.displayFrequency, scaleFactor: display.scaleFactor,
-        displaySize: display.size, windowContentSize: window.getContentSize(), maximized: window.isMaximized(), versions: process.versions };
+        displaySize: display.size, windowContentSize: window.getContentSize(), maximized: window.isMaximized(), packaged: app.isPackaged, versions: process.versions };
     });
-    const report = { workload: process.argv.includes('--media') ? 'images-1024px' : 'empty-nodes', input: 'synthetic', inputHz: 125, gestureDurationMs: 4000, nodes: count, edges: fixture(count).edges.length, rounds,
+    const report = { workload: process.argv.includes('--media') ? 'images-1024px' : 'empty-nodes', input: inputMode, inputHz: hz, gestureDurationMs: seconds * 1000, gestures: gestureNames,
+      ...(osInput ? { osInputWorstLateMs: Math.max(...lateness) } : {}), nodes: count, edges: fixture(count).edges.length, rounds,
       platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model, ...environment, trace, ...(detailTimes ? { detail: detailTimes } : {}), results };
     await fs.writeFile(output, JSON.stringify(report, null, 2));
     console.log(`\n${formatReport(trace)}`);
