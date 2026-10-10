@@ -435,6 +435,43 @@ describe("WorkflowCanvas", () => {
       }
     });
 
+    it("captures the pointer on the pressed element when a press becomes a pan or a node drag, never on a wheel pan", () => {
+      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState()));
+      render(
+        <TestWrapper>
+          <WorkflowCanvas />
+        </TestWrapper>
+      );
+      const wrapper = document.querySelector(".bg-canvas-bg") as HTMLElement;
+      const props = () => mockReactFlowProps.current as Record<string, (...args: unknown[]) => void>;
+      const pressed = document.createElement("div");
+      wrapper.appendChild(pressed);
+      const captured: number[] = [];
+      Object.assign(pressed, { setPointerCapture: (id: number) => captured.push(id), hasPointerCapture: () => false });
+      const pointer = (type: string, target: EventTarget, pointerId = 7) => {
+        const event = new Event(type, { bubbles: true });
+        Object.defineProperty(event, "pointerId", { value: pointerId });
+        target.dispatchEvent(event);
+      };
+      const node = { id: "node-1", position: { x: 0, y: 0 }, data: {} };
+
+      pointer("pointerdown", pressed);
+      act(() => props().onMoveStart());
+      expect(captured).toEqual([7]);
+      pointer("pointerup", window);
+
+      pointer("pointerdown", pressed, 9);
+      act(() => props().onNodeDragStart({}, node));
+      expect(captured).toEqual([7, 9]);
+      act(() => props().onNodeDragStop({}, node));
+      pointer("pointerup", window, 9);
+
+      // A wheel pan has no press to capture
+      act(() => props().onMoveStart());
+      expect(captured).toEqual([7, 9]);
+      pressed.remove();
+    });
+
     it("keeps pointer events off for the whole of a node drag that follows a pan", () => {
       vi.useFakeTimers();
       try {

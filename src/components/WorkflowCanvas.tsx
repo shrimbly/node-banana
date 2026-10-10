@@ -2132,11 +2132,43 @@ export function WorkflowCanvas() {
     []
   );
   useEffect(() => () => interactionClasses.dispose(), [interactionClasses]);
+  // While a button is down for a pan or a node drag, the element the press
+  // landed on captures the pointer: Chromium then delivers each move to it
+  // without hit-testing the canvas, which on a large one costs milliseconds a
+  // move. React Flow follows the gesture through window listeners, which
+  // still see every event; the capture ends with the press.
+  const pressRef = useRef<{ pointerId: number; target: Element } | null>(null);
+  useEffect(() => {
+    const wrapper = reactFlowWrapper.current;
+    if (!wrapper) return;
+    const onDown = (event: PointerEvent) => {
+      pressRef.current = event.target instanceof Element ? { pointerId: event.pointerId, target: event.target } : null;
+    };
+    const onUp = () => { pressRef.current = null; };
+    wrapper.addEventListener("pointerdown", onDown, true);
+    window.addEventListener("pointerup", onUp, true);
+    window.addEventListener("pointercancel", onUp, true);
+    return () => {
+      wrapper.removeEventListener("pointerdown", onDown, true);
+      window.removeEventListener("pointerup", onUp, true);
+      window.removeEventListener("pointercancel", onUp, true);
+    };
+  }, []);
+  const capturePress = useCallback(() => {
+    const press = pressRef.current;
+    if (!press || !press.target.isConnected) return;
+    try {
+      if (!press.target.hasPointerCapture(press.pointerId)) press.target.setPointerCapture(press.pointerId);
+    } catch {
+      // The pointer is no longer active (released between events)
+    }
+  }, []);
   const handleMoveStart = useCallback(() => {
     isPanningRef.current = true;
     setHoveredNodeId(null);
     interactionClasses.signal();
-  }, [interactionClasses, setHoveredNodeId]);
+    capturePress();
+  }, [interactionClasses, setHoveredNodeId, capturePress]);
   const handleMove = useCallback(() => interactionClasses.signal(), [interactionClasses]);
   const handleMoveEnd = useCallback(() => {
     isPanningRef.current = false;
@@ -2145,7 +2177,8 @@ export function WorkflowCanvas() {
     isDraggingNodeRef.current = true;
     document.documentElement.classList.add("canvas-interacting");
     setCanvasMoving(true);
-  }, []);
+    capturePress();
+  }, [capturePress]);
   const handleNodeDragEnd = useCallback((event: MouseEvent | TouchEvent, node: Node) => {
     isDraggingNodeRef.current = false;
     // A pan just before the drag may still hold the tracker active; resetting
