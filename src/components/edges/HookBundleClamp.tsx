@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef } from "react";
-import { EdgeLabelRenderer, useReactFlow, useViewport } from "@xyflow/react";
+import { useReactFlow, useViewport } from "@xyflow/react";
+import { EdgeLabelRenderer } from "@/components/flowPortals";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { MenuSurface, MenuIconButton, MenuBarLabel } from "@/components/ui/Menu";
 import { bundleClampStyle } from "./BundleClamp";

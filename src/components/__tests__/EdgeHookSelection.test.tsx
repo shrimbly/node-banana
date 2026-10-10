@@ -7,6 +7,10 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { useAssetStore } from "@/store/assetStore";
 import type { WorkflowNode } from "@/types";
 
+vi.mock("@/components/flowPortals", () => ({
+  EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+}));
+
 vi.mock("@xyflow/react", async (importOriginal) => ({
   ...await importOriginal<typeof import("@xyflow/react")>(),
   useReactFlow: () => ({ screenToFlowPosition: (point: { x: number; y: number }) => point }),

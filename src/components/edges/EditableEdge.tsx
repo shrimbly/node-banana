@@ -4,7 +4,6 @@ import { useState, useCallback, useMemo } from "react";
 import { Position } from "@xyflow/react";
 import {
   BaseEdge,
-  EdgeLabelRenderer,
   EdgeProps,
   getSmoothStepPath,
   getBezierPath,
@@ -15,6 +14,7 @@ import {
   type ReactFlowState,
 } from "@xyflow/react";
 import { shallow, useShallow } from "zustand/shallow";
+import { EdgeLabelRenderer } from "@/components/flowPortals";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { ArrayNodeData, WorkflowEdgeData } from "@/types";
 import { getSharedGradientId } from "./SharedEdgeGradients";

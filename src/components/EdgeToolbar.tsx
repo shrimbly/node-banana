@@ -3,7 +3,8 @@
 import { Eye, EyeOff, Minus, Pause, Play, Plus, Crosshair, Trash2 } from "lucide-react";
 import { MenuSurface } from "@/components/ui/Menu";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EdgeLabelRenderer, useViewport } from "@xyflow/react";
+import { useViewport } from "@xyflow/react";
+import { EdgeLabelRenderer } from "@/components/flowPortals";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { getImageSequenceNumber } from "@/lib/edges/labels";
 import { edgeGraphIndex } from "@/lib/edges/graphIndex";

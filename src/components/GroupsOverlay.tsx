@@ -2,7 +2,8 @@
 
 import { Ellipsis, Lock, LogOut, Pencil, Play, Repeat, Trash2 } from "lucide-react";
 import { memo, useCallback, useState, useRef, useEffect } from "react";
-import { useStore, ViewportPortal, type ReactFlowState, useReactFlow } from "@xyflow/react";
+import { useStore, type ReactFlowState, useReactFlow } from "@xyflow/react";
+import { ViewportPortal } from "@/components/flowPortals";
 import { useShallow } from "zustand/shallow";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { GROUP_COLOR_ORDER } from "@/store/utils/nodeDefaults";

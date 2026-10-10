@@ -32,6 +32,10 @@ vi.mock("@/store/workflowStore", () => ({
 }));
 
 // Mock useReactFlow
+vi.mock("@/components/flowPortals", () => ({
+  EdgeLabelRenderer: ({ children }: { children: React.ReactNode }) => <foreignObject><div>{children}</div></foreignObject>,
+}));
+
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual("@xyflow/react");
   return {
