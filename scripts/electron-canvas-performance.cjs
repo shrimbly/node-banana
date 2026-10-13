@@ -146,7 +146,8 @@ async function main() {
     // --chromium-flags passes switches to Chromium, e.g. "--enable-features=SkiaGraphite", to try one without changing the app.
     const flags = option('--chromium-flags', '').split(' ').filter(Boolean);
     app = await launchElectron({ executable: executable || require('electron'), args: executable ? flags : [...flags, root], cwd: executable ? undefined : root,
-      env: { ...process.env, NODE_BANANA_ELECTRON_USER_DATA: profile, NODE_BANANA_ELECTRON_PORT: String(port) } });
+      // This measures the classic canvas (scripts/gpu-canvas.cjs measures the GPU canvas).
+      env: { ...process.env, NODE_BANANA_ELECTRON_USER_DATA: profile, NODE_BANANA_ELECTRON_PORT: String(port), NODE_BANANA_GPU_CANVAS: process.env.NODE_BANANA_GPU_CANVAS ?? '0' } });
     const { page } = app;
     await app.run(({ dialog }) => { dialog.showMessageBoxSync = () => 1; });
     await app.window();

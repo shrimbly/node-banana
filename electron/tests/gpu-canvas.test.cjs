@@ -10,21 +10,38 @@ function commandLine(initial = {}) {
   return { switches, getSwitchValue: name => switches[name] ?? '', appendSwitch: (name, value) => { switches[name] = value; } };
 }
 
-test('the GPU canvas switch follows the saved setting, from the next launch', () => {
+test('the GPU canvas is on by default', () => {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'nb-gpu-canvas-'));
-  assert.equal(readGpuCanvasPreference(userData), false);
+  assert.equal(readGpuCanvasPreference(userData), true);
+  const line = commandLine({ 'enable-blink-features': 'Other' });
+  assert.equal(applyGpuCanvasSwitch(line, { userData, env: {} }), true);
+  assert.equal(line.switches['enable-blink-features'], 'Other,CanvasDrawElement');
+});
+
+test('choosing the classic canvas leaves the feature off from the next launch', () => {
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'nb-gpu-canvas-'));
+  writeGpuCanvasPreference(userData, false);
   const off = commandLine();
   assert.equal(applyGpuCanvasSwitch(off, { userData, env: {} }), false);
   assert.deepEqual(off.switches, {});
   writeGpuCanvasPreference(userData, true);
-  const on = commandLine({ 'enable-blink-features': 'Other' });
-  assert.equal(applyGpuCanvasSwitch(on, { userData, env: {} }), true);
-  assert.equal(on.switches['enable-blink-features'], 'Other,CanvasDrawElement');
+  assert.equal(applyGpuCanvasSwitch(commandLine(), { userData, env: {} }), true);
 });
 
-test('NODE_BANANA_GPU_CANVAS=1 turns it on for one run', () => {
+test('an unreadable setting counts as no choice', () => {
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'nb-gpu-canvas-'));
-  const line = commandLine();
-  assert.equal(applyGpuCanvasSwitch(line, { userData, env: { NODE_BANANA_GPU_CANVAS: '1' } }), true);
-  assert.equal(line.switches['enable-blink-features'], 'CanvasDrawElement');
+  fs.writeFileSync(path.join(userData, 'gpu-canvas-v1.json'), '{');
+  assert.equal(readGpuCanvasPreference(userData), true);
+});
+
+test('NODE_BANANA_GPU_CANVAS turns it on or off for one run', () => {
+  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'nb-gpu-canvas-'));
+  writeGpuCanvasPreference(userData, false);
+  const on = commandLine();
+  assert.equal(applyGpuCanvasSwitch(on, { userData, env: { NODE_BANANA_GPU_CANVAS: '1' } }), true);
+  assert.equal(on.switches['enable-blink-features'], 'CanvasDrawElement');
+  writeGpuCanvasPreference(userData, true);
+  const off = commandLine();
+  assert.equal(applyGpuCanvasSwitch(off, { userData, env: { NODE_BANANA_GPU_CANVAS: '0' } }), false);
+  assert.deepEqual(off.switches, {});
 });

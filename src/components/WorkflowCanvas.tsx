@@ -101,7 +101,7 @@ import { NodePlaceholder, setCanvasMoving, useAnyNodeHasFocus, useNodeHasFocus, 
 import { setZoomedOut, useLowDetail, useLowDetailEnabled, useLowDetailZoom } from "./nodes/lowDetail";
 import { NodeLowDetail } from "./nodes/NodeLowDetail";
 import { PerfOverlay } from "./PerfOverlay";
-import { useGpuCanvasActive } from "@/lib/gpuCanvas/setting";
+import { reportGpuCanvasFailure, useGpuCanvasActive, useGpuCanvasFailure } from "@/lib/gpuCanvas/setting";
 import type { GpuEditing } from "./gpuCanvas/editor";
 import { detectAndSplitGrid } from "@/utils/gridSplitter";
 import { logger } from "@/utils/logger";
@@ -500,6 +500,16 @@ export function WorkflowCanvas() {
   // it once out of view, and the edit, which commits on blur, would be lost
   const nodeHasFocus = useAnyNodeHasFocus(lowDetail);
   const { show: showToast } = useToast();
+  // The GPU canvas is rebuilt after a GPU reset; a second reset, or no WebGL2, hands the session to the classic canvas.
+  const [gpuCanvasBuild, setGpuCanvasBuild] = useState(0);
+  const gpuCanvasFailure = useGpuCanvasFailure();
+  const handleGpuCanvasContextLost = useCallback(() => {
+    if (gpuCanvasBuild >= 1) reportGpuCanvasFailure("the graphics card reset more than once");
+    else setGpuCanvasBuild((build) => build + 1);
+  }, [gpuCanvasBuild]);
+  useEffect(() => {
+    if (gpuCanvasFailure) showToast("The GPU canvas stopped working, so the classic canvas is drawing until Node Banana restarts", "warning");
+  }, [gpuCanvasFailure, showToast]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [dropType, setDropType] = useState<"image" | "audio" | "workflow" | "node" | null>(null);
   const [connectionDrop, setConnectionDrop] = useState<ConnectionDropState | null>(null);
@@ -2710,6 +2720,9 @@ export function WorkflowCanvas() {
 
       {gpuCanvasActive ? (
         <GpuCanvas
+          key={gpuCanvasBuild}
+          onFailure={reportGpuCanvasFailure}
+          onContextLost={handleGpuCanvasContextLost}
           nodeTypes={rawNodeTypes}
           edgeTypes={edgeTypes}
           defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}

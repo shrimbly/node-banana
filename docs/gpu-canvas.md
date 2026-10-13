@@ -3,26 +3,46 @@
 The GPU canvas draws the workflow as a three.js scene instead of one page
 element per node. Each node is a picture of the real node component, painted
 off screen with HTML-in-Canvas; the nodes being worked in are the real
-components, laid over the scene. It is behind a setting while it is built.
-Phase 2 drew the canvas; phase 3 (this) edits on it: dragging nodes,
-connecting, deleting, the selection box, the menus, group controls and the
-minimap work as on today's canvas.
+components, laid over the scene. It is the desktop app's canvas. The
+classic React Flow canvas stays one switch away for one release, and the
+browser build keeps it.
 
-## Turning it on
+## Turning it on and off
 
-Settings › Canvas › "GPU canvas (preview)" (`node-banana-gpu-canvas` in
-localStorage, `on` or `off`). It needs HTML-in-Canvas, which Chromium 152
-ships behind the `CanvasDrawElement` Blink feature:
+Settings › Canvas › "GPU canvas" (`node-banana-gpu-canvas` in localStorage,
+`on` or `off`; absent means on in the desktop app, off in the browser). It
+needs HTML-in-Canvas, which Chromium 152 ships behind the
+`CanvasDrawElement` Blink feature:
 
-- **Desktop app**: turning it on writes `gpu-canvas-v1.json` under user data,
-  and the next launch appends `--enable-blink-features=CanvasDrawElement`
-  (`electron/lib/gpu-canvas.cjs`). Until the restart the setting says so.
-  `NODE_BANANA_GPU_CANVAS=1` turns it on for one run (the runner uses it).
-- **Browser**: start Chromium with the same switch.
+- **Desktop app**: every launch appends
+  `--enable-blink-features=CanvasDrawElement` unless the classic canvas was
+  chosen (`electron/lib/gpu-canvas.cjs`, which keeps the choice in
+  `gpu-canvas-v1.json` under user data). Turning the setting off switches to
+  the classic canvas at once and leaves the feature off from the next
+  launch; turning it back on takes a restart, and the setting says so.
+  `NODE_BANANA_GPU_CANVAS=1` or `=0` turns the feature on or off for one run
+  (the runners use it).
+- **Browser**: the classic canvas, unless Chromium was started with the same
+  switch and the setting is turned on.
 
-The canvas is active when the setting is on and `texElementImage2D` exists
-(`useGpuCanvasActive`, `src/lib/gpuCanvas/setting.ts`). Otherwise today's
-React Flow canvas runs, unchanged.
+The canvas is active when the setting is on, `texElementImage2D` exists and
+the GPU canvas has not failed this session (`useGpuCanvasActive`,
+`src/lib/gpuCanvas/setting.ts`). Otherwise the classic canvas runs,
+unchanged.
+
+**Falling back.** If the scene cannot start (no WebGL2) or one of its
+shaders does not compile, the page hands over to the classic canvas for the
+rest of the session and says so in a notice; the setting is left as it was.
+When the GPU resets (`webglcontextlost`), the GPU canvas is built afresh once
+WebGL is back (or after 3 s), repainting from the disk cache; a second reset
+in the same session falls back to the classic canvas.
+
+**Removing React Flow.** With the GPU canvas on, React Flow no longer draws
+the workflow: the scene does, and React Flow only hosts the live nodes and
+the painter's sheets (`LiveLayer.tsx`, `PainterSheet.tsx`), which reuse the
+node components as they are. The classic canvas, and its `WorkflowCanvas`
+branch, are removed once the release that keeps it behind the setting is
+out.
 
 ## How it fits together
 
@@ -114,6 +134,10 @@ image stays until the live component is measured and decoded, then is
 hidden, so the swap shows no gap. When it stops being live it waits up to
 1.5 s for a current painted image (it may have been edited while live)
 before the scene shows it again.
+
+The layer hands React Flow new node objects on each render, carrying the
+size React Flow measured: without it React Flow hides the node until it
+measures it again, which blurs a field being typed in.
 
 Live nodes take the pointer: React Flow sets `pointer-events: none` inline
 on nodes it cannot select or drag, which is every node of the live flow, so
@@ -235,6 +259,15 @@ also compares each node painted alone (bypassing the cache). Without a GPU
 (a Linux container) run it under `xvfb-run` with
 `--input synthetic --chromium-flags "--no-sandbox --use-angle=swiftshader"`;
 frame-rate checks are meaningless there, the rest still run.
+
+The desktop smoke test (`npm run electron:smoke`) runs on whichever canvas
+the app opens with, the GPU canvas by default (`NODE_BANANA_GPU_CANVAS=0`
+for the classic one): it adds a Prompt, makes it live and types into it. In a
+Linux container pass `NODE_BANANA_SMOKE_CHROMIUM_FLAGS="--no-sandbox
+--use-angle=swiftshader"` and run it under `xvfb-run`. The acceptance and
+large-workflow runs check recovery through the classic canvas, so they pin
+it unless `NODE_BANANA_GPU_CANVAS` says otherwise, and
+`electron:performance` measures the classic canvas.
 
 `window.__gpuCanvas` (stats, painter status, sharpness, view, node rects,
 live nodes, `paintNow`, `repaint`) is what the runner drives.

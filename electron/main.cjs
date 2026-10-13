@@ -33,7 +33,7 @@ app.setName('Node Banana');
 app.setPath('userData', process.env.NODE_BANANA_ELECTRON_USER_DATA || path.join(app.getPath('appData'), 'Node Banana'));
 // Test profiles must not pollute the normal application's diagnostics.
 app.setAppLogsPath(process.env.NODE_BANANA_ELECTRON_USER_DATA ? path.join(app.getPath('userData'), 'logs') : undefined);
-// The GPU canvas's Chromium feature, when Settings › Canvas asked for it (applies from the next launch).
+// The GPU canvas's Chromium feature: on unless Settings › Canvas chose the classic canvas (applies from the next launch).
 const gpuCanvasActive = applyGpuCanvasSwitch(app.commandLine, { userData: app.getPath('userData') });
 function validCaller(event) {
   if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) return false;

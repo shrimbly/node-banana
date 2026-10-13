@@ -37,7 +37,9 @@ async function main() {
   };
   const attach = async () => {
     app = await _electron.launch({ executablePath: executable, cwd: os.tmpdir(), timeout: 120000,
-      env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: os.homedir(), TMPDIR: os.tmpdir(), NODE_BANANA_ELECTRON_USER_DATA: profile, NODE_BANANA_ELECTRON_PORT: String(port) } });
+      env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: os.homedir(), TMPDIR: os.tmpdir(), NODE_BANANA_ELECTRON_USER_DATA: profile, NODE_BANANA_ELECTRON_PORT: String(port),
+        // Recovery is checked through the classic canvas's nodes; NODE_BANANA_GPU_CANVAS=1 runs it on the GPU canvas.
+        NODE_BANANA_GPU_CANVAS: process.env.NODE_BANANA_GPU_CANVAS ?? '0' } });
     child = app.process();
     child.stderr.on('data', data => { if (/OOM|FATAL|heap out of memory/i.test(String(data))) process.stderr.write(data); });
     await app.evaluate(({ dialog }) => { dialog.showMessageBoxSync = () => 0; });

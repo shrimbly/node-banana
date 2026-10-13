@@ -34,6 +34,37 @@ async function controlInput(desktop, control, action) {
   await nativeMouse(desktop, action === 'hover' ? 'm' : 'c', box.x + box.width / 2, box.y + box.height / 2);
 }
 
+// The desktop app draws with the GPU canvas unless the classic canvas was
+// chosen (Settings › Canvas, or NODE_BANANA_GPU_CANVAS=0 for one run). These
+// find the canvas, its empty area and its nodes on either.
+const CANVAS = '[data-gpu-canvas], .react-flow';
+const gpuCanvas = page => page.evaluate(() => !!window.__gpuCanvas);
+function canvasPane(page) {
+  // The GPU canvas's own <canvas> comes before the React Flow sheets it holds.
+  return page.locator('[data-gpu-canvas] > canvas, .react-flow__pane').first();
+}
+async function canvasNodeIds(page) {
+  return page.evaluate(() => window.__gpuCanvas?.nodeIds() ?? [...document.querySelectorAll('.react-flow__node')].map(node => node.dataset.id));
+}
+/** The node's live component, for typing into it: on the GPU canvas a click selects it, which makes it live. */
+async function liveNode(page, id) {
+  if (!await gpuCanvas(page)) return page.locator(`.react-flow__node[data-id="${id}"]`);
+  const point = await page.evaluate(id => {
+    const rect = window.__gpuCanvas.nodeRect(id), canvas = document.querySelector('[data-gpu-canvas] > canvas').getBoundingClientRect();
+    return rect && { x: canvas.x + rect.x + rect.width / 2, y: canvas.y + rect.y + Math.min(rect.height / 2, 40) };
+  }, id);
+  assert.ok(point, `Node ${id} is not on the GPU canvas`);
+  await page.mouse.click(point.x, point.y);
+  const node = page.locator(`[data-gpu-canvas-live] .react-flow__node[data-id="${id}"]`);
+  await node.waitFor();
+  return node;
+}
+
+// Linux without a keyring (a container) asks before keys can be kept; session-only keys do here.
+async function passLinuxKeyPrompt(page) {
+  if (process.platform === 'linux') await page.getByRole('button', { name: 'Use for this session only' }).click({ timeout: 15_000 }).catch(() => {});
+}
+
 async function availablePort() {
   const server = net.createServer();
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -53,7 +84,7 @@ async function checkWindowControls(desktop, page) {
   if (process.platform !== 'darwin') return;
   if (nativeInput) await desktop.evaluate(({ app, BrowserWindow }) => { app.focus({ steal: true }); BrowserWindow.getAllWindows()[0].focus(); });
   if (nativeInput) await nativeMouse(desktop, 'c', 400, 300);
-  else await page.locator('.react-flow__pane').click({ position: { x: 100, y: 100 } });
+  else await canvasPane(page).click({ position: { x: 100, y: 100 } });
   const controls = page.getByRole('group', { name: 'Window controls' });
   const dots = controls.locator('.desktop-window-control-dot');
   const opacities = () => dots.evaluateAll((dots) => dots.map((dot) => Number(getComputedStyle(dot).opacity)));
@@ -173,7 +204,7 @@ async function main() {
   const launch = async () => {
     const instance = await electron.launch({
       executablePath,
-      args: executablePath ? [] : [root, ...(production ? [] : ['--dev'])],
+      args: [...(process.env.NODE_BANANA_SMOKE_CHROMIUM_FLAGS ?? '').split(' ').filter(Boolean), ...(executablePath ? [] : [root, ...(production ? [] : ['--dev'])])],
       cwd: executablePath ? temp : root,
       env: { ...launchEnv, NODE_BANANA_ELECTRON_PORT: String(port), NODE_BANANA_ELECTRON_USER_DATA: profile },
       timeout: 120_000,
@@ -194,7 +225,8 @@ async function main() {
     page.setDefaultTimeout(60_000);
     const errors = [];
     page.on('pageerror', (error) => errors.push(error.message));
-    await page.locator('.react-flow').waitFor();
+    await passLinuxKeyPrompt(page);
+    await page.locator(CANVAS).first().waitFor();
     if (nativeInput) {
       await desktop.evaluate(({ app, BrowserWindow }) => {
         const window = BrowserWindow.getAllWindows()[0];
@@ -232,13 +264,16 @@ async function main() {
       assert.equal(await page.locator('.desktop-window-minimize .desktop-window-control-dot').evaluate((dot) => getComputedStyle(dot).opacity), '1');
       console.log('PASS: keyboard focus also brightens the focused window control');
     }
-    await page.locator('.react-flow__pane').click({ position: { x: 100, y: 100 } });
-    const initialNodes = await page.locator('.react-flow__node').count();
+    await canvasPane(page).click({ position: { x: 100, y: 100 } });
+    const initialNodes = await canvasNodeIds(page);
     await page.keyboard.press('Shift+P');
-    const prompt = page.getByPlaceholder('Describe what to generate...').last();
+    await page.waitForFunction(count => (window.__gpuCanvas?.nodeIds() ?? document.querySelectorAll('.react-flow__node')).length === count, initialNodes.length + 1);
+    const added = (await canvasNodeIds(page)).find(id => !initialNodes.includes(id));
+    const prompt = (await liveNode(page, added)).getByPlaceholder('Describe what to generate...');
     await prompt.fill('Electron smoke test prompt');
-    assert.equal(await page.locator('.react-flow__node').count(), initialNodes + 1);
-    console.log('PASS: keyboard shortcut adds a node and its prompt is editable');
+    // On the GPU canvas the edit must reach the store, which the node's picture is painted from.
+    assert.equal(await page.evaluate(id => window.__gpuCanvas ? window.__gpuCanvas.data(id)?.prompt : null, added) ?? await prompt.inputValue(), 'Electron smoke test prompt');
+    console.log(`PASS: keyboard shortcut adds a node and its prompt is editable (${await gpuCanvas(page) ? 'GPU' : 'classic'} canvas)`);
     const clipboardPermission = await page.evaluate(async () => {
       return (await navigator.permissions.query({ name: 'clipboard-read' })).state;
     });
@@ -303,7 +338,8 @@ async function main() {
 
     desktop = await launch();
     const reopened = await desktop.firstWindow({ timeout: 120_000 });
-    await reopened.locator('.react-flow').waitFor({ timeout: 60_000 });
+    await passLinuxKeyPrompt(reopened);
+    await reopened.locator(CANVAS).first().waitFor({ timeout: 60_000 });
     assert.equal(await reopened.evaluate(() => localStorage.getItem('node-banana-electron-smoke')), 'persisted');
     assert.equal(await reopened.evaluate(() => localStorage.getItem('node-banana-ftux-completed')), 'true');
     console.log('PASS: desktop settings survive a full restart');
@@ -320,7 +356,7 @@ async function main() {
   }
 }
 
-module.exports = { checkWindowControls, checkStartupWindowControls, checkLibraryRoot };
+module.exports = { checkWindowControls, checkStartupWindowControls, checkLibraryRoot, CANVAS, canvasPane, canvasNodeIds, liveNode };
 if (require.main === module) main().catch((error) => {
   console.error(error);
   process.exitCode = 1;

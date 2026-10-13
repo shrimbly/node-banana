@@ -55,6 +55,8 @@ async function main() {
   const port = occupied.address().port;
   const env = Object.fromEntries(['HOME', 'TMPDIR', 'LANG'].filter(key => process.env[key]).map(key => [key, process.env[key]]));
   env.PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
+  // Recovery is checked through the classic canvas's text fields; the smoke test covers the GPU canvas.
+  env.NODE_BANANA_GPU_CANVAS = process.env.NODE_BANANA_GPU_CANVAS ?? '0';
   const launch = async () => {
     const instance = await electron.launch({ executablePath: path.join(installed, 'Contents/MacOS/Node Banana'), args: [], cwd: temp,
       env: { ...env, NODE_BANANA_ELECTRON_PORT: String(port), NODE_BANANA_ELECTRON_USER_DATA: profile }, timeout: 120000 });
