@@ -1,6 +1,7 @@
 "use client";
 
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { useNodeId } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import type { WorkflowNodeData } from "@/types";
 
@@ -35,4 +36,42 @@ export function useUpdateNodeData(): UpdateNodeData {
   const painted = useContext(PaintedContext);
   const update = useWorkflowStore((state) => state.updateNodeData);
   return painted ? ignoreWrite : update;
+}
+
+/**
+ * The store's `updateNodeData`, painted copy or not: for an effect that keeps
+ * values derived from upstream in the node's data (a Switch's input type, a
+ * Prompt Constructor's resolved text) and writes only when they differ. On
+ * the GPU canvas a node is mounted mostly as a painted copy, painted again
+ * whenever something upstream changes, so that is where it derives.
+ */
+export function useDerivedNodeData(): UpdateNodeData {
+  return useWorkflowStore((state) => state.updateNodeData);
+}
+
+/**
+ * On the GPU canvas a node is a live component only while it is worked in
+ * (hovered, selected, focused); otherwise it is unmounted and drawn as a
+ * picture. Whatever a node shows from its own state (a dialog, a lightbox, a
+ * menu in a portal) would close the moment the pointer moved onto it and
+ * the node stopped being live. A node holds itself live while such a thing
+ * is open. Elsewhere (today's canvas, a painted copy) this does nothing.
+ */
+export type HoldLive = (nodeId: string) => () => void;
+
+const HoldLiveContext = createContext<HoldLive | null>(null);
+
+export function HoldLiveProvider({ hold, children }: { hold: HoldLive; children: ReactNode }) {
+  return <HoldLiveContext.Provider value={hold}>{children}</HoldLiveContext.Provider>;
+}
+
+/** Keeps this node live while `active` (inside a node; the node's id comes from React Flow). */
+export function useHoldLive(active: boolean, nodeId?: string | null) {
+  const hold = useContext(HoldLiveContext);
+  const contextId = useNodeId();
+  const id = nodeId ?? contextId;
+  useEffect(() => {
+    if (!active || !hold || !id) return;
+    return hold(id);
+  }, [active, hold, id]);
 }

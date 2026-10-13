@@ -397,6 +397,7 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
   return (
     <div
       className="absolute pointer-events-none transition-opacity duration-200"
+      data-node-header={id}
       style={{
         left: `${position.x}px`,
         top: `${position.y - 26}px`,

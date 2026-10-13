@@ -25,7 +25,7 @@ import {
   setPending,
   removePending,
 } from "@/store/thumbnailCache";
-import { useUpdateNodeData } from "./paintMode";
+import { useDerivedNodeData, useUpdateNodeData } from "./paintMode";
 
 type GifEncoderNodeType = Node<GifEncoderNodeData, "gifEncoder">;
 
@@ -116,6 +116,7 @@ function formatBytes(bytes: number | null): string {
 export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeType>) {
   const nodeData = data;
   const updateNodeData = useUpdateNodeData();
+  const deriveNodeData = useDerivedNodeData();
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const removeEdge = useWorkflowStore((state) => state.removeEdge);
   const isRunning = useWorkflowStore((state) => state.isRunning);
@@ -146,9 +147,9 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
       !next.every((eid, i) => eid === current[i])
     ) {
       lastWritten.current = next;
-      updateNodeData(id, { clipOrder: next });
+      deriveNodeData(id, { clipOrder: next });
     }
-  }, [imageEdges, nodeData.clipOrder, id, updateNodeData]);
+  }, [imageEdges, nodeData.clipOrder, id, deriveNodeData]);
 
   // Build ordered frame list for the filmstrip
   const orderedFrames = useMemo(() => {

@@ -17,7 +17,7 @@ import { cubicLength, distanceToCubic, type Cubic, type EdgeRoute } from "./edge
 
 /** Floats per node instance: rect (4), uv rect (4), colour (3), flags (1), layer (1), the node's own box within the rect (4), unused (3). */
 const NODE_STRIDE = 20;
-const FLAG_SELECTED = 1, FLAG_HOVERED = 2, FLAG_HIDDEN = 4, FLAG_GROUP = 8, FLAG_PAINTED = 16;
+const FLAG_SELECTED = 1, FLAG_HOVERED = 2, FLAG_HIDDEN = 4, FLAG_GROUP = 8, FLAG_PAINTED = 16, FLAG_RUNNING = 32;
 /**
  * Floats per edge instance, one cubic segment of a connection: the cubic (8),
  * colour (3), flags (1), width (1), length along the edge where it starts (1)
@@ -63,6 +63,7 @@ const COMMON = /* glsl */ `
 const NODE_VERTEX = /* glsl */ `
   precision highp float;
   ${COMMON}
+  uniform float uPad;
   in vec2 position;
   in vec4 iRect;
   in vec4 iUv;
@@ -81,8 +82,8 @@ const NODE_VERTEX = /* glsl */ `
     vFlags = int(iFlags);
     vBox = iBox;
     if ((vFlags & ${FLAG_HIDDEN}) != 0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
-    // Room for the outline and antialiasing.
-    float pad = 3.0 / uView.z;
+    // Room for the outline and antialiasing (and the running halo, for its pass).
+    float pad = uPad / uView.z;
     vec2 local = position * (iRect.zw + 2.0 * pad) - pad;
     vLocal = local; vSize = iRect.zw; vUv = iUv; vColor = iColor; vLayer = iLayer;
     // The node starts on a whole pixel, as the page lays it out, so a painted
@@ -166,6 +167,41 @@ const OUTLINE_FRAGMENT = /* glsl */ `
     float ring = clamp(1.0 - abs(d - 1.5 * px) / (1.5 * px), 0.0, 1.0);
     vec3 ringColor = (vFlags & ${FLAG_SELECTED}) != 0 ? vec3(0.32, 0.6, 1.0) : vec3(0.5);
     outColor = vec4(ringColor, ring);
+  }
+`;
+
+/**
+ * A running node seen zoomed out (as NodeLowDetail's .node-low-detail-running
+ * draws it today): a tint over the node and a 12 px halo around it, pulsing
+ * between 35% and full strength every 0.9 s; held at 80% under reduced motion.
+ */
+const HALO_FRAGMENT = /* glsl */ `
+  precision highp float;
+  uniform vec3 uView;
+  uniform float uTime;
+  uniform float uMotion;
+  in vec2 vLocal;
+  in vec2 vSize;
+  in vec4 vUv;
+  in vec3 vColor;
+  flat in int vFlags;
+  flat in float vLayer;
+  flat in vec4 vBox;
+  out vec4 outColor;
+  float box(vec2 p, vec2 half_, float r) { vec2 q = abs(p) - half_ + r; return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - r; }
+  void main() {
+    if ((vFlags & ${FLAG_RUNNING}) == 0) discard;
+    float px = 1.0 / uView.z;
+    vec2 half_ = vBox.zw * 0.5;
+    float d = box(vLocal - vBox.xy - half_, half_, 12.0);
+    float inside = clamp(0.5 - d / px, 0.0, 1.0);
+    float halo = clamp(0.5 - (d - 12.0 * px) / px, 0.0, 1.0) * (1.0 - inside);
+    float alpha = inside * 0.4 + halo * 0.6;
+    if (alpha <= 0.0) discard;
+    // 0.9 s each way; smoothstep stands in for the CSS ease.
+    float phase = mod(uTime / 0.9, 2.0);
+    float pulse = mix(0.35, 1.0, smoothstep(0.0, 1.0, phase < 1.0 ? phase : 2.0 - phase));
+    outColor = vec4(0.231, 0.510, 0.965, alpha * (uMotion > 0.5 ? pulse : 0.8));
   }
 `;
 
@@ -307,6 +343,8 @@ export interface SceneCallbacks {
   /** A double-click on empty canvas, at a flow position. */
   onPaneDoubleClick?: (x: number, y: number, screen: { x: number; y: number }) => void;
   onViewChange?: (view: View) => void;
+  /** The zoom below which running nodes show a halo (0: never). */
+  runningHaloBelow?: () => number;
   /** A press, drag or wheel on the canvas: the user is navigating. */
   onInput?: () => void;
   /** ms from an input event to the frame that drew its effect (the page's own part of input latency). */
@@ -335,7 +373,12 @@ export class Scene {
   private uniforms = { uViewport: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector3() }, uDpr: { value: 1 } };
   private nodeData = new Float32Array(0);
   private nodeAttr: THREE.InstancedInterleavedBuffer | null = null;
-  private nodeUniforms: Record<string, THREE.IUniform> = { ...this.uniforms, uPainted: { value: EMPTY_ARRAY } };
+  private nodeUniforms: Record<string, THREE.IUniform> = { ...this.uniforms, uPainted: { value: EMPTY_ARRAY }, uPad: { value: 3 } };
+  private haloUniforms: Record<string, THREE.IUniform> = { ...this.uniforms, uPad: { value: 16 }, uTime: { value: 0 }, uMotion: { value: 1 } };
+  private haloMesh: THREE.Mesh | null = null;
+  /** Nodes a run is on, by id (they keep it across graph rebuilds). */
+  private running = new Set<string>();
+  private reducedMotion = typeof matchMedia === "function" ? matchMedia("(prefers-reduced-motion: reduce)") : null;
   private edgeData = new Float32Array(0);
   private edgeAttr: THREE.InstancedInterleavedBuffer | null = null;
   private edgeGeometry: THREE.InstancedBufferGeometry | null = null;
@@ -358,6 +401,7 @@ export class Scene {
   private hovered = -1;
   private index: GridIndex;
   private dirty = true;
+  private haloWasShown = false;
   private frameHandle = 0;
   private disposed = false;
   private gesture: Gesture | null = null;
@@ -435,6 +479,9 @@ export class Scene {
     this.addGraphMesh(new THREE.Mesh(geometry, material(NODE_VERTEX, NODE_FRAGMENT, this.nodeUniforms)), 3);
     // The same instances again, drawing only outlines over painted nodes.
     this.addGraphMesh(new THREE.Mesh(geometry, material(NODE_VERTEX, OUTLINE_FRAGMENT, this.nodeUniforms)), 4);
+    // And again for running nodes' halos, shown only zoomed out.
+    this.haloMesh = new THREE.Mesh(geometry, material(NODE_VERTEX, HALO_FRAGMENT, this.haloUniforms));
+    this.addGraphMesh(this.haloMesh, 5);
     this.dirty = true;
   }
 
@@ -464,6 +511,7 @@ export class Scene {
     let flags = this.hidden.has(i) ? FLAG_HIDDEN : 0;
     if (this.selected.has(i)) flags |= FLAG_SELECTED;
     if (this.hovered === i) flags |= FLAG_HOVERED;
+    if (this.running.has(node.id)) flags |= FLAG_RUNNING;
     const painted = this.painted.get(i);
     if (painted) {
       this.nodeData.set([node.x + painted.x, node.y + painted.y, painted.w, painted.h, painted.u0, painted.v0, painted.u1, painted.v1,
@@ -529,7 +577,7 @@ export class Scene {
     const [sx, sy, tx, ty] = this.graph.edgeEnds(e);
     const d = tx - sx, off = d >= 0 ? 0.5 * d : 0.25 * 25 * Math.sqrt(-d);
     const segment: Cubic = [sx, sy, sx + off, sy, tx - off, ty, tx, ty];
-    return { segments: [segment], stems: [], ends: [sx, sy, tx, ty], labelX: (sx + tx) / 2, labelY: (sy + ty) / 2, width: 3, dashed: false, hidden: false, decorated: false };
+    return { segments: [segment], stems: [], ends: [sx, sy, tx, ty], labelX: (sx + tx) / 2, labelY: (sy + ty) / 2, width: 3, dashed: false, hidden: false, decorated: false, running: false };
   }
 
   private writeEdge(e: number) {
@@ -779,6 +827,22 @@ export class Scene {
     this.dirty = true;
   }
 
+  /** The nodes a run is on (in the run, or loading on their own): halos when zoomed out. */
+  setRunning(ids: Iterable<string>) {
+    const next = new Set(ids);
+    const changed = [...this.running].filter((id) => !next.has(id)).concat([...next].filter((id) => !this.running.has(id)));
+    this.running = next;
+    for (const id of changed) {
+      const i = this.graph.indexOf.get(id);
+      if (i != null) this.touchNode(i);
+    }
+  }
+
+  /** Halos show while zoomed out below the canvas's low-detail zoom (low detail on). */
+  private haloShown() {
+    return this.running.size > 0 && this.view.zoom < (this.callbacks.runningHaloBelow?.() ?? 0);
+  }
+
   /** Called whenever nodes move, resize or the graph is rebuilt. */
   onLayoutChanged(listener: () => void): () => void {
     this.layoutListeners.add(listener);
@@ -977,6 +1041,16 @@ export class Scene {
     if (this.disposed) return;
     this.frameHandle = requestAnimationFrame(this.tick);
     let jsMs = 0;
+    const halo = this.haloShown();
+    if (this.haloMesh) this.haloMesh.visible = halo;
+    if (halo) {
+      const motion = this.reducedMotion?.matches ? 0 : 1;
+      // A pulsing halo draws every frame; a still one only when it starts.
+      if (motion || this.haloUniforms.uMotion.value !== motion || !this.haloWasShown) this.dirty = true;
+      this.haloUniforms.uMotion.value = motion;
+      this.haloUniforms.uTime.value = now / 1000;
+    } else if (this.haloWasShown) this.dirty = true;
+    this.haloWasShown = halo;
     if (this.dirty) {
       const start = performance.now();
       this.dirty = false;

@@ -115,6 +115,49 @@ hidden, so the swap shows no gap. When it stops being live it waits up to
 1.5 s for a current painted image (it may have been edited while live)
 before the scene shows it again.
 
+Live nodes take the pointer: React Flow sets `pointer-events: none` inline
+on nodes it cannot select or drag, which is every node of the live flow, so
+the live layer's style overrides it. Hover follows the live node the pointer
+is on (its floating header included) as well as the scene's hit test.
+
+## Live content
+
+Today's canvas keeps some nodes mounted whatever the view (`nodeCulling`'s
+always-mounted types) because their component holds what the store does
+not. On the GPU canvas a node stays live for as long as it holds something
+(`liveContent.ts`, `useHoldLive`):
+
+- **held**: the node shows something of its own: a model browser, a
+  lightbox, a variables or presets dialog, the grid editor, an open
+  dropdown. The component holds itself live with `useHoldLive(open)`.
+- **playing**: its video or audio plays (play pressed, or a hover preview),
+  so playback and its sound go on when the pointer leaves. Videos are not
+  textures in the scene: a playing one is a real `<video>` on the live
+  layer, and a still one is painted at its first frame (painting waits for
+  it, as for images).
+- **resident**: the 3D viewer, always: it holds a WebGL view the user orbits.
+  Its blob URL outlives an unmount unless the node or its model went.
+- **pending**: a ComfyUI node with a workflow to import or a "Replace
+  workflow…" to answer, or a run streaming previews.
+- **running**: a node loading its output, so its spinner turns. Its
+  connections show the comet at any zoom (other decorated connections go
+  live from 30%).
+
+Zoomed out past the low-detail zoom (Settings › Canvas), running nodes stay
+pictures and the scene draws today's low-detail running halo over every node
+the run is on, pulsing (static under reduced motion). A run's outline shows
+in a node's picture: the run is marked on its paint key apart from its data
+(`runMark`), so a run starting repaints the nodes near the view at once and
+the rest as the view reaches them, and the nodes they feed are not touched.
+
+A painted copy writes nothing, with one exception: effects that keep
+values derived from upstream in a node's data (a Switch's input type, a
+Prompt Constructor's text, an Array's items, a resize's source image, clip
+order) write through `useDerivedNodeData`. A node is painted again whenever
+something upstream changes, so that is where it derives. Output nodes run on
+a new connection through a store watcher (`outputAutoRun.ts`) instead of
+their component. Annotation opens its editor from the live node, as today.
+
 ## Editing
 
 The scene takes every press and asks the editor what it starts:
@@ -152,6 +195,13 @@ handles. That happens on screen at 30% zoom and above, for up to 250.
 - A live connection's decorations draw over painted nodes they pass under.
 - A node whose look depends on state outside its data and its inputs (a
   file loading elsewhere, a timer) may paint stale until its key changes.
+
+## What phase 4 leaves out
+
+- Videos are never textures in the scene: a playing video is a live
+  `<video>`, so many playing at once cost what they cost on today's canvas.
+- Spinners outside a loading node (a thumbnail resolving, a button waiting)
+  are painted still.
 
 ## Measuring
 

@@ -14,6 +14,8 @@ import { useVideoAutoplay } from "@/hooks/useVideoAutoplay";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
 import { downloadMedia, MediaType } from "@/utils/downloadMedia";
 import { EmptyState, ScrubRow, type SocketSpec } from "./ui";
+import { useHoldLive, useIsPaintedNode } from "./paintMode";
+import { useGpuCanvasActive } from "@/lib/gpuCanvas/setting";
 
 type OutputNodeType = Node<OutputNodeData, "output">;
 
@@ -34,6 +36,12 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
   );
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const [showLightbox, setShowLightbox] = useState(false);
+  useHoldLive(showLightbox);
+  // A painted copy never runs anything; on the GPU canvas, where this node is
+  // mounted only while worked in, the canvas runs it on a new connection
+  // instead (outputAutoRun.ts).
+  const painted = useIsPaintedNode();
+  const gpuCanvas = useGpuCanvasActive();
   const previousEdgeCountRef = useRef<number | null>(null);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
@@ -69,6 +77,7 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
 
   // Auto-trigger execution when a new connection is made
   useEffect(() => {
+    if (painted || gpuCanvas) return;
     if (previousEdgeCountRef.current === null) {
       // First run — just record the baseline, don't trigger
       previousEdgeCountRef.current = connectedEdgeCount;
@@ -78,7 +87,7 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
       regenerateNode(id);
     }
     previousEdgeCountRef.current = connectedEdgeCount;
-  }, [connectedEdgeCount, id, regenerateNode]);
+  }, [connectedEdgeCount, id, regenerateNode, painted, gpuCanvas]);
 
   const handleDownload = useCallback(async () => {
     if (!contentSrc) return;

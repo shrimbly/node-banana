@@ -33,7 +33,7 @@ import type {
 } from "@/lib/comfy/types";
 import type { ComfyAppNodeData, ComfyRunHistoryItem } from "@/types";
 import { downloadMedia } from "@/utils/downloadMedia";
-import { useUpdateNodeData } from "./paintMode";
+import { useHoldLive, useIsPaintedNode, useUpdateNodeData } from "./paintMode";
 
 type ComfyAppNodeType = Node<ComfyAppNodeData, "comfyApp">;
 
@@ -53,16 +53,19 @@ export function ComfyAppNode({ id, data, selected }: NodeProps<ComfyAppNodeType>
   const updateNodeData = useUpdateNodeData();
   /** `replace` picks a different workflow; `edit` revisits this one's picks. */
   const [modal, setModal] = useState<"replace" | "edit" | null>(null);
+  useHoldLive(modal !== null);
+  // A painted copy opens nothing and takes no request: the live node does.
+  const painted = useIsPaintedNode();
   /** A workflow dropped on the canvas, to be read instead of asking for a file. */
   const [dropped, setDropped] = useState<ComfyUpload | null>(null);
 
   // Created from the connection menu, which had nowhere to attach its wire —
   // go straight to choosing a workflow so the node becomes usable.
   useEffect(() => {
-    if (!nodeData._autoOpenImport) return;
+    if (painted || !nodeData._autoOpenImport) return;
     setModal("replace");
     updateNodeData(id, { _autoOpenImport: false });
-  }, [nodeData._autoOpenImport, id, updateNodeData]);
+  }, [nodeData._autoOpenImport, id, updateNodeData, painted]);
 
   // Created by dropping a ComfyUI workflow onto the canvas: skip the file step
   // and read the dropped file straight away. It moves into local state because
@@ -70,22 +73,24 @@ export function ComfyAppNode({ id, data, selected }: NodeProps<ComfyAppNodeType>
   // carry a copy of the upload it was built from.
   useEffect(() => {
     const pending = nodeData._pendingWorkflow;
-    if (!pending) return;
+    if (painted || !pending) return;
     setDropped(pending);
     setModal("replace");
     updateNodeData(id, { _pendingWorkflow: null });
-  }, [nodeData._pendingWorkflow, id, updateNodeData]);
+  }, [nodeData._pendingWorkflow, id, updateNodeData, painted]);
 
   // "Replace workflow…" in the node header's menu.
-  useEffect(
-    () =>
-      useComfyAppRequestStore.subscribe((state) => {
-        if (state.request?.nodeId !== id) return;
-        state.consumeRequest();
-        setModal("replace");
-      }),
-    [id],
-  );
+  useEffect(() => {
+    if (painted) return;
+    const take = (state: ReturnType<typeof useComfyAppRequestStore.getState>) => {
+      if (state.request?.nodeId !== id) return;
+      state.consumeRequest();
+      setModal("replace");
+    };
+    // A request made before this node was mounted (on the GPU canvas it mounts on request).
+    take(useComfyAppRequestStore.getState());
+    return useComfyAppRequestStore.subscribe(take);
+  }, [id, painted]);
 
   const edges = useWorkflowStore((state) => state.edges);
   const removeEdge = useWorkflowStore((state) => state.removeEdge);
@@ -289,8 +294,9 @@ export function ComfyAppNode({ id, data, selected }: NodeProps<ComfyAppNodeType>
 
   const isRunning = nodeData.status === "loading";
   // The latent as it forms. Only the v2 engines emit these, so it stays null
-  // on a stock ComfyUI and the node keeps its spinner.
-  const livePreview = useComfyPreview(nodeData.jobId, isRunning);
+  // on a stock ComfyUI and the node keeps its spinner. Only the live node
+  // streams them: a painted copy would open a stream each time it paints.
+  const livePreview = useComfyPreview(nodeData.jobId, isRunning && !painted);
 
   // The carousel of past runs. A run has every output the app declared, so
   // going back to one reloads each media output by its handle (from the

@@ -102,6 +102,8 @@ export interface EdgeRoute {
   hidden: boolean;
   /** Shows more than its stroke; see the top of this file. */
   decorated: boolean;
+  /** Its target is loading: it shows the running comet (and so is decorated), at any zoom. */
+  running: boolean;
 }
 
 export interface RouteContext {
@@ -140,7 +142,7 @@ export function routeSceneEdge(graph: SceneGraph, e: number, context: RouteConte
   const loading = context.appearance.loadingPulse && (targetNode?.data as { status?: string } | undefined)?.status === "loading";
   if (isReference && !hidden) {
     const [path, labelX, labelY] = routeEdge({ style: "curved", sourceX: source.x, sourceY: source.y, sourcePosition: source.position, targetX: target.x, targetY: target.y, targetPosition: target.position });
-    return { segments: pathToCubics(path), stems: [], ends: [source.x, source.y, target.x, target.y], labelX, labelY, width, dashed: true, hidden, decorated: false };
+    return { segments: pathToCubics(path), stems: [], ends: [source.x, source.y, target.x, target.y], labelX, labelY, width, dashed: true, hidden, decorated: false, running: false };
   }
   const stems: EdgeRoute["stems"] = [];
   let startX = source.x, endX = target.x, decorated = hidden || loading || !!data?.hasPause || !!data?.isLoop || !!data?.label?.trim();
@@ -177,5 +179,5 @@ export function routeSceneEdge(graph: SceneGraph, e: number, context: RouteConte
     startX, endX, isLoop: data?.isLoop, offsetX: (data as { offsetX?: number } | undefined)?.offsetX ?? 0,
     hooks: hooks.length ? hooks : undefined,
   });
-  return { segments: hidden ? [] : pathToCubics(path), stems, ends: [source.x, source.y, target.x, target.y], labelX, labelY, width, dashed: false, hidden, decorated };
+  return { segments: hidden ? [] : pathToCubics(path), stems, ends: [source.x, source.y, target.x, target.y], labelX, labelY, width, dashed: false, hidden, decorated, running: loading && !hidden };
 }

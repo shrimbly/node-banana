@@ -14,7 +14,7 @@ import { useAddMediaNode } from "@/hooks/useAddMediaNode";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import { downloadMedia as downloadMediaUtil } from "@/utils/downloadMedia";
 import { Check, Download, ImagePlus, LibraryBig, Menu, Play, Trash2 } from "lucide-react";
-import { useUpdateNodeData } from "./paintMode";
+import { useHoldLive, useUpdateNodeData } from "./paintMode";
 
 const INPUT_SOCKETS: SocketSpec[] = [
   { id: "image", type: "image", label: "Image" },
@@ -47,6 +47,7 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
   const { getNodes, setNodes } = useReactFlow();
   const addMediaNode = useAddMediaNode();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  useHoldLive(lightboxIndex !== null);
   // "Add to graph" reads "Added" for the item it just added, as in the history viewer
   const [addedId, setAddedId] = useState<string | null>(null);
   const setAppView = useAssetStore((state) => state.setAppView);

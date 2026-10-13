@@ -76,7 +76,29 @@ function loaded(img: HTMLImageElement): Promise<void> {
   }).then(() => img.decode().catch(noop));
 }
 
-/** Waits for React Flow to measure the nodes (it hides a node until then), then for every image in `root` to decode. */
+/** A video with a source whose first frame is still to come (one set not to preload never shows one). */
+function videoLoading(video: HTMLVideoElement): boolean {
+  return !!(video.currentSrc || video.getAttribute("src")) && !video.error && video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA && video.preload !== "none";
+}
+
+function videoLoaded(video: HTMLVideoElement): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const done = () => {
+      video.removeEventListener("loadeddata", done);
+      video.removeEventListener("error", done);
+      resolve();
+    };
+    video.addEventListener("loadeddata", done);
+    video.addEventListener("error", done);
+    if (!videoLoading(video)) done();
+  });
+}
+
+/**
+ * Waits for React Flow to measure the nodes (it hides a node until then),
+ * then for every image in `root` to decode and every video to show its
+ * first frame (a picture of a video is of that frame).
+ */
 export async function settleNodes(root: HTMLElement, ids: readonly string[], until: number, cancelled: () => boolean = () => false): Promise<{ decodeMs: number; unloaded: Set<string> }> {
   const element = (id: string) => root.querySelector<HTMLElement>(`.react-flow__node[data-id="${CSS.escape(id)}"]`);
   for (;;) {
@@ -98,12 +120,14 @@ export async function settleNodes(root: HTMLElement, ids: readonly string[], unt
     const images = [...root.querySelectorAll("img")];
     // A broken image is complete with no width: it is not waited for again.
     const loading = images.filter((img) => img.getAttribute("src") && !(img.complete && (img.naturalWidth || seen)));
-    const signature = images.map((img) => img.currentSrc || img.getAttribute("src") || "").join("\n");
-    if (!loading.length && signature === seen) break;
+    const videos = [...root.querySelectorAll("video")];
+    const loadingVideos = videos.filter(videoLoading);
+    const signature = [...images.map((img) => img.currentSrc || img.getAttribute("src") || ""), ...videos.map((v) => v.currentSrc || v.getAttribute("src") || "")].join("\n");
+    if (!loading.length && !loadingVideos.length && signature === seen) break;
     seen = signature;
     // Bounded: an image that never loads (lazy, or a stalled request) holds the batch only until the deadline.
     let allLoaded = false;
-    void Promise.all(loading.map(loaded)).then(() => { allLoaded = true; });
+    void Promise.all([...loading.map(loaded), ...loadingVideos.map(videoLoaded)]).then(() => { allLoaded = true; });
     while (!allLoaded && performance.now() < until && !cancelled()) await nextFrame();
     decodeMs = performance.now() - started;
     if (cancelled()) break;
@@ -115,6 +139,11 @@ export async function settleNodes(root: HTMLElement, ids: readonly string[], unt
   for (const img of root.querySelectorAll("img")) {
     if (!img.getAttribute("src") || img.complete) continue;
     const id = img.closest(".react-flow__node")?.getAttribute("data-id");
+    if (id) unloaded.add(id);
+  }
+  for (const video of root.querySelectorAll("video")) {
+    if (!videoLoading(video)) continue;
+    const id = video.closest(".react-flow__node")?.getAttribute("data-id");
     if (id) unloaded.add(id);
   }
   return { decodeMs, unloaded };

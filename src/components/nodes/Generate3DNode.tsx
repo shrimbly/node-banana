@@ -26,7 +26,7 @@ import {
   type SocketSpec,
 } from "./ui";
 import { Box, Folder, X } from "lucide-react";
-import { useUpdateNodeData } from "./paintMode";
+import { useHoldLive, useIsPaintedNode, useUpdateNodeData } from "./paintMode";
 
 const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "3d", type: "3d", label: "3D" }];
 const MEDIA_HEIGHT = 112;
@@ -37,6 +37,8 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
   const nodeData = data;
   const updateNodeData = useUpdateNodeData();
   const [isBrowseDialogOpen, setIsBrowseDialogOpen] = useState(false);
+  useHoldLive(isBrowseDialogOpen);
+  const painted = useIsPaintedNode();
   const [settingsTab, setSettingsTab] = useState<"primary" | "fallback">("primary");
 
   useEffect(() => {
@@ -47,9 +49,11 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
 
   // Register browse callback for floating header button
   useEffect(() => {
+    // A painted copy would replace the live node's handler, then remove it as it unmounts.
+    if (painted) return;
     browseRegistry.register(id, () => setIsBrowseDialogOpen(true));
     return () => { browseRegistry.unregister(id); };
-  }, [id]);
+  }, [id, painted]);
 
   // Get the current selected provider (default to fal since most 3D models are there)
   const currentProvider: ProviderType = nodeData.selectedModel?.provider || "fal";

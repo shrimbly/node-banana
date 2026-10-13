@@ -23,7 +23,7 @@ import { VideoStitchNodeData, WorkflowNode } from "@/types";
 import { checkEncoderSupport } from "@/hooks/useStitchVideos";
 import { useVideoBlobUrl } from "@/hooks/useVideoBlobUrl";
 import { useVideoAutoplay } from "@/hooks/useVideoAutoplay";
-import { useUpdateNodeData } from "./paintMode";
+import { useDerivedNodeData, useUpdateNodeData } from "./paintMode";
 
 type VideoStitchNodeType = Node<VideoStitchNodeData, "videoStitch">;
 
@@ -38,6 +38,7 @@ const LOOP_OPTIONS = [
 export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNodeType>) {
   const nodeData = data;
   const updateNodeData = useUpdateNodeData();
+  const deriveNodeData = useDerivedNodeData();
   const edges = useWorkflowStore((state) => state.edges);
   const [thumbnails, setThumbnails] = useState<Map<string, string>>(new Map());
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
@@ -96,9 +97,9 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
       !newOrder.every((eid, idx) => eid === currentOrder[idx])
     ) {
       lastWrittenClipOrderRef.current = newOrder;
-      updateNodeData(id, { clipOrder: newOrder });
+      deriveNodeData(id, { clipOrder: newOrder });
     }
-  }, [videoEdges, nodeData.clipOrder, id, updateNodeData]);
+  }, [videoEdges, nodeData.clipOrder, id, deriveNodeData]);
 
   // Get ordered clips based on clipOrder or connection order
   const orderedClips = useMemo(() => {

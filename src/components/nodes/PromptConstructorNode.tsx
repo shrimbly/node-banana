@@ -11,7 +11,7 @@ import { nodeGraphIndex } from "@/lib/edges/graphIndex";
 import { PromptConstructorNodeData, PromptNodeData, LLMGenerateNodeData, AvailableVariable, WorkflowNode } from "@/types";
 import { resolveTextSourcesThroughRouters } from "@/store/utils/connectedInputs";
 import { parseVarTags } from "@/utils/parseVarTags";
-import { useUpdateNodeData } from "./paintMode";
+import { useDerivedNodeData, useUpdateNodeData } from "./paintMode";
 
 type PromptConstructorNodeType = Node<PromptConstructorNodeData, "promptConstructor">;
 
@@ -22,6 +22,7 @@ const DEFAULT_HEIGHT = 160;
 export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptConstructorNodeType>) {
   const nodeData = data;
   const updateNodeData = useUpdateNodeData();
+  const deriveNodeData = useDerivedNodeData();
   // The text nodes feeding this one, as the store's own node objects, so the
   // list only changes when one of them does and not on every drag frame
   const connectedTextNodes = useWorkflowStore(
@@ -148,9 +149,9 @@ export function PromptConstructorNode({ id, data, selected }: NodeProps<PromptCo
     const resolved = nodeData.template.replace(/@(\w+)/g, (match, name) => valueMap.get(name) ?? match);
     const outputValue = resolved || null;
     if (outputValue !== nodeData.outputText) {
-      updateNodeData(id, { outputText: outputValue });
+      deriveNodeData(id, { outputText: outputValue });
     }
-  }, [nodeData.template, availableVariables, id, updateNodeData, nodeData.outputText]);
+  }, [nodeData.template, availableVariables, id, deriveNodeData, nodeData.outputText]);
 
   const highlightRef = useRef<HTMLDivElement>(null);
 

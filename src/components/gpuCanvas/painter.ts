@@ -21,7 +21,10 @@
  * What a node's image depends on is its paint key (paintKey.ts). The painter
  * recomputes the keys of the nodes a store change touched (and the nodes
  * they feed) a frame later, off the typing path, and repaints those whose
- * key changed. Moving or selecting a node never repaints it.
+ * key changed. Moving or selecting a node never repaints it. What of a run
+ * a node shows (its running outline) is marked on its key apart from that
+ * (runMark): a run starting repaints the nodes near the view that show it at
+ * once, and the rest as they come into view.
  */
 import * as THREE from "three";
 import type { NodeTypes } from "@xyflow/react";
@@ -34,7 +37,7 @@ import { PaintedAtlas, type BlitItem } from "@/lib/gpuCanvas/atlas";
 import type { Slot } from "@/lib/gpuCanvas/atlasLayout";
 import type { AtlasBudget } from "@/lib/gpuCanvas/budget";
 import { enableLayoutSubtree, paintElement } from "@/lib/gpuCanvas/htmlInCanvas";
-import { edgesByNode, upstreamPaintKeys } from "@/lib/gpuCanvas/paintKey";
+import { edgesByNode, READS_RUN_IN_PROGRESS, runMark, upstreamPaintKeys, withRunMark, type RunState } from "@/lib/gpuCanvas/paintKey";
 import { BACKGROUND, EIGHTH, PREFETCH, PaintQueue, URGENT, VIEW, packSheet, tierToShow, tiersFor, wantedTier, type PaintRequest } from "@/lib/gpuCanvas/paintQueue";
 import { cacheKey, deflate, inflate, PAINT_CACHE_BYTES, type PaintStore } from "@/lib/gpuCanvas/paintCache";
 import type { GpuCanvasStats } from "@/lib/gpuCanvas/stats";
@@ -142,8 +145,11 @@ export class Painter {
   private staging = new THREE.Texture();
   private stagingGl: WebGLTexture;
   private paints = new Map<string, NodePaint>();
-  /** Each node's current paint key. */
+  /** Each node's current paint key, with its run mark. */
   private keys = new Map<string, string>();
+  /** Each node's key without its run mark: what the nodes it feeds take in. */
+  private baseKeys = new Map<string, string>();
+  private runState: RunState = { isRunning: false, currentNodeIds: [] };
   private queue = new PaintQueue();
   private running = false;
   private startedAt = 0;
@@ -199,6 +205,7 @@ export class Painter {
     this.unsubscribers.push(subscribeToWorkflowNodeChanges((changes) => this.nodesChanged(changes)));
     this.unsubscribers.push(useWorkflowStore.subscribe((state, previous) => {
       if (state.edges !== previous.edges) this.edgesChanged(previous.edges, state.edges);
+      if (state.isRunning !== previous.isRunning || state.currentNodeIds !== previous.currentNodeIds) this.runChanged(state);
     }));
   }
 
@@ -268,6 +275,7 @@ export class Painter {
       for (const image of paint.images.values()) this.atlas.layout.release(image.slot);
       this.paints.delete(id);
       this.keys.delete(id);
+      this.baseKeys.delete(id);
       this.queue.delete(id);
     }
     this.recomputeAllKeys();
@@ -369,8 +377,41 @@ export class Painter {
 
   private recomputeAllKeys() {
     const { nodes, context } = this.keyContext();
+    const { isRunning, currentNodeIds } = useWorkflowStore.getState();
+    this.runState = { isRunning, currentNodeIds };
     const keyOf = upstreamPaintKeys(context);
-    for (const node of nodes) this.keys.set(node.id, keyOf(node.id)!);
+    for (const node of nodes) {
+      const base = keyOf(node.id)!;
+      this.baseKeys.set(node.id, base);
+      this.keys.set(node.id, withRunMark(base, runMark(node, this.runState)));
+    }
+  }
+
+  /**
+   * A run started or ended, or moved on to other nodes: the nodes whose run
+   * mark changed get their new key. Those the run is on are painted at once;
+   * for a run starting or ending, which marks every node of the types that
+   * show it, nodes away from the view wait until it comes to them.
+   */
+  private runChanged(state: RunState) {
+    const previous = this.runState;
+    this.runState = { isRunning: state.isRunning, currentNodeIds: state.currentNodeIds };
+    const { nodes } = useWorkflowStore.getState();
+    const before = new Set(previous.currentNodeIds), after = new Set(state.currentNodeIds);
+    const urgent = new Set<string>();
+    for (const id of before) if (!after.has(id)) urgent.add(id);
+    for (const id of after) if (!before.has(id)) urgent.add(id);
+    const ids = new Set(urgent);
+    if (state.isRunning !== previous.isRunning) for (const node of nodes) if (READS_RUN_IN_PROGRESS.has(node.type)) ids.add(node.id);
+    const now = performance.now();
+    for (const id of ids) {
+      const i = indexOfNode(nodes, id), base = this.baseKeys.get(id);
+      if (i < 0 || base == null) continue;
+      const key = withRunMark(base, runMark(nodes[i], this.runState));
+      if (this.keys.get(id) === key) continue;
+      this.keys.set(id, key);
+      this.stale(id, now, !urgent.has(id));
+    }
   }
 
   private nodesChanged(changes: NodeChanges) {
@@ -402,10 +443,13 @@ export class Painter {
       const dirty = new Set(this.dirtyKeys);
       this.dirtyKeys.clear();
       for (const id of dirty) for (const edge of context.edgesOf(id)) if (edge.source === id) dirty.add(edge.target);
-      const keyOf = upstreamPaintKeys(context, (id) => (dirty.has(id) ? undefined : this.keys.get(id)));
+      const keyOf = upstreamPaintKeys(context, (id) => (dirty.has(id) ? undefined : this.baseKeys.get(id)));
       for (const id of dirty) {
-        if (indexOfNode(nodes, id) < 0) continue;
-        const key = keyOf(id)!;
+        const i = indexOfNode(nodes, id);
+        if (i < 0) continue;
+        const base = keyOf(id)!;
+        this.baseKeys.set(id, base);
+        const key = withRunMark(base, runMark(nodes[i], this.runState));
         if (this.keys.get(id) === key) continue;
         this.keys.set(id, key);
         if (changed.has(id)) this.downstream.delete(id);
@@ -415,8 +459,12 @@ export class Painter {
     });
   }
 
-  /** A node's key changed: its images are stale. Repaint what the view shows and the 1/8, and drop the rest. */
-  private stale(id: string, changedAt: number) {
+  /**
+   * A node's key changed: its images are stale. Repaint what the view shows
+   * and the 1/8, and drop the rest. `nearOnly`: a node away from the view is
+   * left for refreshView to paint when the view comes to it.
+   */
+  private stale(id: string, changedAt: number, nearOnly = false) {
     const paint = this.paints.get(id), tier = this.wanted();
     if (paint) {
       for (const [t, image] of paint.images) {
@@ -424,6 +472,10 @@ export class Painter {
         this.atlas.layout.release(image.slot);
         paint.images.delete(t);
       }
+    }
+    if (nearOnly && !this.near.has(id)) {
+      this.show(id);
+      return;
     }
     // Queued as of the store change, so the time to shown counts the frame keys wait for.
     if (this.near.has(id) && tier !== EIGHTH) this.queue.add(id, tier, URGENT, changedAt);

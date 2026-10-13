@@ -13,7 +13,9 @@ import { downloadMedia } from "@/utils/downloadMedia";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { Box, RefreshCw } from "lucide-react";
-import { useUpdateNodeData } from "./paintMode";
+import { useIsPaintedNode, useUpdateNodeData } from "./paintMode";
+import { useWorkflowStore } from "@/store/workflowStore";
+import { nodeGraphIndex } from "@/lib/edges/graphIndex";
 
 type GLBViewerNodeType = Node<GLBViewerNodeData, "glbViewer">;
 
@@ -220,16 +222,30 @@ export function GLBViewerNode({ id, data, selected }: NodeProps<GLBViewerNodeTyp
   const envGroupRef = useRef<THREE.Group>(null);
   const [expanded, setExpanded] = useState(true);
 
-  // Revoke blob URL when it changes or when node is unmounted
+  // A painted copy draws no viewer: no WebGL context and no model load per paint.
+  const painted = useIsPaintedNode();
+
+  // The model's blob URL belongs to the node, not to this component: it is
+  // revoked when the node is deleted (a replaced or removed model revokes its
+  // own above), not whenever a component showing it unmounts. On the GPU
+  // canvas a painted copy, or the live node handing back to its picture,
+  // unmounts while the node stays.
   const glbUrlRef = useRef<string | null>(nodeData.glbUrl);
   useEffect(() => {
     glbUrlRef.current = nodeData.glbUrl;
-    return () => {
-      if (glbUrlRef.current) {
-        URL.revokeObjectURL(glbUrlRef.current);
-      }
-    };
   }, [nodeData.glbUrl]);
+  useEffect(() => {
+    if (painted) return;
+    return () => {
+      const url = glbUrlRef.current;
+      if (!url) return;
+      // After React has finished this commit, so a node moving between canvases is still found.
+      queueMicrotask(() => {
+        const node = nodeGraphIndex(useWorkflowStore.getState().nodes).byId.get(id);
+        if (!node || (node.data as GLBViewerNodeData).glbUrl !== url) URL.revokeObjectURL(url);
+      });
+    };
+  }, [id, painted]);
 
   // Prevent wheel events from reaching React Flow (stop graph zoom/pan while scrolling to zoom 3D)
   useEffect(() => {
@@ -402,7 +418,13 @@ export function GLBViewerNode({ id, data, selected }: NodeProps<GLBViewerNodeTyp
         className="hidden"
       />
 
-      {nodeData.glbUrl ? (
+      {nodeData.glbUrl && painted ? (
+        // The viewer's picture: on the GPU canvas the 3D viewer stays live (a
+        // real viewer), so this shows only until it has mounted.
+        <div className="absolute inset-0 flex items-center justify-center bg-neutral-900 text-neutral-600">
+          <Box size={32} strokeWidth={1} />
+        </div>
+      ) : nodeData.glbUrl ? (
         <div
           ref={viewportRef}
           className="nodrag nopan nowheel absolute inset-0 overflow-hidden bg-neutral-900"

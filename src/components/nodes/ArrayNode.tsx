@@ -11,7 +11,7 @@ import { ArrayNodeData } from "@/types";
 import { getConnectedInputsPure } from "@/store/utils/connectedInputs";
 import { parseTextToArray } from "@/utils/arrayParser";
 import { arrayItemWireCounts } from "@/lib/edges/arrayItems";
-import { useIsPaintedNode, useUpdateNodeData } from "./paintMode";
+import { useIsPaintedNode, useDerivedNodeData, useUpdateNodeData } from "./paintMode";
 
 type ArrayNodeType = Node<ArrayNodeData, "array">;
 
@@ -97,6 +97,7 @@ function arraysEqual(a: string[], b: string[]): boolean {
 
 export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
   const updateNodeData = useUpdateNodeData();
+  const deriveNodeData = useDerivedNodeData();
   const addNode = useWorkflowStore((state) => state.addNode);
   const onConnect = useWorkflowStore((state) => state.onConnect);
   const edges = useWorkflowStore((state) => state.edges);
@@ -133,7 +134,7 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
       // Array node has no manual input field; clear stale upstream text on disconnect.
       if (nodeData.inputText !== null && nodeData.inputText !== "") {
         lastSyncedInputRef.current = null;
-        updateNodeData(id, { inputText: null });
+        deriveNodeData(id, { inputText: null });
       }
       return;
     }
@@ -144,9 +145,9 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
       text !== lastSyncedInputRef.current
     ) {
       lastSyncedInputRef.current = text;
-      updateNodeData(id, { inputText: text });
+      deriveNodeData(id, { inputText: text });
     }
-  }, [connectedText, hasIncomingTextConnection, id, nodeData.inputText, updateNodeData]);
+  }, [connectedText, hasIncomingTextConnection, id, nodeData.inputText, deriveNodeData]);
 
   // A painted copy cannot save the upstream text, so it splits that text itself.
   const painted = useIsPaintedNode();
@@ -182,12 +183,12 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
     if (lastDerivedWriteRef.current === writeSignature) return;
     lastDerivedWriteRef.current = writeSignature;
 
-    updateNodeData(id, {
+    deriveNodeData(id, {
       outputItems: parsed.items,
       outputText: nextOutputText,
       error: parsed.error,
     });
-  }, [id, nodeData.error, nodeData.outputItems, nodeData.outputText, parsed.error, parsed.items, updateNodeData]);
+  }, [id, nodeData.error, nodeData.outputItems, nodeData.outputText, parsed.error, parsed.items, deriveNodeData]);
 
   // Helper: reparse and update outputs atomically whenever any split setting changes.
   // Reads fresh data from the Zustand store (not React Flow props) to avoid stale closures.
@@ -273,9 +274,9 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
   useEffect(() => {
     const currentSelection = nodeData.selectedOutputIndex;
     if (currentSelection !== null && (currentSelection < 0 || currentSelection >= previewItems.length)) {
-      updateNodeData(id, { selectedOutputIndex: null });
+      deriveNodeData(id, { selectedOutputIndex: null });
     }
-  }, [id, nodeData.selectedOutputIndex, previewItems.length, updateNodeData]);
+  }, [id, nodeData.selectedOutputIndex, previewItems.length, deriveNodeData]);
 
   // A new split closes the open item rather than opening whatever now sits at its index
   useEffect(() => {

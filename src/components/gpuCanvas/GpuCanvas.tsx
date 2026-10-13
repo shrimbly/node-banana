@@ -24,15 +24,17 @@ import { detectHtmlInCanvas } from "@/lib/gpuCanvas/htmlInCanvas";
 import { reportGpuCanvasFailure } from "@/lib/gpuCanvas/setting";
 import { openPaintStore } from "@/lib/gpuCanvas/paintCache";
 import { GpuCanvasStats } from "@/lib/gpuCanvas/stats";
-import { setZoomedOut } from "@/components/nodes/lowDetail";
+import { getLowDetailSettings, setZoomedOut } from "@/components/nodes/lowDetail";
 import { createPanActivityTracker } from "@/hooks/useWheelPanZoom";
 import { Painter, type PainterStatus } from "./painter";
 import { LiveFlow, LiveLayer, type LiveConnection } from "./LiveLayer";
 import { Editor, type GpuEditing } from "./editor";
 import { setGpuCanvasBridge } from "./bridge";
+import { LiveContent } from "./liveContent";
+import { watchOutputAutoRun } from "@/lib/gpuCanvas/outputAutoRun";
 import { routeSceneEdge } from "@/lib/gpuCanvas/edgeRoutes";
 import { EDGE_THICKNESS_PX } from "@/lib/edges/appearance";
-import { boundedNodeTypes, HEADER, PAD, type HeaderProps } from "./nodeSheets";
+import { boundedNodeTypes, HEADER, noop, PAD, type HeaderProps } from "./nodeSheets";
 
 /** Workflows at least this large open behind the loading screen while they paint. */
 const LOADING_MIN_NODES = 150;
@@ -40,7 +42,7 @@ const LOADING_MIN_NODES = 150;
 const LOADING_DELAY_MS = 300;
 /** Above this zoom every visible node is live. */
 const LIVE_ZOOM = 1;
-/** From this zoom, connections that show more than a line (labels, stubs, clamps) are live while on screen. */
+/** From this zoom, connections that show more than a line (labels, stubs, clamps) are live while on screen; those showing a run's comet at any zoom. */
 const LIVE_EDGE_ZOOM = 0.3;
 /** At most this many live connections besides the selected ones. */
 const MAX_LIVE_EDGES = 250;
@@ -80,6 +82,8 @@ export interface GpuCanvasApi {
   repaint: (id: string) => Promise<void>;
   /** Edits a node's data in the store, as typing elsewhere would (the repaint's latency lands in stats). */
   change: (id: string, data: Record<string, unknown>) => void;
+  /** A node's data as the store holds it. */
+  data: (id: string) => Record<string, unknown> | null;
   /** Records the sheet state (placement, sizes, text fields, images) whenever these nodes are painted. */
   probe: (ids: string[]) => void;
   probeLog: () => Record<string, unknown>[];
@@ -112,6 +116,7 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
   const [liveConnection] = useState<LiveConnection>(() => ({}));
   const connectLive = useCallback((part: LiveConnection) => void Object.assign(liveConnection, part), [liveConnection]);
   const liveViewChanged = useCallback((view: View) => liveConnection.viewChanged?.(view), [liveConnection]);
+  const holdLive = useCallback((id: string) => liveConnection.hold?.(id) ?? noop, [liveConnection]);
   const [initialView] = useState(() => useWorkflowStore.getState().canvasViewport ?? { x: 0, y: 0, zoom: 1 });
   const types = useMemo(() => boundedNodeTypes(nodeTypes), [nodeTypes]);
   const [loading, setLoading] = useState<Loading | null>(null);
@@ -140,6 +145,22 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       setActive: (active) => document.documentElement.classList.toggle("canvas-interacting", active),
       endDelayMs: 300,
     });
+    // The hovered node: the one under the pointer in the scene, or the live node it moved onto
+    // (the scene sees the pointer leave as it enters a live node). Applied a task later, so
+    // leaving the scene for a live node is one change, not a drop and a return.
+    let sceneHover: string | null = null, hoverTimer = 0;
+    const showHover = () => {
+      clearTimeout(hoverTimer);
+      hoverTimer = window.setTimeout(() => {
+        const id = live.pointerNode ?? sceneHover;
+        live.wantOnly("hover", id ? [id] : []);
+      }, 0);
+    };
+    // Zoomed out past the low-detail zoom, running nodes show a halo (as today's low-detail cards do).
+    const haloBelow = () => {
+      const { enabled, zoom } = getLowDetailSettings();
+      return enabled ? zoom : 0;
+    };
     let scene: Scene;
     try {
       scene = new Scene(canvas, graph, {
@@ -148,7 +169,10 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
         onInputLatency: (ms) => stats.record("input.latencyMs", ms),
         onInput: () => interacting.signal(),
         wheelZooms: (event) => propsRef.current.wheelZooms(event),
-        onHover: (i) => live.wantOnly("hover", i >= 0 ? [scene.graph.nodes[i].id] : []),
+        onHover: (i) => {
+          sceneHover = i >= 0 ? scene.graph.nodes[i].id : null;
+          showHover();
+        },
         onPress: (event) => editor.press(event),
         onIdleMove: (event) => editor.idleMove(event),
         onContextMenu: (event) => editor.contextMenu(event),
@@ -159,6 +183,7 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
           return routeSceneEdge(graph, e, { style: state.edgeStyle, appearance: state.edgeAppearance, edges: state.edges, nodes: state.nodes, thicknessPx: EDGE_THICKNESS_PX[state.edgeAppearance.thickness] });
         },
         onViewChange: (view) => live.setView(view),
+        runningHaloBelow: haloBelow,
       });
     } catch (error) {
       // WebGL2 is unavailable: say so instead of an empty canvas.
@@ -175,6 +200,15 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       getOwnPropertyDescriptor: (_, key) => ({ value: propsRef.current.headers[key as keyof HeaderProps], enumerable: true, configurable: true, writable: false }),
     });
     const live = new LiveLayer(liveElement, liveConnection, scene, stats);
+    live.onPointerNode = showHover;
+    // Nodes live for what they hold (the 3D viewer, a playing video, a ComfyUI run, a spinner),
+    // and Output nodes run on a new connection though they are not mounted.
+    const liveContent = new LiveContent(live, {
+      zoomedOut: () => scene.view.zoom < haloBelow(),
+      onViewChanged: (listener) => scene.onViewChanged(listener),
+      setRunning: (ids) => scene.setRunning(ids),
+    });
+    const stopAutoRun = watchOutputAutoRun(useWorkflowStore);
     const editor = new Editor(scene, live, host, () => propsRef.current.editing);
     // The routes above read the store: compute them now that the scene exists.
     scene.setEdgeAppearance(store.edgeAppearance.gradient, store.edgeAppearance.fadedOpacity);
@@ -240,17 +274,16 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
     const showLiveEdges = () => {
       const { edges } = useWorkflowStore.getState();
       const ids = edges.filter((e) => e.selected).map((e) => e.id);
-      if (scene.view.zoom >= LIVE_EDGE_ZOOM) {
-        const w = scene.canvas.clientWidth, h = scene.canvas.clientHeight;
-        const a = scene.toWorld(-w * 0.25, -h * 0.25), b = scene.toWorld(w * 1.25, h * 1.25);
-        let count = 0;
-        for (const e of scene.edgesWithin(a.x, a.y, b.x, b.y)) {
-          if (count >= MAX_LIVE_EDGES) break;
-          const edge = scene.graph.edges[e];
-          if (!scene.edgeRoute(e)?.decorated || edge.edge.selected) continue;
-          ids.push(edge.id);
-          count++;
-        }
+      const all = scene.view.zoom >= LIVE_EDGE_ZOOM;
+      const w = scene.canvas.clientWidth, h = scene.canvas.clientHeight;
+      const a = scene.toWorld(-w * 0.25, -h * 0.25), b = scene.toWorld(w * 1.25, h * 1.25);
+      let count = 0;
+      for (const e of scene.edgesWithin(a.x, a.y, b.x, b.y)) {
+        if (count >= MAX_LIVE_EDGES) break;
+        const edge = scene.graph.edges[e], route = scene.edgeRoute(e);
+        if (!route?.decorated || edge.edge.selected || (!all && !route.running)) continue;
+        ids.push(edge.id);
+        count++;
       }
       const key = ids.join("\n");
       if (key === liveEdgesKey && edges === liveEdgesSource) return;
@@ -343,6 +376,11 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       paintNow: (id) => painter?.paintNow(id) ?? Promise.resolve(),
       repaint: (id) => painter?.repaint(id) ?? Promise.resolve(),
       change: (id, data) => useWorkflowStore.getState().updateNodeData(id, data),
+      data: (id) => {
+        const { nodes } = useWorkflowStore.getState();
+        const i = indexOfNode(nodes, id);
+        return i >= 0 ? (nodes[i].data as unknown as Record<string, unknown>) : null;
+      },
       probe: (ids) => {
         painter?.probeIds.clear();
         for (const id of ids) painter?.probeIds.add(id);
@@ -378,6 +416,7 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
     return () => {
       document.documentElement.toggleAttribute("data-gpu-canvas-active", false);
       clearTimeout(settleTimer);
+      clearTimeout(hoverTimer);
       unsubscribeNodes();
       unsubscribeStore();
       unsubscribeView();
@@ -386,6 +425,8 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       interacting.dispose();
       setGpuCanvasBridge(null);
       editor.dispose();
+      liveContent.dispose();
+      stopAutoRun();
       stats.dispose();
       live.dispose();
       painter?.dispose();
@@ -440,7 +481,7 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" />
       <div ref={liveRef} data-gpu-canvas-live="" className="pointer-events-none absolute inset-0 overflow-hidden">
         <LiveFlow connect={connectLive} onViewChanged={liveViewChanged} initialView={initialView} nodeTypes={types} edgeTypes={edgeTypes} defaultEdgeOptions={defaultEdgeOptions}
-          onEdgesChange={onEdgesChange} headers={headers}>
+          onEdgesChange={onEdgesChange} headers={headers} hold={holdLive}>
           {flowChildren}
         </LiveFlow>
       </div>

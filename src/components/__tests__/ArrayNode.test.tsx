@@ -88,14 +88,14 @@ describe("ArrayNode", () => {
     expect(screen.getByRole("button", { name: /Make Prompts/ })).toBeDisabled();
   });
 
-  it("saves its items when it mounts, except as a painted copy", () => {
+  it("saves its items when it mounts, as a painted copy too (derived values)", () => {
     const data = nodeData({ inputText: ITEMS.join("*") });
     setup(data, [incoming]);
     expect(mockUpdateNodeData).toHaveBeenCalledWith(NODE_ID, expect.objectContaining({ outputItems: ITEMS }));
 
     mockUpdateNodeData.mockClear();
     setup(data, [incoming], { painted: true });
-    expect(mockUpdateNodeData).not.toHaveBeenCalled();
+    expect(mockUpdateNodeData).toHaveBeenCalledWith(NODE_ID, expect.objectContaining({ outputItems: ITEMS }));
   });
 
   it("previews the first five items and marks the wired ones", () => {

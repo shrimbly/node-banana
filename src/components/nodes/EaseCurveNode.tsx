@@ -24,7 +24,7 @@ import {
   SummaryValues,
   type SocketSpec,
 } from "./ui";
-import { useUpdateNodeData } from "./paintMode";
+import { useHoldLive, useUpdateNodeData } from "./paintMode";
 
 type EaseCurveNodeType = Node<EaseCurveNodeData, "easeCurve">;
 
@@ -68,6 +68,7 @@ export function EaseCurveNode({ id, data, selected }: NodeProps<EaseCurveNodeTyp
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
   const [expanded, setExpanded] = useState(true);
   const [showPresets, setShowPresets] = useState(false);
+  useHoldLive(showPresets);
   const presetsButtonRef = useRef<HTMLButtonElement>(null);
   const presetsPopupRef = useRef<HTMLDivElement>(null);
 

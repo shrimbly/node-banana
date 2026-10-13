@@ -9,7 +9,7 @@ import { evaluateRule } from "@/store/utils/ruleEvaluation";
 import { getConnectedInputsPure } from "@/store/utils/connectedInputs";
 import type { WorkflowNode, ConditionalSwitchNodeData, ConditionalSwitchRule, MatchMode } from "@/types";
 import { LogicRow, LogicRows, SelectWell, ellipsisClass, type SocketSpec } from "./ui";
-import { useUpdateNodeData } from "./paintMode";
+import { useDerivedNodeData, useUpdateNodeData } from "./paintMode";
 
 const INPUT_SOCKETS: SocketSpec[] = [{ id: "text", type: "text", label: "Text" }];
 
@@ -41,6 +41,7 @@ function Match({ on }: { on: boolean }) {
 export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>) => {
   const nodeData = data as ConditionalSwitchNodeData;
   const updateNodeData = useUpdateNodeData();
+  const deriveNodeData = useDerivedNodeData();
   const { setEdges } = useReactFlow();
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -66,12 +67,12 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
       updatedRules.some((r, i) => r.isMatched !== nodeData.rules[i].isMatched);
 
     if (hasChanges) {
-      updateNodeData(id, {
+      deriveNodeData(id, {
         incomingText,
         rules: updatedRules
       });
     }
-  }, [incomingText, nodeData.rules, nodeData.incomingText, nodeData.evaluationPaused, id, updateNodeData]);
+  }, [incomingText, nodeData.rules, nodeData.incomingText, nodeData.evaluationPaused, id, deriveNodeData]);
 
   const handleRuleValueChange = useCallback(
     (ruleId: string, newValue: string) => {

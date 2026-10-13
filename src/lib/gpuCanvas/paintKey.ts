@@ -167,3 +167,33 @@ export function edgesByNode(edges: readonly WorkflowEdge[]): Map<string, Workflo
   }
   return byNode;
 }
+
+/**
+ * Node types whose component reads the store's `isRunning` (any run in
+ * progress): during a run they draw the running outline, and some disable
+ * buttons. Kept in step with the components by a test.
+ */
+export const READS_RUN_IN_PROGRESS = new Set([
+  "easeCurve", "generate3d", "generateAudio", "generateVideo", "gifEncoder", "imageResize", "llmGenerate",
+  "nanoBanana", "output", "removeBackground", "splitGrid", "videoFrameGrab", "videoStitch", "videoTrim",
+]);
+
+export interface RunState {
+  isRunning: boolean;
+  currentNodeIds: readonly string[];
+}
+
+/**
+ * What of the run a node's picture shows, outside its data: whether this
+ * node is one the run is on (every node's outline shows it), and whether a
+ * run is in progress at all (for the types above). Kept out of the keys
+ * nodes downstream take in, so a run starting does not reach through them.
+ */
+export function runMark(node: WorkflowNode, run: RunState): string {
+  return `${run.currentNodeIds.includes(node.id) ? "n" : ""}${run.isRunning && READS_RUN_IN_PROGRESS.has(node.type) ? "r" : ""}`;
+}
+
+/** A node's key with its run mark. */
+export function withRunMark(key: string, mark: string): string {
+  return mark ? `${key}~${mark}` : key;
+}

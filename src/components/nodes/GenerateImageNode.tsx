@@ -36,7 +36,7 @@ import {
   type SocketSpec,
 } from "./ui";
 import { Download, X } from "lucide-react";
-import { useUpdateNodeData } from "./paintMode";
+import { useHoldLive, useIsPaintedNode, useUpdateNodeData } from "./paintMode";
 
 const INPUT_SOCKETS: SocketSpec[] = [
   { id: "image", type: "image", label: "Image" },
@@ -69,6 +69,8 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   const [isLoadingModels, setIsLoadingModels] = useState(false);
   const [modelsFetchError, setModelsFetchError] = useState<string | null>(null);
   const [isBrowseDialogOpen, setIsBrowseDialogOpen] = useState(false);
+  useHoldLive(isBrowseDialogOpen);
+  const painted = useIsPaintedNode();
   const [settingsTab, setSettingsTab] = useState<"primary" | "fallback">("primary");
 
   useEffect(() => {
@@ -102,9 +104,11 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
 
   // Register browse callback for floating header button
   useEffect(() => {
+    // A painted copy would replace the live node's handler, then remove it as it unmounts.
+    if (painted) return;
     browseRegistry.register(id, () => setIsBrowseDialogOpen(true));
     return () => { browseRegistry.unregister(id); };
-  }, [id]);
+  }, [id, painted]);
 
   // Get the current selected provider (default to gemini)
   const currentProvider: ProviderType = nodeData.selectedModel?.provider || "gemini";

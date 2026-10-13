@@ -15,6 +15,7 @@ import { createPortal } from "react-dom";
 import { Check, ChevronDown, Search } from "lucide-react";
 import { menuSurfaceClass } from "@/components/ui/Menu";
 import { cn } from "./cn";
+import { useHoldLive } from "../paintMode";
 
 export interface DropdownOption {
   value: string;
@@ -193,6 +194,8 @@ export function Dropdown({
   const hasSearch = searchable ?? all.length > SEARCH_THRESHOLD;
 
   const [open, setOpen] = useState(false);
+  // The list is in a portal: the node stays live while it is open.
+  useHoldLive(open);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(-1);
   const [placement, setPlacement] = useState<Placement | null>(null);

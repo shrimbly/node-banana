@@ -18,7 +18,7 @@ import {
   MIN_SLICE_GAP,
 } from "@/store/utils/splitGridTemplate";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
-import { useIsPaintedNode, useUpdateNodeData } from "./paintMode";
+import { useHoldLive, useIsPaintedNode, useDerivedNodeData, useUpdateNodeData } from "./paintMode";
 
 type SplitGridNodeType = Node<SplitGridNodeData, "splitGrid">;
 
@@ -87,10 +87,12 @@ function GridDimField({ label, value, onChange, disabled }: GridDimFieldProps) {
 export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeType>) {
   const nodeData = data;
   const updateNodeData = useUpdateNodeData();
+  const deriveNodeData = useDerivedNodeData();
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const edges = useWorkflowStore((state) => state.edges);
   const [showEditor, setShowEditor] = useState(false);
+  useHoldLive(showEditor);
   const [expanded, setExpanded] = useState(true);
 
   const gridRows = clampGridDimension(nodeData.gridRows);
@@ -113,9 +115,9 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
 
   useEffect(() => {
     if (connectedSourceImage !== nodeData.sourceImage) {
-      updateNodeData(id, { sourceImage: connectedSourceImage });
+      deriveNodeData(id, { sourceImage: connectedSourceImage });
     }
-  }, [connectedSourceImage, id, updateNodeData, nodeData.sourceImage]);
+  }, [connectedSourceImage, id, deriveNodeData, nodeData.sourceImage]);
 
   // A painted copy cannot save the upstream image, so it shows the one it would save.
   const painted = useIsPaintedNode();

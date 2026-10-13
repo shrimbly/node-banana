@@ -20,7 +20,7 @@ import {
   SummaryValues,
   type SocketSpec,
 } from "./ui";
-import { useIsPaintedNode, useUpdateNodeData } from "./paintMode";
+import { useIsPaintedNode, useDerivedNodeData, useUpdateNodeData } from "./paintMode";
 
 type ImageResizeNodeType = Node<ImageResizeNodeData, "imageResize">;
 
@@ -56,6 +56,7 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
   const nodeData = data;
   const adaptiveOutput = useAdaptiveImageSrc(nodeData.outputImage, id);
   const updateNodeData = useUpdateNodeData();
+  const deriveNodeData = useDerivedNodeData();
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const edges = useWorkflowStore((state) => state.edges);
@@ -73,9 +74,9 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
 
   useEffect(() => {
     if (upstreamImage !== nodeData.sourceImage) {
-      updateNodeData(id, { sourceImage: upstreamImage });
+      deriveNodeData(id, { sourceImage: upstreamImage });
     }
-  }, [upstreamImage, id, updateNodeData, nodeData.sourceImage]);
+  }, [upstreamImage, id, deriveNodeData, nodeData.sourceImage]);
   // A painted copy cannot save the upstream image, so it shows the one it would save.
   const painted = useIsPaintedNode();
   const sourceImage = painted ? upstreamImage : nodeData.sourceImage;

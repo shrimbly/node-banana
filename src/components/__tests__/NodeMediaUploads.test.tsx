@@ -110,12 +110,14 @@ describe.each(cases)("$name upload ownership", (testCase) => {
     expect(state.updateNodeData).not.toHaveBeenCalled();
   });
 
-  it("ignores an upload after its node unmounts", () => {
+  // The read belongs to the node, not its component: one scrolled away (or,
+  // on the GPU canvas, one the pointer left) still gets its file.
+  it("keeps an upload when its node unmounts", () => {
     const { unmount } = startUpload();
     unmount();
     DeferredReader.instances[0].finish();
     finishMetadata();
-    expect(state.updateNodeData).not.toHaveBeenCalled();
+    expect(state.updateNodeData).toHaveBeenCalled();
   });
 
   it("does not let a slower previous upload replace the latest selection", () => {

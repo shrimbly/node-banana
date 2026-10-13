@@ -7,7 +7,7 @@ import { NodeShell } from "./NodeShell";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { PromptNodeData } from "@/types";
 import { ControlsCard, HeightGrip, SummaryValues, type SocketSpec } from "./ui";
-import { useUpdateNodeData } from "./paintMode";
+import { useHoldLive, useUpdateNodeData } from "./paintMode";
 
 type PromptNodeType = Node<PromptNodeData, "prompt">;
 
@@ -27,6 +27,7 @@ export function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
 
   // Variable naming dialog state
   const [showVarDialog, setShowVarDialog] = useState(false);
+  useHoldLive(showVarDialog);
   const [varNameInput, setVarNameInput] = useState(nodeData.variableName || "");
 
   // Check if this node has any incoming text connections

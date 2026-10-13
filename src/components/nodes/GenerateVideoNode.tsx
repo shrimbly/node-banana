@@ -34,7 +34,7 @@ import {
   type SocketSpec,
 } from "./ui";
 import { Download, X } from "lucide-react";
-import { useUpdateNodeData } from "./paintMode";
+import { useHoldLive, useIsPaintedNode, useUpdateNodeData } from "./paintMode";
 
 // Video generation capabilities
 const VIDEO_CAPABILITIES: ModelCapability[] = ["text-to-video", "image-to-video", "audio-to-video", "video-to-video"];
@@ -52,6 +52,8 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
   const [, setIsLoadingModels] = useState(false);
   const [, setModelsFetchError] = useState<string | null>(null);
   const [isBrowseDialogOpen, setIsBrowseDialogOpen] = useState(false);
+  useHoldLive(isBrowseDialogOpen);
+  const painted = useIsPaintedNode();
   const [settingsTab, setSettingsTab] = useState<"primary" | "fallback">("primary");
   // The clip follows the video's real proportions once its metadata arrives.
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
@@ -67,9 +69,11 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
 
   // Register browse callback for floating header button
   useEffect(() => {
+    // A painted copy would replace the live node's handler, then remove it as it unmounts.
+    if (painted) return;
     browseRegistry.register(id, () => setIsBrowseDialogOpen(true));
     return () => { browseRegistry.unregister(id); };
-  }, [id]);
+  }, [id, painted]);
 
   const currentProvider: ProviderType = nodeData.selectedModel?.provider || "fal";
 
