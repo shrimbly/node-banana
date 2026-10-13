@@ -11,7 +11,7 @@ import { ArrayNodeData } from "@/types";
 import { getConnectedInputsPure } from "@/store/utils/connectedInputs";
 import { parseTextToArray } from "@/utils/arrayParser";
 import { arrayItemWireCounts } from "@/lib/edges/arrayItems";
-import { useUpdateNodeData } from "./paintMode";
+import { useIsPaintedNode, useUpdateNodeData } from "./paintMode";
 
 type ArrayNodeType = Node<ArrayNodeData, "array">;
 
@@ -148,8 +148,12 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
     }
   }, [connectedText, hasIncomingTextConnection, id, nodeData.inputText, updateNodeData]);
 
+  // A painted copy cannot save the upstream text, so it splits that text itself.
+  const painted = useIsPaintedNode();
+  const inputText = painted && hasIncomingTextConnection && connectedText !== null ? connectedText : nodeData.inputText;
+
   const parsed = useMemo(() => {
-    return parseTextToArray(nodeData.inputText, {
+    return parseTextToArray(inputText, {
       splitMode: nodeData.splitMode,
       delimiter: nodeData.delimiter,
       regexPattern: nodeData.regexPattern,
@@ -157,7 +161,7 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
       removeEmpty: nodeData.removeEmpty,
     });
   }, [
-    nodeData.inputText,
+    inputText,
     nodeData.splitMode,
     nodeData.delimiter,
     nodeData.regexPattern,

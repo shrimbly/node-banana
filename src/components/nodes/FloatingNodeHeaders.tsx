@@ -11,7 +11,7 @@ import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import type { NodeType } from "@/types";
 import { requestComfyReplace } from "@/store/comfyAppRequestStore";
 
-interface HeaderActions {
+export interface HeaderActions {
   getNodeTitle: (node: Node) => string;
   onCustomTitleChange: (nodeId: string, title: string) => void;
   onCommentChange: (nodeId: string, comment: string) => void;

@@ -103,7 +103,15 @@ export async function externalizeWorkflowMedia(
   const BATCH_SIZE = 3;
   const externalizedNodes: WorkflowNode[] = new Array(workflow.nodes.length);
 
+  // Nodes that need no file written settle without a real wait, so a large
+  // workflow would run the whole loop as one task: give the page a turn
+  // every few milliseconds.
+  let lastYield = performance.now();
   for (let i = 0; i < workflow.nodes.length; i += BATCH_SIZE) {
+    if (performance.now() - lastYield > 12) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      lastYield = performance.now();
+    }
     const batch = workflow.nodes.slice(i, i + BATCH_SIZE);
     const results = await Promise.all(
       batch.map((node, batchIndex) =>
@@ -1027,7 +1035,15 @@ export async function hydrateWorkflowMedia(
   const BATCH_SIZE = 3;
   const hydratedNodes: WorkflowNode[] = new Array(workflow.nodes.length);
 
+  // Nodes that need no file written settle without a real wait, so a large
+  // workflow would run the whole loop as one task: give the page a turn
+  // every few milliseconds.
+  let lastYield = performance.now();
   for (let i = 0; i < workflow.nodes.length; i += BATCH_SIZE) {
+    if (performance.now() - lastYield > 12) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      lastYield = performance.now();
+    }
     const batch = workflow.nodes.slice(i, i + BATCH_SIZE);
     const results = await Promise.all(
       batch.map((node, batchIndex) =>

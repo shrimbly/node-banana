@@ -18,7 +18,7 @@ import {
   MIN_SLICE_GAP,
 } from "@/store/utils/splitGridTemplate";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
-import { useUpdateNodeData } from "./paintMode";
+import { useIsPaintedNode, useUpdateNodeData } from "./paintMode";
 
 type SplitGridNodeType = Node<SplitGridNodeData, "splitGrid">;
 
@@ -86,7 +86,6 @@ function GridDimField({ label, value, onChange, disabled }: GridDimFieldProps) {
 
 export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeType>) {
   const nodeData = data;
-  const adaptiveSourceImage = useAdaptiveImageSrc(nodeData.sourceImage, id);
   const updateNodeData = useUpdateNodeData();
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
@@ -101,8 +100,6 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
   // The clip takes the image's own proportions, so the grid overlay filling
   // the clip tracks the image exactly.
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
-  // Thumbnail swaps and cached load events must not reset the source geometry.
-  const imageAspect = loadedAspect?.src === nodeData.sourceImage ? loadedAspect?.aspect : null;
 
   // Reactively track the connected source image
   const hasIncomingImageConnection = useMemo(() => {
@@ -119,6 +116,13 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
       updateNodeData(id, { sourceImage: connectedSourceImage });
     }
   }, [connectedSourceImage, id, updateNodeData, nodeData.sourceImage]);
+
+  // A painted copy cannot save the upstream image, so it shows the one it would save.
+  const painted = useIsPaintedNode();
+  const sourceImage = painted ? connectedSourceImage : nodeData.sourceImage;
+  const adaptiveSourceImage = useAdaptiveImageSrc(sourceImage, id);
+  // Thumbnail swaps and cached load events must not reset the source geometry.
+  const imageAspect = loadedAspect?.src === sourceImage ? loadedAspect?.aspect : null;
 
   const cells = getSplitGridCells(nodeData);
 
@@ -195,7 +199,7 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
     regenerateNode(id);
   }, [id, regenerateNode]);
 
-  const media = nodeData.sourceImage
+  const media = sourceImage
     ? { kind: "aspect" as const, aspect: imageAspect ?? 1 }
     : { kind: "fixed" as const, height: EMPTY_HEIGHT };
 
@@ -241,8 +245,8 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
               <PanelButton
                 primary
                 onClick={handleSplit}
-                disabled={isRunning || !nodeData.sourceImage}
-                title={!nodeData.sourceImage ? "Connect an image first" : `Split into ${gridRows}×${gridCols}`}
+                disabled={isRunning || !sourceImage}
+                title={!sourceImage ? "Connect an image first" : `Split into ${gridRows}×${gridCols}`}
                 className={`shrink-0 ${ACTION_W} justify-center`}
               >
                 Split {gridRows}×{gridCols} now
@@ -251,7 +255,7 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
           </ControlsCard>
         }
       >
-        {nodeData.sourceImage ? (
+        {sourceImage ? (
           <div ref={innerRef} className="absolute inset-0">
             <img
               src={adaptiveSourceImage ?? undefined}
@@ -260,8 +264,8 @@ export function SplitGridNode({ id, data, selected }: NodeProps<SplitGridNodeTyp
               draggable={false}
               onLoad={(e) => {
                 const { naturalWidth, naturalHeight } = e.currentTarget;
-                if (naturalWidth > 0 && naturalHeight > 0 && nodeData.sourceImage) {
-                  setLoadedAspect({ src: nodeData.sourceImage, aspect: naturalWidth / naturalHeight });
+                if (naturalWidth > 0 && naturalHeight > 0 && sourceImage) {
+                  setLoadedAspect({ src: sourceImage, aspect: naturalWidth / naturalHeight });
                 }
               }}
             />

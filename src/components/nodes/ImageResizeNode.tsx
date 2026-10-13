@@ -20,7 +20,7 @@ import {
   SummaryValues,
   type SocketSpec,
 } from "./ui";
-import { useUpdateNodeData } from "./paintMode";
+import { useIsPaintedNode, useUpdateNodeData } from "./paintMode";
 
 type ImageResizeNodeType = Node<ImageResizeNodeData, "imageResize">;
 
@@ -76,9 +76,12 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
       updateNodeData(id, { sourceImage: upstreamImage });
     }
   }, [upstreamImage, id, updateNodeData, nodeData.sourceImage]);
+  // A painted copy cannot save the upstream image, so it shows the one it would save.
+  const painted = useIsPaintedNode();
+  const sourceImage = painted ? upstreamImage : nodeData.sourceImage;
 
-  const previewSrc = nodeData.outputImage ?? nodeData.sourceImage ?? null;
-  const previewDisplaySrc = nodeData.outputImage ? adaptiveOutput ?? nodeData.outputImage : nodeData.sourceImage;
+  const previewSrc = nodeData.outputImage ?? sourceImage ?? null;
+  const previewDisplaySrc = nodeData.outputImage ? adaptiveOutput ?? nodeData.outputImage : sourceImage;
   const media = previewSrc
     ? { kind: "aspect" as const, aspect: loadedAspect?.src === previewSrc ? loadedAspect.aspect : 1 }
     : { kind: "fixed" as const, height: EMPTY_HEIGHT };
@@ -158,7 +161,7 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
             <PanelButton
               primary
               onClick={() => regenerateNode(id)}
-              disabled={!nodeData.sourceImage || nodeData.status === "loading" || isRunning}
+              disabled={!sourceImage || nodeData.status === "loading" || isRunning}
             >
               {nodeData.status === "loading" ? "Resizing..." : "Resize"}
             </PanelButton>

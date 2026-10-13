@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useDeferredValue } from "react";
 import { useStore, type ReactFlowState } from "@xyflow/react";
 import { generateThumbnail } from "@/utils/imageThumbnail";
+import { useIsPaintedNode } from "@/components/nodes/paintMode";
 import {
   getThumbnail,
   setThumbnail,
@@ -43,7 +44,11 @@ export function useAdaptiveImageSrc(
   // Every image node crosses the threshold on the same zoom step, so the
   // swap is deferred and React spreads it across frames instead of
   // re-rendering them all in one
-  const thumbnailWanted = useDeferredValue(shouldUseThumbnail);
+  // A painted copy (the GPU canvas) is painted once, at one zoom, so it takes
+  // the source for that zoom at once rather than a render late.
+  const painted = useIsPaintedNode();
+  const deferredThumbnailWanted = useDeferredValue(shouldUseThumbnail);
+  const thumbnailWanted = painted ? shouldUseThumbnail : deferredThumbnailWanted;
 
   const [thumbnailSrc, setThumbnailSrc] = useState<string | null>(null);
   const prevSrcRef = useRef<string | null>(null);

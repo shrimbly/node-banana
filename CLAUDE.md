@@ -50,6 +50,7 @@ Node Banana is a node-based visual workflow editor for AI image generation. User
 | Cost calculations | `src/utils/costCalculator.ts` |
 | Grid splitting utility | `src/utils/gridSplitter.ts` |
 | Asset library (always-on saving, Assets view) | `src/lib/assets/`, `src/components/assets/`, `docs/asset-library.md` |
+| GPU canvas (behind a setting: scene, painter, atlas, live layer, disk cache) | `src/lib/gpuCanvas/`, `src/components/gpuCanvas/`, `docs/gpu-canvas.md` |
 | Full-screen media viewer (stage, dock-scaled filmstrip, details rail; the recent-generations drop-down and the output gallery node both mount it with their own actions) | `src/components/MediaViewer.tsx`, `src/hooks/useAddMediaNode.ts` |
 
 ### State Management
@@ -61,7 +62,7 @@ All application state lives in `workflowStore.ts` using Zustand. Key patterns:
 - `updateNodeData(nodeId, partialData)` updates node state
 - The graph is never edited in place: an action replaces the node, edge or group object it changes and keeps every other one. Undo snapshots hold the live objects rather than copies, so an in-place edit would rewrite history; the tests freeze the graph after every change (`src/store/utils/freezeGraph.ts`) to catch one
 - `updateNodeData` finds its node through an id index (`src/store/nodeChanges.ts`) and replaces only that node, so a keystroke costs the same at any graph size. `subscribeToWorkflowNodeChanges(listener)` reports which node ids each change updated, added or removed
-- Node components take their writer from `useUpdateNodeData()` (`src/components/nodes/paintMode.tsx`), never straight from the store: inside `<PaintedNodes>` (the GPU canvas's off-screen painted copies) it drops writes, so a node that saves derived data on mount does not write once per paint
+- Node components take their writer from `useUpdateNodeData()` (`src/components/nodes/paintMode.tsx`), never straight from the store: inside `<PaintedNodes>` (the GPU canvas's off-screen painted copies) it drops writes, so a node that saves derived data on mount does not write once per paint. Such a node shows the derived value itself when `useIsPaintedNode()` is true, or its painted copy shows what was last saved
 - Node data may hold media by reference (`src/lib/media/references.ts`): a same-origin URL for a library asset (`/api/assets/<id>/file`) or a file in a saved workflow's folder (`/api/workflow-images?…&raw=1`). Opening a saved workflow references its images, video and audio rather than reading them (`?raw=1` serves byte ranges, so video seeks), and a save turns the media it writes into references. Anything that sends media to a provider passes its body through `inlineMediaReferences`, and anything that writes a file meant to carry its media (a save without external storage, the JSON download) inlines them too
 - `NB_STORE_BENCH=1 npx vitest run src/store/__tests__/storeBench.test.ts` times a keystroke, undo, autosave's serialisation and a load at 300 to 10,000 nodes
 - Autosave (`src/store/utils/autoSave.ts`) follows the edits: a saved workflow is written 3 s after the last change, at the latest 30 s after the first, never mid-run or while media is still being written, and at once when the window loses focus; a failure is retried once, then backed off with one notice. "Save automatically" in Settings → Project turns it off (`node-banana-autosave`). The request body reuses each unchanged node's JSON from the last save (`src/store/utils/workflowSerializer.ts`)
@@ -616,6 +617,7 @@ All routes in `src/app/api/`:
 - `node-banana-low-detail` - Low detail when zoomed out (absent or `on` means on; Settings › Canvas)
 - `node-banana-low-detail-zoom` - The zoom low detail starts below (default 0.25)
 - `node-banana-perf-overlay` - The performance overlay is shown (`on`)
+- `node-banana-gpu-canvas` - The GPU canvas preview (`on`/`off`; Settings › Canvas). The desktop app mirrors it in `gpu-canvas-v1.json` under user data and enables HTML-in-Canvas at the next launch. Painted node images are cached in IndexedDB (`node-banana-paint-cache`, 512 MB)
 - `node-banana-comfy-apps` - Saved Comfy nodes (workflow + contract + settings)
 - `node-banana-agent-settings` - Agent harness, and model and thinking-effort choice per harness
 - `node-banana-agent-conversations` - Agent chat history (messages, the agent's summary, workflow name, tab and id; newest 50, size-capped)

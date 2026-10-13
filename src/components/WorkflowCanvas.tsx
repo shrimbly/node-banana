@@ -61,6 +61,7 @@ import {
 // Lazy-load GLBViewerNode to avoid bundling three.js for users who don't use 3D nodes
 const GLBViewerNode = dynamic(() => import("./nodes/GLBViewerNode").then(mod => ({ default: mod.GLBViewerNode })), { ssr: false });
 // The agent window (chat UI, Markdown, code highlighting) loads on first open
+const GpuCanvas = dynamic(() => import("./gpuCanvas/GpuCanvas").then(mod => ({ default: mod.GpuCanvas })), { ssr: false });
 const AgentPanel = dynamic(() => import("./agent/AgentPanel").then(mod => ({ default: mod.AgentPanel })), { ssr: false });
 import { EditableEdge, ReferenceEdge, SharedEdgeGradients } from "./edges";
 import { ConnectionDropMenu, MenuAction } from "./ConnectionDropMenu";
@@ -100,6 +101,7 @@ import { NodePlaceholder, setCanvasMoving, useAnyNodeHasFocus, useNodeHasFocus, 
 import { setZoomedOut, useLowDetail, useLowDetailEnabled, useLowDetailZoom } from "./nodes/lowDetail";
 import { NodeLowDetail } from "./nodes/NodeLowDetail";
 import { PerfOverlay } from "./PerfOverlay";
+import { useGpuCanvasActive } from "@/lib/gpuCanvas/setting";
 import { detectAndSplitGrid } from "@/utils/gridSplitter";
 import { logger } from "@/utils/logger";
 import { WelcomeModal } from "./quickstart";
@@ -489,7 +491,9 @@ export function WorkflowCanvas() {
   // this one subscription; React Flow then mounts only what is in view
   const lowDetailZoom = useLowDetailZoom();
   const zoomedOut = useStore(useCallback((state: ReactFlowState) => state.transform[2] < lowDetailZoom, [lowDetailZoom]));
-  useLayoutEffect(() => setZoomedOut(zoomedOut), [zoomedOut]);
+  // The GPU canvas paints nodes at full detail whatever this (hidden) flow's zoom is.
+  const gpuCanvasActive = useGpuCanvasActive();
+  useLayoutEffect(() => setZoomedOut(zoomedOut && !gpuCanvasActive), [zoomedOut, gpuCanvasActive]);
   const lowDetail = useLowDetailEnabled() && zoomedOut;
   // ...except while a node holds the focused field: React Flow would unmount
   // it once out of view, and the edit, which commits on blur, would be lost
@@ -1910,7 +1914,23 @@ export function WorkflowCanvas() {
 
   // Wheel-based pan/zoom, honoring the user's navigation settings. Disabled
   // while a modal is open (the modal's mini canvas drives its own).
-  useWheelPanZoom(reactFlowWrapper, canvasNavigationSettings, !isModalOpen);
+  // The GPU canvas (Settings › Canvas) takes React Flow's place, with its own pan and zoom.
+  useWheelPanZoom(reactFlowWrapper, canvasNavigationSettings, !isModalOpen && !gpuCanvasActive);
+  const gpuWheelZooms = useCallback((event: WheelEvent) => {
+    const { zoomMode } = canvasNavigationSettings;
+    return zoomMode === "scroll" || (zoomMode === "altScroll" && event.altKey) || (zoomMode === "ctrlScroll" && event.metaKey);
+  }, [canvasNavigationSettings]);
+  const gpuHeaders = useMemo(() => ({
+    hints: readinessHints,
+    getNodeTitle,
+    onCustomTitleChange: handleCustomTitleChange,
+    onCommentChange: handleCommentChange,
+    onRunNode: handleRunNode,
+    onExpandNode: handleExpandNode,
+    onBrowse: handleBrowseNode,
+    onToggleOptional: handleToggleOptional,
+    onOpenFallback: handleOpenFallback,
+  }), [readinessHints, getNodeTitle, handleCustomTitleChange, handleCommentChange, handleRunNode, handleExpandNode, handleBrowseNode, handleToggleOptional, handleOpenFallback]);
 
   // Keyboard shortcuts for copy/paste and stacking selected nodes
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -2583,6 +2603,21 @@ export function WorkflowCanvas() {
     [screenToFlowPosition, addNode, updateNodeData, loadWorkflow]
   );
 
+  // The window takes the pill's place while it is open; its own header closes it.
+  const agentButton = !isAgentOpen && (
+    <AgentButton
+      open={false}
+      harness={agentPresence.harnessChosen ? agentPresence.harness : null}
+      busy={isAgentBusy}
+      attention={agentPresence.attention}
+      disabled={tutorialActive && lockedFeatures}
+      dimmed={tutorialActive && lockedFeatures}
+      onClick={toggleAgent}
+      onWidthChange={setAgentButtonWidth}
+      style={{ right: AGENT_BUTTON_MARGIN, top: AGENT_BUTTON_MARGIN }}
+    />
+  );
+
   return (
     <div
       ref={reactFlowWrapper}
@@ -2656,6 +2691,13 @@ export function WorkflowCanvas() {
         />
       )}
 
+      {gpuCanvasActive ? (
+        <GpuCanvas nodeTypes={rawNodeTypes} headers={gpuHeaders} wheelZooms={gpuWheelZooms}>
+          <PerfOverlay />
+          {agentButton}
+        </GpuCanvas>
+      ) : (
+      <>
       <ReactFlow
         nodes={allNodes}
         edges={isCanvasOverview ? OVERVIEW_EDGES : edges}
@@ -2755,20 +2797,7 @@ export function WorkflowCanvas() {
           locked={canvasLocked}
           onLockedChange={setCanvasLocked}
         />
-        {/* The window takes the pill's place while it is open; its own header closes it. */}
-        {!isAgentOpen && (
-        <AgentButton
-          open={false}
-          harness={agentPresence.harnessChosen ? agentPresence.harness : null}
-          busy={isAgentBusy}
-          attention={agentPresence.attention}
-          disabled={tutorialActive && lockedFeatures}
-          dimmed={tutorialActive && lockedFeatures}
-          onClick={toggleAgent}
-          onWidthChange={setAgentButtonWidth}
-          style={{ right: AGENT_BUTTON_MARGIN, top: AGENT_BUTTON_MARGIN }}
-        />
-        )}
+        {agentButton}
         <FloatingNodeHeaders
           nodes={allNodes}
           hints={readinessHints}
@@ -2785,6 +2814,8 @@ export function WorkflowCanvas() {
       <EdgeMarqueeSelection canvas={reactFlowWrapper} disabled={isModalOpen || isCanvasOverview} />
       <NodeMarqueeSelection disabled={isModalOpen || isCanvasOverview} />
       <EdgeHookSelection canvas={reactFlowWrapper} disabled={isModalOpen || isCanvasOverview} />
+      </>
+      )}
 
       {/* Connection drop menu */}
       {connectionDrop && connectionDrop.handleType && (

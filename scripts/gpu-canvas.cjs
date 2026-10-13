@@ -1,0 +1,604 @@
+// GPU canvas runner. Opens the production Electron app with the GPU canvas
+// on, loads the stress workflow tiled to about 5,000 nodes (media by
+// reference, as a saved workflow opens) and measures the phase 2 targets on
+// real workflows: opening behind the loading screen, reopening from the disk
+// cache, pans while painting, a change shown, painted against live nodes,
+// image tiers and jumps, scene gestures, and input latency against today's
+// canvas. Writes a JSON report. Runs unchanged on Windows and the Mac.
+//
+//   npm run build
+//   node scripts/gpu-canvas.cjs --output gpu-canvas-mac.json
+//
+// --checks (open,reopen,pan,change,fidelity,tiers,scene,latency) picks checks.
+// --copies N tiles the stress workflow N times (17 is about 5,100 nodes).
+// --input os (the default on Windows and the Mac) moves the real cursor at
+// --hz (1000) in a maximised window: do not touch the mouse while it runs.
+// --chromium-flags adds switches, e.g. "--no-sandbox --use-angle=swiftshader"
+// on a Linux box with no GPU (run under xvfb-run).
+// --fresh-paint also compares each node painted alone, bypassing the disk cache.
+// --scene-variants base,subtree,sheet,live,chrome,bare repeats the scene
+// gestures with parts of the page taken away, to find what costs frames.
+const assert = require('node:assert/strict');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const os = require('node:os');
+const net = require('node:net');
+const { launchElectron } = require('./lib/electron-driver.cjs');
+const { PERF_TRACE_CATEGORIES, PAGE_PROBE } = require('../electron/lib/perf-trace.cjs');
+const { readTrace, analyzeTrace, keepAnalyzed, formatReport } = require('./lib/trace-analysis.cjs');
+const { createOsInput } = require('./lib/os-input.cjs');
+const { strayElectron } = require('./lib/processes.cjs');
+
+const option = (name, fallback) => {
+  const index = process.argv.indexOf(name);
+  return index < 0 ? fallback : process.argv[index + 1];
+};
+const flag = name => process.argv.includes(name);
+const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+const started = Date.now();
+const log = message => console.log(`[${((Date.now() - started) / 1000).toFixed(1)}s] ${message}`);
+const root = path.resolve(__dirname, '..');
+
+// Gestures in page (css) pixels; o carries the start point and the room around it.
+const GESTURES = {
+  'pan-sweep': { path: (o, u) => ({ x: o.x + o.ax * Math.sin(u * Math.PI * 6) + 30 * u, y: o.y + o.ay * Math.sin(u * Math.PI * 4) }) },
+  'pan-wheel': { wheel: i => ({ dx: Math.floor(i / 50) % 2 ? -23 : 24, dy: 0 }) },
+  // In and out about 4x each way, as a pinch or Ctrl+wheel does.
+  'zoom-wheel': { synthetic: true, modifiers: ['control'], wheel: i => ({ dx: 0, dy: Math.floor(i / 60) % 2 ? -8 : 8 }) },
+};
+
+function schedule(gesture, origin, { hz, seconds }) {
+  const n = Math.round(hz * seconds), interval = 1000 / hz, events = [];
+  if (gesture.wheel) {
+    events.push({ t: 0, type: 'move', x: origin.x, y: origin.y });
+    for (let i = 0; i < n; i++) events.push({ t: 40 + i * interval, type: 'wheel', x: origin.x, y: origin.y, ...gesture.wheel(i), modifiers: gesture.modifiers });
+    // The end marker is a small move: Chromium coalesces wheel events.
+    events.push({ t: 60 + n * interval, type: 'move', x: origin.x + 3, y: origin.y + 3 });
+    return events;
+  }
+  events.push({ t: 0, type: 'move', x: origin.x, y: origin.y }, { t: 40, type: 'down', x: origin.x, y: origin.y });
+  let point = origin;
+  for (let i = 0; i < n; i++) {
+    point = gesture.path(origin, (i + 1) / n, i);
+    events.push({ t: 80 + i * interval, type: 'move', x: point.x, y: point.y });
+  }
+  events.push({ t: 80 + n * interval + 20, type: 'up', x: point.x, y: point.y });
+  return events;
+}
+
+// The brief's lines for question 1 at 5,000 nodes.
+function judge(summary, refreshHz) {
+  const vsyncMs = 1000 / refreshHz;
+  const checks = {
+    presentedAtRefresh: summary.presentedFps >= 0.95 * refreshHz,
+    p95WithinOneAndAHalfVsyncs: summary.frameMs.p95 != null && summary.frameMs.p95 <= 1.5 * vsyncMs,
+    mainThreadAtMost30Pct: (summary.threads.rendererMain?.busyPct ?? 100) <= 30,
+  };
+  return { pass: Object.values(checks).every(Boolean), checks };
+}
+
+// The stress workflow tiled `copies` times, its photos as files in the
+// project's inputs/ folder and referenced the way a saved workflow opens them.
+async function buildFixture(dir, copies) {
+  const sharp = require('sharp');
+  const base = JSON.parse(await fs.readFile(path.join(root, 'examples/stress-workflow.json'), 'utf8'));
+  const sources = (await fs.readdir(path.join(root, 'examples/sample-images'))).filter(name => /\.jpe?g$/i.test(name)).sort();
+  await fs.mkdir(path.join(dir, 'inputs'), { recursive: true });
+  const ids = [];
+  for (const [k, name] of sources.entries()) {
+    const id = `sample-${k}`;
+    await sharp(path.join(root, 'examples/sample-images', name)).resize(1536, 1536, { fit: 'inside' }).jpeg({ quality: 88 }).toFile(path.join(dir, 'inputs', `${id}.jpg`));
+    ids.push(id);
+  }
+  const idFor = index => ids[index % ids.length];
+  const mediaFor = index => `/api/workflow-images?${new URLSearchParams({ workflowPath: dir, imageId: ids[index % ids.length], raw: '1' })}`;
+  let maxX = 0, maxY = 0;
+  for (const node of base.nodes) {
+    maxX = Math.max(maxX, node.position.x + Number(node.style?.width ?? node.width ?? 300));
+    maxY = Math.max(maxY, node.position.y + 600);
+  }
+  for (const group of Object.values(base.groups ?? {})) {
+    maxX = Math.max(maxX, group.position.x + group.size.width);
+    maxY = Math.max(maxY, group.position.y + group.size.height);
+  }
+  const stepX = maxX + 800, stepY = maxY + 800, columns = 4;
+  const nodes = [], edges = [], groups = {};
+  let media = 0;
+  for (let copy = 0; copy < copies; copy++) {
+    const suffix = `~${copy}`, dx = (copy % columns) * stepX, dy = Math.floor(copy / columns) * stepY;
+    const imageOf = new Map();
+    for (const node of base.nodes) {
+      const data = structuredClone(node.data);
+      // Each reference carries its file's ref, as a saved workflow opens.
+      if (node.type === 'imageInput') { data.imageRef = idFor(media); data.image = mediaFor(media++); data.filename = `reference-${media}.jpg`; imageOf.set(node.id, data.image); }
+      else if (node.type === 'nanoBanana') { data.outputImageRef = idFor(media); data.outputImage = mediaFor(media++); data.status = 'complete'; imageOf.set(node.id, data.outputImage); }
+      if (typeof data.groupId === 'string') data.groupId += suffix;
+      nodes.push({ ...node, id: node.id + suffix, position: { x: node.position.x + dx, y: node.position.y + dy }, ...(node.groupId ? { groupId: node.groupId + suffix } : {}), data });
+    }
+    for (const edge of base.edges) edges.push({ ...edge, id: edge.id + suffix, source: edge.source + suffix, target: edge.target + suffix });
+    for (const [id, group] of Object.entries(base.groups ?? {})) groups[id + suffix] = { ...group, id: id + suffix, name: `${group.name} (${copy + 1})`, position: { x: group.position.x + dx, y: group.position.y + dy } };
+    const firstImage = new Map();
+    for (const edge of base.edges) if (!firstImage.has(edge.target) && imageOf.has(edge.source)) firstImage.set(edge.target, edge.source);
+    for (const node of nodes.slice(nodes.length - base.nodes.length)) {
+      if (node.type !== 'output') continue;
+      const source = firstImage.get(node.id.slice(0, -suffix.length));
+      const image = source ? imageOf.get(source) : mediaFor(media++);
+      Object.assign(node.data, { image, imageRef: new URLSearchParams(image.split('?')[1]).get('imageId'), contentType: 'image' });
+    }
+  }
+  return { ...base, id: `gpu-canvas-${copies}`, name: `GPU canvas ${copies} copies`, directoryPath: dir, nodes, edges, groups };
+}
+
+async function main() {
+  const checks = option('--checks', 'open,reopen,pan,change,fidelity,tiers,scene,latency').split(',');
+  const copies = Number(option('--copies', 17));
+  const osInput = option('--input', ['win32', 'darwin'].includes(process.platform) ? 'os' : 'synthetic') === 'os' ? createOsInput() : undefined;
+  assert.ok(!osInput || osInput.available, '--input os needs Windows or macOS');
+  const hz = Number(option('--hz', osInput ? 1000 : 125));
+  const seconds = Number(option('--seconds', 4));
+  const flags = option('--chromium-flags', '').split(' ').filter(Boolean);
+  const output = path.resolve(option('--output', path.join(os.tmpdir(), 'gpu-canvas.json')));
+  const shots = output.replace(/\.json$/, '');
+  await fs.mkdir(shots, { recursive: true });
+  await fs.access(path.join(root, '.next/BUILD_ID')).catch(() => { throw new Error('Run npm run build first: the runner uses the production build.'); });
+  const strays = strayElectron();
+  if (strays.length && !flag('--allow-others')) throw new Error(`Electron is still running from a Node Banana checkout:\n${strays.map(p => `  ${p.pid} ${p.path}`).join('\n')}\nClose it (or pass --allow-others).`);
+
+  const profile = await fs.mkdtemp(path.join(os.tmpdir(), 'gpu-canvas-profile-'));
+  const traceDir = await fs.mkdtemp(path.join(os.tmpdir(), 'gpu-canvas-traces-'));
+  const probe = net.createServer();
+  await new Promise(resolve => probe.listen(0, '127.0.0.1', resolve));
+  const port = probe.address().port;
+  await new Promise(resolve => probe.close(resolve));
+  log(`Building the fixture (${copies} copies)…`);
+  const project = path.join(profile, 'project');
+  const workflow = await buildFixture(project, copies);
+  const workflowText = JSON.stringify(workflow);
+
+  const report = { date: new Date().toISOString(), platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model, input: osInput ? 'os' : 'synthetic', inputHz: hz,
+    gestureMs: seconds * 1000, chromiumFlags: flags, nodes: workflow.nodes.length, edges: workflow.edges.length };
+  const save = () => fs.writeFile(output, JSON.stringify(report, null, 2));
+  let app;
+  try {
+    log('Launching…');
+    app = await launchElectron({ executable: require('electron'), args: [...flags, root], cwd: root,
+      env: { ...process.env, NODE_BANANA_ELECTRON_USER_DATA: profile, NODE_BANANA_ELECTRON_PORT: String(port), NODE_BANANA_GPU_CANVAS: '1' } });
+    const { page } = app;
+    await app.run(({ dialog }) => { dialog.showMessageBoxSync = () => 1; });
+    await app.window();
+    const windowOption = option('--window', osInput ? 'maximized' : '1440x900');
+    const [width, height] = windowOption === 'maximized' ? [] : windowOption.split('x').map(Number);
+    await app.run(({ BrowserWindow }, { width, height }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      if (width) { window.unmaximize(); window.setContentSize(width, height); window.center(); } else window.maximize();
+      // Chromium stops producing frames for a covered window.
+      window.setAlwaysOnTop(true);
+      window.focus();
+    }, { width, height });
+    Object.assign(report, await app.run(({ app, screen, BrowserWindow }) => {
+      const display = screen.getPrimaryDisplay(), window = BrowserWindow.getAllWindows()[0];
+      return { gpu: app.getGPUFeatureStatus(), displayHz: display.displayFrequency, scaleFactor: display.scaleFactor, displaySize: display.size,
+        windowContentSize: window.getContentSize(), versions: { electron: process.versions.electron, chrome: process.versions.chrome } };
+    }));
+    const gpuInfo = await app.run(({ app }) => app.getGPUInfo('basic')).catch(() => null);
+    report.gpuDevice = gpuInfo?.gpuDevice?.find(device => device.active) ?? gpuInfo?.gpuDevice?.[0] ?? null;
+    const geometry = await app.run(({ BrowserWindow, screen }) => {
+      const bounds = BrowserWindow.getAllWindows()[0].getContentBounds();
+      const display = screen.getDisplayMatching(bounds);
+      return { origin: process.platform === 'win32' ? screen.dipToScreenPoint({ x: bounds.x, y: bounds.y }) : { x: bounds.x, y: bounds.y }, scaleFactor: display.scaleFactor };
+    });
+    // No request leaves for a provider.
+    await app.run(({ session }, port) => {
+      session.defaultSession.webRequest.onBeforeRequest({ urls: [`http://127.0.0.1:${port}/api/*`] }, (details, callback) => {
+        callback({ cancel: details.method === 'POST' && /\/api\/(generate|llm)/.test(details.url) });
+      });
+    }, port);
+
+    // The page: the GPU canvas on, the welcome dialog away, watchers installed.
+    async function ready({ gpu = true } = {}) {
+      await page.evaluate(gpu => localStorage.setItem('node-banana-gpu-canvas', gpu ? 'on' : 'off'), gpu);
+      await app.run(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].webContents.reload());
+      await delay(1500);
+      // Linux with no keyring asks where keys go; the runner stores none.
+      await page.click('Use for this session only', { optional: true, timeout: 5000 });
+      // A reload looks like a crash to session recovery; reopening starts from an empty workspace.
+      await page.click('Discard', { optional: true, timeout: 3000 });
+      await page.waitFor(() => !!document.querySelector('[data-gpu-canvas], .react-flow'), null, { timeout: 120000, message: 'the canvas' });
+      await page.click('Close', { last: true, optional: true, timeout: 5000 });
+      await page.click('Skip', { optional: true, timeout: 2000 });
+      await page.key('Escape');
+      await page.evaluate(PAGE_PROBE);
+      await page.evaluate(() => {
+        window.__perfErrors = [];
+        addEventListener('error', event => { if (!/^ResizeObserver loop/.test(event.message)) window.__perfErrors.push(event.error?.stack ? String(event.error.stack).slice(0, 800) : event.message); });
+        addEventListener('unhandledrejection', event => window.__perfErrors.push(String(event.reason?.message || event.reason)));
+        window.confirm = () => true;
+        window.__runnerInput = {};
+        addEventListener('pointerup', event => { window.__runnerInput.up = { x: event.clientX, y: event.clientY }; }, { capture: true, passive: true });
+        addEventListener('pointermove', event => { window.__runnerInput.move = { x: event.clientX, y: event.clientY }; }, { capture: true, passive: true });
+      });
+      if (gpu) {
+        const api = await page.waitFor(() => !!window.__gpuCanvas && window.__gpuCanvas.info().htmlInCanvas, null, { timeout: 30000, message: 'the GPU canvas with HTML-in-Canvas' }).catch(() => false);
+        assert.ok(api, 'The GPU canvas did not start with HTML-in-Canvas');
+      }
+    }
+    // Drops the workflow on the canvas, as a user opening a saved one does.
+    async function drop() {
+      await page.evaluate(() => { window.__runnerText = []; });
+      for (let i = 0; i < workflowText.length; i += 32 << 20) await page.evaluate(part => { window.__runnerText.push(part); }, workflowText.slice(i, i + (32 << 20)));
+      await page.evaluate(() => {
+        const transfer = new DataTransfer();
+        transfer.items.add(new File(window.__runnerText, 'gpu-canvas.json', { type: 'application/json' }));
+        (document.querySelector('[data-gpu-canvas]') || document.querySelector('.react-flow')).dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer, clientX: 400, clientY: 300 }));
+        delete window.__runnerText;
+      });
+    }
+    // Opens the workflow and waits until the loading screen would be gone: the view sharp and every node at 1/8.
+    async function openWorkflow(label) {
+      const t0 = Date.now();
+      // --probe prompt,imageInput: record the painter's sheet state for nodes of these types (in report.probe).
+      if (option('--probe', '')) await page.evaluate(types => window.__gpuCanvas?.probe(types.split(',').map(t => `type:${t}`)), option('--probe', ''));
+      await drop();
+      await page.waitFor(n => window.__gpuCanvas?.nodeIds().length === n, workflow.nodes.length, { timeout: 120000, message: 'the workflow in the scene' });
+      const loaded = Date.now();
+      let sawLoading = false;
+      await page.waitFor(() => { const s = window.__gpuCanvas.painter(); return s && s.screenfulDone && s.painted >= s.total; }, null, { timeout: Number(option('--paint-timeout', 300000)), interval: 100,
+        message: `${label}: every node painted` }).catch(error => { throw error; });
+      sawLoading = await page.evaluate(() => !!document.querySelector('[data-gpu-canvas] [role="status"]'));
+      const status = await page.evaluate(() => window.__gpuCanvas.painter());
+      const result = { loadMs: loaded - t0, paintedMs: Date.now() - loaded, loadingScreenStillUp: sawLoading, status, stats: await page.evaluate(() => window.__gpuCanvas.stats.summary()) };
+      log(`${label}: in the scene after ${result.loadMs} ms; screenful ${status.screenfulMs} ms, every node ${status.allMs} ms; ${status.cacheHits} cache hits, ${status.batches} batches`);
+      return result;
+    }
+
+    const devicePixelRatio = await page.evaluate(() => devicePixelRatio);
+    const pageToScreen = process.platform === 'win32' ? devicePixelRatio : devicePixelRatio / geometry.scaleFactor;
+    report.devicePixelRatio = devicePixelRatio;
+
+    async function play(events, { synthetic } = {}) {
+      if (osInput && !synthetic) return (await osInput.play(events.map(e => ({ ...e, x: geometry.origin.x + e.x * pageToScreen, y: geometry.origin.y + e.y * pageToScreen })))).sent;
+      return app.run(async ({ BrowserWindow }, events) => {
+        const contents = BrowserWindow.getAllWindows()[0].webContents;
+        const start = performance.now();
+        let sent = 0, down = false;
+        await new Promise(resolve => {
+          const timer = setInterval(() => {
+            while (sent < events.length && events[sent].t <= performance.now() - start) {
+              const { type, x, y, dx, dy, modifiers = [] } = events[sent++];
+              const at = { x: Math.round(x), y: Math.round(y) };
+              if (type === 'wheel') contents.sendInputEvent({ type: 'mouseWheel', ...at, deltaX: dx, deltaY: dy, canScroll: true, modifiers });
+              else if (type === 'down') { down = true; contents.sendInputEvent({ type: 'mouseDown', button: 'left', ...at, clickCount: 1 }); }
+              else if (type === 'up') { down = false; contents.sendInputEvent({ type: 'mouseUp', button: 'left', ...at, clickCount: 1 }); }
+              else contents.sendInputEvent({ type: 'mouseMove', ...(down ? { button: 'left', modifiers: ['leftButtonDown'] } : {}), ...at });
+            }
+            if (sent === events.length) { clearInterval(timer); resolve(); }
+          }, 4);
+        });
+        return sent;
+      }, events);
+    }
+    // A point on empty canvas near the middle, with room to move around it.
+    const emptyPoint = () => page.evaluate(() => {
+      const cx = innerWidth / 2, cy = innerHeight / 2;
+      const room = (x, y) => ({ ax: Math.max(40, Math.min(innerWidth * .3, x - 60, innerWidth - x - 60)), ay: Math.max(20, Math.min(innerHeight * .2, y - 60, innerHeight - y - 60)) });
+      const free = (x, y) => window.__gpuCanvas ? !window.__gpuCanvas.nodeAt(x, y) : !document.elementFromPoint(x, y)?.closest('.react-flow__node');
+      for (let radius = 0; radius < Math.min(cx, cy) - 60; radius += 4) {
+        for (let angle = 0; angle < Math.PI * 2; angle += Math.max(.05, 4 / Math.max(radius, 1))) {
+          const x = Math.round(cx + radius * Math.cos(angle)), y = Math.round(cy + radius * Math.sin(angle));
+          if (free(x, y)) return { x, y, ...room(x, y) };
+        }
+      }
+      return { x: 20, y: innerHeight - 20, ax: 10, ay: 10 };
+    });
+    // One traced gesture; its trace events go into `traced`.
+    async function measure(name, label, traced) {
+      const spec = GESTURES[name];
+      const origin = await emptyPoint();
+      const events = schedule(spec, origin, { hz, seconds });
+      await app.run(({ contentTracing }, categories) => contentTracing.startRecording({ included_categories: categories, excluded_categories: ['*'] }), PERF_TRACE_CATEGORIES);
+      await page.evaluate(label => { performance.mark(`banana:gesture ${label}`); window.__runnerInput = {}; window.__gpuCanvas?.stats.reset(); }, label);
+      const sent = await play(events, { synthetic: spec.synthetic });
+      const last = events.at(-1);
+      await page.waitFor(({ type, x, y }) => { const seen = type === 'up' ? window.__runnerInput.up : window.__runnerInput.move;
+        return seen && Math.abs(seen.x - x) <= 1.5 && Math.abs(seen.y - y) <= 1.5; }, last, { message: `${name} to reach the page` });
+      await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+      const pageStats = await page.evaluate(() => window.__gpuCanvas?.stats.summary() ?? null);
+      const traceFile = await app.run(({ contentTracing }, file) => contentTracing.stopRecording(file), path.join(traceDir, `${label}-${Date.now()}.json`));
+      for (const event of readTrace(traceFile)) if (keepAnalyzed(event)) traced.push(event);
+      await fs.rm(traceFile, { force: true });
+      return { name, label, inputEvents: sent, input: spec.synthetic || !osInput ? 'synthetic' : 'os', pageStats };
+    }
+    const traceResult = (traced, results) => {
+      const trace = analyzeTrace(traced);
+      console.log(`\n${formatReport(trace)}\n`);
+      const verdicts = Object.fromEntries(Object.entries(trace.summary).map(([label, summary]) => [label, judge(summary, report.displayHz || trace.refreshHz)]));
+      return { trace, verdicts, results };
+    };
+    const checkErrors = async () => assert.deepEqual(await page.evaluate(() => window.__perfErrors), [], 'Page errors during the run');
+    const processMemory = () => app.run(({ app }) => app.getAppMetrics().map(m => ({ type: m.type, workingSetMB: Math.round(m.memory.workingSetSize / 1024) })));
+
+    async function grab(rect) {
+      return app.run(async ({ BrowserWindow }, rect) => {
+        const image = await BrowserWindow.getAllWindows()[0].webContents.capturePage(rect);
+        globalThis.__grabs = globalThis.__grabs || [];
+        globalThis.__grabs.push(image);
+        return globalThis.__grabs.length - 1;
+      }, rect);
+    }
+    async function compare(a, b, file) {
+      return app.run(({ nativeImage }, { a, b, file }, require) => {
+        const fs = require('node:fs');
+        const A = globalThis.__grabs[a], B = globalThis.__grabs[b];
+        const size = A.getSize(), pa = A.toBitmap(), pb = B.toBitmap();
+        if (pa.length !== pb.length) return { error: `sizes differ: ${JSON.stringify(size)} vs ${JSON.stringify(B.getSize())}` };
+        const diff = Buffer.alloc(pa.length);
+        let within = 0, over10 = 0, total = 0, maxDiff = 0;
+        for (let p = 0; p < pa.length; p += 4) {
+          const d = Math.max(Math.abs(pa[p] - pb[p]), Math.abs(pa[p + 1] - pb[p + 1]), Math.abs(pa[p + 2] - pb[p + 2]));
+          if (d <= 2) within++;
+          if (d > 10) over10++;
+          total += d;
+          maxDiff = Math.max(maxDiff, d);
+          const v = Math.min(255, d * 8);
+          diff[p] = v; diff[p + 1] = v; diff[p + 2] = v; diff[p + 3] = 255;
+        }
+        fs.writeFileSync(`${file}-painted.png`, A.toPNG());
+        fs.writeFileSync(`${file}-live.png`, B.toPNG());
+        fs.writeFileSync(`${file}-diff.png`, nativeImage.createFromBitmap(diff, size).toPNG());
+        const pixels = pa.length / 4;
+        return { size, withinTwoLevelsPct: Math.round(within / pixels * 10000) / 100, overTenLevelsPct: Math.round(over10 / pixels * 10000) / 100, meanDiff: Math.round(total / pixels * 100) / 100, maxDiff };
+      }, { a, b, file });
+    }
+    // A page promise with a deadline, so a hang names itself instead of stalling the driver.
+    const inPage = async (label, fn, arg, timeout = 20000) => {
+      const result = await page.evaluate(`Promise.race([(${fn})(${JSON.stringify(arg ?? null)}).then(v => ({ v })), new Promise(r => setTimeout(() => r({ timedOut: true }), ${timeout}))])`);
+      if (result?.timedOut) {
+        const state = await page.evaluate(() => ({ errors: window.__perfErrors, live: window.__gpuCanvas?.live(), layer: document.querySelectorAll('[data-gpu-canvas-live] .react-flow__node').length }));
+        throw new Error(`Timed out after ${timeout} ms waiting for ${label}: ${JSON.stringify(state)}`);
+      }
+      return result?.v;
+    };
+    const section = async (name, fn) => {
+      if (!checks.includes(name)) return;
+      try { report[name] = await fn(); }
+      catch (error) {
+        const shown = await page.evaluate(() => document.body?.innerText.slice(0, 600)).catch(e => `(page unreadable: ${e.message})`);
+        console.error(`The ${name} check failed: ${error.message}\nThe page showed: ${shown}`);
+        report[name] = { error: error.message, shown };
+      }
+      await save();
+    };
+    // A view at 100% at the top-left of the first copy.
+    const home = () => page.evaluate(() => window.__gpuCanvas.setView({ zoom: 1, x: 40, y: 80 }));
+
+    await ready();
+    report.canvas = await page.evaluate(() => window.__gpuCanvas.info());
+    log(`GPU canvas up: ${JSON.stringify(report.canvas.budget)}`);
+
+    // Opening: the loading screen, the first paint.
+    await section('open', async () => {
+      const result = await openWorkflow('open');
+      result.processes = await processMemory();
+      await page.mouseMove(2, 2);
+      await fs.writeFile(path.join(shots, 'open.png'), await page.screenshot());
+      await checkErrors();
+      return result;
+    });
+
+    // Reopening: a fresh page over the same disk cache.
+    await section('reopen', async () => {
+      await page.evaluate(() => new Promise(resolve => setTimeout(resolve, 3000)));
+      await ready();
+      return openWorkflow('reopen');
+    });
+    if (!checks.includes('open') && !checks.includes('reopen')) await openWorkflow('open');
+
+    // Pans while the view's tier is painting: a jump starts painting, then a pan begins.
+    await section('pan', async () => {
+      const traced = [], results = [];
+      for (let round = 0; round < 3; round++) {
+        await page.evaluate(round => { const v = window.__gpuCanvas.view(); window.__gpuCanvas.setView({ zoom: 1, x: v.x - 4000 - round * 3000, y: v.y - 1500 }); }, round);
+        await delay(150);
+        results.push(await measure('pan-sweep', `pan-while-painting-${round + 1}`, traced));
+        await delay(1000);
+      }
+      const result = traceResult(traced, results);
+      result.yielded = await page.evaluate(() => window.__gpuCanvas.stats.summary().samples['painter.yielded'] ?? null);
+      await checkErrors();
+      return result;
+    });
+
+    // A change to a node not being edited, shown within 100 ms.
+    await section('change', async () => {
+      await home();
+      await delay(1500);
+      const prompts = await page.evaluate(() => window.__gpuCanvas.nodeIds().filter(id => {
+        const r = window.__gpuCanvas.nodeRect(id);
+        return r.type === 'prompt' && r.x > 0 && r.y > 0 && r.x + r.width < innerWidth && r.y + r.height < innerHeight;
+      }).slice(0, 5));
+      await page.evaluate(() => window.__gpuCanvas.stats.reset());
+      for (const [k, id] of prompts.entries()) {
+        await page.evaluate(({ id, k }) => window.__gpuCanvas.change(id, { prompt: `Changed while not being edited, take ${k + 1}: a lighthouse at dusk` }), { id, k });
+        await delay(600);
+        const status = await page.evaluate(() => ({ ...window.__gpuCanvas.painter(), shown: (window.__gpuCanvas.stats.samples['painter.changeToShownMs'] ?? []).length }));
+        log(`  take ${k + 1}: ${status.shown} shown so far, ${status.queued} queued, ${status.running ? 'painting' : 'idle'}`);
+      }
+      const samples = await page.evaluate(() => window.__gpuCanvas.stats.samples['painter.changeToShownMs'] ?? []);
+      const downstream = await page.evaluate(() => window.__gpuCanvas.stats.samples['painter.downstreamToShownMs'] ?? []);
+      const painter = await page.evaluate(() => window.__gpuCanvas.stats.summary().samples);
+      log(`change to shown: ${samples.map(Math.round).join(', ')} ms; what they feed: ${downstream.map(Math.round).join(', ')} ms`);
+      return { prompts, changeToShownMs: samples, downstreamToShownMs: downstream, painter, pass: samples.length > 0 && samples.every(ms => ms <= 100) };
+    });
+
+    // Painted against live, one node of each type, at 100% on whole pixels.
+    await section('fidelity', async () => {
+      const sample = await page.evaluate(() => {
+        const seen = new Map();
+        for (const id of window.__gpuCanvas.nodeIds()) { const r = window.__gpuCanvas.nodeRect(id); if (!seen.has(r.type)) seen.set(r.type, id); }
+        return [...seen.values()];
+      });
+      await fs.mkdir(path.join(shots, 'fidelity'), { recursive: true });
+      if (option('--probe', '')) await page.evaluate(({ ids, types }) => window.__gpuCanvas.probe([...ids, ...types.split(',').map(t => `type:${t}`)]), { ids: sample, types: option('--probe', '') });
+      const results = [];
+      for (const id of sample) {
+        await page.evaluate(id => { const c = window.__gpuCanvas, r = c.nodeRect(id), v = c.view(); c.setView({ zoom: 1, x: 240 - (r.x - v.x) / v.zoom, y: 160 - (r.y - v.y) / v.zoom }); }, id);
+        await page.mouseMove(2, 2);
+        await inPage('the live layer emptied', () => window.__gpuCanvas.setLive([]));
+        await delay(300);
+        await inPage(`${id} painted`, id => window.__gpuCanvas.paintNow(id), id);
+        await delay(250);
+        const rect = await page.evaluate(id => window.__gpuCanvas.paintRect(id), id);
+        const box = { x: Math.round(rect.x), y: Math.round(rect.y), width: Math.round(rect.width), height: Math.round(rect.height) };
+        const painted = await grab(box);
+        const swapStarted = Date.now();
+        await inPage(`${id} live`, id => window.__gpuCanvas.setLive([id]), id);
+        const swapMs = Date.now() - swapStarted;
+        await delay(250);
+        // A live node can still be swapping its image (a thumbnail for the
+        // full one, deferred while the page is busy): grab it once its images
+        // have loaded and held the same source for 300 ms.
+        await page.waitFor(id => {
+          const node = [...document.querySelectorAll(`.react-flow__node[data-id="${CSS.escape(id)}"]`)].find(n => !n.closest('[data-gpu-canvas-sheet]'));
+          const images = node ? [...node.querySelectorAll('img')] : [];
+          const signature = images.map(img => `${img.currentSrc || img.src}|${img.complete}`).join('\n');
+          const w = (window.__liveImages ??= {});
+          if (w.id !== id || w.signature !== signature) Object.assign(w, { id, signature, since: performance.now() });
+          return images.every(img => img.complete) && performance.now() - w.since >= 300;
+        }, id, { message: `${id}'s live images to settle`, timeout: 5000 }).catch(() => log(`  ${id}: live images still changing after 5 s`));
+        const live = await grab(box);
+        const type = await page.evaluate(id => window.__gpuCanvas.nodeRect(id).type, id);
+        const compared = await compare(painted, live, path.join(shots, 'fidelity', type));
+        if (flag('--fresh-paint')) {
+          await inPage('the live layer emptied', () => window.__gpuCanvas.setLive([]));
+          await inPage(`${id} repainted`, id => window.__gpuCanvas.repaint(id), id);
+          await delay(250);
+          compared.fresh = await compare(await grab(box), live, path.join(shots, 'fidelity', `${type}-fresh`));
+        }
+        // Photos resample a little differently on the sheet (a different decode or
+        // thumbnail): many pixels a level or two off, almost none far off. A
+        // misplaced or stale node puts whole edges and glyphs far off.
+        const pass = compared.withinTwoLevelsPct >= 99.5 || (compared.overTenLevelsPct <= 0.5 && compared.meanDiff <= 1);
+        results.push({ id, type, swapMs, ...compared, pass });
+        log(`  ${type}: ${compared.withinTwoLevelsPct ?? compared.error}% of pixels within 2 levels, ${compared.overTenLevelsPct}% over 10, mean ${compared.meanDiff}${compared.fresh ? ` (painted alone: ${compared.fresh.withinTwoLevelsPct}%, ${compared.fresh.overTenLevelsPct}% over 10)` : ''}${pass ? '' : ' FAIL'}`);
+      }
+      await page.evaluate(() => window.__gpuCanvas.setLive([]));
+      await checkErrors();
+      const probe = option('--probe', '') ? await page.evaluate(() => window.__gpuCanvas.probeLog()) : undefined;
+      return { results, probe, pass: results.every(r => r.pass) };
+    });
+
+    // Image tiers: 100% to 5% and back, then jumps; atlas memory and time until sharp.
+    await section('tiers', async () => {
+      await home();
+      await page.mouseMove(2, 2);
+      await delay(1500);
+      const sharpWithin = Number(option('--sharp-timeout', 10000));
+      const settleAt = async view => {
+        const t0 = Date.now();
+        await page.evaluate(view => window.__gpuCanvas.setView(view), view);
+        let sharpness;
+        for (;;) {
+          sharpness = await page.evaluate(() => window.__gpuCanvas.sharpness());
+          if (sharpness.sharp >= sharpness.visible || Date.now() - t0 > sharpWithin) break;
+          await delay(16);
+        }
+        const status = await page.evaluate(() => window.__gpuCanvas.painter());
+        return { view, sharpMs: sharpness.sharp >= sharpness.visible ? Date.now() - t0 : null, ...sharpness, atlasLayers: status.atlasLayers, atlasMB: status.atlasMB, evicted: status.evicted, atlasFull: status.atlasFull };
+      };
+      const { width, height } = await page.evaluate(() => ({ width: innerWidth, height: innerHeight }));
+      const view = await page.evaluate(() => window.__gpuCanvas.view());
+      const center = { x: (width / 2 - view.x) / view.zoom, y: (height / 2 - view.y) / view.zoom };
+      const about = zoom => ({ zoom, x: width / 2 - center.x * zoom, y: height / 2 - center.y * zoom });
+      const steps = [], jumps = [];
+      for (const [k, zoom] of [1, 0.5, 0.25, 0.1, 0.05, 0.1, 0.25, 0.5, 1].entries()) {
+        const step = await settleAt(about(zoom));
+        steps.push(step);
+        if (k <= 4) await fs.writeFile(path.join(shots, `zoom-${Math.round(zoom * 100)}.png`), await page.screenshot());
+        log(`  ${Math.round(zoom * 100)}%: ${step.sharp}/${step.visible} sharp at ${step.tier}x in ${step.sharpMs ?? `>${sharpWithin}`} ms`);
+      }
+      const bounds = await page.evaluate(() => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; const c = window.__gpuCanvas, v = c.view();
+        for (const id of c.nodeIds()) { const n = c.nodeRect(id); const x = (n.x - v.x) / v.zoom, y = (n.y - v.y) / v.zoom; x0 = Math.min(x0, x); y0 = Math.min(y0, y); x1 = Math.max(x1, x); y1 = Math.max(y1, y); } return { x0, y0, x1, y1 }; });
+      for (const zoom of [1, 0.25]) for (const to of [{ x: bounds.x1 - 1200, y: bounds.y1 - 800 }, { x: bounds.x0 + 400, y: bounds.y0 + 300 }, { x: (bounds.x0 + bounds.x1) / 2, y: (bounds.y0 + bounds.y1) / 2 }]) {
+        await delay(300);
+        const jump = await settleAt({ zoom, x: width / 2 - to.x * zoom, y: height / 2 - to.y * zoom });
+        jumps.push(jump);
+        log(`  jump at ${Math.round(zoom * 100)}%: ${jump.sharp}/${jump.visible} sharp in ${jump.sharpMs ?? `>${sharpWithin}`} ms`);
+      }
+      const summary = await page.evaluate(() => window.__gpuCanvas.stats.summary());
+      for (const f of summary.longFrames ?? []) log(`  long frame: ${f.ms} ms, ending in "${f.phase}"`);
+      for (const f of summary.loafs ?? []) log(`  long animation frame: ${f.ms} ms (blocking ${f.blockingMs}, render ${f.renderMs}, layout ${f.layoutMs}) in "${f.phase}"; scripts: ${f.scripts.map(s => `${s.ms} ms ${s.fn || s.invoker} ${s.at}`).join(' | ') || 'none'}`);
+      const verdict = { atMost256MB: Math.max(...steps.map(s => s.atlasMB)) <= 256, jumpsSharpWithin500ms: jumps.every(j => j.sharpMs != null && j.sharpMs <= 500) };
+      await checkErrors();
+      return { steps, jumps, verdict: { ...verdict, pass: Object.values(verdict).every(Boolean) }, stats: summary };
+    });
+
+    // The scene: every node on screen, pans and zooms.
+    const gestureNames = option('--gestures', ['pan-sweep', 'zoom-wheel', ...(process.platform === 'darwin' ? ['pan-wheel'] : [])].join(',')).split(',');
+    await section('scene', async () => {
+      // The scene's own frame rate: wait for the painter's background work to finish (pan-while-painting measures it busy).
+      const idleStarted = Date.now();
+      await page.waitFor(() => { const p = window.__gpuCanvas.painter(); return !p.running && p.queued === 0; }, null, { timeout: 180000, interval: 500, message: 'the painter to finish' })
+        .then(() => log(`  painter idle after ${Date.now() - idleStarted} ms`), () => log('  painter still busy after 180 s'));
+      // --scene-variants base,subtree,sheet,live,chrome,bare: repeat the gestures with a part of the page taken away
+      // (bare takes all of them), to find what costs frames. Labels carry the variant.
+      const variants = option('--scene-variants', 'base').split(',');
+      const PARTS = { subtree: ['sheet', 'subtree'], sheet: ['sheet'], live: ['live'], chrome: ['chrome'], bare: ['sheet', 'subtree', 'live', 'chrome'] };
+      const traced = [], results = [];
+      for (const variant of variants) {
+        const parts = PARTS[variant] || [];
+        await page.evaluate(parts => { for (const part of parts) window.__gpuCanvas.diagnose(part, false); }, parts);
+        for (let round = 0; round < 2; round++) for (const name of gestureNames) {
+          await page.evaluate(() => window.__gpuCanvas.fit());
+          await delay(1500);
+          results.push(await measure(name, variant === 'base' ? name : `${name}:${variant}`, traced));
+        }
+        if (variant === 'base') await fs.writeFile(path.join(shots, 'fit.png'), await page.screenshot());
+        await page.evaluate(parts => { for (const part of [...parts].reverse()) window.__gpuCanvas.diagnose(part, true); }, parts);
+      }
+      await checkErrors();
+      return { ...traceResult(traced, results), info: await page.evaluate(() => window.__gpuCanvas.info()) };
+    });
+
+    // Input latency, the GPU canvas against today's canvas, with the same pan at the same zoom (25%).
+    await section('latency', async () => {
+      const result = {};
+      for (const gpu of [true, false]) {
+        if (!gpu) {
+          await ready({ gpu: false });
+          await drop();
+          await page.waitFor(() => document.querySelectorAll('.react-flow__node').length > 0 && window.__gpuCanvas == null, null, { timeout: 180000, message: "today's canvas" });
+          await delay(5000);
+        }
+        await page.evaluate(gpu => {
+          if (gpu) { const v = window.__gpuCanvas.view(); window.__gpuCanvas.setView({ zoom: 0.25, x: v.x, y: v.y }); }
+        }, gpu);
+        await delay(2000);
+        const traced = [], results = [];
+        for (let round = 0; round < 2; round++) results.push(await measure('pan-sweep', `${gpu ? 'gpu' : 'today'}-pan`, traced));
+        const trace = analyzeTrace(traced);
+        console.log(`\n${formatReport(trace)}\n`);
+        result[gpu ? 'gpuCanvas' : 'todaysCanvas'] = { trace: trace.summary, pageInputLatency: results.map(r => r.pageStats?.samples['input.latencyMs'] ?? null) };
+      }
+      return result;
+    });
+    log(`Saved ${output}`);
+  } catch (error) {
+    // What the page and the app showed when it failed.
+    if (app) {
+      report.failure = { message: error.message, appOutput: app.output().slice(-6000),
+        page: await app.page.evaluate(() => ({ url: location.href, text: document.body?.innerText.slice(0, 2000), errors: window.__perfErrors ?? null })).catch(e => String(e)) };
+      console.error(`App output:\n${report.failure.appOutput}\nPage: ${JSON.stringify(report.failure.page, null, 2)}`);
+    }
+    throw error;
+  } finally {
+    await save().catch(() => {});
+    if (app) {
+      await app.close();
+      for (let wait = 0; wait < 20 && strayElectron().length > strays.length; wait++) await delay(250);
+    }
+    const remove = dir => fs.rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 }).catch(error => console.warn(`Could not remove ${dir}: ${error.message}`));
+    await remove(profile);
+    await remove(traceDir);
+  }
+}
+main().catch(error => { console.error(error); process.exitCode = 1; });

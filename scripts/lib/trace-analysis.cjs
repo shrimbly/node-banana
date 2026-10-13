@@ -112,7 +112,7 @@ function analyzeTrace(events, { gapMs = 250, minInputs = 8 } = {}) {
   const committed = full.filter(frame => frame.commit != null).sort((a, b) => a.commit - b.commit);
   const inputs = spans(events, renderer, 'EventLatency').map(span => {
     const latency = span.begin.args?.event_latency || {};
-    return { type: latency.event_type, generated: span.begin.ts, handled: span.stages.RendererMainProcessing?.e ?? span.end, vsyncMs: latency.vsync_interval_ms };
+    return { type: latency.event_type, generated: span.begin.ts, handled: span.stages.RendererMainProcessing?.e ?? span.end, presented: span.end, vsyncMs: latency.vsync_interval_ms };
   });
   const vsyncMs = median(inputs.map(input => input.vsyncMs).filter(Number.isFinite)) || median(updates.slice(1).map((ts, i) => (ts - updates[i]) / 1000));
   const marks = events.filter(event => event.cat === 'blink.user_timing' && event.ph === 'I' && /^banana:(gesture|auto) /.test(event.name))
@@ -179,6 +179,11 @@ function measureWindow({ label, start, end, last, inputs, canvasFrames, updates,
     const frame = committed[low];
     if (frame && frame.end - input.generated <= 250_000) latencies.push((frame.end - input.generated) / 1000); else unanswered++;
   }
+  // Chromium's own figure: from the input to the frame it says presented it.
+  // It follows the input through the compositor, so it also covers a canvas
+  // whose update needs no main-thread commit (WebGL), which the figure above
+  // misses.
+  const chromeLatencies = inputs.filter(input => input.presented > input.generated).map(input => (input.presented - input.generated) / 1000);
   const threads = {};
   for (const [name, key] of threadKeys) {
     let busy = 0, longest = 0, over16 = 0, over50 = 0;
@@ -192,7 +197,7 @@ function measureWindow({ label, start, end, last, inputs, canvasFrames, updates,
     }
     threads[name] = { busyMs: busy / 1000, longestTaskMs: longest, tasksOver16ms: over16, tasksOver50ms: over50 };
   }
-  return { label, durationMs, windowMs: (end - start) / 1000, inputs: inputs.length, intervals, latencies, unanswered, threads,
+  return { label, durationMs, windowMs: (end - start) / 1000, inputs: inputs.length, intervals, latencies, chromeLatencies, unanswered, threads,
     reports: count(inWindow), updates: shown.length, expected,
     longFrames: longFrames.filter(frame => frame.end != null && frame.end >= start && frame.ts <= end).map(frame => ({ ms: (frame.end - frame.ts) / 1000, name: frame.name })),
     vsyncMs };
@@ -221,7 +226,7 @@ function combine(label, list, vsyncMs) {
   for (const gesture of list) for (const key of Object.keys(reports)) reports[key] += gesture.reports[key];
   return { label, gestures: list.length, durationMs: list.reduce((sum, g) => sum + g.durationMs, 0), windowMs: list.reduce((sum, g) => sum + g.windowMs, 0),
     inputs: list.reduce((sum, g) => sum + g.inputs, 0), updates: list.reduce((sum, g) => sum + g.updates, 0), expected: list.reduce((sum, g) => sum + g.expected, 0),
-    intervals: list.flatMap(g => g.intervals), latencies: list.flatMap(g => g.latencies), unanswered: list.reduce((sum, g) => sum + g.unanswered, 0),
+    intervals: list.flatMap(g => g.intervals), latencies: list.flatMap(g => g.latencies), chromeLatencies: list.flatMap(g => g.chromeLatencies), unanswered: list.reduce((sum, g) => sum + g.unanswered, 0),
     reports, threads, longFrames: list.flatMap(g => g.longFrames), vsyncMs };
 }
 
@@ -229,6 +234,7 @@ function combine(label, list, vsyncMs) {
 function strip(window) {
   const intervals = [...window.intervals].sort((a, b) => a - b);
   const latencies = [...window.latencies].sort((a, b) => a - b);
+  const chromeLatencies = [...(window.chromeLatencies || [])].sort((a, b) => a - b);
   const { vsyncMs } = window;
   const missed = window.intervals.reduce((sum, ms) => sum + Math.max(0, Math.round(ms / vsyncMs) - 1), 0);
   const threads = Object.fromEntries(Object.entries(window.threads).map(([name, stats]) => [name, {
@@ -246,6 +252,7 @@ function strip(window) {
     missedVsyncs: missed, jankyFrames: window.intervals.filter(ms => ms > vsyncMs * 1.5).length,
     frameMs: { p50: round(percentile(intervals, .5)), p95: round(percentile(intervals, .95)), p99: round(percentile(intervals, .99)), max: round(intervals.at(-1)) },
     latencyMs: { p50: round(percentile(latencies, .5), 1), p95: round(percentile(latencies, .95), 1), max: round(latencies.at(-1), 1), unanswered: window.unanswered },
+    chromeLatencyMs: { p50: round(percentile(chromeLatencies, .5), 1), p95: round(percentile(chromeLatencies, .95), 1), max: round(chromeLatencies.at(-1), 1) },
     // Chromium's frame reports in the window, forked ones included: for diagnosis.
     reports: window.reports, threads,
     longFrames: { count: longFrames.length, totalMs: round(longFrames.reduce((sum, f) => sum + f.ms, 0), 0), worst: longFrames.slice(0, 5).map(f => ({ ms: round(f.ms, 0), name: f.name })) },

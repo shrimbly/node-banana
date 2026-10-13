@@ -360,6 +360,16 @@ body {
   pointer-events: none !important;
 }
 
+/* Over the GPU canvas, chrome keeps no backdrop filter. A blur over a
+   WebGL canvas is redone every frame the scene moves, and on macOS it stops
+   the canvas going to the display as its own layer: a pan on the Mac's
+   120 Hz screen lost about 10 frames a second to it. The chrome's grounds
+   are 92% opaque, so the glass barely shows. Set once, while the GPU canvas
+   is mounted. */
+:root[data-gpu-canvas-active] [class*="backdrop-blur"] {
+  backdrop-filter: none !important;
+}
+
 /* Hide edges below 15% zoom while keeping nodes and images visible. */
 .canvas-overview .react-flow__edges,
 .canvas-overview .react-flow__edge {

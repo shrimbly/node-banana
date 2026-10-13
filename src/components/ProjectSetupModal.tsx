@@ -42,6 +42,7 @@ import { APP_VERSION } from "@/lib/appVersion";
 import { cn } from "@/components/nodes/ui/cn";
 import { getLowDetailSettings, setLowDetailEnabled, setLowDetailZoom } from "@/components/nodes/lowDetail";
 import { getPerfOverlayVisible, setPerfOverlayVisible } from "@/components/PerfOverlay";
+import { getGpuCanvasEnabled, gpuCanvasSupported, setGpuCanvasEnabled } from "@/lib/gpuCanvas/setting";
 import { ComfyMark } from "@/components/icons/ComfyMark";
 
 import { DEFAULT_LLM_MODEL, LLM_PROVIDER_OPTIONS, defaultLLMModel, llmModelLabel, llmModelOptions } from "@/lib/llm/catalog";
@@ -271,6 +272,7 @@ export function ProjectSetupModal({
   const [localCanvasSettings, setLocalCanvasSettings] = useState<CanvasNavigationSettings>(canvasNavigationSettings);
   const [localLowDetail, setLocalLowDetail] = useState(getLowDetailSettings);
   const [localPerfOverlay, setLocalPerfOverlay] = useState(getPerfOverlayVisible);
+  const [localGpuCanvas, setLocalGpuCanvas] = useState(getGpuCanvasEnabled);
 
   // Connection appearance draft (Canvas tab); applied on Save
   const [localEdgeStyle, setLocalEdgeStyle] = useState<EdgeStyle>(edgeStyle);
@@ -332,6 +334,7 @@ export function ProjectSetupModal({
       setLocalCanvasSettings(canvasNavigationSettings);
       setLocalLowDetail(getLowDetailSettings());
       setLocalPerfOverlay(getPerfOverlayVisible());
+      setLocalGpuCanvas(getGpuCanvasEnabled());
       setLocalEdgeStyle(edgeStyle);
       setLocalEdgeAppearance(edgeAppearance);
       setEdgeDefaultSaved(false);
@@ -563,6 +566,7 @@ export function ProjectSetupModal({
     setLowDetailEnabled(localLowDetail.enabled);
     setLowDetailZoom(localLowDetail.zoom);
     setPerfOverlayVisible(localPerfOverlay);
+    if (localGpuCanvas !== getGpuCanvasEnabled()) setGpuCanvasEnabled(localGpuCanvas);
     onClose();
   };
 
@@ -1173,6 +1177,18 @@ export function ProjectSetupModal({
             >
               <Switch label="Performance overlay" checked={localPerfOverlay} onChange={setLocalPerfOverlay} />
             </DialogRow>
+            {/* The GPU canvas needs the desktop app's HTML-in-Canvas feature */}
+            {(gpuCanvasSupported() || !!window.nodeBananaDesktop?.gpuCanvas) && (
+              <DialogRow
+                title="GPU canvas (preview)"
+                description={localGpuCanvas && !gpuCanvasSupported()
+                  ? "Restart Node Banana to start drawing with the GPU canvas"
+                  : "Draws every node on the GPU, so very large workflows stay smooth. For now it pans, zooms, selects and opens nodes; editing the graph needs it off"}
+                className="py-[18px]"
+              >
+                <Switch label="GPU canvas (preview)" checked={localGpuCanvas} onChange={setLocalGpuCanvas} />
+              </DialogRow>
+            )}
           </div>
         )}
 

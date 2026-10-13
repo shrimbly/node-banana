@@ -1,0 +1,162 @@
+# GPU canvas
+
+The GPU canvas draws the workflow as a three.js scene instead of one page
+element per node. Each node is a picture of the real node component, painted
+off screen with HTML-in-Canvas; the nodes being worked in are the real
+components, laid over the scene. It is behind a setting while it is built:
+phase 2 (this) is read-only, so you can pan, zoom, select and open a node,
+and editing arrives in phase 3.
+
+## Turning it on
+
+Settings › Canvas › "GPU canvas (preview)" (`node-banana-gpu-canvas` in
+localStorage, `on` or `off`). It needs HTML-in-Canvas, which Chromium 152
+ships behind the `CanvasDrawElement` Blink feature:
+
+- **Desktop app**: turning it on writes `gpu-canvas-v1.json` under user data,
+  and the next launch appends `--enable-blink-features=CanvasDrawElement`
+  (`electron/lib/gpu-canvas.cjs`). Until the restart the setting says so.
+  `NODE_BANANA_GPU_CANVAS=1` turns it on for one run (the runner uses it).
+- **Browser**: start Chromium with the same switch.
+
+The canvas is active when the setting is on and `texElementImage2D` exists
+(`useGpuCanvasActive`, `src/lib/gpuCanvas/setting.ts`). Otherwise today's
+React Flow canvas runs, unchanged.
+
+## How it fits together
+
+| Part | File | What it does |
+|------|------|--------------|
+| Scene graph | `src/lib/gpuCanvas/graph.ts` | Nodes, edges and groups as flat arrays plus a grid index, kept in step with the store; positions move in place, an add or remove rebuilds |
+| Scene | `src/lib/gpuCanvas/scene.ts` | WebGL2: dot grid, groups, instanced node quads reading the atlas, instanced bezier edges, selection and hover outlines. Owns pan, zoom, click, double-click and wheel |
+| Paint keys | `src/lib/gpuCanvas/paintKey.ts` | A hash of what a node's picture shows: type, width, data, socket connections and the keys of what feeds it, so a change anywhere upstream reaches it. Position and selection are not in it |
+| Queue | `src/lib/gpuCanvas/paintQueue.ts` | Paint requests by priority (urgent changes, the view, background) and tier |
+| Atlas | `src/lib/gpuCanvas/atlasLayout.ts`, `atlas.ts` | A 2048² texture array: 1/8 images shelf-packed for good, larger tiers in freeable cells |
+| Budget | `src/lib/gpuCanvas/budget.ts` | 16 layers (256 MB); 8 on an integrated GPU or under 8 GB of memory |
+| Painter | `src/components/gpuCanvas/painter.ts`, `PainterSheet.tsx` | Renders batches of real nodes on a sheet inside `<canvas layoutsubtree>`, paints the sheet into a texture, copies each node into its atlas slot |
+| Disk cache | `src/lib/gpuCanvas/paintCache.ts` | Painted images in IndexedDB (`node-banana-paint-cache`), by paint key and tier |
+| Live layer | `src/components/gpuCanvas/LiveLayer.tsx` | A real `<ReactFlow>` over the scene holding only the live nodes |
+| Shell | `src/components/gpuCanvas/GpuCanvas.tsx` | Builds the rest, follows the store, shows the loading screen |
+
+## Tiers
+
+A node is painted at a tier: 1/8, 1/4, 1/2, 1 or 2 texels per css pixel at
+100%, up to the display's scale. The view wants the tier matching zoom ×
+scale; a node shows the smallest tier it holds that is that sharp, else its
+sharpest. Every node keeps a 1/8 image, so once a workflow has been painted
+a zoomed-out view never falls back to stand-in cards. Larger tiers are painted for the view and its margin and are
+evicted, longest unseen first, when the atlas needs room; the view's own
+tier near the view is never evicted.
+
+After the 1/8 pass, every node is also painted at the tier a 25% view needs
+(1/4 on a standard display, 1/2 on a Retina one), in batches of 8 below
+everything else. Those images go to the disk cache and stay in the atlas
+only near the view, and they never evict anything: a jump to a far part of
+the graph at 25% then uploads a couple of hundred images from the cache
+instead of painting them. Nodes the cache already holds are skipped.
+Batches are 48 nodes, 96 at the 1/4 tier.
+
+## Painting
+
+- **Sizes settle first.** A batch renders its nodes on the sheet, waits for
+  React Flow to measure them and for their images to load and decode (again
+  whenever an image's source changes, until the sizes hold), then places
+  them again at their measured heights and waits until React Flow has moved
+  them (it applies positions a render after ours). Only then is the sheet
+  painted. The measured height and handle positions go to the scene, so
+  edges meet the painted sockets.
+- **Painting gives way to input.** A batch starts only 120 ms after the last
+  input, and a batch whose sheet became ready after input arrived goes back
+  to the queue unpainted. Sheets are 2048×1536 texels; disk cache uploads
+  are spread to 2 M texels a frame.
+- **Changes come first.** A store change marks the node and everything
+  downstream of it stale a frame later (keys are not computed on the typing path). Their
+  images at the view's tier and at 1/8 are queued urgent; an urgent batch
+  holds only urgent requests, and a background batch still being prepared
+  gives way to it.
+- **Painted copies are read-only.** The sheet's nodes read the real store
+  inside `<PaintedNodes>`, where `useUpdateNodeData()` drops writes. A node
+  that derives what it shows by saving it (Split Grid and Image Resize copy
+  their upstream image) shows the derived value directly when
+  `useIsPaintedNode()` is true.
+
+- **Navigating holds `canvas-interacting`** on the document, as today's
+  canvas does, so work that waits for a still canvas (the desktop recovery
+  checkpoint) does not land mid-pan.
+
+## Opening a workflow
+
+A workflow opened from a file is framed as today's canvas frames it
+(`frameLoadedGraph`), or the tab's saved view is restored. Painting starts
+over from that view. A workflow of 150 nodes or more that is not painted
+within 300 ms shows the loading screen ("Opening workflow", N of M), which
+stays until the view is sharp and every node has its 1/8 image. Behind it
+the sheets are 4096×3072 and nothing waits for quiet, since nobody can pan.
+
+Reopening reads the disk cache: each entry is the image's raw RGBA,
+deflated, with the node's height and handle anchors. Images are read back
+from the GPU without stalling (a pixel buffer and a fence) and stored once
+the GPU is done; the cache is trimmed to 512 MB, least recently used first.
+The key includes the app version and display scale, so an update or a
+different screen paints afresh. A node's file refs (`imageRef`, `inputImageRefs`, …) are left out of
+its key: they name the file its media was saved as, so a save that records
+them repaints nothing.
+
+## Live nodes
+
+A node is live (a real component on the live layer) while it is hovered,
+selected, holds focus, is opened, or is visible above 100% zoom. Its scene
+image stays until the live component is measured and decoded, then is
+hidden, so the swap shows no gap. When it stops being live it waits up to
+1.5 s for a current painted image (it may have been edited while live)
+before the scene shows it again.
+
+## What phase 2 leaves out
+
+- Editing on the canvas: dragging nodes, connecting, deleting, the node
+  menus and the selection box (phase 3).
+- Group labels; edges are always beziers whatever the edge style setting.
+- Keyboard shortcuts that add nodes still read React Flow's viewport.
+- A node whose look depends on state outside its data and its inputs (a
+  file loading elsewhere, a timer) may paint stale until its key changes.
+
+## Measuring
+
+`scripts/gpu-canvas.cjs` opens the production Electron app with the GPU canvas
+on, drops the stress workflow tiled to about 5,000 nodes (media by
+reference), and checks:
+
+| Check | Pass |
+|-------|------|
+| `open` | in the scene, then the view sharp and every node at 1/8 (loading screen timings) |
+| `reopen` | the same over the disk cache |
+| `pan` | pans while painting hold refresh rate (traced) |
+| `change` | a change to a node not being edited is shown within 100 ms (what it feeds is timed alongside) |
+| `fidelity` | each node type painted against live: 99.5% of pixels within 2 levels, or (photos resample a little differently) no more than 0.5% over 10 levels and a mean difference of 1 level at most |
+| `tiers` | zoom steps and jumps sharp within 500 ms, atlas within budget |
+| `scene` | pan and zoom gestures at refresh rate |
+| `latency` | input latency of a pan on the GPU canvas against today's canvas |
+
+The trace's `latencyMs` counts an input as shown by the first presented frame
+with a main-thread commit after it; a WebGL canvas's frames need none, so for
+the GPU canvas read `chromeLatencyMs` (Chromium's own input-to-presentation
+figure) and the page's `input.latencyMs` instead.
+
+```bash
+npm run build
+node scripts/gpu-canvas.cjs --output gpu-canvas-mac.json
+```
+
+`--checks` picks checks, `--copies` sizes the workflow, `--fresh-paint`
+also compares each node painted alone (bypassing the cache). Without a GPU
+(a Linux container) run it under `xvfb-run` with
+`--input synthetic --chromium-flags "--no-sandbox --use-angle=swiftshader"`;
+frame-rate checks are meaningless there, the rest still run.
+
+`window.__gpuCanvas` (stats, painter status, sharpness, view, node rects,
+live nodes, `paintNow`, `repaint`) is what the runner drives.
+
+The stats also keep frames over 250 ms with the painter phase they ended in,
+and the browser's long animation frames with their slowest scripts; the
+`tiers` check prints both. That is how a stall outside the painter (an
+autosave settling every node's media in one task) was found.
