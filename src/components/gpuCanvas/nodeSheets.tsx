@@ -128,12 +128,22 @@ export function handleAnchors(state: ReactFlowState, id: string): Map<string, Ha
   for (const kind of ["source", "target"] as const) {
     for (const handle of bounds[kind] ?? []) {
       const { x, y, width, height, position } = handle;
-      const anchor = position === "right" ? { x: x + width, y: y + height / 2 }
-        : position === "left" ? { x, y: y + height / 2 }
-        : position === "top" ? { x: x + width / 2, y }
-        : { x: x + width / 2, y: y + height };
+      const anchor = position === "right" ? { x: x + width, y: y + height / 2, position }
+        : position === "left" ? { x, y: y + height / 2, position }
+        : position === "top" ? { x: x + width / 2, y, position }
+        : { x: x + width / 2, y: y + height, position };
       anchors.set(`${kind}:${handle.id ?? ""}`, anchor);
     }
   }
   return anchors;
+}
+
+/** The node's media card (the box a marquee must hold), relative to the node, in flow units; null without one. */
+export function mediaCardBox(root: HTMLElement, id: string): { x: number; y: number; w: number; h: number } | null {
+  const node = root.querySelector<HTMLElement>(`.react-flow__node[data-id="${CSS.escape(id)}"]`);
+  const card = node?.querySelector<HTMLElement>("[data-media-card]");
+  if (!node || !card || !node.offsetWidth) return null;
+  const a = node.getBoundingClientRect(), b = card.getBoundingClientRect();
+  const scale = a.width / node.offsetWidth || 1;
+  return { x: (b.left - a.left) / scale, y: (b.top - a.top) / scale, w: b.width / scale, h: b.height / scale };
 }

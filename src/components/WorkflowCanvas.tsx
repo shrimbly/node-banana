@@ -102,6 +102,7 @@ import { setZoomedOut, useLowDetail, useLowDetailEnabled, useLowDetailZoom } fro
 import { NodeLowDetail } from "./nodes/NodeLowDetail";
 import { PerfOverlay } from "./PerfOverlay";
 import { useGpuCanvasActive } from "@/lib/gpuCanvas/setting";
+import type { GpuEditing } from "./gpuCanvas/editor";
 import { detectAndSplitGrid } from "@/utils/gridSplitter";
 import { logger } from "@/utils/logger";
 import { WelcomeModal } from "./quickstart";
@@ -1131,9 +1132,10 @@ export function WorkflowCanvas() {
     [isValidConnection, onConnect]
   );
 
-  // Handle connection dropped on empty space or on a node
-  const handleConnectEnd: OnConnectEnd = useCallback(
-    (event, connectionState) => {
+  // Handle connection dropped on empty space or on a node. The GPU canvas
+  // names the node under the pointer itself (its nodes are not page elements).
+  const handleConnectEnd = useCallback(
+    (event: Parameters<OnConnectEnd>[0], connectionState: Parameters<OnConnectEnd>[1], dropNodeId?: string | null) => {
       const { nodes, edges } = useWorkflowStore.getState();
       // A click on the handle (no drag) opens the handle menu instead
       const down = handlePointerDownRef.current;
@@ -1324,15 +1326,13 @@ export function WorkflowCanvas() {
       };
 
       // Check if we dropped on a node by looking for node elements under the cursor
-      const elementsUnderCursor = document.elementsFromPoint(clientX, clientY);
-      const nodeElement = elementsUnderCursor.find((el) => {
+      const nodeElement = dropNodeId !== undefined ? null : document.elementsFromPoint(clientX, clientY).find((el) => {
         // React Flow nodes have data-id attribute
         return el.closest(".react-flow__node");
       });
+      const targetNodeId = dropNodeId !== undefined ? dropNodeId : (nodeElement?.closest(".react-flow__node") as HTMLElement | null)?.dataset.id;
 
-      if (nodeElement) {
-        const nodeWrapper = nodeElement.closest(".react-flow__node") as HTMLElement;
-        const targetNodeId = nodeWrapper?.dataset.id;
+      if (targetNodeId) {
 
         if (targetNodeId && targetNodeId !== connectionState.fromNode.id && fromHandleType) {
           const targetNode = nodes.find((n) => n.id === targetNodeId);
@@ -2380,6 +2380,23 @@ export function WorkflowCanvas() {
 
   const handlePaneClick = useCallback(() => setExpandedStubGroup?.(null), [setExpandedStubGroup]);
 
+  // The GPU canvas edits through the same handlers as React Flow above.
+  const gpuEditing = useMemo<GpuEditing>(() => ({
+    navigation: canvasNavigationSettings,
+    locked: canvasLocked,
+    disabled: isModalOpen || tutorialActive,
+    isValidConnection,
+    onConnect: handleConnect,
+    onConnectEnd: (event, state, nodeId) => handleConnectEnd(event, state as unknown as Parameters<OnConnectEnd>[1], nodeId),
+    onHandleClick: setHandleMenu,
+    onNodeDragStop: (event, node) => handleNodeDragStop(event, node),
+    onPaneClick: handlePaneClick,
+    onPaneMenu: openNodeSearchMenu,
+    onEdgeClick: (event, edge) => handleEdgeClick(event as unknown as React.MouseEvent, edge),
+    onEdgeContextMenu: (event, edge) => handleEdgeContextMenu(event as unknown as React.MouseEvent, edge),
+  }), [canvasNavigationSettings, canvasLocked, isModalOpen, tutorialActive, isValidConnection, handleConnect, handleConnectEnd, handleNodeDragStop, handlePaneClick, openNodeSearchMenu, handleEdgeClick, handleEdgeContextMenu]);
+
+
   // The selection's side effects on the edge menu and on edges. Which nodes a
   // marquee takes is decided by NodeMarqueeSelection and handleNodesChange,
   // which measure each node's real box.
@@ -2692,7 +2709,26 @@ export function WorkflowCanvas() {
       )}
 
       {gpuCanvasActive ? (
-        <GpuCanvas nodeTypes={rawNodeTypes} headers={gpuHeaders} wheelZooms={gpuWheelZooms}>
+        <GpuCanvas
+          nodeTypes={rawNodeTypes}
+          edgeTypes={edgeTypes}
+          defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
+          headers={gpuHeaders}
+          wheelZooms={gpuWheelZooms}
+          editing={gpuEditing}
+          flowChildren={
+            <>
+              <GroupControlsOverlay />
+              <CanvasMinimap
+                disabled={tutorialActive && lockedFeatures}
+                onMinimapVisibleChange={setIsMinimapVisible}
+                locked={canvasLocked}
+                onLockedChange={setCanvasLocked}
+                gpu
+              />
+            </>
+          }
+        >
           <PerfOverlay />
           {agentButton}
         </GpuCanvas>

@@ -11,6 +11,8 @@ import {
 } from "@xyflow/react";
 import { ChromeIconButton } from "./ChromeIconButton";
 import { CHROME_DIVIDER, CHROME_SURFACE } from "./chromeStyles";
+import { GpuMinimap } from "./gpuCanvas/GpuMinimap";
+import { useGpuCanvasBridge } from "./gpuCanvas/bridge";
 
 /** Five 32px buttons, 36px readout, two 9px dividers, seven 2px gaps,
  * plus 4px control-row insets and the card's 1px border on each side.
@@ -121,15 +123,18 @@ interface CanvasMinimapProps {
    * from the prop alone, so a lock written to its store left them draggable.
    */
   onLockedChange?: (locked: boolean) => void;
+  /** On the GPU canvas: React Flow holds only the live nodes, so the minimap and Fit view read the scene. */
+  gpu?: boolean;
 }
 
 /**
  * The navigator: minimap on top, one row of canvas controls beneath. Hiding
  * the minimap leaves the row on its own, so zoom, fit and lock never move.
  */
-export function CanvasMinimap({ disabled = false, onMinimapVisibleChange, locked = false, onLockedChange }: CanvasMinimapProps) {
+export function CanvasMinimap({ disabled = false, onMinimapVisibleChange, locked = false, onLockedChange, gpu = false }: CanvasMinimapProps) {
   const [isMinimapVisible, setIsMinimapVisible] = useState(true);
   const { zoomIn, zoomOut, fitView, setCenter, getZoom } = useReactFlow();
+  const bridge = useGpuCanvasBridge();
 
   return (
     <Panel
@@ -142,6 +147,16 @@ export function CanvasMinimap({ disabled = false, onMinimapVisibleChange, locked
     >
       {isMinimapVisible && (
         <div style={{ padding: `${MINIMAP_GEOMETRY.padding}px ${MINIMAP_GEOMETRY.padding}px 0` }}>
+          {gpu ? (
+            <GpuMinimap
+              className="overflow-hidden rounded-md squircle bg-well shadow-well"
+              width={MINIMAP_GEOMETRY.width}
+              height={MINIMAP_GEOMETRY.height}
+              bgColor="#1a1a1a"
+              maskColor="rgba(0, 0, 0, 0.6)"
+              maskStrokeColor="rgba(255, 255, 255, 0.35)"
+            />
+          ) : (
           <MiniMap
             // 6px radius = the card's 12px minus the 6px inset, so the corners run concentric.
             className="overflow-hidden rounded-md squircle bg-well shadow-well"
@@ -163,6 +178,7 @@ export function CanvasMinimap({ disabled = false, onMinimapVisibleChange, locked
             }}
             nodeColor={getMiniMapNodeColor}
           />
+          )}
         </div>
       )}
       <div className="flex h-10 items-center gap-0.5 px-1">
@@ -174,7 +190,7 @@ export function CanvasMinimap({ disabled = false, onMinimapVisibleChange, locked
           <Plus size={18} strokeWidth={1.75} />
         </ControlButton>
         <div className={CHROME_DIVIDER} />
-        <ControlButton label="Fit view" disabled={disabled} onClick={() => fitView()}>
+        <ControlButton label="Fit view" disabled={disabled} onClick={() => (gpu && bridge ? bridge.fit() : fitView())}>
           <Fullscreen size={18} strokeWidth={1.75} />
         </ControlButton>
         <ControlButton

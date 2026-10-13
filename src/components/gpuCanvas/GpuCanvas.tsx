@@ -11,23 +11,27 @@
  * work as they do on today's canvas; dragging, connecting, menus and the
  * rest of editing come with phase 3.
  */
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import type { NodeChange, NodeTypes } from "@xyflow/react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { DefaultEdgeOptions, EdgeTypes, NodeTypes } from "@xyflow/react";
 import { frameLoadedGraph } from "@/utils/frameGraph";
 import { useWorkflowStore, subscribeToWorkflowNodeChanges } from "@/store/workflowStore";
 import { indexOfNode } from "@/store/nodeChanges";
-import type { WorkflowNode } from "@/types";
 import { APP_VERSION } from "@/lib/appVersion";
 import { SceneGraph } from "@/lib/gpuCanvas/graph";
 import { Scene, type View } from "@/lib/gpuCanvas/scene";
 import { atlasBudget, readGpuInfo } from "@/lib/gpuCanvas/budget";
 import { detectHtmlInCanvas } from "@/lib/gpuCanvas/htmlInCanvas";
+import { reportGpuCanvasFailure } from "@/lib/gpuCanvas/setting";
 import { openPaintStore } from "@/lib/gpuCanvas/paintCache";
 import { GpuCanvasStats } from "@/lib/gpuCanvas/stats";
 import { setZoomedOut } from "@/components/nodes/lowDetail";
 import { createPanActivityTracker } from "@/hooks/useWheelPanZoom";
 import { Painter, type PainterStatus } from "./painter";
-import { LiveLayer } from "./LiveLayer";
+import { LiveFlow, LiveLayer, type LiveConnection } from "./LiveLayer";
+import { Editor, type GpuEditing } from "./editor";
+import { setGpuCanvasBridge } from "./bridge";
+import { routeSceneEdge } from "@/lib/gpuCanvas/edgeRoutes";
+import { EDGE_THICKNESS_PX } from "@/lib/edges/appearance";
 import { boundedNodeTypes, HEADER, PAD, type HeaderProps } from "./nodeSheets";
 
 /** Workflows at least this large open behind the loading screen while they paint. */
@@ -36,14 +40,25 @@ const LOADING_MIN_NODES = 150;
 const LOADING_DELAY_MS = 300;
 /** Above this zoom every visible node is live. */
 const LIVE_ZOOM = 1;
+/** From this zoom, connections that show more than a line (labels, stubs, clamps) are live while on screen. */
+const LIVE_EDGE_ZOOM = 0.3;
+/** At most this many live connections besides the selected ones. */
+const MAX_LIVE_EDGES = 250;
 
 export interface GpuCanvasProps {
   nodeTypes: NodeTypes;
+  /** The connection components, for the live connections (labels, stubs, toolbars). */
+  edgeTypes: EdgeTypes;
+  defaultEdgeOptions: DefaultEdgeOptions;
   headers: HeaderProps;
   /** Whether a wheel event zooms rather than pans (the canvas's navigation settings). */
   wheelZooms: (event: WheelEvent) => boolean;
+  /** WorkflowCanvas's editing settings and handlers (connect, menus, group drops). */
+  editing: GpuEditing;
   /** Drawn over the canvas (the performance overlay, the agent button). */
   children?: ReactNode;
+  /** Drawn inside the page's React Flow, in its viewport's context (group controls, the navigator). */
+  flowChildren?: ReactNode;
 }
 
 export interface GpuCanvasApi {
@@ -89,29 +104,36 @@ interface Loading {
   total: number;
 }
 
-export function GpuCanvas({ nodeTypes, headers, wheelZooms, children }: GpuCanvasProps) {
+export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, wheelZooms, editing, children, flowChildren }: GpuCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const liveRef = useRef<HTMLDivElement>(null);
+  // Filled by the live flow as it mounts, read by the engine.
+  const [liveConnection] = useState<LiveConnection>(() => ({}));
+  const connectLive = useCallback((part: LiveConnection) => void Object.assign(liveConnection, part), [liveConnection]);
+  const liveViewChanged = useCallback((view: View) => liveConnection.viewChanged?.(view), [liveConnection]);
+  const [initialView] = useState(() => useWorkflowStore.getState().canvasViewport ?? { x: 0, y: 0, zoom: 1 });
+  const types = useMemo(() => boundedNodeTypes(nodeTypes), [nodeTypes]);
   const [loading, setLoading] = useState<Loading | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   // The latest props, read by the engine without rebuilding it.
-  const propsRef = useRef({ headers, wheelZooms });
+  const propsRef = useRef({ headers, wheelZooms, editing });
   useLayoutEffect(() => {
-    propsRef.current = { headers, wheelZooms };
+    propsRef.current = { headers, wheelZooms, editing };
   });
   const loadCount = useWorkflowStore((state) => state.workflowLoadCount);
+  const onEdgesChange = useWorkflowStore((state) => state.onEdgesChange);
   const engineRef = useRef<{ painter: Painter | null; scene: Scene } | null>(null);
 
   useEffect(() => {
-    const host = hostRef.current, canvas = canvasRef.current;
-    if (!host || !canvas) return;
+    const host = hostRef.current, canvas = canvasRef.current, liveElement = liveRef.current;
+    if (!host || !canvas || !liveElement) return;
     // Today's canvas sets this from its zoom; nodes here are never at low detail.
     setZoomedOut(false);
     const stats = new GpuCanvasStats();
     stats.observeLongFrames();
     const store = useWorkflowStore.getState();
     const graph = new SceneGraph(store.nodes, store.edges, store.groups);
-    const types = boundedNodeTypes(nodeTypes);
     // Held while the user navigates, as today's canvas does, so work that
     // waits for a quiet canvas (the desktop recovery checkpoint) waits for it.
     const interacting = createPanActivityTracker({
@@ -122,12 +144,20 @@ export function GpuCanvas({ nodeTypes, headers, wheelZooms, children }: GpuCanva
     try {
       scene = new Scene(canvas, graph, {
         onFrame: (now, jsMs) => stats.frame(now, jsMs),
+        onFailure: reportGpuCanvasFailure,
         onInputLatency: (ms) => stats.record("input.latencyMs", ms),
         onInput: () => interacting.signal(),
         wheelZooms: (event) => propsRef.current.wheelZooms(event),
         onHover: (i) => live.wantOnly("hover", i >= 0 ? [scene.graph.nodes[i].id] : []),
-        onSelect: (indices, additive) => select(indices.map((i) => scene.graph.nodes[i].id), additive),
+        onPress: (event) => editor.press(event),
+        onIdleMove: (event) => editor.idleMove(event),
+        onContextMenu: (event) => editor.contextMenu(event),
         onOpen: (i) => open(scene.graph.nodes[i].id),
+        onPaneDoubleClick: (_x, _y, screen) => editor.paneDoubleClick(screen),
+        routeEdge: (e) => {
+          const state = useWorkflowStore.getState();
+          return routeSceneEdge(graph, e, { style: state.edgeStyle, appearance: state.edgeAppearance, edges: state.edges, nodes: state.nodes, thicknessPx: EDGE_THICKNESS_PX[state.edgeAppearance.thickness] });
+        },
         onViewChange: (view) => live.setView(view),
       });
     } catch (error) {
@@ -144,7 +174,11 @@ export function GpuCanvas({ nodeTypes, headers, wheelZooms, children }: GpuCanva
       ownKeys: () => Reflect.ownKeys(propsRef.current.headers),
       getOwnPropertyDescriptor: (_, key) => ({ value: propsRef.current.headers[key as keyof HeaderProps], enumerable: true, configurable: true, writable: false }),
     });
-    const live = new LiveLayer(host, scene, types, headerProxy, stats);
+    const live = new LiveLayer(liveElement, liveConnection, scene, stats);
+    const editor = new Editor(scene, live, host, () => propsRef.current.editing);
+    // The routes above read the store: compute them now that the scene exists.
+    scene.setEdgeAppearance(store.edgeAppearance.gradient, store.edgeAppearance.fadedOpacity);
+    scene.rerouteAll();
     live.setView(scene.view);
 
     const gl = scene.renderer.getContext() as WebGL2RenderingContext;
@@ -161,19 +195,8 @@ export function GpuCanvas({ nodeTypes, headers, wheelZooms, children }: GpuCanva
       live.wantOnly("selected", selectedIds);
     };
     showSelection();
-    function select(ids: string[], additive: boolean) {
-      const { nodes, onNodesChange } = useWorkflowStore.getState();
-      const next = new Set(additive ? selectedIds : []);
-      for (const id of ids) {
-        if (additive && next.has(id)) next.delete(id);
-        else next.add(id);
-      }
-      const changes: NodeChange<WorkflowNode>[] = [];
-      for (const node of nodes) if (!!node.selected !== next.has(node.id)) changes.push({ type: "select", id: node.id, selected: next.has(node.id) });
-      if (changes.length) onNodesChange(changes);
-    }
     function open(id: string) {
-      select([id], false);
+      editor.selectNodes([id], false);
       const i = scene.graph.indexOf.get(id);
       if (i == null) return;
       const n = scene.graph.nodes[i];
@@ -197,10 +220,48 @@ export function GpuCanvas({ nodeTypes, headers, wheelZooms, children }: GpuCanva
         scene.setGraph(scene.graph);
         painter?.graphRebuilt();
         live.graphRebuilt();
-      } else if (moved.length) scene.nodesMoved(moved);
+      } else {
+        if (moved.length) scene.nodesMoved(moved);
+        // What a node's connections show can follow its data (a run's loading pulse, a bundle's clamp).
+        const edges = new Set<number>();
+        for (const id of changes.updated) for (const e of scene.graph.edgesOf[scene.graph.indexOf.get(id) ?? -1] ?? []) edges.add(e);
+        if (edges.size) scene.reroute(edges);
+      }
       showSelection();
+      showLiveEdges();
     });
+    const showEdgeSelection = () => {
+      const { edges } = useWorkflowStore.getState();
+      scene.setSelectedEdges(edges.filter((e) => e.selected).map((e) => scene.graph.edgeIndexOf.get(e.id)).filter((e): e is number => e != null));
+    };
+    showEdgeSelection();
+    // Connections the live layer renders: the selected ones, and those on screen that show more than a line.
+    let liveEdgesKey = "", liveEdgesSource: unknown = null;
+    const showLiveEdges = () => {
+      const { edges } = useWorkflowStore.getState();
+      const ids = edges.filter((e) => e.selected).map((e) => e.id);
+      if (scene.view.zoom >= LIVE_EDGE_ZOOM) {
+        const w = scene.canvas.clientWidth, h = scene.canvas.clientHeight;
+        const a = scene.toWorld(-w * 0.25, -h * 0.25), b = scene.toWorld(w * 1.25, h * 1.25);
+        let count = 0;
+        for (const e of scene.edgesWithin(a.x, a.y, b.x, b.y)) {
+          if (count >= MAX_LIVE_EDGES) break;
+          const edge = scene.graph.edges[e];
+          if (!scene.edgeRoute(e)?.decorated || edge.edge.selected) continue;
+          ids.push(edge.id);
+          count++;
+        }
+      }
+      const key = ids.join("\n");
+      if (key === liveEdgesKey && edges === liveEdgesSource) return;
+      liveEdgesKey = key;
+      liveEdgesSource = edges;
+      live.setEdges(ids);
+    };
+    showLiveEdges();
     const unsubscribeStore = useWorkflowStore.subscribe((state, previous) => {
+      if (state.edgeAppearance !== previous.edgeAppearance) scene.setEdgeAppearance(state.edgeAppearance.gradient, state.edgeAppearance.fadedOpacity);
+      if (state.edgeStyle !== previous.edgeStyle || state.edgeAppearance.thickness !== previous.edgeAppearance.thickness || state.edgeAppearance.loadingPulse !== previous.edgeAppearance.loadingPulse) scene.rerouteAll();
       if (state.edges === previous.edges && state.groups === previous.groups) return;
       const sync = scene.graph.sync(state.nodes, state.edges, state.groups);
       if (sync.rebuilt) {
@@ -208,7 +269,21 @@ export function GpuCanvas({ nodeTypes, headers, wheelZooms, children }: GpuCanva
         painter?.graphRebuilt();
         live.graphRebuilt();
         showSelection();
-      } else if (sync.edgesChanged || sync.groupsChanged) scene.edgesChanged();
+      } else {
+        if (sync.edgesChanged) scene.edgesChanged();
+        else if (sync.groupsChanged) scene.groupsChanged();
+        if (sync.edgesUpdated?.length) {
+          // A replaced connection, and the others at its handles (a selected member splits its bundle).
+          const edges = new Set<number>();
+          for (const e of sync.edgesUpdated) {
+            const edge = scene.graph.edges[e];
+            for (const n of [edge.source, edge.target]) for (const other of scene.graph.edgesOf[n] ?? []) edges.add(other);
+          }
+          scene.reroute(edges);
+        }
+      }
+      showEdgeSelection();
+      showLiveEdges();
     });
 
     // Above 100% every visible node is live, once the view settles; the view is kept for the tab.
@@ -217,9 +292,22 @@ export function GpuCanvas({ nodeTypes, headers, wheelZooms, children }: GpuCanva
       clearTimeout(settleTimer);
       settleTimer = window.setTimeout(() => {
         const visible = scene.view.zoom > LIVE_ZOOM ? scene.visible(0).map((i) => scene.graph.nodes[i].id) : [];
+        showLiveEdges();
         live.wantOnly("zoom", visible);
         useWorkflowStore.getState().setCanvasViewport({ ...scene.view });
       }, 120);
+    });
+
+    setGpuCanvasBridge({
+      graph: () => scene.graph,
+      view: () => scene.view,
+      size: () => ({ width: scene.canvas.clientWidth, height: scene.canvas.clientHeight }),
+      setView: (view) => scene.setView(view),
+      fit: () => scene.fit(),
+      subscribe: (listener) => {
+        const offView = scene.onViewChanged(listener), offLayout = scene.onLayoutChanged(listener);
+        return () => { offView(); offLayout(); };
+      },
     });
 
     window.__gpuCanvas = {
@@ -296,13 +384,15 @@ export function GpuCanvas({ nodeTypes, headers, wheelZooms, children }: GpuCanva
       engineRef.current = null;
       if (window.__gpuCanvas?.stats === stats) delete window.__gpuCanvas;
       interacting.dispose();
+      setGpuCanvasBridge(null);
+      editor.dispose();
       stats.dispose();
       live.dispose();
       painter?.dispose();
       scene.dispose();
     };
     // The engine is built once per mount; props it needs later are read through propsRef.
-  }, [nodeTypes]);
+  }, [types, liveConnection]);
 
   // A workflow opened (or the canvas mounted): the tab's view, else the graph framed as today's
   // canvas frames it; painting starts over from the view, behind the loading screen when large.
@@ -343,11 +433,17 @@ export function GpuCanvas({ nodeTypes, headers, wheelZooms, children }: GpuCanva
       if (shown) painter.setLoading(false);
       setLoading(null);
     };
-  }, [loadCount, nodeTypes]);
+  }, [loadCount, types]);
 
   return (
     <div ref={hostRef} className="absolute inset-0 overflow-hidden bg-neutral-900" data-gpu-canvas="">
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full touch-none" />
+      <div ref={liveRef} data-gpu-canvas-live="" className="pointer-events-none absolute inset-0 overflow-hidden">
+        <LiveFlow connect={connectLive} onViewChanged={liveViewChanged} initialView={initialView} nodeTypes={types} edgeTypes={edgeTypes} defaultEdgeOptions={defaultEdgeOptions}
+          onEdgesChange={onEdgesChange} headers={headers}>
+          {flowChildren}
+        </LiveFlow>
+      </div>
       {children}
       {loading && <LoadingScreen painted={loading.painted} total={loading.total} />}
       {failure && (

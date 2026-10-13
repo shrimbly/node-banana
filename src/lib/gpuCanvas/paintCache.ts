@@ -20,7 +20,9 @@ export interface CachedPaint {
   /** The node's measured height, in flow units. */
   nodeHeight: number;
   /** Handle anchors: [key, x, y]. */
-  handles: [string, number, number][];
+  handles: [string, number, number, string?][];
+  /** The media card's box within the node (x, y, w, h), when it has one. */
+  card?: [number, number, number, number] | null;
   /** Deflated RGBA. */
   bytes: Blob;
   size: number;

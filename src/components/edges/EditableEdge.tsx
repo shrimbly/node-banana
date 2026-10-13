@@ -5,9 +5,7 @@ import { Position } from "@xyflow/react";
 import {
   BaseEdge,
   EdgeProps,
-  getSmoothStepPath,
   getBezierPath,
-  getStraightPath,
   useReactFlow,
   useStore,
   useConnection,
@@ -40,6 +38,7 @@ import { lastResult } from "@/store/selectors/lastResult";
 import { bundleClampStyle } from "./BundleClamp";
 import { HookBundleClamp } from "./HookBundleClamp";
 import { hookHandles, insertHookHandle } from "@/lib/edges/hook";
+import { routeEdge } from "@/lib/edges/route";
 
 /** Room between a target-end label and the handle: the same column as the hidden stubs. */
 const TARGET_LABEL_GAP = 12;
@@ -285,77 +284,13 @@ export function EditableEdge({
   const gradientId = getSharedGradientId(colorKey, isConnectedToSelection ? "active" : "dimmed");
   const activeGradientId = getSharedGradientId(colorKey, "active");
 
-  // Calculate the path based on edge style
-  const [edgePath, labelX, labelY] = useMemo(() => {
-    if (hookBundle) {
-      const direction = targetX >= sourceX ? 1 : -1;
-      const reach = 16 * direction;
-      const route = edgeStyle === "straight" ? getStraightPath : edgeStyle === "curved" ? getBezierPath : getSmoothStepPath;
-      let from = { sourceX: startX, sourceY, sourcePosition };
-      let path = "";
-      const append = (segment: string) => { path += path ? ` ${segment.replace(/^M[^A-Za-z]*/, "")}` : segment; };
-      for (const { x, y } of routeHandles) {
-        const [segment] = route({ ...from, targetX: x - reach, targetY: y, targetPosition: direction > 0 ? Position.Left : Position.Right });
-        append(segment);
-        path += ` L${x + reach},${y}`;
-        from = { sourceX: x + reach, sourceY: y, sourcePosition: direction > 0 ? Position.Right : Position.Left };
-      }
-      append(route({ ...from, targetX: endX, targetY, targetPosition })[0]);
-      return [path, routeHandles[0].x, routeHandles[0].y] as [string, number, number];
-    }
-    // Loop edges: smooth arc that exits/enters along handle directions, bowed below nodes
-    if (edgeData?.isLoop) {
-      const dist = Math.sqrt((targetX - sourceX) ** 2 + (targetY - sourceY) ** 2);
-      const extent = Math.max(100, dist * 0.4);
-      const drop = Math.max(120, dist * 0.4);
-
-      // Direction vectors matching handle positions
-      const dir: Record<string, [number, number]> = {
-        top: [0, -1], bottom: [0, 1], left: [-1, 0], right: [1, 0],
-      };
-      const [sdx, sdy] = dir[sourcePosition] ?? [1, 0];
-      const [tdx, tdy] = dir[targetPosition] ?? [-1, 0];
-
-      // Follow handle direction + push arc below the nodes
-      const cp1x = sourceX + sdx * extent;
-      const cp1y = sourceY + sdy * extent + drop;
-      const cp2x = targetX + tdx * extent;
-      const cp2y = targetY + tdy * extent + drop;
-
-      const path = `M${sourceX},${sourceY} C${cp1x},${cp1y} ${cp2x},${cp2y} ${targetX},${targetY}`;
-      // Label at bezier midpoint (t=0.5)
-      const lx = 0.125 * sourceX + 0.375 * cp1x + 0.375 * cp2x + 0.125 * targetX;
-      const ly = 0.125 * sourceY + 0.375 * cp1y + 0.375 * cp2y + 0.125 * targetY;
-      return [path, lx, ly] as [string, number, number];
-    }
-
-    if (edgeStyle === "straight") {
-      return getStraightPath({ sourceX: startX, sourceY, targetX: endX, targetY });
-    }
-
-    if (edgeStyle === "curved") {
-      return getBezierPath({
-        sourceX: startX,
-        sourceY,
-        sourcePosition,
-        targetX: endX,
-        targetY,
-        targetPosition,
-        curvature: 0.25,
-      });
-    } else {
-      return getSmoothStepPath({
-        sourceX: startX,
-        sourceY,
-        sourcePosition,
-        targetX: endX,
-        targetY,
-        targetPosition,
-        borderRadius: 8,
-        offset: offsetX,
-      });
-    }
-  }, [hookBundle, routeHandles, edgeStyle, edgeData?.isLoop, startX, endX, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, offsetX]);
+  // The path for the edge style (shared with the GPU canvas, src/lib/edges/route.ts)
+  const [edgePath, labelX, labelY] = useMemo(() => routeEdge({
+    style: edgeStyle,
+    sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition,
+    startX, endX, isLoop: edgeData?.isLoop, offsetX,
+    hooks: hookBundle ? routeHandles : undefined,
+  }), [hookBundle, routeHandles, edgeStyle, edgeData?.isLoop, startX, endX, sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition, offsetX]);
 
   // Calculate handle positions on the path segments (only for angular mode)
   const handlePositions = useMemo(() => {

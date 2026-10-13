@@ -3,9 +3,10 @@
 The GPU canvas draws the workflow as a three.js scene instead of one page
 element per node. Each node is a picture of the real node component, painted
 off screen with HTML-in-Canvas; the nodes being worked in are the real
-components, laid over the scene. It is behind a setting while it is built:
-phase 2 (this) is read-only, so you can pan, zoom, select and open a node,
-and editing arrives in phase 3.
+components, laid over the scene. It is behind a setting while it is built.
+Phase 2 drew the canvas; phase 3 (this) edits on it: dragging nodes,
+connecting, deleting, the selection box, the menus, group controls and the
+minimap work as on today's canvas.
 
 ## Turning it on
 
@@ -28,14 +29,17 @@ React Flow canvas runs, unchanged.
 | Part | File | What it does |
 |------|------|--------------|
 | Scene graph | `src/lib/gpuCanvas/graph.ts` | Nodes, edges and groups as flat arrays plus a grid index, kept in step with the store; positions move in place, an add or remove rebuilds |
-| Scene | `src/lib/gpuCanvas/scene.ts` | WebGL2: dot grid, groups, instanced node quads reading the atlas, instanced bezier edges, selection and hover outlines. Owns pan, zoom, click, double-click and wheel |
+| Scene | `src/lib/gpuCanvas/scene.ts` | WebGL2: dot grid, groups, instanced node quads reading the atlas, instanced edge segments, selection and hover outlines. Owns pan, zoom and the pointer, handing presses to the editor |
+| Edge routes | `src/lib/edges/route.ts`, `src/lib/gpuCanvas/edgeRoutes.ts` | The route today's edges draw (curved, angular, straight, hooks, loops), shared with `EditableEdge`, read into cubic segments for the scene, with bundles' stems, reference dashes and loading state |
+| Editor | `src/components/gpuCanvas/editor.ts`, `src/lib/gpuCanvas/gestures.ts` | Drag, connect, the marquee, edge clicks, Delete and the context menus, against painted handles and media cards; what a drag on the pane does follows the navigation settings as WorkflowCanvas's React Flow props do |
 | Paint keys | `src/lib/gpuCanvas/paintKey.ts` | A hash of what a node's picture shows: type, width, data, socket connections and the keys of what feeds it, so a change anywhere upstream reaches it. Position and selection are not in it |
 | Queue | `src/lib/gpuCanvas/paintQueue.ts` | Paint requests by priority (urgent changes, the view, background) and tier |
 | Atlas | `src/lib/gpuCanvas/atlasLayout.ts`, `atlas.ts` | A 2048² texture array: 1/8 images shelf-packed for good, larger tiers in freeable cells |
 | Budget | `src/lib/gpuCanvas/budget.ts` | 16 layers (256 MB); 8 on an integrated GPU or under 8 GB of memory |
 | Painter | `src/components/gpuCanvas/painter.ts`, `PainterSheet.tsx` | Renders batches of real nodes on a sheet inside `<canvas layoutsubtree>`, paints the sheet into a texture, copies each node into its atlas slot |
 | Disk cache | `src/lib/gpuCanvas/paintCache.ts` | Painted images in IndexedDB (`node-banana-paint-cache`), by paint key and tier |
-| Live layer | `src/components/gpuCanvas/LiveLayer.tsx` | A real `<ReactFlow>` over the scene holding only the live nodes |
+| Live layer | `src/components/gpuCanvas/LiveLayer.tsx` | A real `<ReactFlow>` over the scene holding the live nodes and the connections that show more than a line. It renders under the page's `ReactFlowProvider`, so it is the page's React Flow: `screenToFlowPosition`, `setCenter`, the viewport portal and the selection toolbar answer for the GPU canvas, its viewport kept equal to the scene's both ways |
+| Bridge | `src/components/gpuCanvas/bridge.ts`, `GpuMinimap.tsx` | The whole scene graph and view for chrome that needs every node (the minimap, Fit view), since React Flow holds only the live ones |
 | Shell | `src/components/gpuCanvas/GpuCanvas.tsx` | Builds the rest, follows the store, shows the loading screen |
 
 ## Tiers
@@ -111,12 +115,41 @@ hidden, so the swap shows no gap. When it stops being live it waits up to
 1.5 s for a current painted image (it may have been edited while live)
 before the scene shows it again.
 
-## What phase 2 leaves out
+## Editing
 
-- Editing on the canvas: dragging nodes, connecting, deleting, the node
-  menus and the selection box (phase 3).
-- Group labels; edges are always beziers whatever the edge style setting.
-- Keyboard shortcuts that add nodes still read React Flow's viewport.
+The scene takes every press and asks the editor what it starts:
+
+- **A handle** (a live node's, or a painted one within 9 px): a click opens
+  the handle menu; a drag draws the connection line and snaps to an
+  opposite handle within 20 px. A valid drop connects; anything else goes to
+  `handleConnectEnd` with the node under the pointer, which opens the
+  connection drop menu as today.
+- **A node**: a click selects it (Shift adds or removes it); a drag moves the
+  selection. The first move records the undo step, the moves in between go
+  only to the scene graph and the live layer, and the drop goes to the store
+  and to `onNodeDragStop` (group membership).
+- **A connection** (within 7 px): selects it, as React Flow would.
+- **The pane**: a click clears the selection; a drag pans or draws the
+  marquee as the navigation settings say (`paneDragAction`). The marquee
+  takes a node only when it holds its media card, or the whole node without
+  one; with no nodes taken it selects the connections it crosses.
+- **Delete / Backspace** removes the selected connections, then nodes;
+  right-click opens the pane or connection menu; a double-click on the pane
+  opens the add-node menu.
+
+Strokes are always the scene's. A connection with more than a line (a label,
+a hidden stub, a bundle, pause, loop, the loading pulse, an array item) and
+every selected one is also rendered as a real `EditableEdge` on the live
+layer, with its path hidden, for its decorations and toolbar; the painted
+nodes it ends at are stood in for by invisible nodes with the painted
+handles. That happens on screen at 30% zoom and above, for up to 250.
+
+## What phase 3 leaves out
+
+- Sweeping connections with the hook key (H), and dragging a connection's
+  end to reconnect it.
+- Hidden connections' stubs below 30% zoom.
+- A live connection's decorations draw over painted nodes they pass under.
 - A node whose look depends on state outside its data and its inputs (a
   file loading elsewhere, a timer) may paint stale until its key changes.
 

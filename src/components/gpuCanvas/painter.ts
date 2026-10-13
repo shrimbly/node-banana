@@ -39,7 +39,7 @@ import { BACKGROUND, EIGHTH, PREFETCH, PaintQueue, URGENT, VIEW, packSheet, tier
 import { cacheKey, deflate, inflate, PAINT_CACHE_BYTES, type PaintStore } from "@/lib/gpuCanvas/paintCache";
 import type { GpuCanvasStats } from "@/lib/gpuCanvas/stats";
 import { PainterSheet } from "./PainterSheet";
-import { flowNode, HEADER, nextFrame, noop, PAD, handleAnchors, type HeaderProps } from "./nodeSheets";
+import { flowNode, HEADER, nextFrame, noop, PAD, handleAnchors, mediaCardBox, type HeaderProps } from "./nodeSheets";
 
 /** A sheet's size in device pixels while the canvas is in use: one upload is about 12 MB. */
 const SHEET_TEXELS = { w: 2048, h: 1536 };
@@ -91,7 +91,7 @@ interface NodePaint {
 interface Readback {
   buffer: WebGLBuffer;
   sync: WebGLSync;
-  entries: { key: string; offset: number; width: number; height: number; nodeHeight: number; handles: [string, number, number][] }[];
+  entries: { key: string; offset: number; width: number; height: number; nodeHeight: number; handles: [string, number, number, string?][]; card: [number, number, number, number] | null }[];
   bytes: number;
 }
 
@@ -654,7 +654,7 @@ export class Painter {
       if (!slot) continue;
       paint.images.set(tier, { slot, key: this.keys.get(r.id) ?? "", w: box.w, h: box.h });
       const handles = flow ? handleAnchors(flow, r.id) : undefined;
-      this.applyMeasured(r.id, paint.height!, handles);
+      this.applyMeasured(r.id, paint.height!, handles, mediaCardBox(this.sheet.element, r.id));
       items.push({ src, dst: slot });
       done.push(r);
     }
@@ -692,9 +692,10 @@ export class Painter {
   }
 
   /** The node's measured height and handles reach the scene (its edges move to them). */
-  private applyMeasured(id: string, height: number, handles?: Map<string, HandleAnchor>) {
+  private applyMeasured(id: string, height: number, handles?: Map<string, HandleAnchor>, card?: { x: number; y: number; w: number; h: number } | null) {
     const i = this.scene.graph.indexOf.get(id);
     if (i == null) return;
+    if (card !== undefined) this.scene.graph.nodes[i].card = card;
     this.scene.setNodeHeight(i, height);
     if (handles) this.scene.setHandles(i, handles);
   }
@@ -884,7 +885,8 @@ export class Painter {
       paint.height = entry.nodeHeight;
       const box = { w: this.boxOf(r.id).w, h: entry.nodeHeight + HEADER + PAD };
       paint.images.set(r.tier, { slot, key, w: box.w, h: box.h });
-      this.applyMeasured(r.id, entry.nodeHeight, new Map(entry.handles.map(([k, x, y]) => [k, { x, y }])));
+      const card = entry.card ? { x: entry.card[0], y: entry.card[1], w: entry.card[2], h: entry.card[3] } : entry.card;
+      this.applyMeasured(r.id, entry.nodeHeight, new Map(entry.handles.map(([k, x, y, position]) => [k, { x, y, position }])), card);
       this.show(r.id, true);
       hits.push(entry.key);
       this.status.cacheHits++;
@@ -927,7 +929,8 @@ export class Painter {
       const handles = flow ? handleAnchors(flow, r.id) : undefined;
       entries.push({
         key: cacheKey(image.key, r.tier), offset, width: slot.w, height: slot.h, nodeHeight: this.paints.get(r.id)?.height ?? 0,
-        handles: handles ? [...handles].map(([k, a]) => [k, a.x, a.y]) : [],
+        handles: handles ? [...handles].map(([k, a]): [string, number, number, string?] => [k, a.x, a.y, a.position]) : [],
+        card: cardTuple(this.scene.graph.nodes[this.scene.graph.indexOf.get(r.id) ?? -1]?.card),
       });
       offset += slot.w * slot.h * 4;
     }
@@ -976,7 +979,7 @@ export class Painter {
       for (const entry of readback.entries) {
         const pixels = data.subarray(entry.offset, entry.offset + entry.width * entry.height * 4);
         const bytes = await deflate(pixels);
-        await cache.put({ key: entry.key, width: entry.width, height: entry.height, nodeHeight: entry.nodeHeight, handles: entry.handles, bytes, size: bytes.size, usedAt: Date.now() });
+        await cache.put({ key: entry.key, width: entry.width, height: entry.height, nodeHeight: entry.nodeHeight, handles: entry.handles, card: entry.card, bytes, size: bytes.size, usedAt: Date.now() });
       }
       this.storedSinceTrim += readback.entries.length;
       if (this.storedSinceTrim > 200) {
@@ -1005,4 +1008,8 @@ export class Painter {
     this.sheet.dispose();
     this.atlas.dispose();
   }
+}
+
+function cardTuple(card: { x: number; y: number; w: number; h: number } | null | undefined): [number, number, number, number] | null {
+  return card ? [card.x, card.y, card.w, card.h] : null;
 }

@@ -47,6 +47,22 @@ export function setGpuCanvasEnabled(next: boolean) {
   for (const listener of listeners) listener();
 }
 
+// Set when the scene could not draw (a shader failed to compile): the page
+// goes back to the classic canvas until it reloads.
+let failed = false;
+
+export function getGpuCanvasFailed() {
+  return failed;
+}
+
+/** The GPU canvas cannot draw on this machine: fall back to the classic canvas for this session. */
+export function reportGpuCanvasFailure(reason: string) {
+  if (failed) return;
+  failed = true;
+  console.error(`GPU canvas: ${reason}. Using the classic canvas until the page reloads.`);
+  for (const listener of listeners) listener();
+}
+
 /** Whether this page can run the GPU canvas (HTML-in-Canvas is on). */
 export function gpuCanvasSupported(): boolean {
   return typeof window !== "undefined" && detectHtmlInCanvas().available;
@@ -58,7 +74,8 @@ export function useGpuCanvasEnabled(): boolean {
 
 /** The canvas draws with the GPU canvas: the setting is on and this page supports it. */
 export function useGpuCanvasActive(): boolean {
-  return useGpuCanvasEnabled() && gpuCanvasSupported();
+  const failedNow = useSyncExternalStore(subscribe, getGpuCanvasFailed, () => false);
+  return useGpuCanvasEnabled() && !failedNow && gpuCanvasSupported();
 }
 
 if (typeof window !== "undefined") {

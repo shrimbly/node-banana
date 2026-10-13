@@ -19,6 +19,8 @@ export type Rgb = [number, number, number];
 export interface HandleAnchor {
   x: number;
   y: number;
+  /** The side the handle is on ("left", "right", "top", "bottom"); edges leave it that way. */
+  position?: string;
 }
 
 export interface SceneNode {
@@ -31,6 +33,8 @@ export interface SceneNode {
   color: Rgb;
   /** Where each handle sits, once a painted copy of the node has been measured ("source:image", "target:text"). */
   handles?: Map<string, HandleAnchor>;
+  /** The media card's box within the node, once measured: what a marquee must hold to take the node. */
+  card?: { x: number; y: number; w: number; h: number } | null;
 }
 
 export interface SceneEdge {
@@ -40,6 +44,8 @@ export interface SceneEdge {
   sourceHandle: string | null;
   targetHandle: string | null;
   color: Rgb;
+  /** The store's edge. */
+  edge: WorkflowEdge;
 }
 
 export interface SceneGroup {
@@ -77,6 +83,8 @@ export interface GraphSync {
   /** Indices of nodes whose rectangle changed in place. */
   moved: number[];
   edgesChanged: boolean;
+  /** When the edges are the same ones in the same order, the indices of those replaced (their data or selection changed); the scene updates them in place. */
+  edgesUpdated: number[] | null;
   groupsChanged: boolean;
 }
 
@@ -84,6 +92,7 @@ export class SceneGraph {
   nodes: SceneNode[] = [];
   indexOf = new Map<string, number>();
   edges: SceneEdge[] = [];
+  edgeIndexOf = new Map<string, number>();
   /** Edge indices touching each node. */
   edgesOf: number[][] = [];
   groups: SceneGroup[] = [];
@@ -99,7 +108,7 @@ export class SceneGraph {
 
   /** Brings the graph up to date with the store; see GraphSync. */
   sync(nodes: readonly WorkflowNode[], edges: readonly WorkflowEdge[], groups: Record<string, NodeGroup>): GraphSync {
-    const result: GraphSync = { rebuilt: false, moved: [], edgesChanged: false, groupsChanged: false };
+    const result: GraphSync = { rebuilt: false, moved: [], edgesChanged: false, edgesUpdated: null, groupsChanged: false };
     if (nodes !== this.sourceNodes) {
       const sameIds = nodes.length === this.nodes.length && nodes.every((node, i) => node.id === this.nodes[i].id);
       if (!sameIds) {
@@ -121,7 +130,14 @@ export class SceneGraph {
         this.sourceNodes = nodes;
       }
     }
-    if (result.rebuilt || edges !== this.sourceEdges) {
+    if (!result.rebuilt && edges !== this.sourceEdges) {
+      const updated = this.updateEdges(edges);
+      if (updated) result.edgesUpdated = updated;
+      else {
+        this.rebuildEdges(edges);
+        result.edgesChanged = true;
+      }
+    } else if (result.rebuilt) {
       this.rebuildEdges(edges);
       result.edgesChanged = true;
     }
@@ -173,20 +189,47 @@ export class SceneGraph {
         h: kept && kept.w === w ? kept.h : h,
         color: rgb(miniMapTypeColor(node.type)),
         handles: kept && kept.w === w ? kept.handles : undefined,
+        card: kept && kept.w === w ? kept.card : undefined,
       };
     });
     this.indexOf = new Map(this.nodes.map((n, i) => [n.id, i]));
   }
 
+  /**
+   * Takes in an edges array holding the same edges in the same order (some
+   * replaced: selected, relabelled, paused), in place. Returns the indices of
+   * the replaced ones, or null when edges were added, removed or reconnected.
+   */
+  private updateEdges(edges: readonly WorkflowEdge[]): number[] | null {
+    const previous = this.sourceEdges;
+    if (edges.length !== previous.length) return null;
+    const updated: number[] = [];
+    for (let k = 0; k < edges.length; k++) {
+      const edge = edges[k], before = previous[k];
+      if (edge === before) continue;
+      if (edge.id !== before.id || edge.source !== before.source || edge.target !== before.target
+        || (edge.sourceHandle ?? null) !== (before.sourceHandle ?? null) || (edge.targetHandle ?? null) !== (before.targetHandle ?? null)) return null;
+      const e = this.edgeIndexOf.get(edge.id);
+      if (e == null) continue;
+      this.edges[e].edge = edge;
+      this.edges[e].color = edgeColor(edge);
+      updated.push(e);
+    }
+    this.sourceEdges = edges;
+    return updated;
+  }
+
   private rebuildEdges(edges: readonly WorkflowEdge[]) {
     this.sourceEdges = edges;
     this.edges = [];
+    this.edgeIndexOf = new Map();
     this.edgesOf = this.nodes.map(() => []);
     for (const edge of edges) {
       const source = this.indexOf.get(edge.source), target = this.indexOf.get(edge.target);
       if (source == null || target == null) continue;
       const e = this.edges.length;
-      this.edges.push({ id: edge.id, source, target, sourceHandle: edge.sourceHandle ?? null, targetHandle: edge.targetHandle ?? null, color: edgeColor(edge) });
+      this.edgeIndexOf.set(edge.id, e);
+      this.edges.push({ id: edge.id, source, target, sourceHandle: edge.sourceHandle ?? null, targetHandle: edge.targetHandle ?? null, color: edgeColor(edge), edge });
       this.edgesOf[source].push(e);
       if (target !== source) this.edgesOf[target].push(e);
     }

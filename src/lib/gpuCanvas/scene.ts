@@ -13,13 +13,21 @@
  */
 import * as THREE from "three";
 import { GridIndex, type SceneGraph } from "./graph";
+import { cubicLength, distanceToCubic, type Cubic, type EdgeRoute } from "./edgeRoutes";
 
 /** Floats per node instance: rect (4), uv rect (4), colour (3), flags (1), layer (1), the node's own box within the rect (4), unused (3). */
 const NODE_STRIDE = 20;
 const FLAG_SELECTED = 1, FLAG_HOVERED = 2, FLAG_HIDDEN = 4, FLAG_GROUP = 8, FLAG_PAINTED = 16;
-/** Floats per edge instance: ends (4), colour (3), unused (1). */
-const EDGE_STRIDE = 8;
-const EDGE_SEGMENTS = 32;
+/**
+ * Floats per edge instance, one cubic segment of a connection: the cubic (8),
+ * colour (3), flags (1), width (1), length along the edge where it starts (1)
+ * and its own length (1), the edge's x range for the gradient (2), unused (3).
+ */
+const EDGE_STRIDE = 20;
+const EDGE_SEGMENTS = 24;
+const EDGE_SELECTED = 1, EDGE_HOVERED = 2, EDGE_ACTIVE = 4, EDGE_HIDDEN = 8, EDGE_DASHED = 16, EDGE_STEM = 32;
+/** How near (css px) a press must be to a connection to take it. */
+const EDGE_HIT_PX = 7;
 
 export const MIN_ZOOM = 0.02;
 export const MAX_ZOOM = 4;
@@ -164,33 +172,78 @@ const OUTLINE_FRAGMENT = /* glsl */ `
 const EDGE_VERTEX = /* glsl */ `
   precision highp float;
   ${COMMON}
-  in vec2 position;         // x: t along the curve, y: side (-1, 1)
-  in vec4 iEnds;            // source x, y, target x, y
+  in vec2 position;         // x: t along the segment, y: side (-1, 1)
+  in vec4 iA;               // start, first control
+  in vec4 iB;               // second control, end
   in vec3 iColor;
+  in float iFlags;
+  in float iWidth;
+  in vec2 iLength;          // where the segment starts along its edge, its length
+  in vec2 iRange;           // the edge's x range
   out float vSide;
   out vec3 vColor;
+  out float vAlong;
+  out float vX;
+  out float vHalf;
+  flat out int vFlags;
+  flat out vec2 vRange;
   vec2 bezier(vec2 a, vec2 b, vec2 c, vec2 d, float t) { float u = 1.0 - t; return u*u*u*a + 3.0*u*u*t*b + 3.0*u*t*t*c + t*t*t*d; }
   vec2 tangent(vec2 a, vec2 b, vec2 c, vec2 d, float t) { float u = 1.0 - t; return 3.0*u*u*(b-a) + 6.0*u*t*(c-b) + 3.0*t*t*(d-c); }
   void main() {
-    vec2 s = iEnds.xy, e = iEnds.zw;
-    float reach = max(abs(e.x - s.x) * 0.5, 60.0);
-    vec2 c1 = s + vec2(reach, 0.0), c2 = e - vec2(reach, 0.0);
-    vec2 p = bezier(s, c1, c2, e, position.x);
-    vec2 dir = normalize(tangent(s, c1, c2, e, position.x) + 1e-5);
-    // Two flow units wide, never under 1.5 css px.
-    float width = max(2.0, 1.5 / uView.z);
-    vSide = position.y;
+    vFlags = int(iFlags);
+    if ((vFlags & ${EDGE_HIDDEN}) != 0) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); return; }
+    vec2 a = iA.xy, b = iA.zw, c = iB.xy, d = iB.zw;
+    float t = position.x;
+    vec2 p = bezier(a, b, c, d, t);
+    vec2 dir = tangent(a, b, c, d, t);
+    // A degenerate tangent at an end (a control on its end point): look a little inside.
+    if (dot(dir, dir) < 1e-8) dir = bezier(a, b, c, d, clamp(t + (t < 0.5 ? 0.01 : -0.01), 0.0, 1.0)) - p;
+    if (t >= 0.5 && dot(dir, dir) < 1e-8) dir = p - bezier(a, b, c, d, t - 0.01);
+    dir = normalize(dir + 1e-6);
+    // As wide as the SVG stroke (flow units), never under a css pixel; a pixel more for the edge's antialiasing.
+    float px = 1.0 / uView.z;
+    float half_ = max(iWidth, px) * 0.5;
+    vHalf = half_ / px;
+    float reach = half_ + px;
+    vSide = position.y * (half_ + px) / px;
     vColor = iColor;
-    gl_Position = toClip(p + vec2(-dir.y, dir.x) * position.y * width);
+    vAlong = iLength.x + iLength.y * t;
+    vX = p.x;
+    vRange = iRange;
+    // Round caps: the ends reach past the segment by half the width.
+    vec2 cap = (t == 0.0 ? -dir : t == 1.0 ? dir : vec2(0.0)) * half_;
+    gl_Position = toClip(p + cap + vec2(-dir.y, dir.x) * position.y * reach);
   }
 `;
 
 const EDGE_FRAGMENT = /* glsl */ `
   precision highp float;
+  uniform float uGradient;
+  uniform float uFaded;
   in float vSide;
   in vec3 vColor;
+  in float vAlong;
+  in float vX;
+  in float vHalf;
+  flat in int vFlags;
+  flat in vec2 vRange;
   out vec4 outColor;
-  void main() { outColor = vec4(vColor, 0.85 * (1.0 - smoothstep(0.6, 1.0, abs(vSide)))); }
+  void main() {
+    // Dashes of 6 and gaps of 4 flow units (reference links).
+    if ((vFlags & ${EDGE_DASHED}) != 0 && mod(vAlong, 10.0) > 6.0) discard;
+    float coverage = clamp(vHalf + 0.5 - abs(vSide), 0.0, 1.0);
+    bool isActive = (vFlags & ${EDGE_ACTIVE}) != 0;
+    bool highlight = (vFlags & (${EDGE_SELECTED} | ${EDGE_HOVERED})) != 0;
+    float alpha;
+    if ((vFlags & ${EDGE_STEM}) == 0 && uGradient > 0.5) {
+      // The shared gradient: bright ends, a softer middle, across the edge's bounding box.
+      float span = max(vRange.y - vRange.x, 1e-3);
+      float pos = clamp((vX - vRange.x) / span, 0.0, 1.0);
+      vec3 stops = isActive || highlight ? vec3(1.0, 0.55, 1.0) : vec3(uFaded, uFaded * 0.4, uFaded);
+      alpha = pos < 0.5 ? mix(stops.x, stops.y, pos * 2.0) : mix(stops.y, stops.z, (pos - 0.5) * 2.0);
+    } else alpha = isActive ? 1.0 : uFaded;
+    outColor = vec4(vColor, alpha * coverage);
+  }
 `;
 
 const GRID_VERTEX = /* glsl */ `
@@ -219,6 +272,9 @@ const GRID_FRAGMENT = /* glsl */ `
   }
 `;
 
+/** Every shader the scene compiles, for the tests. */
+export const SCENE_SHADERS = { NODE_VERTEX, NODE_FRAGMENT, OUTLINE_FRAGMENT, EDGE_VERTEX, EDGE_FRAGMENT, GRID_VERTEX, GRID_FRAGMENT };
+
 const EMPTY_ARRAY = (() => {
   const texture = new THREE.DataArrayTexture(new Uint8Array(4), 1, 1, 1);
   texture.needsUpdate = true;
@@ -231,11 +287,21 @@ function material(vertexShader: string, fragmentShader: string, uniforms: Record
 }
 
 export interface SceneCallbacks {
+  /** The scene cannot draw: a shader failed to compile or link. */
+  onFailure?: (reason: string) => void;
+  /** Computes a connection's route (the owner knows the store's edge style and bundles). */
+  routeEdge?: (e: number) => EdgeRoute;
   /** Every animation frame, with the JavaScript the scene ran in it (ms). */
   onFrame?: (now: number, jsMs: number) => void;
   onHover?: (node: number) => void;
-  /** A click chose nodes; `additive` when Shift was held. */
-  onSelect?: (nodes: number[], additive: boolean) => void;
+  /**
+   * A press on the canvas (or handed over by the live layer): returns the
+   * gesture it starts, or null to ignore it. Without it a drag pans.
+   */
+  onPress?: (event: PointerEvent) => Gesture | null;
+  /** The pointer moved with no gesture under way (hover). */
+  onIdleMove?: (event: PointerEvent) => void;
+  onContextMenu?: (event: MouseEvent) => void;
   /** A double-click on a node. */
   onOpen?: (node: number) => void;
   /** A double-click on empty canvas, at a flow position. */
@@ -249,6 +315,13 @@ export interface SceneCallbacks {
   wheelZooms?: (event: WheelEvent) => boolean;
 }
 
+/** A press being followed: its moves and its release, until it ends. */
+export interface Gesture {
+  move(event: PointerEvent): void;
+  up(event: PointerEvent): void;
+  cancel(): void;
+}
+
 export class Scene {
   readonly renderer: THREE.WebGLRenderer;
   readonly view: View = { x: 0, y: 0, zoom: 1 };
@@ -256,6 +329,7 @@ export class Scene {
   /** When the pointer or wheel last moved the view (performance.now()). */
   lastInputAt = 0;
   private viewListeners = new Set<() => void>();
+  private layoutListeners = new Set<() => void>();
   private scene = new THREE.Scene();
   private camera = new THREE.Camera();
   private uniforms = { uViewport: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector3() }, uDpr: { value: 1 } };
@@ -264,6 +338,19 @@ export class Scene {
   private nodeUniforms: Record<string, THREE.IUniform> = { ...this.uniforms, uPainted: { value: EMPTY_ARRAY } };
   private edgeData = new Float32Array(0);
   private edgeAttr: THREE.InstancedInterleavedBuffer | null = null;
+  private edgeGeometry: THREE.InstancedBufferGeometry | null = null;
+  private edgeUniforms: Record<string, THREE.IUniform> = { ...this.uniforms, uGradient: { value: 0 }, uFaded: { value: 1 } };
+  /** Each edge's route, and where its segments start in the instance buffer. */
+  private routes: (EdgeRoute | null)[] = [];
+  private routeOffset: number[] = [];
+  private routeCount: number[] = [];
+  /** Each edge's bounds (flow units), for hit tests. */
+  private edgeBounds = new Float32Array(0);
+  private edgeSelected = new Set<number>();
+  /** Edges the live layer draws (decorated ones on screen). */
+  private edgeLive = new Set<number>();
+  private hoveredEdge = -1;
+
   private graphMeshes: THREE.Mesh[] = [];
   private painted = new Map<number, PaintedQuad>();
   private hidden = new Set<number>();
@@ -273,7 +360,7 @@ export class Scene {
   private dirty = true;
   private frameHandle = 0;
   private disposed = false;
-  private gesture: { x: number; y: number; startX: number; startY: number; onNode: number; button: number } | null = null;
+  private gesture: Gesture | null = null;
   /** The earliest input event not yet drawn (its timeStamp). */
   private pendingInputAt = 0;
   private resizeObserver: ResizeObserver;
@@ -282,6 +369,10 @@ export class Scene {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: false, powerPreference: "high-performance" });
     this.renderer.setPixelRatio(devicePixelRatio);
     this.renderer.autoClear = false;
+    this.renderer.debug.onShaderError = (gl, program, vertex, fragment) => {
+      const log = [gl.getProgramInfoLog(program), gl.getShaderInfoLog(vertex), gl.getShaderInfoLog(fragment)].map((l) => l?.trim()).filter(Boolean).join("\n");
+      this.callbacks.onFailure?.(`a shader failed to compile${log ? `: ${log}` : ""}`);
+    };
     this.graph = graph;
     this.index = new GridIndex(graph.nodes);
 
@@ -299,6 +390,7 @@ export class Scene {
     canvas.addEventListener("pointercancel", this.onPointerUp);
     canvas.addEventListener("pointerleave", this.onPointerLeave);
     canvas.addEventListener("dblclick", this.onDoubleClick);
+    canvas.addEventListener("contextmenu", this.onContextMenu);
     canvas.addEventListener("wheel", this.onWheel, { passive: false });
     this.frameHandle = requestAnimationFrame(this.tick);
   }
@@ -333,22 +425,8 @@ export class Scene {
       this.addGraphMesh(new THREE.Mesh(geometry, material(NODE_VERTEX, NODE_FRAGMENT, this.nodeUniforms)), 1);
     }
 
-    const strip: number[] = [], indices: number[] = [];
-    for (let i = 0; i <= EDGE_SEGMENTS; i++) {
-      strip.push(i / EDGE_SEGMENTS, -1, i / EDGE_SEGMENTS, 1);
-      if (i < EDGE_SEGMENTS) indices.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
-    }
-    const edges = new THREE.InstancedBufferGeometry();
-    edges.setAttribute("position", new THREE.Float32BufferAttribute(strip, 2));
-    edges.setIndex(indices);
-    this.edgeData = new Float32Array(Math.max(1, graph.edges.length) * EDGE_STRIDE);
-    this.edgeAttr = new THREE.InstancedInterleavedBuffer(this.edgeData, EDGE_STRIDE);
-    this.edgeAttr.setUsage(THREE.DynamicDrawUsage);
-    edges.setAttribute("iEnds", new THREE.InterleavedBufferAttribute(this.edgeAttr, 4, 0));
-    edges.setAttribute("iColor", new THREE.InterleavedBufferAttribute(this.edgeAttr, 3, 4));
-    edges.instanceCount = graph.edges.length;
-    for (let e = 0; e < graph.edges.length; e++) this.writeEdge(e);
-    this.addGraphMesh(new THREE.Mesh(edges, material(EDGE_VERTEX, EDGE_FRAGMENT, this.uniforms)), 2);
+    this.buildEdges();
+    this.addGraphMesh(new THREE.Mesh(this.edgeGeometry!, material(EDGE_VERTEX, EDGE_FRAGMENT, this.edgeUniforms)), 2);
 
     this.nodeData = new Float32Array(Math.max(1, graph.nodes.length) * NODE_STRIDE);
     for (let i = 0; i < graph.nodes.length; i++) this.writeNode(i);
@@ -405,18 +483,187 @@ export class Scene {
     this.dirty = true;
   }
 
+  /** The edge instance geometry, for the current routes (computed here when missing). */
+  private buildEdges() {
+    const { graph } = this;
+    if (!this.edgeGeometry) {
+      const strip: number[] = [], indices: number[] = [];
+      for (let i = 0; i <= EDGE_SEGMENTS; i++) {
+        strip.push(i / EDGE_SEGMENTS, -1, i / EDGE_SEGMENTS, 1);
+        if (i < EDGE_SEGMENTS) indices.push(i * 2, i * 2 + 1, i * 2 + 2, i * 2 + 1, i * 2 + 3, i * 2 + 2);
+      }
+      this.edgeGeometry = new THREE.InstancedBufferGeometry();
+      this.edgeGeometry.setAttribute("position", new THREE.Float32BufferAttribute(strip, 2));
+      this.edgeGeometry.setIndex(indices);
+    }
+    const geometry = this.edgeGeometry;
+    if (this.routes.length !== graph.edges.length) this.routes = graph.edges.map(() => null);
+    let total = 0;
+    this.routeOffset = new Array(graph.edges.length);
+    this.routeCount = new Array(graph.edges.length);
+    this.edgeBounds = new Float32Array(graph.edges.length * 4);
+    for (let e = 0; e < graph.edges.length; e++) {
+      const route = this.routes[e] ?? (this.routes[e] = this.route(e));
+      this.routeOffset[e] = total;
+      this.routeCount[e] = route.segments.length + route.stems.length;
+      total += this.routeCount[e];
+    }
+    this.edgeData = new Float32Array(Math.max(1, total) * EDGE_STRIDE);
+    this.edgeAttr = new THREE.InstancedInterleavedBuffer(this.edgeData, EDGE_STRIDE);
+    this.edgeAttr.setUsage(THREE.DynamicDrawUsage);
+    geometry.setAttribute("iA", new THREE.InterleavedBufferAttribute(this.edgeAttr, 4, 0));
+    geometry.setAttribute("iB", new THREE.InterleavedBufferAttribute(this.edgeAttr, 4, 4));
+    geometry.setAttribute("iColor", new THREE.InterleavedBufferAttribute(this.edgeAttr, 3, 8));
+    geometry.setAttribute("iFlags", new THREE.InterleavedBufferAttribute(this.edgeAttr, 1, 11));
+    geometry.setAttribute("iWidth", new THREE.InterleavedBufferAttribute(this.edgeAttr, 1, 12));
+    geometry.setAttribute("iLength", new THREE.InterleavedBufferAttribute(this.edgeAttr, 2, 13));
+    geometry.setAttribute("iRange", new THREE.InterleavedBufferAttribute(this.edgeAttr, 2, 15));
+    geometry.instanceCount = total;
+    for (let e = 0; e < graph.edges.length; e++) this.writeEdge(e);
+    this.dirty = true;
+  }
+
+  private route(e: number): EdgeRoute {
+    if (this.callbacks.routeEdge) return this.callbacks.routeEdge(e);
+    // No router (tests, or before the owner set one): a plain curve between the ends.
+    const [sx, sy, tx, ty] = this.graph.edgeEnds(e);
+    const d = tx - sx, off = d >= 0 ? 0.5 * d : 0.25 * 25 * Math.sqrt(-d);
+    const segment: Cubic = [sx, sy, sx + off, sy, tx - off, ty, tx, ty];
+    return { segments: [segment], stems: [], ends: [sx, sy, tx, ty], labelX: (sx + tx) / 2, labelY: (sy + ty) / 2, width: 3, dashed: false, hidden: false, decorated: false };
+  }
+
   private writeEdge(e: number) {
-    const color = this.graph.edges[e].color;
-    this.edgeData.set([...this.graph.edgeEnds(e), ...color, 0], e * EDGE_STRIDE);
+    const route = this.routes[e];
+    if (!route) return;
+    const edge = this.graph.edges[e];
+    let flags = route.hidden || this.edgeLive.has(e) ? EDGE_HIDDEN : 0;
+    if (this.edgeSelected.has(e)) flags |= EDGE_SELECTED;
+    if (this.hoveredEdge === e) flags |= EDGE_HOVERED;
+    if (this.selected.has(edge.source) || this.selected.has(edge.target)) flags |= EDGE_ACTIVE;
+    if (route.dashed) flags |= EDGE_DASHED;
+    const [sx, sy, tx, ty] = route.ends;
+    let minX = Math.min(sx, tx), maxX = Math.max(sx, tx), minY = Math.min(sy, ty), maxY = Math.max(sy, ty);
+    for (const c of route.segments) for (let k = 0; k < 8; k += 2) {
+      minX = Math.min(minX, c[k]); maxX = Math.max(maxX, c[k]);
+      minY = Math.min(minY, c[k + 1]); maxY = Math.max(maxY, c[k + 1]);
+    }
+    let at = this.routeOffset[e] * EDGE_STRIDE, along = 0;
+    const [r, g, b] = edge.color;
+    for (const c of route.segments) {
+      const length = cubicLength(c);
+      this.edgeData.set(c, at);
+      this.edgeData.set([r, g, b, flags, route.width, along, length, minX, maxX], at + 8);
+      along += length;
+      at += EDGE_STRIDE;
+    }
+    for (const stem of route.stems) {
+      this.edgeData.set(stem.segment, at);
+      this.edgeData.set([r, g, b, (flags & ~EDGE_DASHED) | EDGE_STEM, stem.width, 0, cubicLength(stem.segment), 0, 1], at + 8);
+      for (let k = 0; k < 8; k += 2) {
+        minX = Math.min(minX, stem.segment[k]); maxX = Math.max(maxX, stem.segment[k]);
+        minY = Math.min(minY, stem.segment[k + 1]); maxY = Math.max(maxY, stem.segment[k + 1]);
+      }
+      at += EDGE_STRIDE;
+    }
+    this.edgeBounds.set([minX, minY, maxX, maxY], e * 4);
+  }
+
+  /** Writes edges again (their flags or routes changed) and uploads them. */
+  private touchEdgeList(edges: Iterable<number>) {
+    if (!this.edgeAttr) return;
+    for (const e of edges) {
+      if (e < 0 || e >= this.graph.edges.length) continue;
+      this.writeEdge(e);
+      this.edgeAttr.addUpdateRange(this.routeOffset[e] * EDGE_STRIDE, this.routeCount[e] * EDGE_STRIDE);
+    }
+    this.edgeAttr.needsUpdate = true;
+    this.dirty = true;
+  }
+
+  /** Computes the edges' routes again (their ends moved, or what they show changed). */
+  reroute(edges: Iterable<number>) {
+    let resized = false;
+    const list = [...edges];
+    for (const e of list) {
+      if (e < 0 || e >= this.graph.edges.length) continue;
+      const route = this.route(e);
+      if (route.segments.length + route.stems.length !== this.routeCount[e]) resized = true;
+      this.routes[e] = route;
+    }
+    // A route with more or fewer segments than before moves every edge after it in the buffer.
+    if (resized) this.buildEdges();
+    else this.touchEdgeList(list);
+  }
+
+  /** Every edge's route again (the edge style or appearance changed). */
+  rerouteAll() {
+    this.routes = this.graph.edges.map(() => null);
+    this.buildEdges();
   }
 
   private touchEdges(i: number) {
-    if (!this.edgeAttr) return;
-    for (const e of this.graph.edgesOf[i] ?? []) {
-      this.writeEdge(e);
-      this.edgeAttr.addUpdateRange(e * EDGE_STRIDE, EDGE_STRIDE);
+    this.reroute(this.graph.edgesOf[i] ?? []);
+  }
+
+  /** The route the scene drew for an edge. */
+  edgeRoute(e: number): EdgeRoute | null {
+    return this.routes[e] ?? null;
+  }
+
+  /** The connection under a point (css px), or -1: the nearest within a few pixels. */
+  edgeAt(cssX: number, cssY: number): number {
+    const p = this.toWorld(cssX, cssY);
+    const reach = EDGE_HIT_PX / this.view.zoom;
+    let best = -1, bestDistance = Infinity;
+    for (let e = 0; e < this.graph.edges.length; e++) {
+      const b = e * 4, route = this.routes[e];
+      if (!route || p.x < this.edgeBounds[b] - reach || p.x > this.edgeBounds[b + 2] + reach || p.y < this.edgeBounds[b + 1] - reach || p.y > this.edgeBounds[b + 3] + reach) continue;
+      for (const c of route.segments) {
+        const distance = distanceToCubic(c, p.x, p.y) - route.width / 2;
+        if (distance < bestDistance) { bestDistance = distance; best = e; }
+      }
     }
-    this.edgeAttr.needsUpdate = true;
+    return bestDistance <= reach ? best : -1;
+  }
+
+  /** Edges whose bounds overlap a rectangle (flow units). */
+  edgesWithin(x0: number, y0: number, x1: number, y1: number): number[] {
+    const found: number[] = [];
+    for (let e = 0; e < this.graph.edges.length; e++) {
+      const b = e * 4;
+      if (this.routes[e] && this.edgeBounds[b] <= x1 && this.edgeBounds[b + 2] >= x0 && this.edgeBounds[b + 1] <= y1 && this.edgeBounds[b + 3] >= y0) found.push(e);
+    }
+    return found;
+  }
+
+  setSelectedEdges(edges: Iterable<number>) {
+    const next = new Set(edges), changed: number[] = [];
+    for (const e of this.edgeSelected) if (!next.has(e)) changed.push(e);
+    for (const e of next) if (!this.edgeSelected.has(e)) changed.push(e);
+    this.edgeSelected = next;
+    if (changed.length) this.touchEdgeList(changed);
+  }
+
+  /** Edges the live layer draws; the scene leaves them out. */
+  setLiveEdges(edges: Iterable<number>) {
+    const next = new Set(edges), changed: number[] = [];
+    for (const e of this.edgeLive) if (!next.has(e)) changed.push(e);
+    for (const e of next) if (!this.edgeLive.has(e)) changed.push(e);
+    this.edgeLive = next;
+    if (changed.length) this.touchEdgeList(changed);
+  }
+
+  setHoveredEdge(e: number) {
+    if (e === this.hoveredEdge) return;
+    const previous = this.hoveredEdge;
+    this.hoveredEdge = e;
+    this.touchEdgeList([previous, e]);
+  }
+
+  /** The edge appearance settings: the gradient and the faded opacity. */
+  setEdgeAppearance(gradient: boolean, fadedOpacity: number) {
+    this.edgeUniforms.uGradient.value = gradient ? 1 : 0;
+    this.edgeUniforms.uFaded.value = fadedOpacity;
     this.dirty = true;
   }
 
@@ -427,20 +674,33 @@ export class Scene {
     this.hidden.clear();
     this.selected.clear();
     this.hovered = -1;
+    this.routes = [];
+    this.edgeSelected.clear();
+    this.edgeLive.clear();
+    this.hoveredEdge = -1;
     this.index = new GridIndex(graph.nodes);
     this.buildGraphMeshes();
+    this.layoutChanged();
   }
 
   /** Nodes moved or resized in place. */
   nodesMoved(nodes: readonly number[]) {
+    const edges = new Set<number>();
     for (const i of nodes) {
       this.index.update(i);
       this.touchNode(i);
-      this.touchEdges(i);
+      for (const e of this.graph.edgesOf[i] ?? []) edges.add(e);
     }
+    if (edges.size) this.reroute(edges);
+    this.layoutChanged();
   }
 
+  /** The edges were replaced: their indices are new. */
   edgesChanged() {
+    this.routes = [];
+    this.edgeSelected.clear();
+    this.edgeLive.clear();
+    this.hoveredEdge = -1;
     this.buildGraphMeshes();
   }
 
@@ -469,6 +729,7 @@ export class Scene {
     this.index.update(i);
     this.touchNode(i);
     this.touchEdges(i);
+    this.layoutChanged();
   }
 
   /** Where a node's handles are, once measured; moves its edges' ends. */
@@ -488,15 +749,21 @@ export class Scene {
   }
 
   setSelected(nodes: Iterable<number>) {
-    const next = new Set(nodes);
+    const next = new Set(nodes), edges = new Set<number>();
+    const changed = (i: number) => {
+      this.touchNode(i);
+      for (const e of this.graph.edgesOf[i] ?? []) edges.add(e);
+    };
     for (const i of this.selected) if (!next.has(i)) {
       this.selected.delete(i);
-      this.touchNode(i);
+      changed(i);
     }
     for (const i of next) if (!this.selected.has(i)) {
       this.selected.add(i);
-      this.touchNode(i);
+      changed(i);
     }
+    // Connections to a selected node are drawn at full strength.
+    if (edges.size) this.touchEdgeList(edges);
   }
 
   private setHovered(i: number) {
@@ -510,6 +777,16 @@ export class Scene {
 
   invalidate() {
     this.dirty = true;
+  }
+
+  /** Called whenever nodes move, resize or the graph is rebuilt. */
+  onLayoutChanged(listener: () => void): () => void {
+    this.layoutListeners.add(listener);
+    return () => this.layoutListeners.delete(listener);
+  }
+
+  private layoutChanged() {
+    for (const listener of this.layoutListeners) listener();
   }
 
   /** Called whenever the view changes. */
@@ -554,6 +831,11 @@ export class Scene {
     return this.index.at(p.x, p.y);
   }
 
+  /** Nodes whose rectangle overlaps a rectangle (flow units). */
+  nodesWithin(x0: number, y0: number, x1: number, y1: number): number[] {
+    return this.index.within(x0, y0, x1, y1);
+  }
+
   /** Nodes on screen, with a margin in screens (0.25 = a quarter screen each side). */
   visible(margin = 0): number[] {
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
@@ -580,37 +862,67 @@ export class Scene {
   wheel = (event: WheelEvent) => this.onWheel(event);
 
   private onPointerDown = (event: PointerEvent) => {
-    if (event.button !== 0 && event.button !== 1) return;
-    this.canvas.setPointerCapture?.(event.pointerId);
+    if (this.gesture) return;
     this.lastInputAt = performance.now();
     this.callbacks.onInput?.();
-    const at = this.local(event);
-    this.gesture = { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, onNode: event.button === 0 ? this.nodeAt(at.x, at.y) : -1, button: event.button };
+    // The owner decides what a press does (select, drag, connect, marquee); by default a drag pans.
+    const gesture = this.callbacks.onPress ? this.callbacks.onPress(event) : event.button === 0 || event.button === 1 ? this.panGesture(event) : null;
+    if (!gesture) return;
+    this.canvas.setPointerCapture?.(event.pointerId);
+    this.gesture = gesture;
   };
+
+  /** A gesture that pans the view with the pointer. */
+  panGesture(event: PointerEvent): Gesture {
+    let x = event.clientX, y = event.clientY;
+    return {
+      move: (move) => {
+        const dx = move.clientX - x, dy = move.clientY - y;
+        x = move.clientX;
+        y = move.clientY;
+        if (dx || dy) {
+          this.noteInput(move);
+          this.setView({ x: this.view.x + dx, y: this.view.y + dy });
+        }
+      },
+      up: () => {},
+      cancel: () => {},
+    };
+  }
+
+  /** Records a pointer event as input for the latency figures (gestures call it as they move things). */
+  input(event: Event) {
+    this.noteInput(event);
+  }
+
+  /** Ends the gesture in progress, if any (a key cancels it, the canvas is replaced). */
+  cancelGesture() {
+    const gesture = this.gesture;
+    this.gesture = null;
+    gesture?.cancel();
+  }
 
   private onPointerMove = (event: PointerEvent) => {
     const gesture = this.gesture;
     if (!gesture) {
       const at = this.local(event);
       this.setHovered(this.nodeAt(at.x, at.y));
+      this.callbacks.onIdleMove?.(event);
       return;
     }
-    const dx = event.clientX - gesture.x, dy = event.clientY - gesture.y;
-    gesture.x = event.clientX;
-    gesture.y = event.clientY;
-    // Read-only: a drag anywhere pans.
-    if (dx || dy) {
-      this.noteInput(event);
-      this.setView({ x: this.view.x + dx, y: this.view.y + dy });
-    }
+    gesture.move(event);
   };
 
   private onPointerUp = (event: PointerEvent) => {
     const gesture = this.gesture;
     this.gesture = null;
-    if (!gesture || event.type === "pointercancel") return;
-    const click = Math.hypot(event.clientX - gesture.startX, event.clientY - gesture.startY) < 5;
-    if (click && gesture.button === 0) this.callbacks.onSelect?.(gesture.onNode >= 0 ? [gesture.onNode] : [], event.shiftKey);
+    if (!gesture) return;
+    if (event.type === "pointercancel") gesture.cancel();
+    else gesture.up(event);
+  };
+
+  private onContextMenu = (event: MouseEvent) => {
+    this.callbacks.onContextMenu?.(event);
   };
 
   private onPointerLeave = () => {
@@ -696,6 +1008,7 @@ export class Scene {
     canvas.removeEventListener("pointercancel", this.onPointerUp);
     canvas.removeEventListener("pointerleave", this.onPointerLeave);
     canvas.removeEventListener("dblclick", this.onDoubleClick);
+    canvas.removeEventListener("contextmenu", this.onContextMenu);
     canvas.removeEventListener("wheel", this.onWheel);
     for (const mesh of this.graphMeshes) {
       mesh.geometry.dispose();
