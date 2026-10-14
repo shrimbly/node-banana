@@ -16,7 +16,7 @@ import { setCanvasWheelPanningClass } from "@/utils/canvasPerformance";
  * that ReactFlow so it doesn't also zoom on scroll.
  */
 
-const isMacOS =
+export const isMacOS =
   typeof navigator !== "undefined" && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
 
 interface ViewportState {
@@ -116,7 +116,7 @@ export function createViewportPanBatcher({
 }
 
 // Detect if a wheel event is from a mouse (vs trackpad).
-function isMouseWheel(event: WheelEvent): boolean {
+export function isMouseWheel(event: WheelEvent): boolean {
   // Mouse wheels typically use deltaMode 1 (lines); trackpads use deltaMode 0
   // (pixels) with smaller, smoother deltas.
   if (event.deltaMode === 1) return true;
@@ -143,7 +143,7 @@ function canElementScroll(element: HTMLElement, deltaX: number, deltaY: number):
 
 // Nearest scrollable ancestor (nowheel/textarea) that can consume the wheel,
 // so inner scroll areas keep their own scrolling instead of panning the canvas.
-function findScrollableAncestor(
+export function findScrollableAncestor(
   target: HTMLElement,
   deltaX: number,
   deltaY: number
@@ -156,6 +156,29 @@ function findScrollableAncestor(
     current = current.parentElement;
   }
   return null;
+}
+
+export type WheelAction = "zoomIn" | "zoomOut" | "pan" | "ignore";
+
+/**
+ * What a wheel event outside an inner scroll area does to the canvas, by the
+ * navigation settings, the device and the platform (the GPU canvas asks too).
+ */
+export function wheelAction(event: WheelEvent, settings: CanvasNavigationSettings, mac = isMacOS): WheelAction {
+  const { zoomMode } = settings;
+  const shouldZoom =
+    zoomMode === "scroll" ||
+    (zoomMode === "altScroll" && event.altKey) ||
+    (zoomMode === "ctrlScroll" && (event.ctrlKey || event.metaKey));
+  const zoom = event.deltaY < 0 ? "zoomIn" : "zoomOut";
+
+  // Pinch gesture (ctrl + trackpad) always zooms.
+  if (event.ctrlKey && !event.altKey) return zoom;
+  if (shouldZoom) return zoom;
+  // A macOS trackpad pans (which also blocks horizontal swipe navigation); a
+  // mouse wheel, or any wheel elsewhere, zooms only when settings ask for it.
+  if (mac && !isMouseWheel(event)) return "pan";
+  return "ignore";
 }
 
 export function useWheelPanZoom(
@@ -178,45 +201,14 @@ export function useWheelPanZoom(
       const target = event.target as HTMLElement;
       if (findScrollableAncestor(target, event.deltaX, event.deltaY)) return;
 
-      const { zoomMode } = settings;
-      const shouldZoom =
-        zoomMode === "scroll" ||
-        (zoomMode === "altScroll" && event.altKey) ||
-        (zoomMode === "ctrlScroll" && (event.ctrlKey || event.metaKey));
-
-      // Pinch gesture (ctrl + trackpad) always zooms.
-      if (event.ctrlKey && !event.altKey) {
-        event.preventDefault();
-        if (event.deltaY < 0) zoomIn();
-        else zoomOut();
-        return;
-      }
-
-      if (isMacOS) {
-        if (isMouseWheel(event)) {
-          if (shouldZoom) {
-            event.preventDefault();
-            if (event.deltaY < 0) zoomIn();
-            else zoomOut();
-          }
-        } else if (shouldZoom) {
-          event.preventDefault();
-          if (event.deltaY < 0) zoomIn();
-          else zoomOut();
-        } else {
-          // Trackpad pan (also blocks horizontal swipe navigation).
-          event.preventDefault();
-          panActivity.signal();
-          panBatcher.queue(event.deltaX, event.deltaY);
-        }
-        return;
-      }
-
-      // Non-macOS: scroll zooms only when settings ask for it.
-      if (shouldZoom) {
-        event.preventDefault();
-        if (event.deltaY < 0) zoomIn();
-        else zoomOut();
+      const action = wheelAction(event, settings);
+      if (action === "ignore") return;
+      event.preventDefault();
+      if (action === "zoomIn") zoomIn();
+      else if (action === "zoomOut") zoomOut();
+      else {
+        panActivity.signal();
+        panBatcher.queue(event.deltaX, event.deltaY);
       }
     };
 

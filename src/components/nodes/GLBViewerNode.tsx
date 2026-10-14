@@ -13,7 +13,7 @@ import { downloadMedia } from "@/utils/downloadMedia";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { Box, RefreshCw } from "lucide-react";
-import { useIsPaintedNode, useUpdateNodeData } from "./paintMode";
+import { useIsPaintedNode, useUpdateNodeData, useNodeUiState } from "./paintMode";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { nodeGraphIndex } from "@/lib/edges/graphIndex";
 
@@ -220,7 +220,7 @@ export function GLBViewerNode({ id, data, selected }: NodeProps<GLBViewerNodeTyp
   const [autoRotate, setAutoRotate] = useState(false);
   const [isInteracting, setIsInteracting] = useState(false);
   const envGroupRef = useRef<THREE.Group>(null);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useNodeUiState(id, "expanded", true);
 
   // A painted copy draws no viewer: no WebGL context and no model load per paint.
   const painted = useIsPaintedNode();

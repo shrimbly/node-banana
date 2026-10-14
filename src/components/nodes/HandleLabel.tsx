@@ -1,6 +1,8 @@
 import { useConnection, useNodeId } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { hasHiddenStubs } from "@/lib/edges/labels";
+import { useConnectDragStore } from "@/store/connectDragStore";
+import { useIsPaintedNode } from "@/components/nodes/paintMode";
 
 interface HandleLabelProps {
   label: string;
@@ -26,7 +28,12 @@ export function HandleLabel({
   // Hidden noodles leave labelled stubs beside the handles on this side, so the
   // handle labels stay out of their way until a connection drag replaces them
   const nodeId = useNodeId();
-  const isConnecting = useConnection((c) => c.inProgress);
+  const flowConnecting = useConnection((c) => c.inProgress);
+  // The GPU canvas draws its connections itself (connectDragStore); its painted
+  // pictures stay as they are at rest, as in useShowHandleLabels.
+  const painted = useIsPaintedNode();
+  const gpuConnecting = useConnectDragStore((s) => s.active) && !painted;
+  const isConnecting = flowConnecting || gpuConnecting;
   const hiddenStubs = useWorkflowStore((state) => hasHiddenStubs(state.edges, nodeId, side));
   const shown = visible && (isConnecting || !hiddenStubs);
   const positionStyle = side === "target"

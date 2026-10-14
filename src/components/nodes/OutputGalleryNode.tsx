@@ -1,20 +1,21 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
-import { NodeProps, Node, useReactFlow } from "@xyflow/react";
+import { NodeProps, Node, useReactFlow, type NodeChange } from "@xyflow/react";
 import { MediaViewer, type MediaViewerAction, type MediaViewerItem } from "@/components/MediaViewer";
 import { NodeShell } from "./NodeShell";
 import { ControlsCard, CornerGrip, EmptyState, type SocketSpec, HeightGrip } from "./ui";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { useAssetStore } from "@/store/assetStore";
 import { historyViewerItem } from "@/components/GlobalImageHistory";
-import { OutputGalleryNodeData, type ImageHistoryItem } from "@/types";
+import { OutputGalleryNodeData, type ImageHistoryItem, type WorkflowNode } from "@/types";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
 import { useAddMediaNode } from "@/hooks/useAddMediaNode";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import { downloadMedia as downloadMediaUtil } from "@/utils/downloadMedia";
 import { Check, Download, ImagePlus, LibraryBig, Menu, Play, Trash2 } from "lucide-react";
-import { useHoldLive, useUpdateNodeData } from "./paintMode";
+import { PaintPending, useHoldLive, useUpdateNodeData } from "./paintMode";
+import { rememberVideoPoster, videoPoster } from "@/utils/videoPosterCache";
 
 const INPUT_SOCKETS: SocketSpec[] = [
   { id: "image", type: "image", label: "Image" },
@@ -44,7 +45,7 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
   const nodeData = data;
   const updateNodeData = useUpdateNodeData();
   const addNode = useWorkflowStore((state) => state.addNode);
-  const { getNodes, setNodes } = useReactFlow();
+  const { getNodes } = useReactFlow();
   const addMediaNode = useAddMediaNode();
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   useHoldLive(lightboxIndex !== null);
@@ -76,6 +77,8 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
   // VideoStitchNode's extraction approach, keyed by the video's data URL.
   const videoSrcs = useMemo(() => nodeData.videos || [], [nodeData.videos]);
   const [videoThumbnails, setVideoThumbnails] = useState<Map<string, string>>(new Map());
+  // The sources the last extraction finished for: until then a painted copy is not ready (PaintPending).
+  const [extractedFor, setExtractedFor] = useState<string[] | null>(null);
   // Ref-based cache so the effect doesn't read stale `videoThumbnails` state
   const videoThumbnailsRef = useRef<Map<string, string>>(new Map());
 
@@ -100,8 +103,9 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
         if (cancelled) return;
 
         // Reuse cached thumbnail if we already have one for this exact source
-        if (videoThumbnailsRef.current.has(src)) {
-          newThumbnails.set(src, videoThumbnailsRef.current.get(src)!);
+        const known = videoThumbnailsRef.current.get(src) ?? videoPoster(src)?.thumbnail;
+        if (known) {
+          newThumbnails.set(src, known);
           continue;
         }
 
@@ -160,6 +164,7 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const thumbnail = canvas.toDataURL("image/jpeg", 0.7);
           newThumbnails.set(src, thumbnail);
+          rememberVideoPoster(src, { thumbnail, duration: video.duration });
         } catch (error) {
           console.warn("Failed to extract gallery video thumbnail:", error);
         }
@@ -171,6 +176,7 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
       if (!cancelled) {
         videoThumbnailsRef.current = newThumbnails;
         setVideoThumbnails(newThumbnails);
+        setExtractedFor(videoSrcs);
       }
     };
 
@@ -276,18 +282,24 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
       currentY += defaultNodeDimensions.videoInput.height + gap;
     }
 
+    // The new nodes become the selection. Written to the store, which holds every node: on the GPU canvas
+    // React Flow holds only the live ones, and the new nodes are not among them.
     if (newNodeIds.length > 0) {
-      setNodes((nodes) =>
-        nodes.map((n) => ({
-          ...n,
-          selected: newNodeIds.includes(n.id),
-        }))
-      );
+      const store = useWorkflowStore.getState();
+      const changes: NodeChange<WorkflowNode>[] = [];
+      for (const n of store.nodes) {
+        const selected = newNodeIds.includes(n.id);
+        if (!!n.selected !== selected) changes.push({ type: "select", id: n.id, selected });
+      }
+      if (changes.length) store.onNodesChange(changes);
     }
-  }, [id, nodeData.images, nodeData.videos, getNodes, addNode, setNodes]);
+  }, [id, nodeData.images, nodeData.videos, getNodes, addNode]);
 
   const currentItem = lightboxIndex !== null ? displayMedia[lightboxIndex] : null;
   const gridHeight = nodeData.mediaHeight ?? GRID_HEIGHT;
+  // A poster extracted before (by this node mounted earlier, or another) shows in the first render.
+  const videoThumbnailOf = (src: string) => videoThumbnails.get(src) ?? videoPoster(src)?.thumbnail;
+  const postersPending = extractedFor !== videoSrcs && videoSrcs.some((src) => !videoThumbnailOf(src));
 
   // The viewer's items: images then videos, as the grid shows them. An image
   // the history knows is described the way the history viewer describes it.
@@ -376,6 +388,7 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
           ) : undefined
         }
       >
+        <PaintPending pending={postersPending} />
         {displayMedia.length === 0 ? (
           <EmptyState message="Connect image or video nodes to view gallery" />
         ) : (
@@ -391,9 +404,9 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
                 >
                   {item.type === "video" ? (
                     <>
-                      {videoThumbnails.get(item.src) ? (
+                      {videoThumbnailOf(item.src) ? (
                         <img
-                          src={videoThumbnails.get(item.src)}
+                          src={videoThumbnailOf(item.src)}
                           alt={`Video ${idx + 1}`}
                           className="w-full h-full object-cover"
                         />

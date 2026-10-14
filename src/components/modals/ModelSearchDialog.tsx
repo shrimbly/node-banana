@@ -33,6 +33,7 @@ import { ProviderType, RecentModel } from "@/types";
 import { ProviderModel, ModelCapability } from "@/lib/providers/types";
 import type { ProviderListResult } from "@/lib/providers/registry";
 import { ComfyMark } from "@/components/icons/ComfyMark";
+import { getPaneCenter } from "@/utils/canvasPaneCenter";
 
 // localStorage cache: the whole list, one entry per set of configured
 // providers, so the dialog opens on it while the server answers. Filters and
@@ -204,18 +205,6 @@ const PROVIDER_OPTIONS: { id: ProviderType; label: string; Icon: () => React.Rea
   { id: "comfy", label: "ComfyUI", Icon: ComfyIcon },
 ];
 
-// Get the center of the React Flow pane in screen coordinates
-function getPaneCenter() {
-  const pane = document.querySelector(".react-flow");
-  if (pane) {
-    const rect = pane.getBoundingClientRect();
-    return {
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2,
-    };
-  }
-  return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-}
 
 // Capability filter options
 type CapabilityFilter = "all" | "image" | "video" | "3d" | "audio";

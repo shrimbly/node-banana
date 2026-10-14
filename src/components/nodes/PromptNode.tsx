@@ -7,7 +7,7 @@ import { NodeShell } from "./NodeShell";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { PromptNodeData } from "@/types";
 import { ControlsCard, HeightGrip, SummaryValues, type SocketSpec } from "./ui";
-import { useHoldLive, useUpdateNodeData } from "./paintMode";
+import { useHoldLive, useIsLiveLayerNode, useIsPaintedNode, useUpdateNodeData } from "./paintMode";
 
 type PromptNodeType = Node<PromptNodeData, "prompt">;
 
@@ -37,9 +37,15 @@ export function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
 
   // Track the last received text from connected LLM node to detect when it changes
   const lastReceivedTextRef = useRef<string | null>(null);
+  // The GPU canvas mounts a node only while it is worked in: its store watcher
+  // (watchPromptConnectedText) copies the connected text instead.
+  const liveLayer = useIsLiveLayerNode();
+  const painted = useIsPaintedNode();
+  const gpuCanvas = liveLayer || painted;
 
   // Get connected text input and update prompt when LLM output changes
   useEffect(() => {
+    if (gpuCanvas) return;
     if (hasIncomingTextConnection) {
       const { text } = getConnectedInputs(id);
       // Only update if the incoming text changed (LLM node ran again)
@@ -51,7 +57,7 @@ export function PromptNode({ id, data, selected }: NodeProps<PromptNodeType>) {
       // Clear tracking when connection is removed
       lastReceivedTextRef.current = null;
     }
-  }, [hasIncomingTextConnection, id, getConnectedInputs, updateNodeData]);
+  }, [gpuCanvas, hasIncomingTextConnection, id, getConnectedInputs, updateNodeData]);
 
   // Sync from props when not actively editing
   useEffect(() => {

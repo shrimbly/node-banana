@@ -1,6 +1,8 @@
 "use client";
 
+import { useContext, useLayoutEffect, useRef } from "react";
 import { EdgeLabelRenderer } from "@/components/flowPortals";
+import { EdgeLabelCoverContext, labelClip } from "./edgeLabelCover";
 
 /**
  * The pill a connection wears: the user's own label or the automatic one
@@ -23,12 +25,25 @@ interface EdgeLabelProps {
 }
 
 const ANCHOR_SHIFT = { center: "-50%", end: "-100%", start: "0%" } as const;
+const ANCHOR_FRACTION = { center: -0.5, end: -1, start: 0 } as const;
 
 export function EdgeLabel({ x, y, text, color, loopCount, active, anchor = "center" }: EdgeLabelProps) {
+  const cover = useContext(EdgeLabelCoverContext);
+  const ref = useRef<HTMLDivElement>(null);
+  // Where something other than the node layer covers labels (the GPU canvas's painted nodes), the pill is cut
+  // where a box lies over it, as a node above it would hide it. Without a cover (classic) nothing is touched.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || (!cover && !el.style.clipPath && !el.style.visibility)) return;
+    const clip = cover?.length ? labelClip({ x: x + ANCHOR_FRACTION[anchor] * el.offsetWidth, y: y - el.offsetHeight / 2, w: el.offsetWidth, h: el.offsetHeight }, cover) : null;
+    el.style.visibility = clip === "hidden" ? "hidden" : "";
+    el.style.clipPath = clip && clip !== "hidden" ? clip : "";
+  });
   if (!text && loopCount === undefined) return null;
   return (
     <EdgeLabelRenderer>
       <div
+        ref={ref}
         data-testid="edge-label"
         className="inline-flex items-center gap-1.5 h-5 px-2 rounded-full bg-neutral-800/90 border text-[10px] font-medium text-neutral-100 whitespace-nowrap transition-opacity duration-150"
         style={{

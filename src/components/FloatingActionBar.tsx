@@ -3,6 +3,7 @@
 import { MenuDivider, MenuItem, MenuSectionLabel, MenuStepper, MenuSurface } from "@/components/ui/Menu";
 import { MAX_RUN_COUNT } from "@/store/utils/runBatch";
 import { groupLabelColor } from "@/utils/groupColors";
+import { getPaneCenter } from "@/utils/canvasPaneCenter";
 import { useRef, useState, useEffect, useMemo, useCallback, type ReactNode } from "react";
 import { ChromeIconButton, type ChromeIconButtonProps } from "./ChromeIconButton";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -101,18 +102,6 @@ const ALL_NODES_CATEGORIES: { label: string; nodes: { type: NodeType; label: str
   },
 ];
 
-// Get the center of the React Flow pane in screen coordinates
-function getPaneCenter() {
-  const pane = document.querySelector('.react-flow');
-  if (pane) {
-    const rect = pane.getBoundingClientRect();
-    return {
-      x: rect.left + rect.width / 2,
-      y: rect.top + rect.height / 2,
-    };
-  }
-  return { x: window.innerWidth / 2, y: window.innerHeight / 2 };
-}
 
 // ---- Icons: Lucide at 20px, 1.5 stroke, one style throughout ------------------
 

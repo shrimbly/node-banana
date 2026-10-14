@@ -325,6 +325,7 @@ const GroupControls = memo(function GroupControls({
         {/* Inner scaled element: bottom-anchored so it grows upward, scale keeps bottom-left fixed */}
         <div
           ref={menuRef}
+          data-group-label={group.id}
           className={cn(
             "group/header absolute left-0 select-none",
             showInteractiveControls ? "pointer-events-auto cursor-grab active:cursor-grabbing" : "pointer-events-none"

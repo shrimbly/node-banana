@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useCallback, useState, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useState, useEffect, useMemo } from "react";
 import { NodeProps, Node } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
 import { ModelParameters } from "./ModelParameters";
+import { useSchemaDerived } from "./schemaDerived";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { Generate3DNodeData, ProviderType, ModelInputDef } from "@/types";
+import { Generate3DNodeData, ProviderType } from "@/types";
 import { ProviderModel } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { modelSelectionData } from "@/store/utils/modelSelection";
@@ -22,11 +23,10 @@ import {
   LoadingOverlay,
   Spinner,
   schemaSockets,
-  sameInputSchema,
   type SocketSpec,
 } from "./ui";
 import { Box, Folder, X } from "lucide-react";
-import { useHoldLive, useIsPaintedNode, useUpdateNodeData } from "./paintMode";
+import { useHoldLive, useIsPaintedNode, useUpdateNodeData, useNodeUiState } from "./paintMode";
 
 const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "3d", type: "3d", label: "3D" }];
 const MEDIA_HEIGHT = 112;
@@ -39,7 +39,7 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
   const [isBrowseDialogOpen, setIsBrowseDialogOpen] = useState(false);
   useHoldLive(isBrowseDialogOpen);
   const painted = useIsPaintedNode();
-  const [settingsTab, setSettingsTab] = useState<"primary" | "fallback">("primary");
+  const [settingsTab, setSettingsTab] = useNodeUiState<"primary" | "fallback">(id, "settingsTab", "primary");
 
   useEffect(() => {
     if (!nodeData.fallbackModel && settingsTab === "fallback") {
@@ -65,20 +65,8 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
     [id, updateNodeData]
   );
 
-  // Handle inputs loaded from schema
-  // Read through a ref so the callback stays stable: it is a dependency of
-  // ModelParameters' schema effect, and a new identity would refetch.
-  const inputSchemaRef = useRef(nodeData.inputSchema);
-  inputSchemaRef.current = nodeData.inputSchema;
-  const handleInputsLoaded = useCallback(
-    (inputs: ModelInputDef[]) => {
-      // ModelParameters reports on every mount, and a culled node remounts on
-      // every pan; a schema the node already has must not dirty the workflow.
-      if (sameInputSchema(inputSchemaRef.current, inputs)) return;
-      updateNodeData(id, { inputSchema: inputs });
-    },
-    [id, updateNodeData]
-  );
+  // The schema's inputs (sockets) and defaults, stored from a painted copy too (schemaDerived.ts).
+  const schemaDerived = useSchemaDerived(id, nodeData);
 
   const isRunning = useWorkflowStore((state) => state.isRunning);
 
@@ -132,7 +120,8 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
           provider={currentProvider}
           parameters={nodeData.parameters || {}}
           onParametersChange={handleParametersChange}
-          onInputsLoaded={handleInputsLoaded}
+          onInputsLoaded={schemaDerived.inputsLoaded}
+          onDefaults={schemaDerived.defaults}
         />
       )}
       {settingsTab === "fallback" && nodeData.fallbackModel && (
@@ -141,6 +130,8 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
           provider={nodeData.fallbackModel.provider}
           parameters={nodeData.fallbackParameters || {}}
           onParametersChange={(p) => updateNodeData(id, { fallbackParameters: p })}
+          slot="fallback"
+          onDefaults={schemaDerived.fallbackDefaults}
         />
       )}
     </>

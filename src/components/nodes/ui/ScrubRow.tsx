@@ -29,6 +29,9 @@ export function formatTime(seconds: number): string {
 const buttonClass =
   "w-5 h-5 rounded-[6px] squircle flex items-center justify-center hover:text-white hover:bg-white/10 transition-colors shrink-0";
 
+/** The node types whose gap row holds a ScrubRow (its sound icon is painted by the GPU canvas, keyed on the setting). */
+export const SCRUB_ROW_NODE_TYPES: ReadonlySet<string> = new Set(["output", "generateVideo", "videoInput", "videoStitch", "easeCurve"]);
+
 /**
  * Play/pause, a scrubber, `0:03 / 0:08` and the sound button, driving the
  * node's own <video>. Lives in the gap row.

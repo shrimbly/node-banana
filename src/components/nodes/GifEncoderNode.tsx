@@ -25,7 +25,7 @@ import {
   setPending,
   removePending,
 } from "@/store/thumbnailCache";
-import { useDerivedNodeData, useUpdateNodeData } from "./paintMode";
+import { useDerivedNodeData, useUpdateNodeData, useNodeUiState } from "./paintMode";
 
 type GifEncoderNodeType = Node<GifEncoderNodeData, "gifEncoder">;
 
@@ -122,7 +122,7 @@ export function GifEncoderNode({ id, data, selected }: NodeProps<GifEncoderNodeT
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const edges = useWorkflowStore((state) => state.edges);
   const nodes = useWorkflowStore(selectNodeContent);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useNodeUiState(id, "expanded", true);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
   // Dynamic image input edges

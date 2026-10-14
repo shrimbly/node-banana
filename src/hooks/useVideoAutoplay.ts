@@ -1,6 +1,7 @@
 import { useRef, useEffect } from "react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { soundAudible, useVideoSoundStore } from "@/store/videoSoundStore";
+import { useIsPaintedNode } from "@/components/nodes/paintMode";
 
 /** How long the pointer rests on a node before its video starts. */
 export const VIDEO_HOVER_DELAY_MS = 300;
@@ -41,7 +42,9 @@ export type VideoPlaybackIntent = "hover" | "playing" | "paused";
  */
 export function useVideoAutoplay(nodeId: string, src?: string | null): React.RefObject<HTMLVideoElement | null> {
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const isHovered = useWorkflowStore((s) => s.hoveredNodeId === nodeId);
+  // A painted copy is never hovered: hover state would be baked into its picture.
+  const painted = useIsPaintedNode();
+  const isHovered = useWorkflowStore((s) => !painted && s.hoveredNodeId === nodeId);
   const soundOn = useVideoSoundStore((s) => s.on);
   const volume = useVideoSoundStore((s) => s.volume);
   const intent = useRef<VideoPlaybackIntent>("hover");

@@ -365,8 +365,10 @@ body {
    the canvas going to the display as its own layer: a pan on the Mac's
    120 Hz screen lost about 10 frames a second to it. The chrome's grounds
    are 92% opaque, so the glass barely shows. Set once, while the GPU canvas
-   is mounted. */
-:root[data-gpu-canvas-active] [class*="backdrop-blur"] {
+   is mounted. Only that chrome (CHROME_SURFACE's `nb-scene-chrome`) outside
+   a modal dialog: dialogs' scrims, the lightbox (its rail and buttons) and
+   node content keep their blur, as on classic, since nothing moves under them. */
+:root[data-gpu-canvas-active] .nb-scene-chrome:not([aria-modal="true"] *) {
   backdrop-filter: none !important;
 }
 

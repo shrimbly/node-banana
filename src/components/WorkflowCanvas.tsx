@@ -22,6 +22,7 @@ import {
   type XYPosition,
 } from "@xyflow/react";
 import { frameLoadedGraph } from "@/utils/frameGraph";
+import { CANVAS_MAX_ZOOM, CANVAS_MIN_ZOOM } from "@/lib/canvasZoom";
 import "@xyflow/react/dist/style.css";
 
 import { useWorkflowStore, WorkflowFile } from "@/store/workflowStore";
@@ -102,7 +103,10 @@ import { setZoomedOut, useLowDetail, useLowDetailEnabled, useLowDetailZoom } fro
 import { NodeLowDetail } from "./nodes/NodeLowDetail";
 import { PerfOverlay } from "./PerfOverlay";
 import { reportGpuCanvasFailure, useGpuCanvasActive, useGpuCanvasFailure } from "@/lib/gpuCanvas/setting";
+import { sceneWheel } from "@/lib/gpuCanvas/wheel";
 import type { GpuEditing } from "./gpuCanvas/editor";
+import type { GpuWheelState } from "./gpuCanvas/GpuCanvas";
+import { gpuEdgePaths } from "./gpuCanvas/bridge";
 import { detectAndSplitGrid } from "@/utils/gridSplitter";
 import { logger } from "@/utils/logger";
 import { WelcomeModal } from "./quickstart";
@@ -1926,10 +1930,19 @@ export function WorkflowCanvas() {
   // while a modal is open (the modal's mini canvas drives its own).
   // The GPU canvas (Settings › Canvas) takes React Flow's place, with its own pan and zoom.
   useWheelPanZoom(reactFlowWrapper, canvasNavigationSettings, !isModalOpen && !gpuCanvasActive);
-  const gpuWheelZooms = useCallback((event: WheelEvent) => {
-    const { zoomMode } = canvasNavigationSettings;
-    return zoomMode === "scroll" || (zoomMode === "altScroll" && event.altKey) || (zoomMode === "ctrlScroll" && event.metaKey);
-  }, [canvasNavigationSettings]);
+  // The GPU canvas's wheel, decided as React Flow's zoom pane and the hook above decide it here.
+  const gpuWheel = useCallback(
+    (event: WheelEvent, { pane, panKey }: GpuWheelState) =>
+      sceneWheel(event, {
+        settings: canvasNavigationSettings,
+        zoomOnPinch: !tutorialActive && !isModalOpen,
+        wrapperWheel: !isModalOpen,
+        pane,
+        // React Flow's panActivationKeyCode, off in the tutorial and under a modal.
+        panKey: panKey && !tutorialActive && !isModalOpen,
+      }),
+    [canvasNavigationSettings, tutorialActive, isModalOpen],
+  );
   const gpuHeaders = useMemo(() => ({
     hints: readinessHints,
     getNodeTitle,
@@ -2390,23 +2403,6 @@ export function WorkflowCanvas() {
 
   const handlePaneClick = useCallback(() => setExpandedStubGroup?.(null), [setExpandedStubGroup]);
 
-  // The GPU canvas edits through the same handlers as React Flow above.
-  const gpuEditing = useMemo<GpuEditing>(() => ({
-    navigation: canvasNavigationSettings,
-    locked: canvasLocked,
-    disabled: isModalOpen || tutorialActive,
-    isValidConnection,
-    onConnect: handleConnect,
-    onConnectEnd: (event, state, nodeId) => handleConnectEnd(event, state as unknown as Parameters<OnConnectEnd>[1], nodeId),
-    onHandleClick: setHandleMenu,
-    onNodeDragStop: (event, node) => handleNodeDragStop(event, node),
-    onPaneClick: handlePaneClick,
-    onPaneMenu: openNodeSearchMenu,
-    onEdgeClick: (event, edge) => handleEdgeClick(event as unknown as React.MouseEvent, edge),
-    onEdgeContextMenu: (event, edge) => handleEdgeContextMenu(event as unknown as React.MouseEvent, edge),
-  }), [canvasNavigationSettings, canvasLocked, isModalOpen, tutorialActive, isValidConnection, handleConnect, handleConnectEnd, handleNodeDragStop, handlePaneClick, openNodeSearchMenu, handleEdgeClick, handleEdgeContextMenu]);
-
-
   // The selection's side effects on the edge menu and on edges. Which nodes a
   // marquee takes is decided by NodeMarqueeSelection and handleNodesChange,
   // which measure each node's real box.
@@ -2421,6 +2417,25 @@ export function WorkflowCanvas() {
       if (selectedEdges.length) onEdgesChange(selectedEdges.map((edge) => ({ type: "select", id: edge.id, selected: false })));
     }
   }, [onEdgesChange]);
+
+  // The GPU canvas edits through the same handlers as React Flow above.
+  const gpuEditing = useMemo<GpuEditing>(() => ({
+    navigation: canvasNavigationSettings,
+    locked: canvasLocked,
+    disabled: isModalOpen,
+    tutorial: tutorialActive,
+    isValidConnection,
+    onConnect: handleConnect,
+    onReconnect: handleReconnect,
+    onConnectEnd: (event, state, nodeId) => handleConnectEnd(event, state as unknown as Parameters<OnConnectEnd>[1], nodeId),
+    onHandleClick: setHandleMenu,
+    onNodeDragStop: (event, node) => handleNodeDragStop(event, node),
+    onPaneClick: handlePaneClick,
+    onPaneMenu: openNodeSearchMenu,
+    onEdgeClick: (event, edge) => handleEdgeClick(event as unknown as React.MouseEvent, edge),
+    onEdgeContextMenu: (event, edge) => handleEdgeContextMenu(event as unknown as React.MouseEvent, edge),
+    onSelectionChange: handleSelectionChange,
+  }), [canvasNavigationSettings, canvasLocked, isModalOpen, tutorialActive, isValidConnection, handleConnect, handleReconnect, handleConnectEnd, handleNodeDragStop, handlePaneClick, openNodeSearchMenu, handleEdgeClick, handleEdgeContextMenu, handleSelectionChange]);
 
   const handleDragOver = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -2719,6 +2734,7 @@ export function WorkflowCanvas() {
       )}
 
       {gpuCanvasActive ? (
+        <>
         <GpuCanvas
           key={gpuCanvasBuild}
           onFailure={reportGpuCanvasFailure}
@@ -2727,8 +2743,10 @@ export function WorkflowCanvas() {
           edgeTypes={edgeTypes}
           defaultEdgeOptions={DEFAULT_EDGE_OPTIONS}
           headers={gpuHeaders}
-          wheelZooms={gpuWheelZooms}
+          wheel={gpuWheel}
+          wheelRoot={reactFlowWrapper}
           editing={gpuEditing}
+          dimBackground={tutorialActive && lockedFeatures}
           flowChildren={
             <>
               <GroupControlsOverlay />
@@ -2745,6 +2763,9 @@ export function WorkflowCanvas() {
           <PerfOverlay />
           {agentButton}
         </GpuCanvas>
+        {/* The scene draws the connections: the sweep crosses its routes rather than SVG paths */}
+        <EdgeHookSelection canvas={reactFlowWrapper} disabled={isModalOpen || isCanvasOverview} paths={gpuEdgePaths} />
+        </>
       ) : (
       <>
       <ReactFlow
@@ -2811,8 +2832,8 @@ export function WorkflowCanvas() {
         zoomOnScroll={tutorialActive ? false : false}
         zoomOnPinch={tutorialActive ? false : !isModalOpen}
         zoomOnDoubleClick={false}
-        minZoom={0.1}
-        maxZoom={4}
+        minZoom={CANVAS_MIN_ZOOM}
+        maxZoom={CANVAS_MAX_ZOOM}
         defaultViewport={initialViewport ?? DEFAULT_VIEWPORT}
         panActivationKeyCode={
           tutorialActive

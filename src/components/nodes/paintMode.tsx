@@ -1,8 +1,9 @@
 "use client";
 
-import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { useNodeId } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
+import { useNodeUiStore } from "@/store/nodeUiStore";
 import type { WorkflowNodeData } from "@/types";
 
 /**
@@ -65,6 +66,15 @@ export function HoldLiveProvider({ hold, children }: { hold: HoldLive; children:
   return <HoldLiveContext.Provider value={hold}>{children}</HoldLiveContext.Provider>;
 }
 
+/**
+ * True inside the GPU canvas's live layer. Its React Flow starts no
+ * connection of its own: the GPU canvas's editor draws them, from presses the
+ * layer hands it.
+ */
+export function useIsLiveLayerNode(): boolean {
+  return useContext(HoldLiveContext) !== null;
+}
+
 /** Keeps this node live while `active` (inside a node; the node's id comes from React Flow). */
 export function useHoldLive(active: boolean, nodeId?: string | null) {
   const hold = useContext(HoldLiveContext);
@@ -74,4 +84,58 @@ export function useHoldLive(active: boolean, nodeId?: string | null) {
     if (!active || !hold || !id) return;
     return hold(id);
   }, [active, hold, id]);
+}
+
+type SetValue<T> = (value: T | ((previous: T) => T)) => void;
+
+/**
+ * useState for a node's view state: plain local state on the classic canvas,
+ * kept in useNodeUiStore under the node's id and `key` on the GPU canvas (its
+ * live layer and its painted copies), so a node looks the same whichever way
+ * it is drawn.
+ *
+ * `scope` stands for what classic's component is mounted for (a model, a
+ * settings tab): there a change of it remounts the component and resets its
+ * state. Here a stored value belongs to the scope it was set under; under
+ * another it reads as `initial`, and is dropped so it does not come back with
+ * its old scope.
+ */
+export function useNodeUiState<T>(id: string, key: string, initial: T, scope?: string): [T, SetValue<T>] {
+  const live = useIsLiveLayerNode(), painted = useIsPaintedNode();
+  const gpu = live || painted;
+  const [local, setLocal] = useState(initial);
+  const raw = useNodeUiStore((state) => state.byNode[id]?.[key]);
+  const setStored = useCallback<SetValue<T>>((next) => {
+    const store = useNodeUiStore.getState();
+    const current = scopedValue<T>(store.byNode[id]?.[key], scope);
+    const value = typeof next === "function" ? (next as (previous: T) => T)(current === undefined ? initial : current) : next;
+    store.set(id, key, scope === undefined ? value : { scope, value });
+  }, [id, key, initial, scope]);
+  const stale = gpu && scope !== undefined && raw !== undefined && scopedValue(raw, scope) === undefined;
+  useEffect(() => {
+    if (!stale) return;
+    const store = useNodeUiStore.getState(), current = store.byNode[id]?.[key];
+    if (current !== undefined && scopedValue(current, scope) === undefined) store.set(id, key, undefined);
+  }, [stale, id, key, scope]);
+  if (!gpu) return [local, setLocal];
+  const stored = scopedValue<T>(raw, scope);
+  return [stored === undefined ? initial : stored, setStored];
+}
+
+/** A stored view-state entry's value, `undefined` when it was set under another scope. */
+export function scopedValue<T>(raw: unknown, scope: string | undefined): T | undefined {
+  if (scope === undefined) return raw as T | undefined;
+  const entry = raw as { scope?: unknown; value?: T } | null | undefined;
+  return entry && typeof entry === "object" && entry.scope === scope ? entry.value : undefined;
+}
+
+/**
+ * Marks a painted copy as not ready while `pending` (a waveform decoding, a
+ * video's poster being extracted): the GPU canvas waits for it before
+ * painting, and paints it again later if the wait runs out. Renders nothing
+ * elsewhere.
+ */
+export function PaintPending({ pending }: { pending: boolean }) {
+  const painted = useIsPaintedNode();
+  return painted && pending ? <div hidden data-paint-pending="" /> : null;
 }

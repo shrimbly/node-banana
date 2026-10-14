@@ -14,6 +14,8 @@ import {
 import { shallow, useShallow } from "zustand/shallow";
 import { EdgeLabelRenderer } from "@/components/flowPortals";
 import { useWorkflowStore, type WorkflowStore } from "@/store/workflowStore";
+import { useConnectDragStore } from "@/store/connectDragStore";
+import { useEdgeHoverStore } from "@/store/edgeHoverStore";
 import { ArrayNodeData, WorkflowEdgeData, type WorkflowEdge, type WorkflowNode } from "@/types";
 import { getSharedGradientId } from "./SharedEdgeGradients";
 import { EDGE_COLORS, edgeColorKeyForHandles, edgeHighlightColor } from "@/lib/edges/colors";
@@ -135,7 +137,9 @@ export function EditableEdge({
   // Hidden connections: labelled stubs at the handles; hover ghosts the line back
   const isHidden = Boolean((data as EdgeData | undefined)?.hidden);
   // While a noodle is being dragged the handle labels take the stubs' place
-  const isConnecting = useConnection((c) => c.inProgress);
+  // (the GPU canvas draws its own, so it says so through connectDragStore)
+  const flowConnecting = useConnection((c) => c.inProgress);
+  const isConnecting = useConnectDragStore((s) => s.active) || flowConnecting;
   const [stubHovered, setStubHovered] = useState(false);
   const [stubWidths, setStubWidths] = useState({ source: 0, target: 0 });
   const [toolbarSide, setToolbarSide] = useState<"source" | "target">("source");
@@ -151,6 +155,8 @@ export function EditableEdge({
   const ownLabel = (data as EdgeData | undefined)?.label?.trim() ?? "";
   const hasOwnLabel = Boolean(ownLabel);
   const [hovered, setHovered] = useState(false);
+  // On the GPU canvas the scene takes the pointer, and says which connection it is over
+  const sceneHovered = useEdgeHoverStore((state) => state.edgeId === id);
   // A collapsed pill is drawn by one member but every member's ghost must
   // leave from its outer edge, so its measured width goes through the store.
   // Members share a label, so this edge's own label names its stack.
@@ -589,7 +595,7 @@ export function EditableEdge({
           text={labelText}
           color={edgeColor}
           loopCount={edgeData?.isLoop ? edgeData.loopCount || 3 : undefined}
-          active={isConnectedToSelection || Boolean(selected) || hovered}
+          active={isConnectedToSelection || Boolean(selected) || hovered || sceneHovered}
         />
       )}
 
@@ -620,6 +626,7 @@ export function EditableEdge({
               fill="white"
               stroke="#3b82f6"
               strokeWidth={2}
+              className="edge-segment-handle"
               style={{
                 cursor: handle.direction === "horizontal" ? "ew-resize" : "ns-resize",
               }}

@@ -20,7 +20,7 @@ import {
   SummaryValues,
   type SocketSpec,
 } from "./ui";
-import { useIsPaintedNode, useDerivedNodeData, useUpdateNodeData } from "./paintMode";
+import { useIsPaintedNode, useDerivedNodeData, useUpdateNodeData, useNodeUiState } from "./paintMode";
 
 type ImageResizeNodeType = Node<ImageResizeNodeData, "imageResize">;
 
@@ -60,7 +60,7 @@ export function ImageResizeNode({ id, data, selected }: NodeProps<ImageResizeNod
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const edges = useWorkflowStore((state) => state.edges);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useNodeUiState(id, "expanded", true);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
   // Sync upstream image into sourceImage so the executor + UI both see it

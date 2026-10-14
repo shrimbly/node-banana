@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useCallback, useState, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useState, useEffect, useMemo } from "react";
 import { NodeProps, Node } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
 import { ModelParameters } from "./ModelParameters";
+import { useSchemaDerived } from "./schemaDerived";
 import { useWorkflowStore, useProviderApiKeys } from "@/store/workflowStore";
 import { deduplicatedFetch } from "@/utils/deduplicatedFetch";
-import { GenerateVideoNodeData, ProviderType, ModelInputDef } from "@/types";
+import { GenerateVideoNodeData, ProviderType } from "@/types";
 import { ProviderModel, ModelCapability } from "@/lib/providers/types";
 import { ModelSearchDialog } from "@/components/modals/ModelSearchDialog";
 import { modelSelectionData } from "@/store/utils/modelSelection";
@@ -30,11 +31,10 @@ import {
   ScrubRow,
   Spinner,
   schemaSockets,
-  sameInputSchema,
   type SocketSpec,
 } from "./ui";
 import { Download, X } from "lucide-react";
-import { useHoldLive, useIsPaintedNode, useUpdateNodeData } from "./paintMode";
+import { useHoldLive, useIsPaintedNode, useUpdateNodeData, useNodeUiState } from "./paintMode";
 
 // Video generation capabilities
 const VIDEO_CAPABILITIES: ModelCapability[] = ["text-to-video", "image-to-video", "audio-to-video", "video-to-video"];
@@ -54,7 +54,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
   const [isBrowseDialogOpen, setIsBrowseDialogOpen] = useState(false);
   useHoldLive(isBrowseDialogOpen);
   const painted = useIsPaintedNode();
-  const [settingsTab, setSettingsTab] = useState<"primary" | "fallback">("primary");
+  const [settingsTab, setSettingsTab] = useNodeUiState<"primary" | "fallback">(id, "settingsTab", "primary");
   // The clip follows the video's real proportions once its metadata arrives.
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
@@ -144,20 +144,8 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
     [id, updateNodeData]
   );
 
-  // Handle inputs loaded from schema
-  // Read through a ref so the callback stays stable: it is a dependency of
-  // ModelParameters' schema effect, and a new identity would refetch.
-  const inputSchemaRef = useRef(nodeData.inputSchema);
-  inputSchemaRef.current = nodeData.inputSchema;
-  const handleInputsLoaded = useCallback(
-    (inputs: ModelInputDef[]) => {
-      // ModelParameters reports on every mount, and a culled node remounts on
-      // every pan; a schema the node already has must not dirty the workflow.
-      if (sameInputSchema(inputSchemaRef.current, inputs)) return;
-      updateNodeData(id, { inputSchema: inputs });
-    },
-    [id, updateNodeData]
-  );
+  // The schema's inputs (sockets) and defaults, stored from a painted copy too (schemaDerived.ts).
+  const schemaDerived = useSchemaDerived(id, nodeData);
 
   const isRunning = useWorkflowStore((state) => state.isRunning);
 
@@ -231,7 +219,8 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
           provider={currentProvider}
           parameters={nodeData.parameters || {}}
           onParametersChange={handleParametersChange}
-          onInputsLoaded={handleInputsLoaded}
+          onInputsLoaded={schemaDerived.inputsLoaded}
+          onDefaults={schemaDerived.defaults}
         />
       )}
 
@@ -241,6 +230,8 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
           provider={nodeData.fallbackModel.provider}
           parameters={nodeData.fallbackParameters || {}}
           onParametersChange={(p) => updateNodeData(id, { fallbackParameters: p })}
+          slot="fallback"
+          onDefaults={schemaDerived.fallbackDefaults}
         />
       )}
     </>

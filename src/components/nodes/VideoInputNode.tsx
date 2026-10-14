@@ -24,7 +24,7 @@ const OUTPUT_SOCKETS: SocketSpec[] = [{ id: "video", type: "video", label: "Vide
 export function VideoInputNode({ id, data, selected }: NodeProps<VideoInputNodeType>) {
   const nodeData = data;
   const updateNodeData = useUpdateNodeData();
-  const { beginRequest, cancelRequest } = useNodeMediaRequest();
+  const { beginRequest, cancelRequest } = useNodeMediaRequest(id);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 

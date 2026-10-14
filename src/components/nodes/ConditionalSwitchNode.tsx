@@ -2,7 +2,7 @@
 
 import { memo, useMemo, useEffect, useState, useCallback } from "react";
 import { Check, ChevronDown, ChevronUp, Plus, X } from "lucide-react";
-import { useReactFlow, NodeProps } from "@xyflow/react";
+import { NodeProps } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { evaluateRule } from "@/store/utils/ruleEvaluation";
@@ -42,7 +42,6 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
   const nodeData = data as ConditionalSwitchNodeData;
   const updateNodeData = useUpdateNodeData();
   const deriveNodeData = useDerivedNodeData();
-  const { setEdges } = useReactFlow();
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Get incoming text via store selector so it recomputes when upstream node data changes
@@ -110,9 +109,12 @@ export const ConditionalSwitchNode = memo(({ id, data, selected }: NodeProps<Wor
       if (nodeData.rules.length <= 1) return;
       const updatedRules = nodeData.rules.filter((rule) => rule.id !== ruleId);
       updateNodeData(id, { rules: updatedRules });
-      setEdges((edges) => edges.filter((e) => !(e.source === id && e.sourceHandle === ruleId)));
+      // From the store, not React Flow's setEdges: the GPU canvas's live flow holds only some edges.
+      const store = useWorkflowStore.getState();
+      const stale = store.edges.filter((e) => e.source === id && e.sourceHandle === ruleId).map((e) => e.id);
+      if (stale.length) store.removeEdges(stale);
     },
-    [id, nodeData.rules, updateNodeData, setEdges]
+    [id, nodeData.rules, updateNodeData]
   );
 
   const handleAddRule = useCallback(() => {

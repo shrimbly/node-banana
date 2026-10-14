@@ -69,6 +69,7 @@ vi.mock("react-dom", async () => {
 
 // Mock useAudioVisualization
 vi.mock("@/hooks/useAudioVisualization", () => ({
+  audioSourceKey: () => null,
   useAudioVisualization: () => ({
     waveformData: null,
     isLoading: false,

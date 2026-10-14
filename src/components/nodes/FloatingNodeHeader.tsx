@@ -10,6 +10,7 @@ import { ProviderBadge } from "./ProviderBadge";
 import { menuSurfaceClass } from "@/components/ui/Menu";
 import { KbdGroup } from "@/components/ui/Kbd";
 import { cn } from "./ui/cn";
+import { useHoldLive, useIsPaintedNode } from "./paintMode";
 import {
   Box,
   ChevronDown,
@@ -116,7 +117,9 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
   const canRun = RUNNABLE_TYPES.has(type);
   const canExpand = EXPANDABLE_TYPES.has(type);
   const [isHeaderHovered, setIsHeaderHovered] = useState(false);
-  const isBodyHovered = useWorkflowStore((state) => state.hoveredNodeId === id);
+  // A painted copy never shows hover-only controls: its picture outlives the hover it was painted under.
+  const painted = useIsPaintedNode();
+  const isBodyHovered = useWorkflowStore((state) => !painted && state.hoveredNodeId === id);
   const isHovered = isHeaderHovered || isBodyHovered;
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [editTitleValue, setEditTitleValue] = useState(customTitle || (titleLogo ? title : ""));
@@ -134,6 +137,9 @@ export const FloatingNodeHeader = memo(function FloatingNodeHeader({
 
   // Check if comment is focused for navigation
   const isCommentFocused = focusedCommentNodeId === id;
+  // On the GPU canvas the node stays live while its header shows something of its own: the header
+  // sits outside the node (its own id, not the node's context), and unmounting would drop the edit.
+  useHoldLive(isEditingTitle || isEditingComment || isMenuOpen || isCommentFocused, id);
 
   /**
    * The name the user edits.

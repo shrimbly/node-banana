@@ -6,8 +6,14 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { useAssetStore } from "@/store/assetStore";
 import { crossesEdge, FORK_HOTSPOT, FORK_PATHS, FORK_SIZE, type Point } from "@/lib/edges/hook";
 
-/** Hold H and sweep the rendered noodles; nodes never participate in this gesture. */
-export function EdgeHookSelection({ canvas, disabled }: { canvas: RefObject<HTMLDivElement | null>; disabled: boolean }) {
+/** A connection's rendered path, sampled in client px. */
+export interface HookPath { id: string; points: Point[] }
+
+/**
+ * Hold H and sweep the rendered noodles; nodes never participate in this gesture.
+ * `paths` samples the connections from elsewhere than their SVG (the GPU canvas draws them in its scene).
+ */
+export function EdgeHookSelection({ canvas, disabled, paths: samplePaths }: { canvas: RefObject<HTMLDivElement | null>; disabled: boolean; paths?: (eligible: Set<string>) => HookPath[] }) {
   const [held, setHeld] = useState(false);
   const [count, setCount] = useState(0);
   // The fork follows the pointer as an element, so it can ease between sizes;
@@ -21,7 +27,7 @@ export function EdgeHookSelection({ canvas, disabled }: { canvas: RefObject<HTML
     el.style.opacity = "1";
   };
   const { screenToFlowPosition } = useReactFlow();
-  const gesture = useRef<{ last: Point; ids: Set<string>; paths: { id: string; points: Point[] }[] } | null>(null);
+  const gesture = useRef<{ last: Point; ids: Set<string>; paths: HookPath[] } | null>(null);
   const finish = useRef<(cancel?: boolean) => void>(() => {});
   finish.current = (cancel = false) => {
     const sweep = gesture.current;
@@ -99,8 +105,8 @@ export function EdgeHookSelection({ canvas, disabled }: { canvas: RefObject<HTML
         store.onNodesChange(store.nodes.filter((n) => n.selected).map((n) => ({ type: "select", id: n.id, selected: false })));
         store.onEdgesChange(store.edges.filter((e) => e.selected).map((e) => ({ type: "select", id: e.id, selected: false })));
         const eligible = new Set(store.edges.filter((e) => !e.hidden && !e.data?.hidden && e.type !== "reference").map((e) => e.id));
-        const paths: { id: string; points: Point[] }[] = [];
-        canvas.current?.querySelectorAll<SVGPathElement>(".react-flow__edge .react-flow__edge-path").forEach((path) => {
+        const paths: HookPath[] = samplePaths ? samplePaths(eligible) : [];
+        if (!samplePaths) canvas.current?.querySelectorAll<SVGPathElement>(".react-flow__edge .react-flow__edge-path").forEach((path) => {
           const id = path.closest(".react-flow__edge")?.getAttribute("data-id");
           const matrix = path.getScreenCTM();
           if (!id || !eligible.has(id) || !matrix) return;

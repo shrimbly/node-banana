@@ -21,7 +21,7 @@ import { cn } from "./ui/cn";
 import { ControlsSizingContext, type ControlsSizing } from "./ui/ControlsCard";
 import { SocketColumn, socketRowCount, type SocketOutline, type SocketSpec } from "./ui/Socket";
 import { CONTROLS_GAP, GAP_ROW_H, NODE_MIN_W, socketMinHeight } from "./ui/tokens";
-import { useUpdateNodeData } from "./paintMode";
+import { useIsPaintedNode, useUpdateNodeData } from "./paintMode";
 
 export type { ShellMedia };
 
@@ -38,9 +38,11 @@ const TRAIL_MAX = 18;
  * media were towing it. The node's position is read from React Flow; a
  * smoothed copy eases toward it each frame, and the difference is written
  * straight to the trailing element's transform — no React state, so it never
- * fights React Flow's own per-move re-render.
+ * fights React Flow's own per-move re-render. Off (`enabled` false) on a
+ * painted copy: its sheet moves nodes between spots, which is no drag, and a
+ * trail caught mid-way would be painted in.
  */
-function useTrailingOffset(id: string): React.RefObject<HTMLDivElement | null> {
+function useTrailingOffset(id: string, enabled = true): React.RefObject<HTMLDivElement | null> {
   const store = useStoreApi();
   const el = useRef<HTMLDivElement | null>(null);
   const target = useRef<{ x: number; y: number } | null>(null);
@@ -49,6 +51,13 @@ function useTrailingOffset(id: string): React.RefObject<HTMLDivElement | null> {
   const lastTime = useRef(0);
 
   useEffect(() => {
+    if (!enabled) {
+      if (el.current) {
+        el.current.style.transform = "";
+        el.current.style.willChange = "";
+      }
+      return;
+    }
     const step = (now: number) => {
       frame.current = null;
       const t = target.current;
@@ -115,7 +124,7 @@ function useTrailingOffset(id: string): React.RefObject<HTMLDivElement | null> {
         el.current.style.willChange = "";
       }
     };
-  }, [id, store]);
+  }, [id, store, enabled]);
 
   return el;
 }
@@ -200,7 +209,8 @@ export function NodeShell({
   const labels = showLabels ?? connectingLabels;
 
   const rows = Math.max(socketRowCount(inputs), socketRowCount(outputs));
-  const trailingRef = useTrailingOffset(id);
+  const painted = useIsPaintedNode();
+  const trailingRef = useTrailingOffset(id, !painted);
   // Same precedence as the card's classes below: error beats selection beats running.
   const outline: SocketOutline = hasError ? "error" : selected ? "selected" : running ? "running" : "none";
 

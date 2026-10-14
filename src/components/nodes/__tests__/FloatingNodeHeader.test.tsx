@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { FloatingNodeHeader } from "../FloatingNodeHeader";
+import { HoldLiveProvider } from "../paintMode";
 
 let hoveredNodeId: string | null = null;
 vi.mock("@/store/workflowStore", () => ({
@@ -74,6 +75,25 @@ describe("FloatingNodeHeader", () => {
     fireEvent.change(input, { target: { value: "Hero shot" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(onCustomTitleChange).toHaveBeenCalledWith("n1", "Hero shot");
+  });
+
+  it("holds its node live on the GPU canvas while renaming or with the menu open", () => {
+    const release = vi.fn();
+    const hold = vi.fn(() => release);
+    render(
+      <ReactFlowProvider>
+        <HoldLiveProvider hold={hold}>
+          <FloatingNodeHeader {...base} type="prompt" title="Prompt" onCustomTitleChange={vi.fn()} />
+        </HoldLiveProvider>
+      </ReactFlowProvider>
+    );
+    expect(hold).not.toHaveBeenCalled();
+    fireEvent.doubleClick(screen.getByText("Prompt"));
+    expect(hold).toHaveBeenCalledWith("n1");
+    fireEvent.keyDown(screen.getByPlaceholderText("Custom title..."), { key: "Escape" });
+    expect(release).toHaveBeenCalledTimes(1);
+    openMenu();
+    expect(hold).toHaveBeenCalledTimes(2);
   });
 
   it("has no bordered chips: fallback and comment live in the kebab", () => {

@@ -22,7 +22,7 @@ export function ImageInputNode({ id, data, selected }: NodeProps<ImageInputNodeT
   const adaptiveImage = useAdaptiveImageSrc(nodeData.image, id);
   useCommentNavigation(id);
   const updateNodeData = useUpdateNodeData();
-  const { beginRequest, cancelRequest } = useNodeMediaRequest();
+  const { beginRequest, cancelRequest } = useNodeMediaRequest(id);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 

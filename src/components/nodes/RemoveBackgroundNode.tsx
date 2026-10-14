@@ -9,7 +9,7 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { BackgroundRemovalModel, RemoveBackgroundNodeData } from "@/types";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
 import { ChipGroup, ControlsCard, EmptyState, Field, Spinner, type SocketSpec } from "./ui";
-import { useUpdateNodeData } from "./paintMode";
+import { useUpdateNodeData, useNodeUiState } from "./paintMode";
 
 type RemoveBackgroundNodeType = Node<RemoveBackgroundNodeData, "removeBackground">;
 
@@ -39,7 +39,7 @@ export function RemoveBackgroundNode({ id, data, selected }: NodeProps<RemoveBac
   const getConnectedInputs = useWorkflowStore((state) => state.getConnectedInputs);
   const edges = useWorkflowStore((state) => state.edges);
   const nodes = useWorkflowStore(selectNodeContent);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useNodeUiState(id, "expanded", true);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
   const hasIncomingImageConnection = useMemo(() => {

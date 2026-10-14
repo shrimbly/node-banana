@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { HandleLabel } from "../HandleLabel";
+import { PaintedNodes } from "../paintMode";
+import { setConnectDrag } from "@/store/connectDragStore";
 
 let connectionInProgress = false;
 let edges: Array<{ id: string; source: string; target: string; data?: { hidden?: boolean } }> = [];
@@ -23,6 +25,7 @@ describe("HandleLabel", () => {
   beforeEach(() => {
     connectionInProgress = false;
     edges = [];
+    setConnectDrag(false);
   });
 
   it("shows when asked and nothing is hidden nearby", () => {
@@ -58,5 +61,19 @@ describe("HandleLabel", () => {
     connectionInProgress = true;
     render(<HandleLabel label="Image" side="target" color="red" visible />);
     expect(screen.getByText("Image").style.opacity).toBe("1");
+  });
+
+  it("comes back while the GPU canvas draws a connection", () => {
+    edges = [hiddenInto("node-1")];
+    setConnectDrag(true);
+    render(<HandleLabel label="Image" side="target" color="red" visible />);
+    expect(screen.getByText("Image").style.opacity).toBe("1");
+  });
+
+  it("keeps a painted copy as it is at rest during a GPU connection", () => {
+    edges = [hiddenInto("node-1")];
+    setConnectDrag(true);
+    render(<PaintedNodes><HandleLabel label="Image" side="target" color="red" visible /></PaintedNodes>);
+    expect(screen.getByText("Image").style.opacity).toBe("0");
   });
 });

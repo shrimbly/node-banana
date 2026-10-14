@@ -32,6 +32,8 @@ export interface FloatingNodeHeadersProps extends HeaderActions {
 const HEADER_REACH = 48;
 
 const GENERATE_TYPES = new Set(["nanoBanana", "generateVideo", "generate3d", "generateAudio"]);
+/** Node types whose header shows no readiness hint (generate nodes say it in their own body). */
+export const HEADER_HINTLESS_TYPES: ReadonlySet<string> = GENERATE_TYPES;
 const INPUT_TYPES = new Set(["imageInput", "audioInput", "prompt"]);
 
 /**

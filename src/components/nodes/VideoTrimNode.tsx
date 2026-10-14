@@ -22,7 +22,7 @@ import {
   SummaryValues,
   type SocketSpec,
 } from "./ui";
-import { useUpdateNodeData } from "./paintMode";
+import { useDerivedNodeData, useUpdateNodeData, useNodeUiState, useIsLiveLayerNode, useIsPaintedNode } from "./paintMode";
 
 type VideoTrimNodeType = Node<VideoTrimNodeData, "videoTrim">;
 
@@ -42,14 +42,17 @@ function formatTime(seconds: number): string {
 export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeType>) {
   const nodeData = data;
   const updateNodeData = useUpdateNodeData();
+  // Encoder support is a fact about the browser, not this copy: a painted copy
+  // (GPU canvas) settles it too, as the always-mounted classic node does.
+  const writeEncoderSupport = useDerivedNodeData();
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const edges = useWorkflowStore((state) => state.edges);
   const nodes = useWorkflowStore(selectNodeContent);
 
   // Track whether user wants to see source or output video
-  const [showOutput, setShowOutput] = useState(false);
-  const [expanded, setExpanded] = useState(true);
+  const [showOutput, setShowOutput] = useNodeUiState(id, "showOutput", false);
+  const [expanded, setExpanded] = useNodeUiState(id, "expanded", true);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
   // Keep a ref to endTime so the metadata callback reads fresh state
@@ -60,10 +63,10 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
   useEffect(() => {
     if (nodeData.encoderSupported === null) {
       checkEncoderSupport().then((supported) => {
-        updateNodeData(id, { encoderSupported: supported });
+        writeEncoderSupport(id, { encoderSupported: supported });
       });
     }
-  }, [id, nodeData.encoderSupported, updateNodeData]);
+  }, [id, nodeData.encoderSupported, writeEncoderSupport]);
 
   // Find connected source video from incoming edges
   const sourceVideoUrl = useMemo(() => {
@@ -78,9 +81,14 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
     return (d.outputVideo as string | null) ?? null;
   }, [edges, nodes, id]);
 
-  // When source video changes, load metadata to detect duration
+  // When source video changes, load metadata to detect duration. The GPU canvas
+  // mounts a node only while it is worked in: its store watcher
+  // (watchVideoTrimDurations) does this instead.
+  const liveLayer = useIsLiveLayerNode();
+  const painted = useIsPaintedNode();
+  const gpuCanvas = liveLayer || painted;
   useEffect(() => {
-    if (!sourceVideoUrl) return;
+    if (!sourceVideoUrl || gpuCanvas) return;
 
     let cancelled = false;
     const abortController = new AbortController();
@@ -132,7 +140,7 @@ export function VideoTrimNode({ id, data, selected }: NodeProps<VideoTrimNodeTyp
       video.src = "";
       if (blobUrl) URL.revokeObjectURL(blobUrl);
     };
-  }, [sourceVideoUrl, id, updateNodeData]);
+  }, [sourceVideoUrl, gpuCanvas, id, updateNodeData]);
 
   // Auto-switch to output when trimming completes
   const prevOutputVideoRef = useRef(nodeData.outputVideo);

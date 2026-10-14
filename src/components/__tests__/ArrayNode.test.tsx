@@ -3,6 +3,7 @@ import { render, screen, fireEvent, within } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { ArrayNode } from "@/components/nodes/ArrayNode";
 import { PaintedNodes } from "@/components/nodes/paintMode";
+import { useNodeUiStore } from "@/store/nodeUiStore";
 import type { ArrayNodeData } from "@/types";
 
 const mockUpdateNodeData = vi.fn();
@@ -127,6 +128,20 @@ describe("ArrayNode", () => {
 
     fireEvent.click(row);
     expect(screen.queryByTestId("array-item-full")).toBeNull();
+  });
+
+  it("shows the opened item in a painted copy, until the text splits differently", () => {
+    useNodeUiStore.getState().forget();
+    const long = "a desert motel at noon, film grain, wide shot, sun bleached sign, two cars parked out front";
+    const items = ["fox", long];
+    useNodeUiStore.getState().set(NODE_ID, "openItem", { index: 1, of: items.join("\u0000") });
+    const copy = setup(nodeData({ inputText: items.join("*"), outputItems: items }), [incoming], { painted: true });
+    expect(screen.getByTestId("array-item-full")).toHaveTextContent(long);
+    copy.unmount();
+
+    setup(nodeData({ inputText: ["koi", long].join("*"), outputItems: ["koi", long] }), [incoming], { painted: true });
+    expect(screen.queryByTestId("array-item-full")).toBeNull();
+    useNodeUiStore.getState().forget();
   });
 
   it("explains batch mode and drops the Prompt action", () => {

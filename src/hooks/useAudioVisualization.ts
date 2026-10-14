@@ -37,6 +37,27 @@ const writeWaveformCache = (key: string, value: CachedWaveform) => {
   }
 };
 
+/**
+ * A cache key for an audio source (its URL, or for a long data URL its
+ * length and a sample of its characters), so a node mounted again finds the
+ * waveform before it has fetched the audio.
+ */
+export function audioSourceKey(src: string | null | undefined): string | null {
+  if (!src) return null;
+  if (src.length <= 2048) return `src:${src}`;
+  const samples = 256, step = Math.floor(src.length / samples);
+  let sampled = "";
+  for (let i = 0; i < samples; i++) sampled += src[i * step];
+  return `src:${src.length}:${src.slice(0, 64)}:${sampled}:${src.slice(-64)}`;
+}
+
+const cachedWaveform = (key: string | null | undefined): WaveformData | null => {
+  const cached = key ? readWaveformCache(key) : undefined;
+  // channelData is intentionally not cached; consumers only read peaks/
+  // duration/sampleRate. Reconstruct with an empty channelData array.
+  return cached ? { ...cached, channelData: [] } : null;
+};
+
 const blobKeyStore = new WeakMap<Blob, string>();
 let blobKeyCounter = 0;
 let sharedAudioContext: AudioContext | null = null;
@@ -77,12 +98,24 @@ const decodeAudioBuffer = async (context: AudioContext, arrayBuffer: ArrayBuffer
   });
 };
 
-export function useAudioVisualization(audioFile: File | Blob | null) {
-  const [waveformData, setWaveformData] = useState<WaveformData | null>(null);
+/**
+ * The waveform of an audio file. `sourceKey` (audioSourceKey of the URL the
+ * file was fetched from) finds one decoded before, in the first render and
+ * without the file.
+ */
+export function useAudioVisualization(audioFile: File | Blob | null, sourceKey?: string | null) {
+  const [waveformData, setWaveformData] = useState<WaveformData | null>(() => cachedWaveform(sourceKey));
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const known = cachedWaveform(sourceKey);
+    if (known) {
+      setWaveformData((current) => (current?.peaks === known.peaks ? current : known));
+      setIsLoading(false);
+      setError(null);
+      return;
+    }
     if (!audioFile) {
       setWaveformData(null);
       setError(null);
@@ -91,16 +124,13 @@ export function useAudioVisualization(audioFile: File | Blob | null) {
     }
 
     const cacheKey = getBlobCacheKey(audioFile);
-    if (cacheKey) {
-      const cached = readWaveformCache(cacheKey);
-      if (cached) {
-        // channelData is intentionally not cached; consumers only read peaks/
-        // duration/sampleRate. Reconstruct with an empty channelData array.
-        setWaveformData({ ...cached, channelData: [] });
-        setIsLoading(false);
-        setError(null);
-        return;
-      }
+    const cached = cachedWaveform(cacheKey);
+    if (cached) {
+      if (sourceKey) writeWaveformCache(sourceKey, { peaks: cached.peaks, sampleRate: cached.sampleRate, duration: cached.duration });
+      setWaveformData(cached);
+      setIsLoading(false);
+      setError(null);
+      return;
     }
 
     let isCancelled = false;
@@ -127,13 +157,9 @@ export function useAudioVisualization(audioFile: File | Blob | null) {
           peaks,
         };
 
-        if (cacheKey) {
-          // Cache only the lightweight fields; drop the full PCM channelData.
-          writeWaveformCache(cacheKey, {
-            peaks,
-            sampleRate: audioBuffer.sampleRate,
-            duration: audioBuffer.duration,
-          });
+        // Cache only the lightweight fields; drop the full PCM channelData.
+        for (const key of [cacheKey, sourceKey]) {
+          if (key) writeWaveformCache(key, { peaks, sampleRate: audioBuffer.sampleRate, duration: audioBuffer.duration });
         }
 
         if (!isCancelled) {
@@ -155,7 +181,7 @@ export function useAudioVisualization(audioFile: File | Blob | null) {
     return () => {
       isCancelled = true;
     };
-  }, [audioFile]);
+  }, [audioFile, sourceKey]);
 
   return { waveformData, isLoading, error };
 }

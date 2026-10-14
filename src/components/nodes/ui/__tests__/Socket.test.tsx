@@ -3,6 +3,9 @@ import { useLayoutEffect, useState } from "react";
 import { render, screen } from "@testing-library/react";
 import { ReactFlowProvider, useStoreApi } from "@xyflow/react";
 import { Socket, SocketColumn, SocketMark, assignSocketRows, socketRowCount } from "../Socket";
+import { StoreSocketConnections, socketConnectionKeys } from "../socketConnections";
+import { useWorkflowStore } from "@/store/workflowStore";
+import type { WorkflowEdge } from "@/types";
 
 /** Puts edges ending at the given handles (React Flow's connection lookup keys) in the store first. */
 function Connected({ handles, children }: { handles: string[]; children: React.ReactNode }) {
@@ -45,6 +48,29 @@ describe("Socket", () => {
     expect(handle).toHaveAttribute("data-connected", "true");
     const hole = handle.querySelector("[data-socket-hole]") as SVGCircleElement;
     expect(hole.getAttribute("fill")).toBe("currentColor");
+  });
+
+  it("shows the store's connections when the GPU canvas provides them, whatever React Flow holds", () => {
+    const previous = useWorkflowStore.getState().edges;
+    useWorkflowStore.setState({ edges: [{ id: "e1", source: "a", target: "n1", sourceHandle: "image", targetHandle: "image" } as WorkflowEdge] });
+    try {
+      const { container } = wrap(
+        <StoreSocketConnections>
+          <Socket nodeId="n1" side="left" row={0} spec={{ id: "image", type: "image" }} />
+          <Socket nodeId="n1" side="left" row={1} spec={{ id: "text", type: "text" }} />
+        </StoreSocketConnections>,
+        ["n1-target-text"],
+      );
+      expect(container.querySelector('[data-handleid="image"]')).toHaveAttribute("data-connected", "true");
+      expect(container.querySelector('[data-handleid="text"]')).not.toHaveAttribute("data-connected");
+    } finally {
+      useWorkflowStore.setState({ edges: previous });
+    }
+  });
+
+  it("keys the store's connections as React Flow's lookup does", () => {
+    const keys = socketConnectionKeys([{ id: "e1", source: "a", target: "b", sourceHandle: "out", targetHandle: null } as unknown as WorkflowEdge]);
+    expect([...keys].sort()).toEqual(["a-source", "a-source-out", "b-target"]);
   });
 
   it("keeps a hidden socket in the DOM, unconnectable and invisible", () => {

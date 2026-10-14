@@ -149,6 +149,7 @@ export function CanvasMinimap({ disabled = false, onMinimapVisibleChange, locked
         <div style={{ padding: `${MINIMAP_GEOMETRY.padding}px ${MINIMAP_GEOMETRY.padding}px 0` }}>
           {gpu ? (
             <GpuMinimap
+              disabled={disabled}
               className="overflow-hidden rounded-md squircle bg-well shadow-well"
               width={MINIMAP_GEOMETRY.width}
               height={MINIMAP_GEOMETRY.height}

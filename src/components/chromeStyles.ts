@@ -4,9 +4,12 @@
  * never from hue, so the minimap's node colours stay the only colour down there.
  */
 
-/** Glass card: neutral-800 at 92% with blur, hairline border and top light. */
+/**
+ * Glass card: neutral-800 at 92% with blur, hairline border and top light. `nb-scene-chrome` marks it as
+ * chrome floating over the canvas, whose blur the GPU canvas turns off (globals.css); it has no style of its own.
+ */
 export const CHROME_SURFACE =
-  "squircle border border-white/8 bg-neutral-800/92 backdrop-blur-md " +
+  "nb-scene-chrome squircle border border-white/8 bg-neutral-800/92 backdrop-blur-md " +
   "shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_1px_2px_rgba(0,0,0,0.4),0_12px_32px_-8px_rgba(0,0,0,0.5)]";
 
 /** Icon button, sized by CHROME_ICON_BUTTON_SIZE: rest → hover lift → pressed dip. */

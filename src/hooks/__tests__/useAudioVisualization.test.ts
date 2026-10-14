@@ -56,7 +56,7 @@ const { mockDecodeAudioData, MockAudioBuffer } = vi.hoisted(() => {
 });
 
 // Now the import will pick up our AudioContext when getSharedAudioContext() runs
-import { useAudioVisualization } from "../useAudioVisualization";
+import { audioSourceKey, useAudioVisualization } from "../useAudioVisualization";
 
 /**
  * Create a Blob with arrayBuffer() polyfilled (jsdom Blob lacks this method).
@@ -97,6 +97,20 @@ describe("useAudioVisualization", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("finds a waveform decoded before by its source in the first render, without the file", async () => {
+    const audioBuffer = new MockAudioBuffer({ length: 4410, numberOfChannels: 1, sampleRate: 44100 });
+    mockDecodeAudioData.mockResolvedValue(audioBuffer);
+    const key = audioSourceKey("data:audio/mp3;base64," + "A".repeat(5000) + "first");
+    const first = renderHook(() => useAudioVisualization(createAudioBlob("audio"), key));
+    await waitFor(() => expect(first.result.current.waveformData).not.toBeNull());
+    // Mounted again (a painted copy, then the live node): there at once.
+    const again = renderHook(() => useAudioVisualization(null, key));
+    expect(again.result.current.waveformData?.peaks).toEqual(first.result.current.waveformData!.peaks);
+    // Another source of the same length is not it.
+    expect(audioSourceKey("data:audio/mp3;base64," + "A".repeat(5000) + "other")).not.toBe(key);
+    expect(audioSourceKey(null)).toBeNull();
   });
 
   it("returns null waveformData and isLoading=false for null input", () => {

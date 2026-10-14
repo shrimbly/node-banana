@@ -10,6 +10,8 @@
  * - **resident**: the 3D viewer, always (a WebGL viewer the user orbits).
  * - **playing**: a node whose video or audio is playing (pressed play, or a
  *   hover preview), so playback and its sound go on wherever the pointer goes.
+ * - **animated**: a GIF Encoder holding its GIF, which plays as an `<img>`
+ *   on today's canvas; a painted copy would show one frozen frame.
  * - **pending**: a ComfyUI node with a workflow to import (made from the
  *   connection menu or a dropped file) or a "Replace workflow…" to answer,
  *   which only its component can open; and one whose run is in progress, so
@@ -44,6 +46,11 @@ export function isLoading(node: WorkflowNode): boolean {
 /** Node types that stay live, as they stay mounted on today's canvas. */
 export const RESIDENT_TYPES = new Set(["glbViewer"]);
 
+/** Whether a node shows an animation only its mounted component plays (a GIF Encoder's output). */
+export function showsAnimation(node: WorkflowNode): boolean {
+  return node.type === "gifEncoder" && !!(node.data as { outputGif?: string | null } | undefined)?.outputGif;
+}
+
 /** Whether a node has work only its mounted component can pick up. */
 export function pendingWork(node: WorkflowNode): boolean {
   if (node.type !== "comfyApp") return false;
@@ -54,6 +61,7 @@ export function pendingWork(node: WorkflowNode): boolean {
 export class LiveContent {
   private resident = new Set<string>();
   private pending = new Set<string>();
+  private animated = new Set<string>();
   private requested: string | null = null;
   private loading = new Set<string>();
   /** The loading nodes made live (none while zoomed out). */
@@ -118,6 +126,7 @@ export class LiveContent {
     }
     for (const id of [...this.resident]) if (!seen.has(id)) this.resident.delete(id);
     for (const id of [...this.pending]) if (!seen.has(id)) this.pending.delete(id);
+    for (const id of [...this.animated]) if (!seen.has(id)) this.animated.delete(id);
     for (const id of [...this.loading]) if (!seen.has(id)) this.loading.delete(id);
     for (const id of [...this.liveLoading]) if (!seen.has(id)) this.liveLoading.delete(id);
     this.publishRunning();
@@ -141,6 +150,12 @@ export class LiveContent {
       if (resident) this.resident.add(node.id);
       else this.resident.delete(node.id);
       this.live.want(node.id, "resident", resident);
+    }
+    const animated = showsAnimation(node);
+    if (animated !== this.animated.has(node.id)) {
+      if (animated) this.animated.add(node.id);
+      else this.animated.delete(node.id);
+      this.live.want(node.id, "animated", animated);
     }
     const pending = pendingWork(node) || this.requested === node.id;
     if (pending !== this.pending.has(node.id)) {

@@ -18,7 +18,7 @@ import type { WorkflowEdge, WorkflowNode } from "@/types";
 import { storeNodeSize } from "./graph";
 
 /** Bump when the painter's output changes for the same inputs (sheet styling, margins). */
-export const PAINT_FORMAT = 1;
+export const PAINT_FORMAT = 4;
 
 /** cyrb53: a fast 53-bit string hash. */
 export function hashString(text: string, seed = 0): number {

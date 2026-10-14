@@ -510,10 +510,10 @@ async function main() {
       const center = { x: (width / 2 - view.x) / view.zoom, y: (height / 2 - view.y) / view.zoom };
       const about = zoom => ({ zoom, x: width / 2 - center.x * zoom, y: height / 2 - center.y * zoom });
       const steps = [], jumps = [];
-      for (const [k, zoom] of [1, 0.5, 0.25, 0.1, 0.05, 0.1, 0.25, 0.5, 1].entries()) {
+      for (const [k, zoom] of [1, 0.5, 0.25, 0.1, 0.25, 0.5, 1].entries()) {
         const step = await settleAt(about(zoom));
         steps.push(step);
-        if (k <= 4) await fs.writeFile(path.join(shots, `zoom-${Math.round(zoom * 100)}.png`), await page.screenshot());
+        if (k <= 3) await fs.writeFile(path.join(shots, `zoom-${Math.round(zoom * 100)}.png`), await page.screenshot());
         log(`  ${Math.round(zoom * 100)}%: ${step.sharp}/${step.visible} sharp at ${step.tier}x in ${step.sharpMs ?? `>${sharpWithin}`} ms`);
       }
       const bounds = await page.evaluate(() => { let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity; const c = window.__gpuCanvas, v = c.view();

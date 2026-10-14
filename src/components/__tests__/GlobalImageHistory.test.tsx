@@ -20,12 +20,16 @@ const mockUpdateNodeData = vi.fn();
 const mockUseWorkflowStore = vi.fn();
 
 vi.mock("@/store/workflowStore", () => ({
-  useWorkflowStore: (selector?: (state: unknown) => unknown) => {
-    if (selector) {
-      return mockUseWorkflowStore(selector);
-    }
-    return mockUseWorkflowStore((s: unknown) => s);
-  },
+  useWorkflowStore: Object.assign(
+    (selector?: (state: unknown) => unknown) => {
+      if (selector) {
+        return mockUseWorkflowStore(selector);
+      }
+      return mockUseWorkflowStore((s: unknown) => s);
+    },
+    // useAddMediaNode selects the new node through the store.
+    { getState: () => ({ nodes: [], onNodesChange: () => {} }) },
+  ),
 }));
 
 // The asset library as the recorder last saw it. Most tests below cover the

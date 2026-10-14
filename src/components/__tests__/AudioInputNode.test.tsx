@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { AudioInputNodeData } from "@/types";
 
 // Mock the workflow store
@@ -84,10 +84,12 @@ let mockVisualizationReturn = {
 };
 
 vi.mock("@/hooks/useAudioVisualization", () => ({
+  audioSourceKey: () => null,
   useAudioVisualization: () => mockVisualizationReturn,
 }));
 
 import { AudioInputNode } from "@/components/nodes/AudioInputNode";
+import { PaintedNodes } from "@/components/nodes/paintMode";
 
 /** Set up mock store state */
 function setMockStoreState(overrides: Record<string, unknown> = {}) {
@@ -297,6 +299,18 @@ describe("AudioInputNode", () => {
         />
       );
       expect(screen.getByText("Processing...")).toBeInTheDocument();
+    });
+  });
+
+  describe("Painted copy", () => {
+    it("waits for the waveform, but not once the audio's fetch has failed", async () => {
+      const props = createNodeProps({ audioFile: "blob:gone", filename: "a.mp3", format: "audio/mp3" });
+      let reject: (error: Error) => void = () => {};
+      vi.mocked(global.fetch).mockReturnValue(new Promise<Response>((_, r) => { reject = r; }));
+      const { container } = render(<PaintedNodes><AudioInputNode {...props} /></PaintedNodes>);
+      expect(container.querySelector("[data-paint-pending]")).not.toBeNull();
+      reject(new Error("revoked"));
+      await waitFor(() => expect(container.querySelector("[data-paint-pending]")).toBeNull());
     });
   });
 

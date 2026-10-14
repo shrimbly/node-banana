@@ -6,6 +6,9 @@ import type { HandleType } from "@/types";
 import { cn } from "./cn";
 import { SOCKET_H, SOCKET_HOLE_R, SOCKET_RING_W, SOCKET_W, socketCenter } from "./tokens";
 import { HandleLabel } from "../HandleLabel";
+import { useConnectDragStore } from "@/store/connectDragStore";
+import { useIsLiveLayerNode, useIsPaintedNode } from "../paintMode";
+import { useSocketConnections } from "./socketConnections";
 
 export type SocketType = HandleType | "reference";
 
@@ -147,7 +150,16 @@ export function Socket({ nodeId, side, row, spec, showLabel = false, outline = "
   // One map lookup per store update: useNodeConnections also builds the key,
   // compares connection maps and copies them into an array every time.
   const connectionKey = spec.id ? `${nodeId}-${handleType}-${spec.id}` : `${nodeId}-${handleType}`;
-  const connected = useStore(useCallback((s: ReactFlowState) => (s.connectionLookup.get(connectionKey)?.size ?? 0) > 0, [connectionKey]));
+  const flowConnected = useStore(useCallback((s: ReactFlowState) => (s.connectionLookup.get(connectionKey)?.size ?? 0) > 0, [connectionKey]));
+  // On the GPU canvas, whose React Flows hold few or no edges, the store's connections.
+  const provided = useSocketConnections();
+  const connected = provided ? provided.has(connectionKey) : flowConnected;
+  // The GPU canvas's connection drag on a live node (React Flow sets these classes for its own).
+  const painted = useIsPaintedNode();
+  const dragTarget = useConnectDragStore((s) => !!s.target && s.target.nodeId === nodeId && s.target.type === handleType && (s.target.handleId ?? "") === spec.id);
+  const gpuTarget = dragTarget && !painted;
+  // A live node on the GPU canvas leaves the press to the canvas's editor: React Flow must not start a second connection.
+  const liveLayer = useIsLiveLayerNode();
   const color = socketColor(spec.type);
   const position = side === "left" ? Position.Left : Position.Right;
 
@@ -176,7 +188,8 @@ export function Socket({ nodeId, side, row, spec, showLabel = false, outline = "
         data-connected={connected ? "true" : undefined}
         title={spec.title}
         isConnectable={spec.isConnectable ?? true}
-        className={cn("socket", spec.placeholder && "socket-placeholder")}
+        isConnectableStart={liveLayer ? false : undefined}
+        className={cn("socket", spec.placeholder && "socket-placeholder", gpuTarget && "connectingto valid")}
         style={{
           ...socketBoxStyle(side, row),
           color,

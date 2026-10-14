@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback } from "react";
-import { useReactFlow } from "@xyflow/react";
+import { useReactFlow, type NodeChange } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
+import type { WorkflowNode } from "@/types";
 
 export interface AddMediaNodeOptions {
   kind: "image" | "video";
@@ -17,7 +18,7 @@ export interface AddMediaNodeOptions {
  * graph" in the media viewer does, for the history and the output gallery.
  */
 export function useAddMediaNode() {
-  const { screenToFlowPosition, setNodes } = useReactFlow();
+  const { screenToFlowPosition } = useReactFlow();
   const addNode = useWorkflowStore((state) => state.addNode);
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
 
@@ -38,9 +39,17 @@ export function useAddMediaNode() {
         img.src = src;
       }
 
-      setNodes((nodes) => nodes.map((node) => ({ ...node, selected: node.id === id })));
+      // The new node becomes the only selection. Written to the store, which holds every node: on the
+      // GPU canvas React Flow holds only the live ones, and the new node is not among them.
+      const store = useWorkflowStore.getState();
+      const changes: NodeChange<WorkflowNode>[] = [];
+      for (const node of store.nodes) {
+        const selected = node.id === id;
+        if (!!node.selected !== selected) changes.push({ type: "select", id: node.id, selected });
+      }
+      if (changes.length) store.onNodesChange(changes);
       return id;
     },
-    [screenToFlowPosition, setNodes, addNode, updateNodeData],
+    [screenToFlowPosition, addNode, updateNodeData],
   );
 }

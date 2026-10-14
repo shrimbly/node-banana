@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ModelParameters } from "@/components/nodes/ModelParameters";
+import { PaintedNodes } from "@/components/nodes/paintMode";
 import { ModelParameter } from "@/lib/providers/types";
 import { pickOption } from "@/test/dropdown";
 
@@ -814,7 +815,7 @@ describe("ModelParameters", () => {
       await waitFor(() => {
         expect(onInputsLoaded).toHaveBeenCalledWith([
           { name: "image", type: "image", required: true, label: "Image" },
-        ]);
+        ], { modelId: "test-model", provider: "replicate" });
       });
     });
 
@@ -841,8 +842,48 @@ describe("ModelParameters", () => {
       await waitFor(() => {
         expect(onInputsLoaded).toHaveBeenCalledWith([
           { name: "prompt", type: "text", required: true, label: "Prompt" },
-        ]);
+        ], { modelId: "test-model", provider: "gemini" });
       });
+    });
+  });
+
+  describe("Schema defaults", () => {
+    const schemaWithDefault = () => (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ parameters: [{ name: "steps", type: "integer", default: 20 }, { name: "seed", type: "integer" }], inputs: [] }),
+    });
+
+    it("writes missing defaults through onParametersChange", async () => {
+      schemaWithDefault();
+      const onParametersChange = vi.fn();
+      render(<ModelParameters {...defaultProps} parameters={{ seed: 1 }} onParametersChange={onParametersChange} />);
+      await waitFor(() => expect(onParametersChange).toHaveBeenCalledWith({ seed: 1, steps: 20 }));
+    });
+
+    it("hands only the missing defaults to onDefaults when given", async () => {
+      schemaWithDefault();
+      const onParametersChange = vi.fn();
+      const onDefaults = vi.fn();
+      render(<ModelParameters {...defaultProps} parameters={{ seed: 1 }} onParametersChange={onParametersChange} onDefaults={onDefaults} />);
+      await waitFor(() => expect(onDefaults).toHaveBeenCalledWith({ steps: 20 }, { modelId: "test-model", provider: "replicate" }));
+      expect(onParametersChange).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("Painted copies", () => {
+    it("marks a painted copy pending until its schema is in", async () => {
+      let answer: (value: unknown) => void = () => {};
+      (global.fetch as ReturnType<typeof vi.fn>).mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+      const { container } = render(<PaintedNodes><ModelParameters {...defaultProps} /></PaintedNodes>);
+      expect(container.querySelector("[data-paint-pending]")).not.toBeNull();
+      answer({ ok: true, json: () => Promise.resolve({ parameters: [{ name: "steps", type: "integer" }], inputs: [] }) });
+      await waitFor(() => expect(container.querySelector("[data-paint-pending]")).toBeNull());
+    });
+
+    it("adds no mark outside a painted copy", () => {
+      (global.fetch as ReturnType<typeof vi.fn>).mockReturnValueOnce(new Promise(() => {}));
+      const { container } = render(<ModelParameters {...defaultProps} />);
+      expect(container.querySelector("[data-paint-pending]")).toBeNull();
     });
   });
 

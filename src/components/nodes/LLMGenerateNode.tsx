@@ -20,7 +20,7 @@ import {
   type SocketSpec,
 } from "./ui";
 import { Check, CircleAlert, Copy, RefreshCw, X } from "lucide-react";
-import { useUpdateNodeData } from "./paintMode";
+import { useUpdateNodeData, useNodeUiState } from "./paintMode";
 
 const INPUT_SOCKETS: SocketSpec[] = [
   { id: "image", type: "image", label: "Image" },
@@ -57,7 +57,7 @@ export function LLMGenerateNode({ id, data, selected }: NodeProps<LLMGenerateNod
   }, [id, updateNodeData]);
 
   const [copied, setCopied] = useState(false);
-  const [settingsTab, setSettingsTab] = useState<"primary" | "fallback">("primary");
+  const [settingsTab, setSettingsTab] = useNodeUiState<"primary" | "fallback">(id, "settingsTab", "primary");
 
   useEffect(() => {
     if (!nodeData.fallbackModel && settingsTab === "fallback") {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { WorkflowEdge, WorkflowNode } from "@/types";
-import { GridIndex, SceneGraph } from "../graph";
+import { controlsOverhang, GridIndex, headersUnder, refitMeasured, SceneGraph } from "../graph";
+import { GROUP_COLORS } from "@/store/utils/nodeDefaults";
 import { AtlasLayout } from "../atlasLayout";
 import { atlasBudget } from "../budget";
 import { edgesByNode, hashData, paintKey, upstreamPaintKeys, type PaintKeyContext } from "../paintKey";
@@ -39,7 +40,26 @@ describe("SceneGraph", () => {
     graph.nodes[0].handles = new Map([["source:text", { x: 300, y: 40 }]]);
     graph.sync([node("a", 0, 0), node("b", 0, 900)], [edge("e", "a", "b")], {});
     expect(graph.nodes[0].h).toBe(777);
-    expect(graph.edgeEnds(0).slice(0, 2)).toEqual([300, 40]);
+    expect(graph.edgeEnds(0)!.slice(0, 2)).toEqual([300, 40]);
+  });
+});
+
+describe("group chrome", () => {
+  it("paints a group in its hue, and an unknown colour key in neutral's", () => {
+    const group = (color: string) => ({ g: { id: "g", name: "G", color, position: { x: 0, y: 0 }, size: { width: 100, height: 100 } } });
+    const hue = (hex: string) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
+    expect(new SceneGraph([], [], group("blue") as never).groups[0].color).toEqual(hue(GROUP_COLORS.blue));
+    expect(new SceneGraph([], [], group("legacy-teal") as never).groups[0].color).toEqual(hue(GROUP_COLORS.neutral));
+  });
+
+  it("finds the nodes whose header band a label or menu overlaps", () => {
+    const graph = new SceneGraph([node("a", 0, 100), node("b", 400, 100), node("c", 0, 500)], [], {});
+    const all = graph.nodes.map((_, i) => i);
+    // Over a's header band (70..100), touching b's left edge only, nowhere near c.
+    expect(headersUnder(graph, all, [{ x0: 10, y0: 60, x1: 400, y1: 90 }])).toEqual(["a"]);
+    // Over a's body only: its header is not under it.
+    expect(headersUnder(graph, all, [{ x0: 10, y0: 120, x1: 100, y1: 140 }])).toEqual([]);
+    expect(headersUnder(graph, all, [{ x0: 10, y0: 60, x1: 410, y1: 90 }, { x0: 0, y0: 480, x1: 20, y1: 490 }])).toEqual(["a", "b", "c"]);
   });
 });
 
@@ -55,6 +75,67 @@ describe("GridIndex", () => {
     expect(index.at(150, 150)).toBe(0);
     expect(index.at(2100, 150)).toBe(1);
     expect(index.within(1900, 0, 2500, 400)).toEqual([1]);
+  });
+
+  it("counts the header band above a node for hits, but not for what lies within a box", () => {
+    const graph = new SceneGraph([node("a", 0, 520)], [], {});
+    const index = new GridIndex(graph.nodes, 512, 30);
+    // The band crosses into the cell above the node's.
+    expect(index.at(10, 500)).toBe(0);
+    expect(index.at(10, 500, false)).toBe(-1);
+    expect(index.at(10, 480)).toBe(-1);
+    expect(index.within(0, 495, 50, 505)).toEqual([]);
+  });
+
+  it("lets a raised node (live, selected) answer over a later one it overlaps", () => {
+    const graph = new SceneGraph([node("a", 0, 0), node("b", 100, 100)], [], {});
+    const index = new GridIndex(graph.nodes);
+    expect(index.at(150, 150, true, (i) => (i === 0 ? 1 : 0))).toBe(0);
+    expect(index.at(150, 150, true, () => 1)).toBe(1);
+    // Only nodes containing the point compete.
+    expect(index.at(50, 50, true, (i) => (i === 1 ? 1 : 0))).toBe(0);
+  });
+
+  it("lets a header band answer over a node's box, raised or later, as headers sit above the nodes", () => {
+    const graph = new SceneGraph([node("a", 0, 0), node("b", 0, 100)], [], {});
+    const index = new GridIndex(graph.nodes, 512, 30);
+    // (10, 90) is inside a's box and b's header band.
+    expect(index.at(10, 90, true, (i) => (i === 0 ? 2 : 0))).toBe(1);
+    expect(index.at(10, 90, false)).toBe(0);
+  });
+});
+
+describe("controls card overhang", () => {
+  it("is half of what a widened controls card reaches past its node, on each side", () => {
+    expect(controlsOverhang({ controlsWidth: 500 }, 300)).toBe(100);
+    expect(controlsOverhang({ controlsWidth: 200 }, 300)).toBe(0);
+    expect(controlsOverhang({}, 300)).toBe(0);
+    expect(controlsOverhang({ controlsWidth: Number.NaN }, 300)).toBe(0);
+  });
+
+  it("takes hits beside the node where the card reaches, and nowhere else beside it", () => {
+    const graph = new SceneGraph([node("a", 600, 0)], [], {});
+    graph.nodes[0].h = 400;
+    // A 500 wide card under a 300 wide node, from y 300 to 360: it reaches into the cell to the left.
+    graph.nodes[0].overhang = { x: -100, y: 300, w: 500, h: 60 };
+    const index = new GridIndex(graph.nodes);
+    expect(index.at(520, 330)).toBe(0);
+    expect(index.at(980, 330)).toBe(0);
+    expect(index.at(520, 100)).toBe(-1);
+    expect(index.at(980, 370)).toBe(-1);
+    // What lies within a box is the node's own rectangle.
+    expect(index.within(500, 300, 550, 350)).toEqual([]);
+  });
+
+  it("stays centred when the node's width changes, and goes once the node is as wide", () => {
+    const graph = new SceneGraph([node("a", 0, 0)], [], {});
+    const n = graph.nodes[0];
+    n.measuredW = 300;
+    n.overhang = { x: -100, y: 300, w: 500, h: 60 };
+    refitMeasured(n, 400);
+    expect(n.overhang).toEqual({ x: -50, y: 300, w: 500, h: 60 });
+    refitMeasured(n, 500);
+    expect(n.overhang).toBeNull();
   });
 });
 

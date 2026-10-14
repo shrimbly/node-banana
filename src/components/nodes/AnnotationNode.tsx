@@ -21,7 +21,7 @@ export function AnnotationNode({ id, data, selected }: NodeProps<AnnotationNodeT
   const nodeData = data;
   const openModal = useAnnotationStore((state) => state.openModal);
   const updateNodeData = useUpdateNodeData();
-  const { beginRequest, cancelRequest } = useNodeMediaRequest();
+  const { beginRequest, cancelRequest } = useNodeMediaRequest(id);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 

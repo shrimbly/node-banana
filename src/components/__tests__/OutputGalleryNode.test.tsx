@@ -7,7 +7,8 @@ const mockUpdateNodeData = vi.fn();
 const mockAddNode = vi.fn(() => "imageInput-9");
 const storeState = vi.hoisted(() => ({ globalImageHistory: [] as unknown[] }));
 vi.mock("@/store/workflowStore", () => ({
-  useWorkflowStore: vi.fn((selector) =>
+  // getState: useAddMediaNode selects the new node through the store.
+  useWorkflowStore: Object.assign(vi.fn((selector) =>
     selector({
       updateNodeData: mockUpdateNodeData,
       incrementModalCount: vi.fn(),
@@ -22,7 +23,7 @@ vi.mock("@/store/workflowStore", () => ({
       getConnectedInputs: vi.fn(() => ({ images: [], videos: [], text: null, dynamicInputs: {} })),
       globalImageHistory: storeState.globalImageHistory,
     })
-  ),
+  ), { getState: () => ({ nodes: [], onNodesChange: vi.fn() }) }),
 }));
 vi.mock("@/components/WorkflowCanvas", () => ({ isPanningRef: { current: false }, isDraggingNodeRef: { current: false } }));
 

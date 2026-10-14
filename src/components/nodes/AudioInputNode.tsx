@@ -4,13 +4,13 @@ import { useCallback, useRef, useState, useEffect } from "react";
 import { NodeProps, Node } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
 import { AudioInputNodeData } from "@/types";
-import { useAudioVisualization } from "@/hooks/useAudioVisualization";
+import { audioSourceKey, useAudioVisualization } from "@/hooks/useAudioVisualization";
 import { useAudioPlayback } from "@/hooks/useAudioPlayback";
 import { useNodeMediaRequest } from "@/hooks/useNodeMediaRequest";
 import { downloadMedia } from "@/utils/downloadMedia";
 import { ControlsCard, SummaryValues, type SocketSpec } from "./ui";
 import { Download, Music, Pause, Play, X } from "lucide-react";
-import { useUpdateNodeData } from "./paintMode";
+import { PaintPending, useHoldLive, useUpdateNodeData } from "./paintMode";
 
 type AudioInputNodeType = Node<AudioInputNodeData, "audioInput">;
 
@@ -21,24 +21,30 @@ const MEDIA_HEIGHT = 96;
 export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeType>) {
   const nodeData = data;
   const updateNodeData = useUpdateNodeData();
-  const { beginRequest, cancelRequest } = useNodeMediaRequest();
+  const { beginRequest, cancelRequest } = useNodeMediaRequest(id);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  // The source whose fetch failed: no waveform will come, so a painted copy does not wait for one.
+  const [failedSource, setFailedSource] = useState<string | null>(null);
 
   // Convert base64 data URL to Blob for the hook
   useEffect(() => {
     if (nodeData.audioFile) {
-      fetch(nodeData.audioFile)
+      const source = nodeData.audioFile;
+      fetch(source)
         .then((r) => r.blob())
         .then(setAudioBlob)
-        .catch(() => setAudioBlob(null));
+        .catch(() => {
+          setAudioBlob(null);
+          setFailedSource(source);
+        });
     } else {
       setAudioBlob(null);
     }
   }, [nodeData.audioFile]);
 
-  const { waveformData, isLoading } = useAudioVisualization(audioBlob);
+  const { waveformData, isLoading, error: waveformError } = useAudioVisualization(audioBlob, audioSourceKey(nodeData.audioFile));
   const {
     audioRef,
     canvasRef,
@@ -53,6 +59,8 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
     waveformData,
     isLoadingWaveform: isLoading,
   });
+  // The clip plays from a detached Audio, which unmounting pauses: a playing node stays live (GPU canvas).
+  useHoldLive(isPlaying);
 
   const handleFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -210,6 +218,7 @@ export function AudioInputNode({ id, data, selected }: NodeProps<AudioInputNodeT
               Optional
             </span>
           )}
+          <PaintPending pending={!waveformData && !waveformError && failedSource !== nodeData.audioFile} />
           {isLoading ? (
             <div className="absolute inset-0 flex items-center justify-center bg-neutral-900/50">
               <span className="text-node text-neutral-500">Loading waveform...</span>

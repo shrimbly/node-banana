@@ -9,7 +9,7 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { VideoFrameGrabNodeData } from "@/types";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
 import { ChipGroup, ControlsCard, EmptyState, Field, FieldRow, PanelButton, Spinner, type SocketSpec } from "./ui";
-import { useUpdateNodeData } from "./paintMode";
+import { useUpdateNodeData, useNodeUiState } from "./paintMode";
 
 type VideoFrameGrabNodeType = Node<VideoFrameGrabNodeData, "videoFrameGrab">;
 
@@ -30,7 +30,7 @@ export function VideoFrameGrabNode({ id, data, selected }: NodeProps<VideoFrameG
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const edges = useWorkflowStore((state) => state.edges);
   const nodes = useWorkflowStore(selectNodeContent);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useNodeUiState(id, "expanded", true);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
   // Find connected source video from incoming edges

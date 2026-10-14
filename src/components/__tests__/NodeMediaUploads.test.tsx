@@ -17,6 +17,7 @@ vi.mock("@/hooks/useCommentNavigation", () => ({ useCommentNavigation: vi.fn() }
 vi.mock("@/hooks/useAdaptiveImageSrc", () => ({ useAdaptiveImageSrc: (value: string) => value }));
 vi.mock("@/hooks/useVideoBlobUrl", () => ({ useVideoBlobUrl: () => null }));
 vi.mock("@/hooks/useAudioVisualization", () => ({
+  audioSourceKey: () => null,
   useAudioVisualization: () => ({ waveformData: null, isLoading: false }),
 }));
 vi.mock("@/hooks/useAudioPlayback", () => ({

@@ -1,7 +1,15 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import { useWorkflowStore } from "@/store/workflowStore";
+
+/**
+ * The newest request per node id. Kept outside the component so that a node
+ * remounted mid-read (on the GPU canvas a hovered node leaves the live layer
+ * when the pointer does) still supersedes the read its earlier instance
+ * started: a Remove or another upload on the new instance bumps the same count.
+ */
+const latestRequest = new Map<string, number>();
 
 /**
  * Scopes a node's deferred file reads (FileReader, metadata probes) to the
@@ -14,18 +22,18 @@ import { useWorkflowStore } from "@/store/workflowStore";
  * pointer left, unmounts while its file is still being read, and the file
  * still arrives. A deleted node takes no write.
  */
-export function useNodeMediaRequest() {
-  const requestId = useRef(0);
+export function useNodeMediaRequest(nodeId: string) {
   const cancelRequest = useCallback(() => {
-    requestId.current += 1;
-  }, []);
+    latestRequest.set(nodeId, (latestRequest.get(nodeId) ?? 0) + 1);
+  }, [nodeId]);
 
   const beginRequest = useCallback(() => {
-    const currentRequest = ++requestId.current;
+    const currentRequest = (latestRequest.get(nodeId) ?? 0) + 1;
+    latestRequest.set(nodeId, currentRequest);
     const generation = useWorkflowStore.getState().canvasGeneration;
     return () =>
-      requestId.current === currentRequest && useWorkflowStore.getState().canvasGeneration === generation;
-  }, []);
+      latestRequest.get(nodeId) === currentRequest && useWorkflowStore.getState().canvasGeneration === generation;
+  }, [nodeId]);
 
   return { beginRequest, cancelRequest };
 }

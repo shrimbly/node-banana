@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NodeProps, Node } from "@xyflow/react";
 import { ReactCompareSlider, ReactCompareSliderImage } from "react-compare-slider";
 import { NodeShell } from "./NodeShell";
@@ -9,6 +9,7 @@ import { useShallow } from "zustand/shallow";
 import { nodeGraphIndex } from "@/lib/edges/graphIndex";
 import { ImageCompareNodeData } from "@/types";
 import { EmptyState, type SocketSpec } from "./ui";
+import { useIsLiveLayerNode, useIsPaintedNode, useNodeUiState } from "./paintMode";
 
 type ImageCompareNodeType = Node<ImageCompareNodeData, "imageCompare">;
 
@@ -17,6 +18,51 @@ const INPUT_SOCKETS: SocketSpec[] = [
   { id: "image-1", type: "image", label: "B" },
 ];
 const EMPTY_HEIGHT = 160;
+/** How long the divider rests before its position is kept for the node's painted copies. */
+const POSITION_COMMIT_MS = 150;
+
+/**
+ * The divider's position on the GPU canvas, kept as node view state so a
+ * painted copy and the next live mount show it where the user left it. The
+ * live slider moves on its own; its position is written once it rests (and
+ * when the node goes back to a picture), not on every drag frame, since each
+ * write repaints the node. On the classic canvas the slider stays
+ * uncontrolled, as before: `null`.
+ *
+ * While the node is not `ready` (an input disconnected) the slider is gone,
+ * as on classic, where it mounts again at the centre: the kept position goes
+ * back to the centre, and a drag still waiting to be written is dropped.
+ */
+export function useComparePosition(id: string, ready = true) {
+  const live = useIsLiveLayerNode(), painted = useIsPaintedNode();
+  const gpu = live || painted;
+  const [position, setPosition] = useNodeUiState(id, "comparePosition", 50);
+  const pending = useRef<number | null>(null);
+  const timer = useRef<number | undefined>(undefined);
+  useEffect(() => () => {
+    window.clearTimeout(timer.current);
+    if (pending.current !== null) setPosition(pending.current);
+  }, [setPosition]);
+  useEffect(() => {
+    if (ready || !gpu) return;
+    window.clearTimeout(timer.current);
+    pending.current = null;
+    setPosition(50);
+  }, [ready, gpu, setPosition]);
+  if (!gpu) return null;
+  if (painted) return { position };
+  return {
+    position,
+    onPositionChange: (next: number) => {
+      pending.current = next;
+      window.clearTimeout(timer.current);
+      timer.current = window.setTimeout(() => {
+        pending.current = null;
+        setPosition(next);
+      }, POSITION_COMMIT_MS);
+    },
+  };
+}
 
 export function ImageCompareNode({ id, data, selected }: NodeProps<ImageCompareNodeType>) {
   const nodeData = data;
@@ -63,6 +109,7 @@ export function ImageCompareNode({ id, data, selected }: NodeProps<ImageCompareN
   const imageA = displayImages[0] || nodeData.imageA || null;
   const imageB = displayImages[1] || nodeData.imageB || null;
   const ready = Boolean(imageA && imageB);
+  const sliderPosition = useComparePosition(id, ready);
 
   const media = ready
     ? { kind: "aspect" as const, aspect: loadedAspect?.src === imageA ? loadedAspect.aspect : 1 }
@@ -89,6 +136,7 @@ export function ImageCompareNode({ id, data, selected }: NodeProps<ImageCompareN
             itemOne={<ReactCompareSliderImage src={imageA!} alt="Image A" style={{ objectFit: "cover" }} />}
             itemTwo={<ReactCompareSliderImage src={imageB!} alt="Image B" style={{ objectFit: "cover" }} />}
             portrait={false}
+            {...sliderPosition}
             style={{ width: "100%", height: "100%" }}
           />
           <div className="absolute top-2 left-2 bg-black/50 text-white text-[10px] font-medium px-2 py-1 rounded pointer-events-none">A</div>

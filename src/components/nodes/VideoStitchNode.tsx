@@ -23,7 +23,8 @@ import { VideoStitchNodeData, WorkflowNode } from "@/types";
 import { checkEncoderSupport } from "@/hooks/useStitchVideos";
 import { useVideoBlobUrl } from "@/hooks/useVideoBlobUrl";
 import { useVideoAutoplay } from "@/hooks/useVideoAutoplay";
-import { useDerivedNodeData, useUpdateNodeData } from "./paintMode";
+import { PaintPending, useDerivedNodeData, useUpdateNodeData, useNodeUiState } from "./paintMode";
+import { rememberVideoPoster, videoPoster } from "@/utils/videoPosterCache";
 
 type VideoStitchNodeType = Node<VideoStitchNodeData, "videoStitch">;
 
@@ -41,22 +42,24 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
   const deriveNodeData = useDerivedNodeData();
   const edges = useWorkflowStore((state) => state.edges);
   const [thumbnails, setThumbnails] = useState<Map<string, string>>(new Map());
+  // The clips the last extraction finished for (clipKey): until then a painted copy is not ready (PaintPending).
+  const [extractedKey, setExtractedKey] = useState<string | null>(null);
   const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const removeEdge = useWorkflowStore((state) => state.removeEdge);
   const videoBlobUrl = useVideoBlobUrl(nodeData.outputVideo ?? null);
   const videoAutoplayRef = useVideoAutoplay(id, videoBlobUrl);
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useNodeUiState(id, "expanded", true);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
   // Check encoder support on mount
   useEffect(() => {
     if (nodeData.encoderSupported === null) {
       checkEncoderSupport().then((supported) => {
-        updateNodeData(id, { encoderSupported: supported });
+        deriveNodeData(id, { encoderSupported: supported });
       });
     }
-  }, [id, nodeData.encoderSupported, updateNodeData]);
+  }, [id, nodeData.encoderSupported, deriveNodeData]);
 
   // Get connected video edges
   const videoEdges = useMemo(() => {
@@ -200,6 +203,12 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
           newThumbnails.set(clip.edgeId, thumbnailsRef.current.get(clip.edgeId)!);
           continue;
         }
+        // Or one extracted before, by this node mounted earlier or another.
+        const known = videoPoster(clip.videoData);
+        if (known) {
+          newThumbnails.set(clip.edgeId, known.thumbnail);
+          continue;
+        }
 
         const video = document.createElement("video");
         activeVideo = video;
@@ -256,6 +265,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           const thumbnail = canvas.toDataURL("image/jpeg", 0.7);
           newThumbnails.set(clip.edgeId, thumbnail);
+          rememberVideoPoster(clip.videoData, { thumbnail, duration: video.duration });
 
           clip.duration = video.duration;
         } catch (error) {
@@ -270,6 +280,7 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
         thumbnailsRef.current = newThumbnails;
         thumbnailFingerprintsRef.current = newFingerprints;
         setThumbnails(newThumbnails);
+        setExtractedKey(clipKey);
       }
     };
 
@@ -372,10 +383,17 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
     ? { kind: "aspect" as const, aspect: loadedAspect?.src === nodeData.outputVideo ? loadedAspect.aspect : 16 / 9 }
     : { kind: "fixed" as const, height: EMPTY_HEIGHT };
 
+  // A poster extracted before (by this node mounted earlier, or another) shows in the first render.
+  const posterOf = (clip: (typeof orderedClips)[number]) => (clip.videoData ? videoPoster(clip.videoData) : undefined);
+  const clipThumbnail = (clip: (typeof orderedClips)[number]) => thumbnails.get(clip.edgeId) ?? posterOf(clip)?.thumbnail;
+  const postersPending = extractedKey !== clipKey && orderedClips.some((clip) => clip.videoData && !clipThumbnail(clip));
+
   const filmstrip = (
     <div className="overflow-y-auto nowheel grid grid-cols-4 content-start gap-1.5 p-1.5 bg-well rounded-well squircle shadow-well max-h-[140px]">
+      <PaintPending pending={postersPending} />
       {orderedClips.map((clip) => {
-        const thumbnail = thumbnails.get(clip.edgeId);
+        const thumbnail = clipThumbnail(clip);
+        const duration = clip.duration ?? posterOf(clip)?.duration;
         return (
           <div
             key={clip.edgeId}
@@ -398,9 +416,9 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
                 <Spinner size={14} className="text-neutral-500" />
               </div>
             )}
-            {clip.duration && (
+            {duration && (
               <div className="absolute bottom-1 right-1 bg-black/70 px-1 py-0.5 rounded text-[8px] text-white">
-                {Math.round(clip.duration)}s
+                {Math.round(duration)}s
               </div>
             )}
             <button

@@ -2,7 +2,7 @@
 
 import { memo, useMemo, useEffect, useState, useCallback } from "react";
 import { Plus, X } from "lucide-react";
-import { useReactFlow, NodeProps } from "@xyflow/react";
+import { NodeProps } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
 import { useWorkflowStore } from "@/store/workflowStore";
 import type { WorkflowNode, SwitchNodeData, HandleType } from "@/types";
@@ -20,7 +20,6 @@ export const SwitchNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>)
   const edges = useWorkflowStore((state) => state.edges);
   const updateNodeData = useUpdateNodeData();
   const deriveNodeData = useDerivedNodeData();
-  const { setEdges } = useReactFlow();
   const [editingId, setEditingId] = useState<string | null>(null);
 
   // Derive inputType from incoming edge connection
@@ -70,9 +69,12 @@ export const SwitchNode = memo(({ id, data, selected }: NodeProps<WorkflowNode>)
       updateNodeData(id, { switches: updatedSwitches });
 
       // Remove edges connected to this handle
-      setEdges((edges) => edges.filter((e) => !(e.source === id && e.sourceHandle === switchId)));
+      // From the store, not React Flow's setEdges: the GPU canvas's live flow holds only some edges.
+      const store = useWorkflowStore.getState();
+      const stale = store.edges.filter((e) => e.source === id && e.sourceHandle === switchId).map((e) => e.id);
+      if (stale.length) store.removeEdges(stale);
     },
-    [id, nodeData.switches, updateNodeData, setEdges]
+    [id, nodeData.switches, updateNodeData]
   );
 
   const handleAddSwitch = useCallback(() => {

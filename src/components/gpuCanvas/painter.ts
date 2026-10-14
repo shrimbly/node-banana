@@ -30,19 +30,23 @@ import * as THREE from "three";
 import type { NodeTypes } from "@xyflow/react";
 import { useWorkflowStore, subscribeToWorkflowNodeChanges } from "@/store/workflowStore";
 import { indexOfNode, type NodeChanges } from "@/store/nodeChanges";
-import type { WorkflowEdge } from "@/types";
+import { useNodeUiStore } from "@/store/nodeUiStore";
+import type { WorkflowEdge, WorkflowNode } from "@/types";
 import type { Scene } from "@/lib/gpuCanvas/scene";
-import type { HandleAnchor } from "@/lib/gpuCanvas/graph";
+import { controlsOverhang, measuredChanges, type HandleAnchor, type SceneNode } from "@/lib/gpuCanvas/graph";
 import { PaintedAtlas, type BlitItem } from "@/lib/gpuCanvas/atlas";
 import type { Slot } from "@/lib/gpuCanvas/atlasLayout";
 import type { AtlasBudget } from "@/lib/gpuCanvas/budget";
 import { enableLayoutSubtree, paintElement } from "@/lib/gpuCanvas/htmlInCanvas";
 import { edgesByNode, READS_RUN_IN_PROGRESS, runMark, upstreamPaintKeys, withRunMark, type RunState } from "@/lib/gpuCanvas/paintKey";
 import { BACKGROUND, EIGHTH, PREFETCH, PaintQueue, URGENT, VIEW, packSheet, tierToShow, tiersFor, wantedTier, type PaintRequest } from "@/lib/gpuCanvas/paintQueue";
-import { cacheKey, deflate, inflate, PAINT_CACHE_BYTES, type PaintStore } from "@/lib/gpuCanvas/paintCache";
+import { cachedHandle, cacheKey, deflate, handleFromCache, inflate, PAINT_CACHE_BYTES, PAINT_CACHE_FORMAT, type CachedHandle, type PaintStore } from "@/lib/gpuCanvas/paintCache";
 import type { GpuCanvasStats } from "@/lib/gpuCanvas/stats";
+import { HEADER_HINTLESS_TYPES as HINTLESS_TYPES } from "@/components/nodes/FloatingNodeHeaders";
+import { SCRUB_ROW_NODE_TYPES } from "@/components/nodes/ui/ScrubRow";
+import { soundAudible, useVideoSoundStore } from "@/store/videoSoundStore";
 import { PainterSheet } from "./PainterSheet";
-import { flowNode, HEADER, nextFrame, noop, PAD, handleAnchors, mediaCardBox, type HeaderProps } from "./nodeSheets";
+import { controlsOverhangBox, flowNode, HEADER, nextFrame, noop, PAD, PAD_X, handleAnchors, mediaCardBox, scrollAreaBoxes, type HeaderProps, type ScrollArea } from "./nodeSheets";
 
 /** A sheet's size in device pixels while the canvas is in use: one upload is about 12 MB. */
 const SHEET_TEXELS = { w: 2048, h: 1536 };
@@ -81,12 +85,23 @@ interface HeldImage {
   /** Its size in flow units (node, header and margins). */
   w: number;
   h: number;
+  /** Where the node starts within it: the side margin, and a controls card's overhang (controlsOverhang). */
+  left: number;
 }
 
 interface NodePaint {
   images: Map<number, HeldImage>;
   /** The node's measured height, in flow units. */
   height?: number;
+  /** Its handles' anchors as painting measured them. */
+  handles?: Map<string, HandleAnchor>;
+  /** The node's width when they were measured (the scene's own when not known). */
+  handlesWidth?: number;
+  /** Its media card's and controls card's boxes as painting measured them. */
+  card?: SceneNode["card"];
+  overhang?: SceneNode["overhang"];
+  /** Its inner areas that scroll (scrollAreaBoxes), as painting measured them. */
+  scroll?: ScrollArea[];
   shown?: HeldImage;
   lastSeen: number;
 }
@@ -94,7 +109,7 @@ interface NodePaint {
 interface Readback {
   buffer: WebGLBuffer;
   sync: WebGLSync;
-  entries: { key: string; offset: number; width: number; height: number; nodeHeight: number; handles: [string, number, number, string?][]; card: [number, number, number, number] | null }[];
+  entries: { key: string; offset: number; width: number; height: number; nodeHeight: number; handles: CachedHandle[]; card: [number, number, number, number] | null; overhang: [number, number, number, number] | null; scroll: [number, number, number, number, number][] }[];
   bytes: number;
 }
 
@@ -150,6 +165,8 @@ export class Painter {
   /** Each node's key without its run mark: what the nodes it feeds take in. */
   private baseKeys = new Map<string, string>();
   private runState: RunState = { isRunning: false, currentNodeIds: [] };
+  /** The readiness hint each node's header shows ("needs a prompt"), as WorkflowCanvas last worked them out. */
+  private hints: Record<string, string>;
   private queue = new PaintQueue();
   private running = false;
   private startedAt = 0;
@@ -178,12 +195,17 @@ export class Painter {
   private loading = false;
   private storedSinceTrim = 0;
   private disposed = false;
+  /** Nodes measured since the store last heard their sizes. */
+  private measuredIds = new Set<string>();
   private onStatus: () => void = noop;
 
   constructor(private scene: Scene, private options: PainterOptions) {
     enableLayoutSubtree(scene.canvas);
     this.tiers = tiersFor(scene.scale);
-    const headers = { ...NO_HEADERS, getNodeTitle: options.headers.getNodeTitle, hints: options.headers.hints };
+    this.hints = options.headers.hints ?? {};
+    // A getter: the sheet spreads the headers on every batch, and takes the hints as they are then.
+    const hints = () => this.hints;
+    const headers: HeaderProps = { ...NO_HEADERS, getNodeTitle: options.headers.getNodeTitle, get hints() { return hints(); } };
     this.sheet = new PainterSheet(scene.canvas, SHEET_TEXELS.w / scene.scale, SHEET_TEXELS.h / scene.scale, options.nodeTypes, headers);
     this.atlas = new PaintedAtlas(scene.renderer, options.budget.layerSize, options.budget.layers);
     scene.setPaintedAtlas(this.atlas.target.texture);
@@ -206,6 +228,16 @@ export class Painter {
     this.unsubscribers.push(useWorkflowStore.subscribe((state, previous) => {
       if (state.edges !== previous.edges) this.edgesChanged(previous.edges, state.edges);
       if (state.isRunning !== previous.isRunning || state.currentNodeIds !== previous.currentNodeIds) this.runChanged(state);
+    }));
+    // A node's view state (a collapsed card, a settings tab) is painted as the live node shows it.
+    this.unsubscribers.push(useNodeUiStore.subscribe((state, previous) => {
+      if (state.byNode === previous.byNode) return;
+      this.rekey([...new Set([...Object.keys(previous.byNode), ...Object.keys(state.byNode)])].filter((id) => previous.byNode[id] !== state.byNode[id]));
+    }));
+    // The video players' sound button shows the shared setting: their nodes are painted again as it turns.
+    this.unsubscribers.push(useVideoSoundStore.subscribe((state, previous) => {
+      if (soundAudible(state) === soundAudible(previous)) return;
+      this.rekey(useWorkflowStore.getState().nodes.filter((n) => SCRUB_ROW_NODE_TYPES.has(n.type ?? "")).map((n) => n.id));
     }));
   }
 
@@ -292,6 +324,25 @@ export class Painter {
   }
 
   /** Paints a node at the view's tier now (ahead of the queue) and resolves once the scene shows it. */
+  /** Whether the scene's image of the node is current at the view's tier (or the node is gone). */
+  isFresh(id: string) {
+    return !this.scene.graph.indexOf.has(id) || this.fresh(id, this.wanted());
+  }
+
+  /**
+   * The inner area that scrolls (a long prompt's textarea, a `.nowheel` list) under a point of the node's painted
+   * image, in flow units relative to the node; null when none. Classic scrolls it under a wheel; until the node is
+   * live, the GPU canvas holds the wheel there rather than moving the view.
+   */
+  scrollAreaAt(id: string, x: number, y: number): ScrollArea | null {
+    return this.paints.get(id)?.scroll?.find((a) => x >= a.x && x <= a.x + a.w && y >= a.y && y <= a.y + a.h) ?? null;
+  }
+
+  /** Whether a paintNow for the node is still to come: its paint waits in the loop (behind a pan, a long batch). */
+  painting(id: string) {
+    return this.running && this.waiters.has(id);
+  }
+
   paintNow(id: string): Promise<void> {
     if (!this.startedAt) this.startedAt = performance.now();
     const tier = this.wanted();
@@ -370,9 +421,47 @@ export class Painter {
           return i >= 0 ? nodes[i] : undefined;
         },
         edgesOf: (id: string) => byNode.get(id) ?? [],
-        salt: `${this.options.salt}|${this.scene.scale}`,
+        salt: `${this.options.salt}|${this.scene.scale}|${PAINT_CACHE_FORMAT}`,
       },
     };
+  }
+
+  /**
+   * A node's key: its base key, its run mark, the hint its header shows, its
+   * own view state (useNodeUiState) and, for a video player, the sound
+   * setting, the last three kept out of the base so they reach no node
+   * downstream.
+   */
+  private fullKey(node: WorkflowNode, base: string) {
+    const hint = HINTLESS_TYPES.has(node.type) ? "" : this.hints[node.id] ?? "";
+    const ui = useNodeUiStore.getState().byNode[node.id];
+    let key = withRunMark(base, runMark(node, this.runState));
+    if (hint) key += `|h:${hint}`;
+    if (ui) key += `|ui:${JSON.stringify(ui)}`;
+    if (SCRUB_ROW_NODE_TYPES.has(node.type ?? "")) key += `|snd:${soundAudible(useVideoSoundStore.getState()) ? 1 : 0}`;
+    return key;
+  }
+
+  /** Something outside a node's base key changed for these nodes: those whose key did are repainted. */
+  private rekey(ids: Iterable<string>) {
+    const { nodes } = useWorkflowStore.getState();
+    const now = performance.now();
+    for (const id of ids) {
+      const i = indexOfNode(nodes, id), base = this.baseKeys.get(id);
+      if (i < 0 || base == null) continue;
+      const key = this.fullKey(nodes[i], base);
+      if (this.keys.get(id) === key) continue;
+      this.keys.set(id, key);
+      this.stale(id, now);
+    }
+  }
+
+  /** The headers' readiness hints changed: the nodes whose hint did are repainted. */
+  hintsChanged(next: Record<string, string>) {
+    const previous = this.hints;
+    if (next === previous) return;
+    this.hints = next;
+    this.rekey([...new Set([...Object.keys(previous), ...Object.keys(next)])].filter((id) => previous[id] !== next[id]));
   }
 
   private recomputeAllKeys() {
@@ -383,7 +472,7 @@ export class Painter {
     for (const node of nodes) {
       const base = keyOf(node.id)!;
       this.baseKeys.set(node.id, base);
-      this.keys.set(node.id, withRunMark(base, runMark(node, this.runState)));
+      this.keys.set(node.id, this.fullKey(node, base));
     }
   }
 
@@ -407,7 +496,7 @@ export class Painter {
     for (const id of ids) {
       const i = indexOfNode(nodes, id), base = this.baseKeys.get(id);
       if (i < 0 || base == null) continue;
-      const key = withRunMark(base, runMark(nodes[i], this.runState));
+      const key = this.fullKey(nodes[i], base);
       if (this.keys.get(id) === key) continue;
       this.keys.set(id, key);
       this.stale(id, now, !urgent.has(id));
@@ -416,7 +505,11 @@ export class Painter {
 
   private nodesChanged(changes: NodeChanges) {
     if (!this.dirtyKeys.size) this.dirtySince = performance.now();
-    for (const id of changes.updated) this.dirtyKeys.add(id);
+    for (const id of changes.updated) {
+      // The painter's own size report changes no paint key: it must not preempt the batch being painted.
+      if (this.reportedSizes.delete(id)) continue;
+      this.dirtyKeys.add(id);
+    }
     for (const id of changes.added) this.dirtyKeys.add(id);
     this.scheduleKeys();
   }
@@ -449,7 +542,7 @@ export class Painter {
         if (i < 0) continue;
         const base = keyOf(id)!;
         this.baseKeys.set(id, base);
-        const key = withRunMark(base, runMark(nodes[i], this.runState));
+        const key = this.fullKey(nodes[i], base);
         if (this.keys.get(id) === key) continue;
         this.keys.set(id, key);
         if (changed.has(id)) this.downstream.delete(id);
@@ -559,11 +652,17 @@ export class Painter {
     this.options.stats.phase = name;
   }
 
+  /**
+   * A node's image box: the node with its header and margins, widened each side by a controls card that
+   * reaches past it (as classic shows it, overflowing the node); `left` is where the node starts within it.
+   */
   private boxOf(id: string) {
     const i = this.scene.graph.indexOf.get(id);
     const n = i == null ? undefined : this.scene.graph.nodes[i];
     const height = this.paints.get(id)?.height ?? (n ? n.h : 300);
-    return { w: (n?.w ?? 300) + PAD * 2, h: height + HEADER + PAD };
+    const nodes = useWorkflowStore.getState().nodes, k = indexOfNode(nodes, id);
+    const w = n?.w ?? 300, left = PAD_X + (k >= 0 ? controlsOverhang(nodes[k].data, w) : 0);
+    return { w: w + left * 2, h: height + HEADER + PAD, left };
   }
 
   private sheetFlowSize(zoom: number) {
@@ -610,11 +709,15 @@ export class Painter {
       packSheet(list.map((r) => ({ key: r.id, w: this.boxOf(r.id).w, h: heights(r.id) + HEADER + PAD })), sheet.width, sheet.height, sheet.gap);
     const sheetNodes = (list: PaintRequest[], placed: Map<string, { x: number; y: number }>) => list.flatMap((r) => {
       const node = sourceOf(r.id), at = placed.get(r.id), n = this.scene.graph.nodes[this.scene.graph.indexOf.get(r.id)!];
-      return node && at && n ? [flowNode(node, at.x + PAD, at.y + HEADER, n.w)] : [];
+      return node && at && n ? [flowNode(node, at.x + this.boxOf(r.id).left, at.y + HEADER, n.w)] : [];
     });
 
     // First pass at estimated heights, to measure.
     const first = place(misses, (id) => this.boxOf(id).h - HEADER - PAD);
+    // The key each node is drawn for: the sheet reads node data and header hints as it renders, and an urgent
+    // batch does not give way to a change after that, so its image is stamped with this key, not the one current
+    // at the blit. A change meanwhile leaves the image stale, and the repaint stale() queued still runs.
+    const renderedKeys = new Map(misses.map((r) => [r.id, this.keys.get(r.id) ?? ""]));
     this.phase(`render ${tier} ×${misses.length}`);
     await this.sheet.render(sheetNodes(misses, first), zoom);
     const t1 = performance.now();
@@ -643,10 +746,13 @@ export class Painter {
       return !a || a.x !== b.x || a.y !== b.y;
     });
     this.phase(`place ${tier} ×${fits.length}`);
-    if (moved || fits.length !== misses.length) await this.sheet.render(sheetNodes(fits, placed), zoom);
+    if (moved || fits.length !== misses.length) {
+      for (const r of fits) renderedKeys.set(r.id, this.keys.get(r.id) ?? "");
+      await this.sheet.render(sheetNodes(fits, placed), zoom);
+    }
     const nodePositions = new Map(fits.map((r) => {
       const p = placed.get(r.id)!;
-      return [r.id, { x: p.x + PAD, y: p.y + HEADER }];
+      return [r.id, { x: p.x + this.boxOf(r.id).left, y: p.y + HEADER }];
     }));
     const inPlace = await this.sheet.positioned(nodePositions, 2000, () => this.disposed || yielded());
     if (this.disposed) return;
@@ -704,9 +810,10 @@ export class Painter {
       const src = { x: p.x * tier, y: p.y * tier, w: box.w * tier, h: box.h * tier };
       const slot = this.slotFor(r.id, tier, Math.ceil(box.w * tier), Math.ceil(box.h * tier), r.priority !== PREFETCH);
       if (!slot) continue;
-      paint.images.set(tier, { slot, key: this.keys.get(r.id) ?? "", w: box.w, h: box.h });
-      const handles = flow ? handleAnchors(flow, r.id) : undefined;
-      this.applyMeasured(r.id, paint.height!, handles, mediaCardBox(this.sheet.element, r.id));
+      paint.images.set(tier, { slot, key: renderedKeys.get(r.id) ?? "", w: box.w, h: box.h, left: box.left });
+      const handles = flow ? handleAnchors(flow, r.id, this.sheet.element) : undefined;
+      paint.scroll = scrollAreaBoxes(this.sheet.element, r.id);
+      this.applyMeasured(r.id, paint.height!, handles, mediaCardBox(this.sheet.element, r.id), flow?.nodeLookup.get(r.id)?.measured.width, controlsOverhangBox(this.sheet.element, r.id));
       items.push({ src, dst: slot });
       done.push(r);
     }
@@ -743,14 +850,67 @@ export class Painter {
     this.afterBatch(done, t0);
   }
 
-  /** The node's measured height and handles reach the scene (its edges move to them). */
-  private applyMeasured(id: string, height: number, handles?: Map<string, HandleAnchor>, card?: { x: number; y: number; w: number; h: number } | null) {
+  /**
+   * The node's measured height and handles reach the scene (its edges move to them). A live node (its painted copy
+   * hidden) keeps the box React Flow measures for it, as on classic, where the DOM is the node: they are only held,
+   * and reach the scene when it goes back to its painted image (restoreMeasured).
+   */
+  private applyMeasured(id: string, height: number, handles?: Map<string, HandleAnchor>, card?: SceneNode["card"], width?: number, overhang?: SceneNode["overhang"]) {
     const i = this.scene.graph.indexOf.get(id);
     if (i == null) return;
-    if (card !== undefined) this.scene.graph.nodes[i].card = card;
-    this.scene.setNodeHeight(i, height);
-    if (handles) this.scene.setHandles(i, handles);
+    const paint = this.paint(id);
+    paint.height = height;
+    if (card !== undefined) paint.card = card;
+    if (overhang !== undefined) paint.overhang = overhang;
+    if (handles) {
+      paint.handles = handles;
+      paint.handlesWidth = width;
+    }
+    if (this.scene.isHidden(i)) return;
+    this.measuredToScene(id, i, height, handles, card, width, overhang);
   }
+
+  private measuredToScene(id: string, i: number, height: number, handles?: Map<string, HandleAnchor>, card?: SceneNode["card"], width?: number, overhang?: SceneNode["overhang"]) {
+    if (card !== undefined) this.scene.graph.nodes[i].card = card;
+    if (overhang !== undefined) this.scene.setOverhang(i, overhang);
+    this.scene.setNodeHeight(i, height);
+    // At the width it was painted at: a width changed since moves them until the next paint.
+    if (handles) this.scene.setHandles(i, handles, width);
+    if (!this.measuredIds.size) queueMicrotask(() => this.reportMeasured());
+    this.measuredIds.add(id);
+  }
+
+  /**
+   * A node leaving the live layer: the scene's box, handles and cards are its painted image's again, and that size
+   * reaches the store. Whether the painter has measured the node.
+   */
+  restoreMeasured(id: string): boolean {
+    const paint = this.paints.get(id), i = this.scene.graph.indexOf.get(id);
+    if (paint?.height == null || i == null) return false;
+    this.measuredToScene(id, i, paint.height, paint.handles, paint.card, paint.handlesWidth, paint.overhang);
+    return true;
+  }
+
+  /** The measured sizes reach the store as React Flow's measuring does on the classic canvas (no undo step, nothing unsaved). */
+  private reportMeasured() {
+    const ids = this.measuredIds;
+    this.measuredIds = new Set();
+    if (this.disposed) return;
+    // A node live by now: the live flow reports React Flow's measurement of it.
+    for (const id of ids) {
+      const i = this.scene.graph.indexOf.get(id);
+      if (i != null && this.scene.isHidden(i)) ids.delete(id);
+    }
+    const store = useWorkflowStore.getState();
+    const changes = measuredChanges(store.nodes, (id) => indexOfNode(store.nodes, id), this.scene.graph, ids);
+    if (!changes.length) return;
+    for (const change of changes) if ("id" in change) this.reportedSizes.add(change.id);
+    store.onNodesChange(changes);
+    requestAnimationFrame(() => this.reportedSizes.clear());
+  }
+
+  /** Nodes whose measured size the painter just wrote to the store, until that change is seen. */
+  private reportedSizes = new Set<string>();
 
   /** Resolves paintNow for these nodes on the next frame, once the scene has drawn them. */
   private resolveWaiters(requests: readonly PaintRequest[]) {
@@ -880,7 +1040,7 @@ export class Painter {
       this.scene.setPainted(i, null);
       return;
     }
-    this.scene.setPainted(i, { x: -PAD, y: -HEADER, w: best.w, h: best.h, layer: best.slot.layer, ...this.atlas.layout.uv(best.slot) });
+    this.scene.setPainted(i, { x: -best.left, y: -HEADER, w: best.w, h: best.h, layer: best.slot.layer, ...this.atlas.layout.uv(best.slot) });
   }
 
   // ---- the disk cache ----
@@ -935,10 +1095,10 @@ export class Painter {
       texels += entry.width * entry.height;
       const paint = this.paint(r.id);
       paint.height = entry.nodeHeight;
-      const box = { w: this.boxOf(r.id).w, h: entry.nodeHeight + HEADER + PAD };
-      paint.images.set(r.tier, { slot, key, w: box.w, h: box.h });
-      const card = entry.card ? { x: entry.card[0], y: entry.card[1], w: entry.card[2], h: entry.card[3] } : entry.card;
-      this.applyMeasured(r.id, entry.nodeHeight, new Map(entry.handles.map(([k, x, y, position]) => [k, { x, y, position }])), card);
+      paint.scroll = (entry.scroll ?? []).map(([x, y, w, h, nowheel]) => ({ x, y, w, h, nowheel: !!nowheel }));
+      const { w, left } = this.boxOf(r.id);
+      paint.images.set(r.tier, { slot, key, w, h: entry.nodeHeight + HEADER + PAD, left });
+      this.applyMeasured(r.id, entry.nodeHeight, new Map(entry.handles.map(handleFromCache)), boxFromTuple(entry.card), undefined, boxFromTuple(entry.overhang));
       this.show(r.id, true);
       hits.push(entry.key);
       this.status.cacheHits++;
@@ -978,11 +1138,16 @@ export class Painter {
       const { slot } = image;
       gl.framebufferTextureLayer(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, texture, 0, slot.layer);
       gl.readPixels(slot.x, slot.y, slot.w, slot.h, gl.RGBA, gl.UNSIGNED_BYTE, offset);
-      const handles = flow ? handleAnchors(flow, r.id) : undefined;
+      const handles = flow ? handleAnchors(flow, r.id, this.sheet.element) : undefined;
+      // The card and overhang this paint measured: a live node's reach the scene only once it goes back to its
+      // painted image (restoreMeasured), after this readback, so the scene's would be the previous (or none).
+      const paint = this.paints.get(r.id), sceneNode = this.scene.graph.nodes[this.scene.graph.indexOf.get(r.id) ?? -1];
       entries.push({
-        key: cacheKey(image.key, r.tier), offset, width: slot.w, height: slot.h, nodeHeight: this.paints.get(r.id)?.height ?? 0,
-        handles: handles ? [...handles].map(([k, a]): [string, number, number, string?] => [k, a.x, a.y, a.position]) : [],
-        card: cardTuple(this.scene.graph.nodes[this.scene.graph.indexOf.get(r.id) ?? -1]?.card),
+        key: cacheKey(image.key, r.tier), offset, width: slot.w, height: slot.h, nodeHeight: paint?.height ?? 0,
+        handles: handles ? [...handles].map(([k, a]) => cachedHandle(k, a)) : [],
+        card: cardTuple(paint?.card !== undefined ? paint.card : sceneNode?.card),
+        overhang: cardTuple(paint?.overhang !== undefined ? paint.overhang : sceneNode?.overhang),
+        scroll: (paint?.scroll ?? []).map((a) => [a.x, a.y, a.w, a.h, a.nowheel ? 1 : 0]),
       });
       offset += slot.w * slot.h * 4;
     }
@@ -1031,7 +1196,7 @@ export class Painter {
       for (const entry of readback.entries) {
         const pixels = data.subarray(entry.offset, entry.offset + entry.width * entry.height * 4);
         const bytes = await deflate(pixels);
-        await cache.put({ key: entry.key, width: entry.width, height: entry.height, nodeHeight: entry.nodeHeight, handles: entry.handles, card: entry.card, bytes, size: bytes.size, usedAt: Date.now() });
+        await cache.put({ key: entry.key, width: entry.width, height: entry.height, nodeHeight: entry.nodeHeight, handles: entry.handles, card: entry.card, overhang: entry.overhang, scroll: entry.scroll, bytes, size: bytes.size, usedAt: Date.now() });
       }
       this.storedSinceTrim += readback.entries.length;
       if (this.storedSinceTrim > 200) {
@@ -1064,4 +1229,8 @@ export class Painter {
 
 function cardTuple(card: { x: number; y: number; w: number; h: number } | null | undefined): [number, number, number, number] | null {
   return card ? [card.x, card.y, card.w, card.h] : null;
+}
+
+function boxFromTuple(box: [number, number, number, number] | null | undefined): { x: number; y: number; w: number; h: number } | null | undefined {
+  return box ? { x: box[0], y: box[1], w: box[2], h: box[3] } : box;
 }
