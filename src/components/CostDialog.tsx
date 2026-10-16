@@ -24,6 +24,7 @@ function ProviderIcon({ provider }: { provider: ProviderType }) {
     anthropic: { bg: "bg-amber-500/20", text: "text-amber-300" },
     kie: { bg: "bg-orange-500/20", text: "text-orange-300" },
     wavespeed: { bg: "bg-purple-500/20", text: "text-purple-300" },
+    atlas: { bg: "bg-sky-500/20", text: "text-sky-300" },
     comfy: { bg: "bg-neutral-500/20", text: "text-neutral-300" },
   };
 
@@ -35,6 +36,7 @@ function ProviderIcon({ provider }: { provider: ProviderType }) {
     anthropic: "A",
     kie: "K",
     wavespeed: "W",
+    atlas: "A",
     comfy: "C",
   };
 
@@ -59,6 +61,7 @@ function getProviderDisplayName(provider: ProviderType): string {
     anthropic: "Anthropic",
     kie: "Kie.ai",
     wavespeed: "WaveSpeed",
+    atlas: "Atlas Cloud",
     comfy: "ComfyUI",
   };
   return names[provider] || provider;

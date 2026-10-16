@@ -117,6 +117,7 @@ const PROVIDER_ROWS: { id: ProviderType; name: string; placeholder: string; desc
   { id: "fal", name: "fal.ai", placeholder: "..." },
   { id: "kie", name: "Kie.ai", placeholder: "..." },
   { id: "wavespeed", name: "WaveSpeed", placeholder: "..." },
+  { id: "atlas", name: "Atlas Cloud", placeholder: "apikey-..." },
 ];
 
 const PAN_MODES: SegmentedOption<PanMode>[] = [
@@ -248,6 +249,7 @@ export function ProjectSetupModal({
     fal: false,
     kie: false,
     wavespeed: false,
+    atlas: false,
     comfy: false,
   });
   const [overrideActive, setOverrideActive] = useState<Record<ProviderType, boolean>>({
@@ -258,6 +260,7 @@ export function ProjectSetupModal({
     fal: false,
     kie: false,
     wavespeed: false,
+    atlas: false,
     comfy: false,
   });
   const [envStatus, setEnvStatus] = useState<EnvStatusResponse | null>(null);
@@ -308,7 +311,7 @@ export function ProjectSetupModal({
       // Sync local providers state
       editedProviderKeys.current.clear();
       setLocalProviders(providerSettings);
-      setShowApiKey({ gemini: false, openai: false, anthropic: false, replicate: false, fal: false, kie: false, wavespeed: false, comfy: false });
+      setShowApiKey({ gemini: false, openai: false, anthropic: false, replicate: false, fal: false, kie: false, wavespeed: false, comfy: false, atlas: false });
       // Initialize override as active if user already has a key set
       setOverrideActive({
         gemini: !!providerSettings.providers.gemini?.apiKey,
@@ -318,6 +321,7 @@ export function ProjectSetupModal({
         fal: !!providerSettings.providers.fal?.apiKey,
         kie: !!providerSettings.providers.kie?.apiKey,
         wavespeed: !!providerSettings.providers.wavespeed?.apiKey,
+        atlas: !!providerSettings.providers.atlas?.apiKey,
         comfy: !!providerSettings.providers.comfy?.apiKey,
       });
       setError(null);
@@ -529,7 +533,7 @@ export function ProjectSetupModal({
 
   const handleSaveProviders = () => {
     // Save each provider's settings
-    const providerIds: ProviderType[] = ["gemini", "openai", "anthropic", "replicate", "fal", "kie", "wavespeed", "comfy"];
+    const providerIds: ProviderType[] = ["gemini", "openai", "anthropic", "replicate", "fal", "kie", "wavespeed", "comfy", "atlas"];
     for (const providerId of providerIds) {
       const local = localProviders.providers[providerId];
       const current = providerSettings.providers[providerId];
