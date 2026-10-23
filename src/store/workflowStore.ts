@@ -4349,6 +4349,8 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       getState: () => get(),
       subscribe: (listener) => useWorkflowStore.subscribe(listener),
       save: () => get().saveToFile({ reason: "auto" }),
+      // The canvas holds this class for a pan, a zoom, a drag or a marquee
+      busy: () => typeof document !== "undefined" && document.documentElement.classList.contains("canvas-interacting"),
       onFailure: (error) => {
         const detail = error instanceof Error ? error.message : "";
         useToast.getState().show(`Autosave is paused: it couldn't write the workflow${detail ? ` (${detail})` : ""}. Save with ${saveShortcutLabel()} to try now.`, "error");
