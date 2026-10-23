@@ -2235,20 +2235,41 @@ export function WorkflowCanvas() {
     [screenToFlowPosition, addNode, addMediaNode, updateNodeData, loadWorkflow]
   );
 
+  // The canvas's own elements, kept while they are unchanged: the GPU canvas is memoised, so the store changes this
+  // component re-renders for (every selection step, every keystroke) do not re-render the canvas below it.
   // The window takes the pill's place while it is open; its own header closes it.
-  const agentButton = !isAgentOpen && (
-    <AgentButton
-      open={false}
-      harness={agentPresence.harnessChosen ? agentPresence.harness : null}
-      busy={isAgentBusy}
-      attention={agentPresence.attention}
-      disabled={tutorialActive && lockedFeatures}
-      dimmed={tutorialActive && lockedFeatures}
-      onClick={toggleAgent}
-      onWidthChange={setAgentButtonWidth}
-      style={{ right: AGENT_BUTTON_MARGIN, top: AGENT_BUTTON_MARGIN }}
-    />
-  );
+  const agentHarness = agentPresence.harnessChosen ? agentPresence.harness : null;
+  const agentAttention = agentPresence.attention;
+  const gpuChildren = useMemo(() => (
+    <>
+      <PerfOverlay />
+      {!isAgentOpen && (
+        <AgentButton
+          open={false}
+          harness={agentHarness}
+          busy={isAgentBusy}
+          attention={agentAttention}
+          disabled={tutorialActive && lockedFeatures}
+          dimmed={tutorialActive && lockedFeatures}
+          onClick={toggleAgent}
+          onWidthChange={setAgentButtonWidth}
+          style={{ right: AGENT_BUTTON_MARGIN, top: AGENT_BUTTON_MARGIN }}
+        />
+      )}
+    </>
+  ), [isAgentOpen, agentHarness, isAgentBusy, agentAttention, tutorialActive, lockedFeatures, toggleAgent, setAgentButtonWidth]);
+  const gpuFlowChildren = useMemo(() => (
+    <>
+      <GroupControlsOverlay />
+      <CanvasMinimap
+        disabled={tutorialActive && lockedFeatures}
+        onMinimapVisibleChange={setIsMinimapVisible}
+        locked={canvasLocked}
+        onLockedChange={setCanvasLocked}
+      />
+    </>
+  ), [tutorialActive, lockedFeatures, setIsMinimapVisible, canvasLocked, setCanvasLocked]);
+
 
   return (
     <div
@@ -2340,20 +2361,9 @@ export function WorkflowCanvas() {
           wheelRoot={reactFlowWrapper}
           editing={gpuEditing}
           dimBackground={tutorialActive && lockedFeatures}
-          flowChildren={
-            <>
-              <GroupControlsOverlay />
-              <CanvasMinimap
-                disabled={tutorialActive && lockedFeatures}
-                onMinimapVisibleChange={setIsMinimapVisible}
-                locked={canvasLocked}
-                onLockedChange={setCanvasLocked}
-              />
-            </>
-          }
+          flowChildren={gpuFlowChildren}
         >
-          <PerfOverlay />
-          {agentButton}
+          {gpuChildren}
         </GpuCanvas>
         {/* The scene draws the connections: the sweep crosses its routes rather than SVG paths */}
         <EdgeHookSelection canvas={reactFlowWrapper} disabled={isModalOpen || isCanvasOverview} paths={gpuEdgePaths} />

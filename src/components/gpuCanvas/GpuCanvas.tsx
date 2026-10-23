@@ -6,7 +6,7 @@
  * component, and only the nodes being worked in as live components over it.
  * See docs/gpu-canvas.md.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { DefaultEdgeOptions, EdgeTypes, NodeTypes } from "@xyflow/react";
 import { frameLoadedGraph } from "@/utils/frameGraph";
 import { isPanningRef } from "@/components/WorkflowCanvas";
@@ -164,7 +164,11 @@ interface Loading {
   total: number;
 }
 
-export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, wheel, wheelRoot, editing, dimBackground = false, children, flowChildren, onFailure, onContextLost }: GpuCanvasProps) {
+/**
+ * Memoised: the canvas page re-renders for many store changes (each selection step, each keystroke) that the
+ * canvas takes from the store itself, and its props stay the same objects then.
+ */
+export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, wheel, wheelRoot, editing, dimBackground = false, children, flowChildren, onFailure, onContextLost }: GpuCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const liveRef = useRef<HTMLDivElement>(null);
@@ -908,7 +912,7 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       {loading && <LoadingScreen painted={loading.painted} total={loading.total} />}
     </div>
   );
-}
+});
 
 /** Covers the canvas while a large workflow paints, as Figma does while a file opens. */
 function LoadingScreen({ painted, total }: Loading) {
