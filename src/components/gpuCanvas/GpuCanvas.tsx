@@ -64,6 +64,11 @@ const LIVE_MODE_MAX_NODES = 400;
 const LIVE_EDGE_ZOOM = OVERVIEW_ZOOM_THRESHOLD;
 /** At most this many live connections besides the selected ones, unless more are on screen (pickLiveEdges). */
 const MAX_LIVE_EDGES = 250;
+/**
+ * Selected nodes are live (their grips and toolbars), up to this many: a marquee across a zoomed-out graph or
+ * Select all takes hundreds or thousands, and mounting them all stalls the page. Past it they are drawn selected.
+ */
+const MAX_SELECTED_LIVE = 40;
 /** Added nodes on screen made live until painted (the rest are held undrawn until painted: `Scene.holdStandIn`). */
 const MAX_ADDED_LIVE = 8;
 /** How long an added node stays live at most, should its paint not land. */
@@ -356,12 +361,12 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
     live.painter = painter;
     engineRef.current = { painter, scene };
 
-    // Selected nodes are live; store selection follows clicks. Mid-marquee they are only drawn selected: each
-    // step would otherwise mount the nodes it took, and a sweep across a zoomed-out graph takes hundreds.
+    // Selected nodes are live (up to MAX_SELECTED_LIVE); store selection follows clicks. Mid-marquee they are only
+    // drawn selected: each step would otherwise mount the nodes it took.
     const selectedIds = new Set(store.nodes.filter((n) => n.selected).map((n) => n.id));
     const showSelection = () => {
       scene.setSelected([...selectedIds].map((id) => scene.graph.indexOf.get(id)).filter((i): i is number => i != null));
-      if (!editor.marqueeing) live.wantOnly("selected", selectedIds);
+      if (!editor.marqueeing) live.wantOnly("selected", selectedIds.size <= MAX_SELECTED_LIVE ? selectedIds : []);
     };
     editor.onMarqueeEnd = showSelection;
     showSelection();
@@ -415,7 +420,7 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
       }
       for (const id of onScreen.slice(MAX_ADDED_LIVE)) {
         // A node the live layer renders anyway (selected) needs no hold.
-        if (selectedIds.has(id) || live.renders(id) || heldAdded.has(id)) continue;
+        if ((selectedIds.size <= MAX_SELECTED_LIVE && selectedIds.has(id)) || live.renders(id) || heldAdded.has(id)) continue;
         heldAdded.add(id);
         scene.holdStandIn(id, true);
         void painted(id).then(() => {
