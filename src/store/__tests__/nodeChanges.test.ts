@@ -60,4 +60,25 @@ describe("subscribeToWorkflowNodeChanges", () => {
     expect([...listener.mock.calls[2][0].removed]).toEqual([a]);
     unsubscribe();
   });
+
+  it("selects by replacing only the nodes whose selection flips, keeping the others", () => {
+    const store = useWorkflowStore.getState();
+    const a = store.addNode("prompt", { x: 0, y: 0 });
+    const b = store.addNode("prompt", { x: 400, y: 0 });
+    useWorkflowStore.setState({ hasUnsavedChanges: false });
+    const before = useWorkflowStore.getState().nodes;
+    const listener = vi.fn();
+    const unsubscribe = subscribeToWorkflowNodeChanges(listener);
+
+    useWorkflowStore.getState().onNodesChange([{ type: "select", id: a, selected: true }, { type: "select", id: b, selected: false }]);
+    const after = useWorkflowStore.getState().nodes;
+    expect(after.find((n) => n.id === a)?.selected).toBe(true);
+    expect(after.find((n) => n.id === b)).toBe(before.find((n) => n.id === b));
+    expect([...listener.mock.calls[0][0].updated]).toEqual([a]);
+    expect(useWorkflowStore.getState().hasUnsavedChanges).toBe(false);
+
+    useWorkflowStore.getState().onNodesChange([{ type: "select", id: a, selected: true }]);
+    expect(useWorkflowStore.getState().nodes).toBe(after);
+    unsubscribe();
+  });
 });

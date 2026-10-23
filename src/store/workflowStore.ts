@@ -14,6 +14,7 @@ import {
   applyNodeChanges,
   applyEdgeChanges,
   XYPosition,
+  type NodeSelectionChange,
 } from "@xyflow/react";
 import {
   WorkflowNode,
@@ -1460,6 +1461,25 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       pushUndoCheckpoint(get, set);
       deleteCheckpointActive = true;
       setTimeout(() => { deleteCheckpointActive = false; }, 0);
+    }
+
+    // Selection alone (a click, each step of a marquee): replace just the nodes it flips, by index, so a
+    // change costs the same at any graph size and change listeners need not compare the whole graph
+    if (changes.every((c) => c.type === "select")) {
+      set((state) => {
+        const replacements = new Map<number, WorkflowNode>();
+        for (const change of changes as NodeSelectionChange[]) {
+          const i = indexOfNode(state.nodes, change.id);
+          if (i >= 0 && !!state.nodes[i].selected !== change.selected) replacements.set(i, { ...state.nodes[i], selected: change.selected });
+        }
+        if (!replacements.size) return {};
+        const nextNodes = replaceNodesAt(state.nodes, replacements);
+        return {
+          nodes: nextNodes,
+          ...(state.edges.some((e) => e.selected) && nextNodes.some((n) => n.selected) ? { edges: state.edges.map((e) => e.selected ? { ...e, selected: false } : e) } : {}),
+        };
+      });
+      return;
     }
 
     set((state) => {

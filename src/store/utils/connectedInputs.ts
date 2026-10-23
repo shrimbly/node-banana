@@ -495,8 +495,15 @@ export interface NodeReadiness {
  */
 export function nodeReadinessPure(nodes: Pick<WorkflowNode, "id" | "type" | "data">[], edges: WorkflowEdge[]): Record<string, NodeReadiness> {
   const readiness: Record<string, NodeReadiness> = {};
+  // Edges by target, so the check is linear in the graph rather than nodes × edges
+  const incoming = new Map<string, WorkflowEdge[]>();
+  for (const e of edges) {
+    const list = incoming.get(e.target);
+    if (list) list.push(e);
+    else incoming.set(e.target, [e]);
+  }
   const connected = (nodeId: string, accept: (handle: string | null | undefined) => boolean, includeLoops = false) =>
-    edges.some((e) => e.target === nodeId && (includeLoops || !e.data?.isLoop) && accept(e.targetHandle));
+    incoming.get(nodeId)?.some((e) => (includeLoops || !e.data?.isLoop) && accept(e.targetHandle)) ?? false;
   const isType = (handle: string | null | undefined, type: string) => handle === type || Boolean(handle?.startsWith(`${type}-`));
 
   for (const node of nodes) {

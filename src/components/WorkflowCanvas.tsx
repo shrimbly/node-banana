@@ -160,16 +160,6 @@ const edgeTypes: EdgeTypes = {
 
 /** Pointer travel (px) under which a handle press counts as a click, not a drag. */
 const HANDLE_CLICK_SLOP = 4;
-/** Height is content-derived; a stored one must not reach React Flow's wrapper. */
-function stripNodeHeight<T extends Node>(node: T): T {
-  const styleHeight = node.style && "height" in node.style;
-  if (node.height === undefined && !styleHeight) return node;
-  const { height: _height, ...rest } = node;
-  void _height;
-  const { height: _styleHeight, ...style } = (node.style ?? {}) as Record<string, unknown>;
-  void _styleHeight;
-  return { ...rest, style } as unknown as T;
-}
 
 // Connection validation rules
 // - Image handles (green) can only connect to image handles
@@ -256,7 +246,7 @@ function capabilityForNodeType(type: string): "image" | "video" | "3d" | "audio"
 const DEFAULT_EDGE_OPTIONS = { type: "editable", animated: false };
 
 export function WorkflowCanvas() {
-  const { nodes, edges, isModalOpen, showQuickstart, navigationTarget, canvasNavigationSettings, dimmedNodeIds, skippedNodeIds } =
+  const { nodes, edges, isModalOpen, showQuickstart, navigationTarget, canvasNavigationSettings } =
     useWorkflowStore(useShallow((state) => ({
       nodes: state.nodes,
       edges: state.edges,
@@ -264,8 +254,6 @@ export function WorkflowCanvas() {
       showQuickstart: state.showQuickstart,
       navigationTarget: state.navigationTarget,
       canvasNavigationSettings: state.canvasNavigationSettings,
-      dimmedNodeIds: state.dimmedNodeIds,
-      skippedNodeIds: state.skippedNodeIds,
     })));
   const onNodesChange = useWorkflowStore((state) => state.onNodesChange);
   const onEdgesChange = useWorkflowStore((state) => state.onEdgesChange);
@@ -462,9 +450,6 @@ export function WorkflowCanvas() {
     }
   }, [tutorialActive, nodes, setCenter]);
 
-  // Apply dimming className to nodes downstream of disabled Switch outputs or skipped by optional inputs.
-  // Also drop any stored height: node height is derived from content by the
-  // node shell, and a stale value here would pin the wrapper.
   // Nodes that cannot run as wired, hinted on their headers; recomputed only when the graph changes
   const contentNodes = useWorkflowStore(selectNodeContent);
   const readinessHints = useMemo(() => {
@@ -473,32 +458,6 @@ export function WorkflowCanvas() {
     return hints;
   }, [contentNodes, edges]);
 
-  const allNodes = useMemo(() => {
-    return nodes.map((storedNode) => {
-      const node = stripNodeHeight(storedNode);
-      // Never dim Switch or ConditionalSwitch nodes themselves
-      if (node.type === "switch" || node.type === "conditionalSwitch") return node;
-
-      const isDimmed = dimmedNodeIds.has(node.id);
-      const isSkipped = skippedNodeIds.has(node.id);
-      const extraClasses = [
-        isDimmed ? "switch-dimmed" : "",
-        isSkipped ? "node-skipped" : "",
-      ].filter(Boolean).join(" ");
-
-      // Preserve existing className if any, add/remove dimmed/skipped classes
-      const baseClass = (node.className || "").replace(/\bswitch-dimmed\b/g, "").replace(/\bnode-skipped\b/g, "").trim();
-      const newClass = extraClasses ? `${baseClass} ${extraClasses}`.trim() : baseClass;
-
-      // Only create a new node object if the classes changed. React Flow
-      // rebuilds a node, and everything under it re-renders, whenever the
-      // object handed to it is new, so a node without a className must keep
-      // its identity rather than gain an empty one on every drag frame.
-      if ((node.className || "") === newClass) return node;
-      return { ...node, className: newClass };
-    });
-  }, [nodes, dimmedNodeIds, skippedNodeIds]);
-
   // Switching workflows can leave React Flow holding handle positions measured
   // on the previous workflow's nodes (same ids, different layout), so edges
   // land in the wrong place until something resizes a node. Re-measure every
@@ -506,13 +465,11 @@ export function WorkflowCanvas() {
   const updateNodeInternals = useUpdateNodeInternals();
   const workflowLoadCount = useWorkflowStore((state) => state.workflowLoadCount);
   const setCanvasViewport = useWorkflowStore((state) => state.setCanvasViewport);
-  const nodeIdsRef = useRef<string[]>([]);
-  nodeIdsRef.current = allNodes.map((n) => n.id);
   useEffect(() => {
     if (!workflowLoadCount) return;
     let frame = requestAnimationFrame(() => {
       frame = requestAnimationFrame(() => {
-        updateNodeInternals(nodeIdsRef.current);
+        updateNodeInternals(useWorkflowStore.getState().nodes.map((n) => n.id));
         // A workflow opened from a file has no viewport of its own (a tab
         // switch restores its parked one first): frame its graph, now that
         // the nodes are measured, so the view is not left wherever the
