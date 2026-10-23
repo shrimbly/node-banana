@@ -117,9 +117,13 @@ function frameTarget(): FrameTarget | null {
 
 const VIEWPORT_TRANSFORM = /translate\(\s*(-?[\d.e+-]+)px\s*,\s*(-?[\d.e+-]+)px\s*\)\s*scale\(\s*([\d.e+-]+)\s*\)/;
 
-/** React Flow's live pan and zoom, read from its viewport element (the store keeps it only per tab). */
+/**
+ * React Flow's live pan and zoom, read from its viewport element (the store keeps it only per tab). On the GPU
+ * canvas that is the live layer's flow, kept at the scene's view: the painter's hidden sheet is a React Flow too,
+ * pinned at the origin, and comes first in the page.
+ */
 function liveViewport(): { x: number; y: number; zoom: number } | null {
-  const element = document.querySelector<HTMLElement>(".react-flow__viewport");
+  const element = document.querySelector<HTMLElement>("[data-gpu-canvas-live] .react-flow__viewport") ?? document.querySelector<HTMLElement>(".react-flow__viewport");
   const match = element?.style.transform.match(VIEWPORT_TRANSFORM);
   if (!match) return null;
   const [x, y, zoom] = [Number(match[1]), Number(match[2]), Number(match[3])];
@@ -131,7 +135,7 @@ function liveViewport(): { x: number; y: number; zoom: number } | null {
  * under a covering view, so its box and pan are the ones it shows when it comes back.
  */
 export function canvasCentrePosition(size: { width: number; height: number }): XYPosition {
-  const box = document.querySelector<HTMLElement>(".react-flow")?.getBoundingClientRect();
+  const box = (document.querySelector<HTMLElement>("[data-gpu-canvas]") ?? document.querySelector<HTMLElement>(".react-flow"))?.getBoundingClientRect();
   const width = box && box.width > 0 ? box.width : window.innerWidth;
   const height = box && box.height > 0 ? box.height : window.innerHeight;
   const viewport = liveViewport() ?? useWorkflowStore.getState().canvasViewport ?? { x: 0, y: 0, zoom: 1 };

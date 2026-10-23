@@ -565,6 +565,33 @@ describe("frameToCanvas from an edit project (the Edit video view)", () => {
     expect(input.parameters).not.toHaveProperty("fromNodeId");
   });
 
+  it("on the GPU canvas reads the live layer's flow and the host's box, not the painter's sheet ahead of them", () => {
+    const expected = canvasCentrePosition({ width: 300, height: 280 });
+    // The host holds the scene's canvas (with the painter's own React Flow, pinned at the origin) before the live layer
+    const host = document.createElement("div");
+    host.dataset.gpuCanvas = "";
+    host.getBoundingClientRect = flow.getBoundingClientRect;
+    const sheet = document.createElement("div");
+    sheet.className = "react-flow";
+    sheet.getBoundingClientRect = () => ({ x: 0, y: 0, left: 0, top: 0, width: 1024, height: 768, right: 1024, bottom: 768, toJSON: () => ({}) });
+    const sheetViewport = document.createElement("div");
+    sheetViewport.className = "react-flow__viewport";
+    sheetViewport.style.transform = "translate(0px, 0px) scale(1)";
+    sheet.appendChild(sheetViewport);
+    const live = document.createElement("div");
+    live.dataset.gpuCanvasLive = "";
+    flow.remove();
+    live.appendChild(flow);
+    host.append(sheet, live);
+    document.body.prepend(host);
+    try {
+      expect(canvasCentrePosition({ width: 300, height: 280 })).toEqual(expected);
+    } finally {
+      host.remove();
+      document.body.appendChild(flow);
+    }
+  });
+
   it("falls back to the stored viewport, then to no pan, when the canvas has not drawn one", () => {
     flow.querySelector(".react-flow__viewport")!.remove();
     useWorkflowStore.setState({ canvasViewport: { x: 100, y: 0, zoom: 0.5 } });
