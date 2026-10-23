@@ -120,8 +120,12 @@ describe("WorkflowTabs", () => {
     render(<WorkflowTabs />);
     fireEvent.click(screen.getByText("Product shots"));
     expect(mockSwitchTab).not.toHaveBeenCalled();
+    mockSetCanvasViewport.mockClear();
     fireEvent.click(screen.getByText("Summer campaign"));
     expect(mockSwitchTab).toHaveBeenCalledWith("tab-1");
+    // The view as it is now parks with the outgoing tab, before the switch.
+    expect(mockSetCanvasViewport).toHaveBeenCalledWith({ x: 1, y: 2, zoom: 3 });
+    expect(mockSetCanvasViewport.mock.invocationCallOrder[0]).toBeLessThan(mockSwitchTab.mock.invocationCallOrder[0]);
   });
 
   it("closes a clean tab straight away", () => {
@@ -203,9 +207,8 @@ describe("WorkflowTabs", () => {
     expect(screen.getByRole("button", { name: "New tab" })).toBeDisabled();
   });
 
-  it("mirrors viewport moves into the store and restores the tab's viewport on a switch", () => {
+  it("parks the current viewport with the tab on a switch and restores the incoming tab's", () => {
     const { rerender } = render(<WorkflowTabs />);
-    expect(mockUseOnViewportChange).toHaveBeenCalledWith({ onEnd: mockSetCanvasViewport });
     // First showing of a tab with no viewport of its own: it adopts the current one
     expect(mockSetViewport).not.toHaveBeenCalled();
     expect(mockSetCanvasViewport).toHaveBeenCalledWith({ x: 1, y: 2, zoom: 3 });
@@ -215,17 +218,9 @@ describe("WorkflowTabs", () => {
     expect(mockSetViewport).toHaveBeenCalledWith({ x: 10, y: 20, zoom: 1.5 });
   });
 
-  it("captures the incoming viewport before navigation effects can update the store", () => {
-    const incoming = { x: 120, y: -50, zoom: 0.7 };
-    const state = useState({ canvasViewport: incoming });
-    mockUseOnViewportChange.mockImplementationOnce(() => {
-      useLayoutEffect(() => {
-        // An outgoing navigation event can arrive during the same commit.
-        Object.assign(state, { canvasViewport: { x: 999, y: 999, zoom: 1 } });
-      }, []);
-    });
+  it("does not write the store as the view moves", () => {
     render(<WorkflowTabs />);
-    expect(mockSetViewport).toHaveBeenCalledWith(incoming);
+    expect(mockUseOnViewportChange).not.toHaveBeenCalled();
   });
 
   describe("Assets entry", () => {

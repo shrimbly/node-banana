@@ -2,7 +2,7 @@
 
 import { Film, LibraryBig, MessagesSquare, Plus, X } from "lucide-react";
 import { useEffect, useId, useMemo, type MouseEvent, type ReactNode } from "react";
-import { useOnViewportChange, useReactFlow } from "@xyflow/react";
+import { useReactFlow } from "@xyflow/react";
 import { useAgentPresence } from "@/components/agent/AgentSession";
 import { confirmStopAgent } from "@/lib/agent/client/stopGuard";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -70,9 +70,11 @@ export function WorkflowTabs() {
     }))
   );
 
-  // The viewport lives in React Flow; mirror it into the store so it parks with the tab
+  // The viewport lives in the canvas, which mirrors it into the store once it settles (GpuCanvas); a switch
+  // takes the view as it is now, so a pan just before it parks with the tab. Not mirrored per move here: each
+  // pan step would write the store, and every selector over the whole graph would run again with it.
   const { getViewport, setViewport } = useReactFlow();
-  useOnViewportChange({ onEnd: setCanvasViewport });
+  const parkViewport = () => setCanvasViewport(getViewport());
   // Capture the incoming tab's viewport during render, before React Flow's
   // effects can publish navigation events for the outgoing view.
   const tabViewport = useMemo(() => useWorkflowStore.getState().canvasViewport, [activeTabId]);
@@ -172,7 +174,9 @@ export function WorkflowTabs() {
               onClick={() => {
                 if (!tab.isActive && !confirmStopAgent("Switching workflows")) return;
                 setAppView("canvas");
-                if (!tab.isActive) switchTab(tab.id);
+                if (tab.isActive) return;
+                parkViewport();
+                switchTab(tab.id);
               }}
               disabled={busy && !tab.isActive}
               // The label always leaves room for the slot on its right, so the
@@ -214,6 +218,7 @@ export function WorkflowTabs() {
         onClick={() => {
           if (!confirmStopAgent("Opening a new tab")) return;
           setAppView("canvas");
+          parkViewport();
           newTab();
         }}
         disabled={busy}
