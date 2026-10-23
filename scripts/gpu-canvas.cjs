@@ -454,6 +454,41 @@ async function main() {
       return result;
     });
 
+    // A store write at full graph size: a marquee selecting one node more each frame, as a Mac's left drag on
+    // empty canvas does. Each write runs every store selector over the graph; the time to the next frame shows it.
+    await section('writes', async () => {
+      await page.evaluate(() => window.__gpuCanvas.fit());
+      await delay(1500);
+      if (flag('--profile')) await debug('Profiler.start');
+      const ms = await page.evaluate(async () => {
+        const ids = window.__gpuCanvas.nodeIds().slice(0, 40), times = [];
+        const frame = () => new Promise(resolve => requestAnimationFrame(() => resolve()));
+        // The write and the React work it schedules, without the wait for a frame (which on a software GPU is the
+        // scene's draw, not the page's work)
+        const task = () => new Promise(resolve => { const c = new MessageChannel(); c.port1.onmessage = () => resolve(); c.port2.postMessage(0); });
+        await frame();
+        for (let k = 1; k <= ids.length; k++) {
+          await frame();
+          const t0 = performance.now();
+          window.__gpuCanvas.select(ids.slice(0, k));
+          await task();
+          times.push(performance.now() - t0);
+        }
+        window.__gpuCanvas.select([]);
+        return times;
+      });
+      let profileTop;
+      if (flag('--profile')) {
+        const { profile } = await debug('Profiler.stop');
+        await fs.writeFile(path.join(shots, `writes-${Date.now()}.cpuprofile`), JSON.stringify(profile));
+        profileTop = heaviest(profile, 25);
+        log(`  writes: heaviest functions\n${profileTop.map(f => `    ${String(f.ms).padStart(6)} ms ${String(f.pct).padStart(5)}%  ${f.fn}`).join('\n')}`);
+      }
+      const sorted = [...ms].sort((a, b) => a - b), at = q => Math.round(sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] * 10) / 10;
+      log(`  selection write and its renders: p50 ${at(0.5)} ms, p95 ${at(0.95)} ms over ${ms.length} writes`);
+      return { ms, p50: at(0.5), p95: at(0.95), profileTop };
+    });
+
     // A change to a node not being edited, shown within 100 ms.
     await section('change', async () => {
       await home();

@@ -137,6 +137,8 @@ export interface GpuCanvasApi {
   change: (id: string, data: Record<string, unknown>) => void;
   /** A node's data as the store holds it. */
   data: (id: string) => Record<string, unknown> | null;
+  /** Selects exactly these nodes, as a marquee does (one store write). */
+  select: (ids: string[]) => void;
   /** Records the sheet state (placement, sizes, text fields, images) whenever these nodes are painted. */
   probe: (ids: string[]) => void;
   probeLog: () => Record<string, unknown>[];
@@ -734,6 +736,11 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
         const { nodes } = useWorkflowStore.getState();
         const i = indexOfNode(nodes, id);
         return i >= 0 ? (nodes[i].data as unknown as Record<string, unknown>) : null;
+      },
+      select: (ids) => {
+        const state = useWorkflowStore.getState(), next = new Set(ids);
+        const changes = state.nodes.filter((n) => !!n.selected !== next.has(n.id)).map((n) => ({ type: "select" as const, id: n.id, selected: next.has(n.id) }));
+        if (changes.length) state.onNodesChange(changes);
       },
       probe: (ids) => {
         painter?.probeIds.clear();
