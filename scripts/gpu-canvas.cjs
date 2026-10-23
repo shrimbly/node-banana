@@ -44,6 +44,8 @@ const root = path.resolve(__dirname, '..');
 // Gestures in page (css) pixels; o carries the start point and the room around it.
 const GESTURES = {
   'pan-sweep': { path: (o, u) => ({ x: o.x + o.ax * Math.sin(u * Math.PI * 6) + 30 * u, y: o.y + o.ay * Math.sin(u * Math.PI * 4) }) },
+  // The Mac's left drag on empty canvas, anywhere: a marquee (Shift held, so it is one on every platform).
+  'marquee-sweep': { synthetic: true, modifiers: ['shift'], path: (o, u) => ({ x: o.x + o.ax * Math.sin(u * Math.PI * 6) + 30 * u, y: o.y + o.ay * Math.sin(u * Math.PI * 4) }) },
   'pan-wheel': { wheel: i => ({ dx: Math.floor(i / 50) % 2 ? -23 : 24, dy: 0 }) },
   // In and out about 4x each way, as a pinch or Ctrl+wheel does.
   'zoom-wheel': { synthetic: true, modifiers: ['control'], wheel: i => ({ dx: 0, dy: Math.floor(i / 60) % 2 ? -8 : 8 }) },
@@ -58,13 +60,14 @@ function schedule(gesture, origin, { hz, seconds }) {
     events.push({ t: 60 + n * interval, type: 'move', x: origin.x + 3, y: origin.y + 3 });
     return events;
   }
-  events.push({ t: 0, type: 'move', x: origin.x, y: origin.y }, { t: 40, type: 'down', x: origin.x, y: origin.y });
+  const modifiers = gesture.modifiers;
+  events.push({ t: 0, type: 'move', x: origin.x, y: origin.y, modifiers }, { t: 40, type: 'down', x: origin.x, y: origin.y, modifiers });
   let point = origin;
   for (let i = 0; i < n; i++) {
     point = gesture.path(origin, (i + 1) / n, i);
-    events.push({ t: 80 + i * interval, type: 'move', x: point.x, y: point.y });
+    events.push({ t: 80 + i * interval, type: 'move', x: point.x, y: point.y, modifiers });
   }
-  events.push({ t: 80 + n * interval + 20, type: 'up', x: point.x, y: point.y });
+  events.push({ t: 80 + n * interval + 20, type: 'up', x: point.x, y: point.y, modifiers });
   return events;
 }
 
@@ -283,9 +286,9 @@ async function main() {
               const { type, x, y, dx, dy, modifiers = [] } = events[sent++];
               const at = { x: Math.round(x), y: Math.round(y) };
               if (type === 'wheel') contents.sendInputEvent({ type: 'mouseWheel', ...at, deltaX: dx, deltaY: dy, canScroll: true, modifiers });
-              else if (type === 'down') { down = true; contents.sendInputEvent({ type: 'mouseDown', button: 'left', ...at, clickCount: 1 }); }
-              else if (type === 'up') { down = false; contents.sendInputEvent({ type: 'mouseUp', button: 'left', ...at, clickCount: 1 }); }
-              else contents.sendInputEvent({ type: 'mouseMove', ...(down ? { button: 'left', modifiers: ['leftButtonDown'] } : {}), ...at });
+              else if (type === 'down') { down = true; contents.sendInputEvent({ type: 'mouseDown', button: 'left', ...at, clickCount: 1, modifiers }); }
+              else if (type === 'up') { down = false; contents.sendInputEvent({ type: 'mouseUp', button: 'left', ...at, clickCount: 1, modifiers }); }
+              else contents.sendInputEvent({ type: 'mouseMove', ...(down ? { button: 'left' } : {}), modifiers: [...modifiers, ...(down ? ['leftButtonDown'] : [])], ...at });
             }
             if (sent === events.length) { clearInterval(timer); resolve(); }
           }, 4);
