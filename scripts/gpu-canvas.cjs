@@ -27,7 +27,7 @@ const os = require('node:os');
 const net = require('node:net');
 const { launchElectron } = require('./lib/electron-driver.cjs');
 const { PERF_TRACE_CATEGORIES, PAGE_PROBE } = require('../electron/lib/perf-trace.cjs');
-const { readTrace, analyzeTrace, keepAnalyzed, formatReport } = require('./lib/trace-analysis.cjs');
+const { readTrace, analyzeGestures, keepAnalyzed, formatReport } = require('./lib/trace-analysis.cjs');
 const { createOsInput } = require('./lib/os-input.cjs');
 const { strayElectron } = require('./lib/processes.cjs');
 
@@ -380,13 +380,14 @@ async function main() {
         log(`  ${label}: heaviest functions\n${profileTop.map(f => `    ${String(f.ms).padStart(6)} ms ${String(f.pct).padStart(5)}%  ${f.fn}`).join('\n')}`);
       }
       const traceFile = await app.run(({ contentTracing }, file) => contentTracing.stopRecording(file), path.join(traceDir, `${label}-${Date.now()}.json`));
-      for (const event of readTrace(traceFile)) if (keepAnalyzed(event)) traced.push(event);
+      traced.push({ label, events: readTrace(traceFile).filter(keepAnalyzed) });
       await fs.rm(traceFile, { force: true });
       return { name, label, inputEvents: sent, input: spec.synthetic || !osInput ? 'synthetic' : 'os', pageStats, profileTop };
     }
     const traceResult = (traced, results) => {
-      const trace = analyzeTrace(traced);
+      const trace = analyzeGestures(traced);
       console.log(`\n${formatReport(trace)}\n`);
+      if (trace.untraced) log(`  not in the trace: ${JSON.stringify(trace.untraced)}`);
       const verdicts = Object.fromEntries(Object.entries(trace.summary).map(([label, summary]) => [label, judge(summary, report.displayHz || trace.refreshHz)]));
       return { trace, verdicts, results };
     };
@@ -698,8 +699,15 @@ async function main() {
         const parts = variant.split('+').flatMap(v => PARTS[v] || []);
         await page.evaluate(parts => { for (const part of parts) window.__gpuCanvas.diagnose(part, false); }, parts);
         for (let round = 0; round < 2; round++) for (const name of gestureNames) {
-          await page.evaluate(() => window.__gpuCanvas.fit());
-          await delay(1500);
+          // Every gesture starts from the same place: nothing selected (a marquee leaves its nodes selected,
+          // and selected nodes are live), the whole graph in view, and the view still there after the wait.
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const fitted = await page.evaluate(() => { window.__gpuCanvas.select([]); window.__gpuCanvas.fit(); return window.__gpuCanvas.view().zoom; });
+            await delay(1500);
+            const zoom = await page.evaluate(() => window.__gpuCanvas.view().zoom);
+            if (Math.abs(zoom - fitted) < 1e-6) break;
+            log(`  ${name}: the view moved from ${fitted.toFixed(3)} to ${zoom.toFixed(3)} after fitting; fitting again`);
+          }
           if (!round && name === gestureNames[0]) {
             // What the page keeps live at this view: those are what a pan moves besides the scene.
             const held = await page.evaluate(() => {
@@ -726,7 +734,7 @@ async function main() {
       await delay(2000);
       const traced = [], results = [];
       for (let round = 0; round < 2; round++) results.push(await measure('pan-sweep', 'gpu-pan', traced));
-      const trace = analyzeTrace(traced);
+      const trace = analyzeGestures(traced);
       console.log(`\n${formatReport(trace)}\n`);
       return { gpuCanvas: { trace: trace.summary, pageInputLatency: results.map(r => r.pageStats?.samples['input.latencyMs'] ?? null) } };
     });
