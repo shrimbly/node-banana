@@ -89,7 +89,7 @@ vi.mock("@/components/nodes/BaseNode", () => {
   };
 });
 
-import { VideoStitchNode } from "@/components/nodes/VideoStitchNode";
+import { VideoStitchNode, __resetStitchWritesForTests } from "@/components/nodes/VideoStitchNode";
 import { createDefaultNodeData } from "@/store/utils/nodeDefaults";
 import { createClip } from "@/lib/stitch/timeline";
 import { createAudioClip, MUSIC_CLIP_ID } from "@/lib/stitch/audioClips";
@@ -151,6 +151,7 @@ const createNodeProps = (data: Partial<VideoStitchNodeData> = {}) => ({
 
 describe("VideoStitchNode", () => {
   beforeEach(() => {
+    __resetStitchWritesForTests();
     vi.clearAllMocks();
     mockCheckEncoderSupport.mockResolvedValue(true);
     setMockStoreState();
@@ -336,6 +337,18 @@ describe("VideoStitchNode", () => {
       setGraph(twoEdges, restored);
       rerender(<VideoStitchNode {...props} data={restored} />);
 
+      expect(orderWrites()).toHaveLength(1);
+    });
+
+    it("does not write again when Undo's restored data mounts a new card (a painted copy on the GPU canvas)", () => {
+      const props = createNodeProps({ clipOrder: ["e1"] });
+      setGraph(twoEdges, props.data);
+      const { unmount } = render(<VideoStitchNode {...props} />);
+      expect(orderWrites()).toHaveLength(1);
+      unmount();
+      const restored = createNodeData({ clipOrder: ["e1"] });
+      setGraph(twoEdges, restored);
+      render(<VideoStitchNode {...props} data={restored} />);
       expect(orderWrites()).toHaveLength(1);
     });
 

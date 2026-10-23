@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { CircleAlert, Film, LibraryBig, TriangleAlert, VolumeX, X } from "lucide-react";
 import { NodeProps, Node } from "@xyflow/react";
 import { NodeShell } from "./NodeShell";
@@ -63,6 +63,12 @@ const LOOP_OPTIONS = [
   { value: "3", label: "3×" },
 ];
 const SUMMARY_ICON = <Film size={14} strokeWidth={1.75} />;
+/** The sequence each Edit Video node's card last wrote back (see the write-back effect). */
+const lastWrittenOrder = new Map<string, string>();
+
+export function __resetStitchWritesForTests(): void {
+  lastWrittenOrder.clear();
+}
 
 export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNodeType>) {
   const nodeData = data;
@@ -132,7 +138,6 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
   // The draft only says when to look. The write is built from one store
   // snapshot, because the data prop catches up with the store a render after
   // the edges do, and a patch built from it would replace a newer timeline.
-  const lastWrittenRef = useRef<string | null>(null);
   useEffect(() => {
     const state = useWorkflowStore.getState();
     const node = state.nodes.find((n) => n.id === id);
@@ -156,10 +161,11 @@ export function VideoStitchNode({ id, data, selected }: NodeProps<VideoStitchNod
     // Skip a sequence this card already wrote. Undo can restore the data from
     // before that write; every reader reconciles on read, so leaving it is
     // harmless, while writing again would put a new step on the undo stack
-    // each time and Undo could never get past it.
+    // each time and Undo could never get past it. Kept per node, not per
+    // mount: on the GPU canvas the node is mounted afresh for each paint.
     const key = current.join("\n");
-    if (lastWrittenRef.current === key) return;
-    lastWrittenRef.current = key;
+    if (lastWrittenOrder.get(id) === key) return;
+    lastWrittenOrder.set(id, key);
     deriveNodeData(id, stitchOrderPatch(stored, fresh.timeline));
   }, [draft, id, deriveNodeData]);
 
