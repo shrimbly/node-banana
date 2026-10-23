@@ -793,7 +793,7 @@ export class Painter {
     const renderer = this.scene.renderer;
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.stagingGl);
-    paintElement(gl, this.sheet.element);
+    paintElement(gl, this.sheet.element, Math.ceil(this.sheet.width * this.scene.scale), Math.ceil(this.sheet.height * this.scene.scale));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);

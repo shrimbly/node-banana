@@ -18,7 +18,7 @@ import { controlsOverhang, headersUnder, NODE_HEADER, SceneGraph } from "@/lib/g
 import { Scene, type View } from "@/lib/gpuCanvas/scene";
 import { holdOverScrollArea, type SceneWheel } from "@/lib/gpuCanvas/wheel";
 import { atlasBudget, readGpuInfo } from "@/lib/gpuCanvas/budget";
-import { detectHtmlInCanvas } from "@/lib/gpuCanvas/htmlInCanvas";
+import { detectHtmlInCanvas, enableLayoutSubtree } from "@/lib/gpuCanvas/htmlInCanvas";
 import { openPaintStore } from "@/lib/gpuCanvas/paintCache";
 import { GpuCanvasStats } from "@/lib/gpuCanvas/stats";
 import { getLowDetailSettings } from "@/components/nodes/lowDetail";
@@ -152,7 +152,7 @@ export interface GpuCanvasApi {
   info: () => ReturnType<Scene["info"]> & { budget: ReturnType<typeof atlasBudget> | null; htmlInCanvas: boolean };
   /**
    * For a runner isolating frame-rate costs: takes a part of the page away
-   * (on = false) or puts it back. "subtree" is the canvas's layoutsubtree
+   * (on = false) or puts it back. "subtree" is the canvas's layoutsubtree (content="drawable")
    * attribute, "sheet" the painter's sheet inside it, "live" the live layer,
    * "chrome" everything on the page but the canvas and the live layer, "draw" the scene's
    * drawing (the view and everything following it still run).
@@ -780,7 +780,7 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
         diagnosed[part] = on ? "" : `${selector} { display: none !important; }`;
         diagnoseStyle.textContent = Object.values(diagnosed).join("\n");
       }
-      else if (part === "subtree") canvas!.toggleAttribute("layoutsubtree", on);
+      else if (part === "subtree") enableLayoutSubtree(canvas!, on);
       else if (part === "sheet" && sheetElement) {
         if (on) canvas!.appendChild(sheetElement);
         else sheetElement.remove();

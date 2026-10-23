@@ -180,7 +180,8 @@ async function main() {
   let app;
   try {
     log('Launching…');
-    app = await launchElectron({ executable: require('electron'), args: [...flags, root], cwd: root,
+    // --electron <binary> runs another Electron (one on a newer Chromium) on the same app.
+    app = await launchElectron({ executable: option('--electron', require('electron')), args: [...flags, root], cwd: root,
       env: { ...process.env, NODE_BANANA_ELECTRON_USER_DATA: profile, NODE_BANANA_ELECTRON_PORT: String(port) } });
     const { page } = app;
     await app.run(({ dialog }) => { dialog.showMessageBoxSync = () => 1; });

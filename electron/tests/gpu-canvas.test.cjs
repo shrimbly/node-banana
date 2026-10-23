@@ -19,8 +19,9 @@ test('WebGL may fall back to SwiftShader, so a machine without a usable GPU stil
   assert.ok('enable-unsafe-swiftshader' in line.switches);
 });
 
-test('NODE_BANANA_HTML_IN_CANVAS=0 leaves HTML-in-Canvas off for one run, and keeps the software fallback', () => {
+test('NODE_BANANA_HTML_IN_CANVAS=0 turns HTML-in-Canvas off for one run (Chromium 158 has it on by default), and keeps the software fallback', () => {
   const line = commandLine();
   assert.equal(applyGpuCanvasSwitches(line, { env: { NODE_BANANA_HTML_IN_CANVAS: '0' } }), false);
-  assert.deepEqual(Object.keys(line.switches), ['enable-unsafe-swiftshader']);
+  assert.deepEqual(Object.keys(line.switches), ['enable-unsafe-swiftshader', 'disable-blink-features']);
+  assert.equal(line.switches['disable-blink-features'], 'CanvasDrawElement');
 });

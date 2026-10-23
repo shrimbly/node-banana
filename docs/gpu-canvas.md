@@ -13,7 +13,12 @@ React Flow canvas it replaced, whose behaviour it was built to match.
 
 It needs WebGL2. Painting nodes also needs HTML-in-Canvas, which Chromium
 152 ships behind the `CanvasDrawElement` Blink feature
-(`detectHtmlInCanvas`, `src/lib/gpuCanvas/htmlInCanvas.ts`):
+(`detectHtmlInCanvas`, `src/lib/gpuCanvas/htmlInCanvas.ts`). Chromium 155
+renamed it (`texElementSubImage2D` into storage made first, the canvas's
+`content="drawable"` and the painted element's `drawable` in place of
+`layoutsubtree`); the adapter uses whichever names the page has, and was
+checked on Electron 46 (Chromium 158), where it is on by default, with the
+same paint, reopen and fidelity results as Electron 44:
 
 - **Desktop app**: every launch appends
   `--enable-blink-features=CanvasDrawElement` and
@@ -23,9 +28,10 @@ It needs WebGL2. Painting nodes also needs HTML-in-Canvas, which Chromium
   without it such a machine gets no WebGL2 at all (checked on Electron 44
   with `--disable-gpu`). A real GPU is used whenever there is one; on
   software, the canvas says once a session that it may be slow.
-  `NODE_BANANA_HTML_IN_CANVAS=0` leaves HTML-in-Canvas off for one launch.
+  `NODE_BANANA_HTML_IN_CANVAS=0` turns HTML-in-Canvas off for one launch
+  (`--disable-blink-features`, since Chromium 158 has it on by default).
 - **Browser**, or any page without HTML-in-Canvas (an Electron whose API
-  changed, see the Chromium 155 rename): the same canvas, with no painter.
+  changed again): the same canvas, with no painter.
   The nodes in view are live components instead of pictures, up to
   `LIVE_MODE_MAX_NODES` (400) and down to the low-detail zoom (Settings ›
   Canvas, 25% unless changed; 15% when low detail is off). Further out, or
