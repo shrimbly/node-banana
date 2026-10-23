@@ -152,7 +152,7 @@ export interface GpuCanvasApi {
    * "chrome" everything on the page but the canvas and the live layer, "draw" the scene's
    * drawing (the view and everything following it still run).
    */
-  diagnose: (part: "subtree" | "sheet" | "live" | "chrome" | "draw", on: boolean) => void;
+  diagnose: (part: "subtree" | "sheet" | "live" | "chrome" | "draw" | "navigator" | "groups" | "marquee", on: boolean) => void;
 }
 
 declare global {
@@ -764,8 +764,17 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
     };
     const sheetElement = canvas.querySelector<HTMLElement>("[data-gpu-canvas-sheet]");
     const hidden = new Map<HTMLElement, string>();
-    function diagnose(part: "subtree" | "sheet" | "live" | "chrome" | "draw", on: boolean) {
+    const diagnosed: Record<string, string> = {};
+    const diagnoseStyle = document.createElement("style");
+    document.head.appendChild(diagnoseStyle);
+    function diagnose(part: "subtree" | "sheet" | "live" | "chrome" | "draw" | "navigator" | "groups" | "marquee", on: boolean) {
       if (part === "draw") scene.drawing = on;
+      // Parts of the live layer: the navigator, the group headers, the marquee's box.
+      else if (part === "navigator" || part === "groups" || part === "marquee") {
+        const selector = { navigator: '[data-testid="canvas-navigator"]', groups: ".group-controls-overlay", marquee: "[data-gpu-canvas-marquee]" }[part];
+        diagnosed[part] = on ? "" : `${selector} { display: none !important; }`;
+        diagnoseStyle.textContent = Object.values(diagnosed).join("\n");
+      }
       else if (part === "subtree") canvas!.toggleAttribute("layoutsubtree", on);
       else if (part === "sheet" && sheetElement) {
         if (on) canvas!.appendChild(sheetElement);
@@ -788,6 +797,7 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
     }
 
     return () => {
+      diagnoseStyle.remove();
       // A node or connection drag still running ends first (its cancel path: the auto-pan loop, the connection
       // drag store and the held `canvas-interacting`), while the live layer and the store subscriptions are there.
       scene.cancelGesture();

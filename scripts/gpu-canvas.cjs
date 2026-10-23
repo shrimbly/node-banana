@@ -17,7 +17,7 @@
 // --profile records a CPU profile of each gesture through Electron's own
 // debugger (<output>/<label>.cpuprofile) and prints its heaviest functions.
 // The debugger observes the page, so leave it off for comparisons.
-// --scene-variants base,subtree,sheet,live,chrome,draw,bare repeats the scene
+// --scene-variants base,subtree,sheet,live,chrome,draw,navigator,groups,marquee,bare repeats the scene
 // gestures with parts of the page taken away, to find what costs frames
 // (draw keeps everything but the scene's drawing: the page's own costs on a slow GPU).
 const assert = require('node:assert/strict');
@@ -692,7 +692,7 @@ async function main() {
       // --scene-variants base,subtree,sheet,live,chrome,draw,bare: repeat the gestures with a part of the page taken away
       // (bare takes all of them; a+b takes both), to find what costs frames. Labels carry the variant.
       const variants = option('--scene-variants', 'base').split(',');
-      const PARTS = { subtree: ['sheet', 'subtree'], sheet: ['sheet'], live: ['live'], chrome: ['chrome'], draw: ['draw'], bare: ['sheet', 'subtree', 'live', 'chrome'] };
+      const PARTS = { subtree: ['sheet', 'subtree'], sheet: ['sheet'], live: ['live'], chrome: ['chrome'], draw: ['draw'], navigator: ['navigator'], groups: ['groups'], marquee: ['marquee'], bare: ['sheet', 'subtree', 'live', 'chrome'] };
       const traced = [], results = [];
       for (const variant of variants) {
         const parts = variant.split('+').flatMap(v => PARTS[v] || []);
