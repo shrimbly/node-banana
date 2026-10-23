@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import { Check, Copy, Hourglass } from "lucide-react";
 import type { PendingGenerationTask } from "@/types";
 import { pollProviderName } from "@/store/execution/pollTaskCompletion";
+import { useIsPaintedNode } from "../paintMode";
 import { cn } from "./cn";
 import { PanelButton } from "./Field";
 
@@ -15,6 +16,17 @@ export function sentAgo(submittedAt: number, now: number): string {
   const hours = Math.floor(minutes / 60);
   if (hours < 48) return `${hours} h ago`;
   return `${Math.floor(hours / 24)} days ago`;
+}
+
+/**
+ * When a request was sent, as a date and clock time ("23 Oct, 14:02"). A
+ * painted card is a picture kept on disk, so it says this rather than a
+ * relative time that would go stale in it.
+ */
+export function sentAt(submittedAt: number): string {
+  const sent = new Date(submittedAt);
+  const date = sent.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+  return `${date}, ${sent.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`;
 }
 
 /** The time now, again every `ms`, so a relative time keeps up. */
@@ -49,6 +61,7 @@ export function PendingTaskNotice({
   className?: string;
 }) {
   const now = useNow(30_000);
+  const painted = useIsPaintedNode();
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -76,7 +89,7 @@ export function PendingTaskNotice({
     >
       {!compact && <Hourglass size={20} strokeWidth={1.5} className="text-amber-300/90 mb-0.5" aria-hidden />}
       <span className="text-node text-neutral-200">May still be running on {pollProviderName(task.provider)}</span>
-      <span className="text-node text-neutral-500 tabular-nums">Sent {sentAgo(task.submittedAt, now)}</span>
+      <span className="text-node text-neutral-500 tabular-nums">Sent {painted ? sentAt(task.submittedAt) : sentAgo(task.submittedAt, now)}</span>
       <div className="nodrag nopan flex items-center gap-1 max-w-full min-w-0">
         <span className="font-mono text-[9px] text-neutral-400 truncate select-text cursor-text" title={`Request ${task.taskId}`}>
           {task.taskId}
