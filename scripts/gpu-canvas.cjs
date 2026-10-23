@@ -326,6 +326,33 @@ async function main() {
       const total = [...self.values()].reduce((a, b) => a + b, 0);
       return [...self.entries()].sort((a, b) => b[1] - a[1]).slice(0, count).map(([fn, ms]) => ({ fn, ms: Math.round(ms), pct: Math.round(1000 * ms / total) / 10 }));
     }
+    // Inclusive time per function over the samples inside the page-time windows, the profile's clock tied to the
+    // page's by the nbCalibrate marker that started at `calibration`.
+    function inclusiveWithin(profile, calibration, windows, count) {
+      const byNode = new Map(profile.nodes.map(node => [node.id, node]));
+      const parent = new Map();
+      for (const node of profile.nodes) for (const child of node.children ?? []) parent.set(child, node.id);
+      const key = ({ callFrame: f }) => `${f.functionName || '(anonymous)'} ${f.url.split('/').pop()}:${f.lineNumber + 1}:${f.columnNumber + 1}`;
+      const times = [];
+      let t = profile.startTime;
+      for (const delta of profile.timeDeltas) times.push(t += delta);
+      const marked = profile.samples.findIndex(id => { for (let n = id; n !== undefined; n = parent.get(n)) if (byNode.get(n).callFrame.functionName === 'nbCalibrate') return true; return false; });
+      if (marked < 0) return [];
+      const offset = times[marked] / 1000 - calibration;
+      const inside = ms => windows.some(([a, b]) => ms >= a && ms <= b);
+      const total = new Map();
+      for (let i = 0; i < profile.samples.length; i++) {
+        if (!inside(times[i] / 1000 - offset)) continue;
+        const ms = (profile.timeDeltas[i + 1] ?? 0) / 1000, seen = new Set();
+        for (let n = profile.samples[i]; n !== undefined; n = parent.get(n)) {
+          const k = key(byNode.get(n));
+          if (seen.has(k) || /^\((root|idle|program)\)/.test(k)) continue;
+          seen.add(k);
+          total.set(k, (total.get(k) ?? 0) + ms);
+        }
+      }
+      return [...total.entries()].sort((a, b) => b[1] - a[1]).slice(0, count).map(([fn, ms]) => ({ fn, ms: Math.round(ms) }));
+    }
     async function measure(name, label, traced) {
       const spec = GESTURES[name];
       const origin = await emptyPoint();
@@ -460,8 +487,14 @@ async function main() {
       await page.evaluate(() => window.__gpuCanvas.fit());
       await delay(1500);
       if (flag('--profile')) await debug('Profiler.start');
-      const ms = await page.evaluate(async () => {
-        const ids = window.__gpuCanvas.nodeIds().slice(0, 40), times = [];
+      // Profile samples are matched to the writes by a busy marker of known page time.
+      const calibration = flag('--profile') ? await page.evaluate(() => {
+        const at = performance.now();
+        (function nbCalibrate() { while (performance.now() - at < 30); })();
+        return at;
+      }) : null;
+      const { ms, sync, windows, marquee, idle } = await page.evaluate(async () => {
+        const ids = window.__gpuCanvas.nodeIds().slice(0, 40), times = [], sync = [], windows = [], marquee = [];
         const frame = () => new Promise(resolve => requestAnimationFrame(() => resolve()));
         // The write and the React work it schedules, without the wait for a frame (which on a software GPU is the
         // scene's draw, not the page's work)
@@ -471,22 +504,50 @@ async function main() {
           await frame();
           const t0 = performance.now();
           window.__gpuCanvas.select(ids.slice(0, k));
+          sync.push(performance.now() - t0);
           await task();
-          times.push(performance.now() - t0);
+          const t1 = performance.now();
+          times.push(t1 - t0);
+          windows.push([t0, t1]);
         }
         window.__gpuCanvas.select([]);
-        return times;
+        // The same steps inside a marquee, which draws what it takes and makes it live only as it ends
+        await frame();
+        window.__gpuCanvas.marquee(true);
+        for (let k = 1; k <= ids.length; k++) {
+          await frame();
+          const t0 = performance.now();
+          window.__gpuCanvas.select(ids.slice(0, k));
+          await task();
+          const t1 = performance.now();
+          marquee.push(t1 - t0);
+          windows.push([t0, t1]);
+        }
+        window.__gpuCanvas.marquee(false);
+        window.__gpuCanvas.select([]);
+        // The same wait with no write: what the page does in that time anyway (the painter, a frame)
+        const idle = [];
+        for (let k = 1; k <= ids.length; k++) {
+          await frame();
+          const t0 = performance.now();
+          await task();
+          idle.push(performance.now() - t0);
+        }
+        return { ms: times, sync, windows, marquee, idle };
       });
       let profileTop;
       if (flag('--profile')) {
         const { profile } = await debug('Profiler.stop');
         await fs.writeFile(path.join(shots, `writes-${Date.now()}.cpuprofile`), JSON.stringify(profile));
-        profileTop = heaviest(profile, 25);
-        log(`  writes: heaviest functions\n${profileTop.map(f => `    ${String(f.ms).padStart(6)} ms ${String(f.pct).padStart(5)}%  ${f.fn}`).join('\n')}`);
+        profileTop = inclusiveWithin(profile, calibration, windows.slice(0, ms.length), 40);
+        const marqueeTop = inclusiveWithin(profile, calibration, windows.slice(ms.length), 40);
+        log(`  writes: inclusive time inside the selection writes\n${profileTop.map(f => `    ${String(f.ms).padStart(6)} ms  ${f.fn}`).join('\n')}`);
+        log(`  writes: inclusive time inside the marquee steps\n${marqueeTop.map(f => `    ${String(f.ms).padStart(6)} ms  ${f.fn}`).join('\n')}`);
       }
-      const sorted = [...ms].sort((a, b) => a - b), at = q => Math.round(sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] * 10) / 10;
-      log(`  selection write and its renders: p50 ${at(0.5)} ms, p95 ${at(0.95)} ms over ${ms.length} writes`);
-      return { ms, p50: at(0.5), p95: at(0.95), profileTop };
+      const quantile = (list, q) => { const sorted = [...list].sort((a, b) => a - b); return Math.round(sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))] * 10) / 10; };
+      log(`  selection write and its renders: p50 ${quantile(ms, 0.5)} ms, p95 ${quantile(ms, 0.95)} ms over ${ms.length} writes; the write itself p50 ${quantile(sync, 0.5)} ms`);
+      log(`  marquee step and its renders: p50 ${quantile(marquee, 0.5)} ms, p95 ${quantile(marquee, 0.95)} ms; the same wait with no write p50 ${quantile(idle, 0.5)} ms`);
+      return { ms, sync, marquee, p50: quantile(ms, 0.5), p95: quantile(ms, 0.95), syncP50: quantile(sync, 0.5), marqueeP50: quantile(marquee, 0.5), marqueeP95: quantile(marquee, 0.95), idle, idleP50: quantile(idle, 0.5), profileTop };
     });
 
     // A change to a node not being edited, shown within 100 ms.

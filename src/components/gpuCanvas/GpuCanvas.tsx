@@ -139,6 +139,8 @@ export interface GpuCanvasApi {
   data: (id: string) => Record<string, unknown> | null;
   /** Selects exactly these nodes, as a marquee does (one store write). */
   select: (ids: string[]) => void;
+  /** Holds the canvas as a marquee would (selections are drawn, not made live, until it ends). */
+  marquee: (active: boolean) => void;
   /** Records the sheet state (placement, sizes, text fields, images) whenever these nodes are painted. */
   probe: (ids: string[]) => void;
   probeLog: () => Record<string, unknown>[];
@@ -354,12 +356,14 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
     live.painter = painter;
     engineRef.current = { painter, scene };
 
-    // Selected nodes are live; store selection follows clicks.
+    // Selected nodes are live; store selection follows clicks. Mid-marquee they are only drawn selected: each
+    // step would otherwise mount the nodes it took, and a sweep across a zoomed-out graph takes hundreds.
     const selectedIds = new Set(store.nodes.filter((n) => n.selected).map((n) => n.id));
     const showSelection = () => {
       scene.setSelected([...selectedIds].map((id) => scene.graph.indexOf.get(id)).filter((i): i is number => i != null));
-      live.wantOnly("selected", selectedIds);
+      if (!editor.marqueeing) live.wantOnly("selected", selectedIds);
     };
+    editor.onMarqueeEnd = showSelection;
     showSelection();
 
     // React Flow's SelectionListener: WorkflowCanvas hears of every change in the selected nodes or
@@ -745,6 +749,10 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
         const state = useWorkflowStore.getState(), next = new Set(ids);
         const changes = state.nodes.filter((n) => !!n.selected !== next.has(n.id)).map((n) => ({ type: "select" as const, id: n.id, selected: next.has(n.id) }));
         if (changes.length) state.onNodesChange(changes);
+      },
+      marquee: (active) => {
+        editor.marqueeing = active;
+        if (!active) editor.onMarqueeEnd?.();
       },
       probe: (ids) => {
         painter?.probeIds.clear();

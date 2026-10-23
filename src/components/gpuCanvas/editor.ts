@@ -183,6 +183,10 @@ export class Editor {
   private offs: (() => void)[] = [];
   /** Node, wire and marquee drags holding `canvas-interacting` (holdInteracting). */
   private interactingHolds = 0;
+  /** A marquee is under way: the nodes it takes are drawn selected but go live only as it ends (onMarqueeEnd). */
+  marqueeing = false;
+  /** Called as a marquee ends, with its selection in the store. */
+  onMarqueeEnd: (() => void) | null = null;
   /** Called as a drag lets go of `canvas-interacting` (the canvas resets its pan tracker, as classic's handleNodeDragEnd). */
   onInteractingEnd: (() => void) | null = null;
   /** Tab through the nodes and connections (keyboardFocus.ts). */
@@ -1007,6 +1011,7 @@ export class Editor {
     scene.canvas.style.cursor = "pointer";
     // A gesture like a drag: work that waits for a quiet canvas (the desktop recovery checkpoint) waits for it
     this.holdInteracting(true);
+    this.marqueeing = true;
     // Live nodes are judged by their cards as they show now, as NodeMarqueeSelection measures the DOM as it starts.
     const cards = this.liveCards();
     const update = (at: { x: number; y: number }) => {
@@ -1043,6 +1048,8 @@ export class Editor {
       offView();
       this.marquee.style.display = "none";
       this.holdInteracting(false);
+      this.marqueeing = false;
+      this.onMarqueeEnd?.();
     };
     return {
       move: (event) => update(scene.local(event)),
