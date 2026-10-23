@@ -57,6 +57,8 @@ export class GpuCanvasStats {
   longFrames: { ms: number; at: number; phase: string }[] = [];
   /** The browser's 50 longest long-animation-frame entries over LOAF_MS: where the time went, and the slowest scripts. */
   loafs: LongAnimationFrame[] = [];
+  /** Workflow store writes by the keys they changed (and node writes by node count), so a gesture that writes shows. */
+  storeWrites: Record<string, number> = {};
   private observer?: PerformanceObserver;
 
   /** Starts recording long animation frames, where the browser reports them. */
@@ -112,6 +114,12 @@ export class GpuCanvasStats {
     this.jsMs = [];
     this.longFrames = [];
     this.loafs = [];
+    this.storeWrites = {};
+  }
+
+  /** Counts a store write under its name. */
+  storeWrite(name: string) {
+    this.storeWrites[name] = (this.storeWrites[name] ?? 0) + 1;
   }
 
   summary() {
@@ -123,6 +131,7 @@ export class GpuCanvasStats {
       jsMs: percentiles(this.jsMs),
       longFrames: this.longFrames,
       loafs: this.loafs,
+      storeWrites: this.storeWrites,
       samples: Object.fromEntries(Object.entries(this.samples).map(([name, values]) => [name, percentiles(values)])),
     };
   }

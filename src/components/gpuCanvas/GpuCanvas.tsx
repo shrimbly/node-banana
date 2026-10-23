@@ -190,6 +190,27 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
     if (!host || !canvas || !liveElement) return;
     const stats = new GpuCanvasStats();
     stats.observeLongFrames();
+    // What writes the store, for runners: a write mid-gesture re-runs every selector over the whole graph.
+    const unsubscribeStoreWrites = useWorkflowStore.subscribe((state, previous) => {
+      const keys = (Object.keys(state) as (keyof typeof state)[]).filter((key) => key !== "nodes" && state[key] !== previous[key]);
+      if (keys.length) stats.storeWrite(keys.sort().join(","));
+    });
+    const unsubscribeNodeWrites = subscribeToWorkflowNodeChanges((changes) => {
+      if (changes.added.size || changes.removed.size) return stats.storeWrite("nodes:added/removed");
+      const fields = new Set<string>();
+      for (const id of changes.updated) {
+        const before = changes.previous[indexOfNode(changes.previous, id)], after = changes.nodes[indexOfNode(changes.nodes, id)];
+        if (!before || !after) continue;
+        const a = after as unknown as Record<string, unknown>, b = before as unknown as Record<string, unknown>;
+        for (const key of Object.keys(a)) {
+          if (key === "data") {
+            const ad = a.data as Record<string, unknown>, bd = b.data as Record<string, unknown>;
+            for (const field of Object.keys(ad)) if (ad[field] !== bd[field]) fields.add(`data.${field}`);
+          } else if (a[key] !== b[key]) fields.add(key);
+        }
+      }
+      stats.storeWrite(`nodes(${changes.updated.size}):${[...fields].sort().join(",")}`);
+    });
     const store = useWorkflowStore.getState();
     const graph = new SceneGraph(store.nodes, store.edges, store.groups);
     // Held while the user navigates, as today's canvas does, so work that
@@ -777,6 +798,8 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       unsubscribeView();
       engineRef.current = null;
       if (window.__gpuCanvas?.stats === stats) delete window.__gpuCanvas;
+      unsubscribeStoreWrites();
+      unsubscribeNodeWrites();
       interacting.dispose();
       setGpuCanvasBridge(null);
       editor.dispose();

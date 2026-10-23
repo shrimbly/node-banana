@@ -339,6 +339,9 @@ async function main() {
         return seen && Math.abs(seen.x - x) <= 1.5 && Math.abs(seen.y - y) <= 1.5; }, last, { message: `${name} to reach the page` });
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       const pageStats = await page.evaluate(() => window.__gpuCanvas?.stats.summary() ?? null);
+      // A store write mid-gesture re-runs every selector over the graph: name them.
+      const writes = Object.entries(pageStats?.storeWrites ?? {}).sort((a, b) => b[1] - a[1]);
+      if (writes.length) log(`  ${label}: store writes ${writes.map(([what, n]) => `${n}× ${what}`).join(' | ')}`);
       let profileTop;
       if (flag('--profile')) {
         const { profile } = await debug('Profiler.stop');
