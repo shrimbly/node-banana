@@ -8,7 +8,8 @@
 //   node scripts/gpu-canvas.cjs --output gpu-canvas-mac.json
 //
 // --checks (open,reopen,pan,change,fidelity,tiers,scene,latency) picks checks.
-// --copies N tiles the stress workflow N times (17 is about 5,100 nodes).
+// --copies N tiles the stress workflow N times (17 is about 5,100 nodes); --nodes N keeps the first N of them
+// (tiling as many copies as that takes), and --hidden-edges hides every connection, as the FAB's button does.
 // --input os (the default on Windows and the Mac) moves the real cursor at
 // --hz (1000) in a maximised window: do not touch the mouse while it runs.
 // --chromium-flags adds switches, e.g. "--no-sandbox --use-angle=swiftshader"
@@ -88,7 +89,7 @@ function judge(summary, refreshHz) {
 
 // The stress workflow tiled `copies` times, its photos as files in the
 // project's inputs/ folder and referenced the way a saved workflow opens them.
-async function buildFixture(dir, copies) {
+async function buildFixture(dir, copies, { keep = Infinity, hiddenEdges = false } = {}) {
   const sharp = require('sharp');
   const base = JSON.parse(await fs.readFile(path.join(root, 'examples/stress-workflow.json'), 'utf8'));
   const sources = (await fs.readdir(path.join(root, 'examples/sample-images'))).filter(name => /\.jpe?g$/i.test(name)).sort();
@@ -149,13 +150,17 @@ async function buildFixture(dir, copies) {
       Object.assign(node.data, { image, imageRef: new URLSearchParams(image.split('?')[1]).get('imageId'), contentType: 'image' });
     }
   }
-  return { ...base, id: `gpu-canvas-${copies}`, name: `GPU canvas ${copies} copies`, directoryPath: dir, nodes, edges, groups };
+  const kept = nodes.slice(0, keep), keptIds = new Set(kept.map(node => node.id));
+  const keptEdges = edges.filter(edge => keptIds.has(edge.source) && keptIds.has(edge.target));
+  if (hiddenEdges) for (const edge of keptEdges) edge.data = { ...edge.data, hidden: true };
+  return { ...base, id: `gpu-canvas-${copies}`, name: `GPU canvas ${copies} copies`, directoryPath: dir, nodes: kept, edges: keptEdges, groups };
 }
 
 async function main() {
   const liveMode = flag('--live');
   const checks = option('--checks', liveMode ? 'open,reopen,pan,writes,scene,latency' : 'open,reopen,pan,change,fidelity,tiers,scene,latency').split(',');
-  const copies = Number(option('--copies', 17));
+  const keep = option('--nodes') ? Number(option('--nodes')) : Infinity;
+  const copies = Number.isFinite(keep) ? Math.ceil(keep / 300) : Number(option('--copies', 17));
   const osInput = option('--input', ['win32', 'darwin'].includes(process.platform) ? 'os' : 'synthetic') === 'os' ? createOsInput() : undefined;
   assert.ok(!osInput || osInput.available, '--input os needs Windows or macOS');
   const hz = Number(option('--hz', osInput ? 1000 : 125));
@@ -176,7 +181,7 @@ async function main() {
   await new Promise(resolve => probe.close(resolve));
   log(`Building the fixture (${copies} copies)…`);
   const project = path.join(profile, 'project');
-  const workflow = await buildFixture(project, copies);
+  const workflow = await buildFixture(project, copies, { keep, hiddenEdges: flag('--hidden-edges') });
   const workflowText = JSON.stringify(workflow);
 
   const report = { date: new Date().toISOString(), platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model, input: osInput ? 'os' : 'synthetic', inputHz: hz,
