@@ -36,6 +36,11 @@ const FLAG_HEADER_LIVE = 64;
  * and its own length (1), the edge's x range for the gradient (2), unused (3).
  */
 const EDGE_STRIDE = 20;
+/**
+ * Spare instances laid out after each edge's pieces: a route that gains a piece or a stem (a node turning live or
+ * selected, an end moved) is written in place, instead of laying out every edge's buffer again.
+ */
+const EDGE_SPARE_PIECES = 2;
 const EDGE_SEGMENTS = 24;
 const EDGE_SELECTED = 1, EDGE_HOVERED = 2, EDGE_ACTIVE = 4, EDGE_HIDDEN = 8, EDGE_DASHED = 16, EDGE_STEM = 32;
 /**
@@ -777,7 +782,7 @@ export class Scene {
     for (let e = 0; e < graph.edges.length; e++) {
       const route = this.routes[e] ?? (this.routes[e] = this.route(e));
       this.routeOffset[e] = total;
-      this.routeCount[e] = drawnPieces(route).length + route.stems.length;
+      this.routeCount[e] = drawnPieces(route).length + route.stems.length + EDGE_SPARE_PIECES;
       total += this.routeCount[e];
     }
     this.edgeData = new Float32Array(Math.max(1, total) * EDGE_STRIDE);
@@ -844,6 +849,11 @@ export class Scene {
       }
       at += EDGE_STRIDE;
     }
+    // The slots it does not use draw nothing.
+    for (const end = (this.routeOffset[e] + this.routeCount[e]) * EDGE_STRIDE; at < end; at += EDGE_STRIDE) {
+      this.edgeData.fill(0, at, at + EDGE_STRIDE);
+      this.edgeData[at + 11] = EDGE_HIDDEN;
+    }
     // A connection with a missing handle has no extent: nothing finds it.
     if (route.unresolved) this.edgeBounds.set([Infinity, Infinity, -Infinity, -Infinity], e * 4);
     else this.edgeBounds.set([minX, minY, maxX, maxY], e * 4);
@@ -868,7 +878,7 @@ export class Scene {
     for (const e of list) {
       if (e < 0 || e >= this.graph.edges.length) continue;
       const route = this.route(e);
-      if (drawnPieces(route).length + route.stems.length !== this.routeCount[e]) resized = true;
+      if (drawnPieces(route).length + route.stems.length > this.routeCount[e]) resized = true;
       this.routes[e] = route;
     }
     // A route with more or fewer segments than before moves every edge after it in the buffer: rebuilt once, before the next draw or read.

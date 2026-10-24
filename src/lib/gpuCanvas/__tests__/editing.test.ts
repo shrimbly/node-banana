@@ -203,18 +203,33 @@ describe("connections and painted nodes", () => {
     const route = { segments: pathToCubics("M0,0 L50,0 L50,50 L100,50"), stems: [{ segment: pathToCubics("M0,0 L-20,0")[0], width: 6 }], ends: [0, 0, 100, 50], width: 2, dashed: false, hidden: false };
     const fake = {
       routes: [route], graph: { edges: [{ source: 0, target: 1, color: [1, 1, 1] }] }, edgeLive: new Set(), edgeHeld: -1, edgeSelected: new Set(), hoveredEdge: -1, selected: new Set(),
-      routeOffset: [0], edgeData: new Float32Array(4 * 20), edgeBounds: new Float32Array(4),
+      routeOffset: [0], routeCount: [4], edgeData: new Float32Array(4 * 20), edgeBounds: new Float32Array(4),
     };
     (Scene.prototype as unknown as { writeEdge(e: number): void }).writeEdge.call(fake, 0);
     const caps = [0, 1, 2, 3].map((k) => fake.edgeData[k * 20 + 11] & (EDGE_CAP_START | EDGE_CAP_END));
     expect(caps).toEqual([EDGE_CAP_START, 0, EDGE_CAP_END, EDGE_CAP_START | EDGE_CAP_END]);
   });
 
+  it("hides the spare slots after a connection's pieces", () => {
+    const route = { segments: pathToCubics("M0,0 L50,0"), stems: [], ends: [0, 0, 50, 0], width: 2, dashed: false, hidden: false };
+    const fake = {
+      routes: [route], graph: { edges: [{ source: 0, target: 1, color: [1, 1, 1] }] }, edgeLive: new Set(), edgeHeld: -1, edgeSelected: new Set(), hoveredEdge: -1, selected: new Set(),
+      routeOffset: [0], routeCount: [3], edgeData: new Float32Array(3 * 20).fill(7), edgeBounds: new Float32Array(4),
+    };
+    (Scene.prototype as unknown as { writeEdge(e: number): void }).writeEdge.call(fake, 0);
+    const hidden = 8;
+    expect(fake.edgeData[11] & hidden).toBe(0);
+    for (const k of [1, 2]) {
+      expect(fake.edgeData[k * 20 + 11]).toBe(hidden);
+      expect(fake.edgeData[k * 20 + 12]).toBe(0);
+    }
+  });
+
   it("draws a long curve in pieces, continuous and capped at its ends only", () => {
     const route = { segments: [[0, 0, 400, 0, 0, 300, 400, 300]], stems: [], ends: [0, 0, 400, 300], width: 2, dashed: false, hidden: false };
     const fake = {
       routes: [route], graph: { edges: [{ source: 0, target: 1, color: [1, 1, 1] }] }, edgeLive: new Set(), edgeHeld: -1, edgeSelected: new Set(), hoveredEdge: -1, selected: new Set(),
-      routeOffset: [0], edgeData: new Float32Array(16 * 20), edgeBounds: new Float32Array(4),
+      routeOffset: [0], routeCount: [16], edgeData: new Float32Array(16 * 20), edgeBounds: new Float32Array(4),
     };
     (Scene.prototype as unknown as { writeEdge(e: number): void }).writeEdge.call(fake, 0);
     const pieces: number[][] = [];
