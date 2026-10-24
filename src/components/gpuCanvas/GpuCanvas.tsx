@@ -63,7 +63,7 @@ const LIVE_MODE_MAX_NODES = 750;
  * and its size reaching the store, so the number a frame follows how long frames take: it grows while they keep up
  * with the display and halves after a slow one, between these bounds.
  */
-const LIVE_MODE_ADDED_PER_FRAME = { min: 2, start: 6, max: 40 };
+const LIVE_MODE_ADDED_PER_FRAME = { min: 2, start: 6, max: 16 };
 /** A frame taking longer than this (ms) halves the number of nodes turning live a frame; a quicker one adds one. */
 const LIVE_MODE_SLOW_FRAME_MS = 20;
 /** Once the view is still, nodes this far out of view (a fraction of its size) turn live too, so a pan finds them. */
@@ -77,6 +77,8 @@ const LIVE_MODE_MOVING_MARGIN = 0.75;
 const LIVE_EDGE_ZOOM = OVERVIEW_ZOOM_THRESHOLD;
 /** At most this many live connections besides the selected ones, unless more are on screen (pickLiveEdges). */
 const MAX_LIVE_EDGES = 250;
+/** At most this many connections turn live a frame (each mounts its pills and its ends' stand-ins). */
+const LIVE_EDGES_ADDED_PER_FRAME = 24;
 /**
  * Selected nodes are live (their grips and toolbars), up to this many: a marquee across a zoomed-out graph or
  * Select all takes hundreds or thousands, and mounting them all stalls the page. Past it they are drawn selected.
@@ -465,27 +467,33 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
     };
     // The nodes live for the view: those visible above 100%, or without a painter every one in view and, once the
     // view is still, those just outside it (LIVE_MODE_MAX_NODES at most), nearest the middle first.
+    let viewLive: string[] = [];
     const showViewLive = () => {
       const { zoom } = scene.view;
       let ids: string[] = [];
       if (painter) {
         if (zoom > LIVE_ZOOM) ids = scene.visible(0).map((i) => scene.graph.nodes[i].id);
+      } else if (isPanningRef.current) {
+        // While the view moves, nothing new turns live (the nodes coming into view show their stand-ins) and
+        // only those well out of view go back: once it stops, the nodes turn live a few a frame. Each frame
+        // looks at the live nodes alone: zoomed out, the view holds the whole graph.
+        const w = scene.canvas.clientWidth, h = scene.canvas.clientHeight, m = LIVE_MODE_MOVING_MARGIN;
+        const a = scene.toWorld(-w * m, -h * m), b = scene.toWorld(w * (1 + m), h * (1 + m));
+        ids = viewLive.filter((id) => {
+          const n = scene.graph.nodes[scene.graph.indexOf.get(id) ?? -1];
+          return !!n && n.x < b.x && n.x + n.w > a.x && n.y < b.y && n.y + n.h > a.y;
+        });
       } else if (scene.visible(0).length <= LIVE_MODE_MAX_NODES) {
-        if (isPanningRef.current) {
-          // While the view moves, nothing new turns live (the nodes coming into view show their stand-ins) and
-          // only those well out of view go back: once it stops, the nodes turn live a few a frame.
-          ids = scene.visible(LIVE_MODE_MOVING_MARGIN).map((i) => scene.graph.nodes[i].id).filter((id) => live.has(id, "zoom"));
-        } else {
-          lastHeldFrame = 0;
-          const centre = scene.toWorld(scene.canvas.clientWidth / 2, scene.canvas.clientHeight / 2);
-          const distance = (i: number) => {
-            const n = scene.graph.nodes[i];
-            return Math.hypot(n.x + n.w / 2 - centre.x, n.y + n.h / 2 - centre.y);
-          };
-          const near = scene.visible(LIVE_MODE_AHEAD).map((i) => ({ i, d: distance(i) })).sort((a, b) => a.d - b.d);
-          ids = budgetAdded(near.slice(0, LIVE_MODE_MAX_NODES).map(({ i }) => scene.graph.nodes[i].id));
-        }
+        lastHeldFrame = 0;
+        const centre = scene.toWorld(scene.canvas.clientWidth / 2, scene.canvas.clientHeight / 2);
+        const distance = (i: number) => {
+          const n = scene.graph.nodes[i];
+          return Math.hypot(n.x + n.w / 2 - centre.x, n.y + n.h / 2 - centre.y);
+        };
+        const near = scene.visible(LIVE_MODE_AHEAD).map((i) => ({ i, d: distance(i) })).sort((a, b) => a.d - b.d);
+        ids = budgetAdded(near.slice(0, LIVE_MODE_MAX_NODES).map(({ i }) => scene.graph.nodes[i].id));
       }
+      viewLive = ids;
       live.wantOnly("zoom", ids);
     };
     if (!painter) showViewLive();
@@ -544,7 +552,7 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
     };
     showEdgeSelection();
     // Connections the live layer renders: the selected ones, and those on screen that show more than a line.
-    let liveEdgesKey = "", liveEdgesSource: unknown = null;
+    let liveEdgesKey = "", liveEdgesSource: unknown = null, liveEdgeIds = new Set<string>(), heldEdgesFrame = 0;
     const showLiveEdges = () => {
       const { edges } = useWorkflowStore.getState();
       const ids = edges.filter((e) => e.selected).map((e) => e.id);
@@ -564,8 +572,23 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
         const onScreen = new Set(scene.edgesWithin(s0.x, s0.y, s1.x, s1.y));
         for (const c of candidates) c.onScreen = onScreen.has(c.e);
       }
-      // Those on screen are never capped; the limit bounds only those made live early in the margin.
-      for (const id of pickLiveEdges(candidates, MAX_LIVE_EDGES)) ids.push(id);
+      // Those on screen are never capped; the limit bounds only those made live early in the margin. Ones not live
+      // yet wait while the view moves (a zoom crossing LIVE_EDGE_ZOOM would bring every hidden connection's pills at
+      // once), then come LIVE_EDGES_ADDED_PER_FRAME a frame, nearest first; a run's comet shows at once.
+      const picked = pickLiveEdges(candidates, MAX_LIVE_EDGES);
+      const running = new Set(candidates.filter((c) => scene.edgeRoute(c.e)?.running).map((c) => c.id));
+      const fresh = picked.filter((id) => !liveEdgeIds.has(id) && !running.has(id));
+      const waiting = isPanningRef.current ? fresh.length : Math.max(0, fresh.length - LIVE_EDGES_ADDED_PER_FRAME);
+      if (waiting) {
+        const distance = new Map(candidates.map((c) => [c.id, c.distance]));
+        const held = new Set(fresh.sort((p, q) => distance.get(p)! - distance.get(q)!).slice(fresh.length - waiting));
+        for (const id of picked) if (!held.has(id)) ids.push(id);
+        if (!isPanningRef.current && !heldEdgesFrame) heldEdgesFrame = requestAnimationFrame(() => {
+          heldEdgesFrame = 0;
+          showLiveEdges();
+        });
+      } else for (const id of picked) ids.push(id);
+      liveEdgeIds = new Set(ids);
       const key = ids.join("\n");
       if (key === liveEdgesKey && edges === liveEdgesSource) return;
       liveEdgesKey = key;
@@ -703,6 +726,7 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
         clearTimeout(moveEndTimer);
         moveEndTimer = window.setTimeout(() => {
           isPanningRef.current = false;
+          showLiveEdges();
           if (!painter) showViewLive();
         }, MOVE_END_MS);
       }
@@ -863,6 +887,7 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
       cancelAnimationFrame(liveEdgesFrame);
       cancelAnimationFrame(viewLiveFrame);
       cancelAnimationFrame(heldViewFrame);
+      cancelAnimationFrame(heldEdgesFrame);
       cancelAnimationFrame(chromeFrame);
       unsubscribeChromeLayout();
       document.removeEventListener("click", measureChrome, true);

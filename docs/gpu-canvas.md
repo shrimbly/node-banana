@@ -304,7 +304,12 @@ not. On the GPU canvas a node stays live for as long as it holds something
   workflow…" to answer, or a run streaming previews.
 - **running**: a node loading its output, so its spinner turns. Its
   connections show the comet at any zoom (other decorated connections go
-  live from 15%, where classic stops drawing connections).
+  live from 15%, where classic stops drawing connections). Decorated
+  connections new to the view wait while it moves, then turn live
+  `LIVE_EDGES_ADDED_PER_FRAME` (24) a frame, nearest the middle first, so a
+  zoom past 15% with every connection hidden does not mount all their pills in
+  one frame. A hidden connection is masked under painted nodes only where
+  another node lies over its handle strokes (`paintedCover`).
 
 Zoomed out past the low-detail zoom (Settings › Canvas), running nodes stay
 pictures and the scene draws today's low-detail running halo over every node
