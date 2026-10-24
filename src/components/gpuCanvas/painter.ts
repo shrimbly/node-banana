@@ -38,6 +38,7 @@ import { PaintedAtlas, type BlitItem } from "@/lib/gpuCanvas/atlas";
 import type { Slot } from "@/lib/gpuCanvas/atlasLayout";
 import type { AtlasBudget } from "@/lib/gpuCanvas/budget";
 import { enableLayoutSubtree, paintElement } from "@/lib/gpuCanvas/htmlInCanvas";
+import { snapshotElement } from "@/lib/gpuCanvas/domSnapshot";
 import { edgesByNode, READS_RUN_IN_PROGRESS, runMark, upstreamPaintKeys, withRunMark, type RunState } from "@/lib/gpuCanvas/paintKey";
 import { BACKGROUND, EIGHTH, PREFETCH, PaintQueue, URGENT, VIEW, packSheet, tierToShow, tiersFor, wantedTier, type PaintRequest } from "@/lib/gpuCanvas/paintQueue";
 import { cachedHandle, cacheKey, deflate, handleFromCache, inflate, PAINT_CACHE_BYTES, PAINT_CACHE_FORMAT, type CachedHandle, type PaintStore } from "@/lib/gpuCanvas/paintCache";
@@ -141,6 +142,8 @@ export interface PainterOptions {
   /** Anything outside the graph that changes how nodes look (app version). */
   salt: string;
   stats: GpuCanvasStats;
+  /** How the sheet becomes pixels: HTML-in-Canvas paints it ("element"), or it is copied into an image ("snapshot"). */
+  backend: "element" | "snapshot";
 }
 
 const NO_HEADERS: HeaderProps = {
@@ -159,6 +162,9 @@ export class Painter {
   readonly tiers: number[];
   readonly status: PainterStatus;
   private sheet: PainterSheet;
+  /** The page element the sheet is laid out in when it is copied into an image rather than painted by the canvas. */
+  private sheetHost: HTMLDivElement | null = null;
+  private snapshotFailures = 0;
   private staging = new THREE.Texture();
   private stagingGl: WebGLTexture;
   private paints = new Map<string, NodePaint>();
@@ -202,13 +208,19 @@ export class Painter {
   private onStatus: () => void = noop;
 
   constructor(private scene: Scene, private options: PainterOptions) {
-    enableLayoutSubtree(scene.canvas);
+    if (options.backend === "snapshot") {
+      // Laid out on the page but never seen: copied into an image (snapshotElement) rather than painted by the canvas.
+      this.sheetHost = document.createElement("div");
+      this.sheetHost.dataset.gpuCanvasSheetHost = "";
+      this.sheetHost.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;overflow:visible;opacity:0;pointer-events:none;z-index:-1;";
+      document.body.appendChild(this.sheetHost);
+    } else enableLayoutSubtree(scene.canvas);
     this.tiers = tiersFor(scene.scale);
     this.hints = options.headers.hints ?? {};
     // A getter: the sheet spreads the headers on every batch, and takes the hints as they are then.
     const hints = () => this.hints;
     const headers: HeaderProps = { ...NO_HEADERS, getNodeTitle: options.headers.getNodeTitle, get hints() { return hints(); } };
-    this.sheet = new PainterSheet(scene.canvas, SHEET_TEXELS.w / scene.scale, SHEET_TEXELS.h / scene.scale, options.nodeTypes, headers);
+    this.sheet = new PainterSheet(this.sheetHost ?? scene.canvas, SHEET_TEXELS.w / scene.scale, SHEET_TEXELS.h / scene.scale, options.nodeTypes, headers);
     this.atlas = new PaintedAtlas(scene.renderer, options.budget.layerSize, options.budget.layers);
     scene.setPaintedAtlas(this.atlas.target.texture);
     this.status = {
@@ -792,8 +804,34 @@ export class Painter {
     // Paint the sheet into the staging texture.
     const renderer = this.scene.renderer;
     const gl = this.gl;
-    gl.bindTexture(gl.TEXTURE_2D, this.stagingGl);
-    paintElement(gl, this.sheet.element, Math.ceil(this.sheet.width * this.scene.scale), Math.ceil(this.sheet.height * this.scene.scale));
+    const texels = { width: Math.ceil(this.sheet.width * this.scene.scale), height: Math.ceil(this.sheet.height * this.scene.scale) };
+    if (this.options.backend === "snapshot") {
+      let image: HTMLImageElement;
+      try {
+        image = await snapshotElement(this.sheet.element, this.sheet.width, this.sheet.height, this.scene.scale);
+      } catch {
+        // A sheet that will not decode is tried again twice; then its nodes keep their stand-ins until they change.
+        this.options.stats.record("painter.snapshotFailed", misses.length);
+        if (++this.snapshotFailures < 3) this.queue.restore(misses);
+        else this.resolveWaiters(misses);
+        return;
+      }
+      this.snapshotFailures = 0;
+      if (this.disposed) return;
+      if (yielded()) {
+        this.queue.restore(misses);
+        this.options.stats.record(this.scene.lastInputAt > t0 ? "painter.yielded" : "painter.preempted", misses.length);
+        return;
+      }
+      this.options.stats.record("painter.snapshotMs", performance.now() - t3);
+      gl.bindTexture(gl.TEXTURE_2D, this.stagingGl);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    } else {
+      gl.bindTexture(gl.TEXTURE_2D, this.stagingGl);
+      paintElement(gl, this.sheet.element, texels.width, texels.height);
+    }
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -1219,6 +1257,7 @@ export class Painter {
     }
     gl.deleteTexture(this.stagingGl);
     this.sheet.dispose();
+    this.sheetHost?.remove();
     this.atlas.dispose();
   }
 }

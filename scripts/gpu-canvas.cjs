@@ -14,10 +14,11 @@
 // --hz (1000) in a maximised window: do not touch the mouse while it runs.
 // --chromium-flags adds switches, e.g. "--no-sandbox --use-angle=swiftshader"
 // on a Linux box with no GPU (run under xvfb-run).
-// --live runs the browser path: HTML-in-Canvas off (NODE_BANANA_HTML_IN_CANVAS=0), so there is no painter and the
-// nodes in view are live components, as in a browser. Its checks are open,reopen,pan,writes,scene,latency (the
-// painter's change, fidelity and tiers do not apply), and the scene gestures run at each of --scene-zooms
-// (fit,0.5,0.3 by default there; fit elsewhere), where a zoom is a fraction about the fitted view's centre.
+// --live runs the browser path: HTML-in-Canvas off (NODE_BANANA_HTML_IN_CANVAS=0), as in a browser, where the
+// painter copies its sheets into images (domSnapshot). --live-nodes also turns the painter off
+// (node-banana-live-nodes), so the nodes in view are live components: its checks are open,reopen,pan,writes,scene,
+// latency (the painter's change, fidelity and tiers do not apply). On either, the scene gestures run at each of
+// --scene-zooms (fit,0.5,0.3 by default there; fit elsewhere), where a zoom is a fraction about the fitted view's centre.
 // --fresh-paint also compares each node painted alone, bypassing the disk cache.
 // --profile records a CPU profile of each gesture through Electron's own
 // debugger (<output>/<label>.cpuprofile) and prints its heaviest functions.
@@ -157,7 +158,9 @@ async function buildFixture(dir, copies, { keep = Infinity, hiddenEdges = false 
 }
 
 async function main() {
-  const liveMode = flag('--live');
+  // liveMode: no painter at all; browserPath: no HTML-in-Canvas.
+  const liveMode = flag('--live-nodes');
+  const browserPath = liveMode || flag('--live');
   const checks = option('--checks', liveMode ? 'open,reopen,pan,writes,scene,latency' : 'open,reopen,pan,change,fidelity,tiers,scene,latency').split(',');
   const keep = option('--nodes') ? Number(option('--nodes')) : Infinity;
   const copies = Number.isFinite(keep) ? Math.ceil(keep / 300) : Number(option('--copies', 17));
@@ -185,7 +188,7 @@ async function main() {
   const workflowText = JSON.stringify(workflow);
 
   const report = { date: new Date().toISOString(), platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model, input: osInput ? 'os' : 'synthetic', inputHz: hz,
-    gestureMs: seconds * 1000, chromiumFlags: flags, mode: liveMode ? 'live' : 'painted', nodes: workflow.nodes.length, edges: workflow.edges.length };
+    gestureMs: seconds * 1000, chromiumFlags: flags, mode: liveMode ? 'live' : browserPath ? 'snapshot' : 'painted', nodes: workflow.nodes.length, edges: workflow.edges.length };
   const save = () => fs.writeFile(output, JSON.stringify(report, null, 2));
   let app;
   try {
@@ -193,7 +196,7 @@ async function main() {
     // --electron <binary> runs another Electron (one on a newer Chromium) on the same app.
     app = await launchElectron({ executable: option('--electron', require('electron')), args: [...flags, root], cwd: root,
       env: { ...process.env, NODE_BANANA_ELECTRON_USER_DATA: profile, NODE_BANANA_ELECTRON_PORT: String(port),
-        ...(liveMode ? { NODE_BANANA_HTML_IN_CANVAS: '0' } : {}) } });
+        ...(browserPath ? { NODE_BANANA_HTML_IN_CANVAS: '0' } : {}) } });
     const { page } = app;
     await app.run(({ dialog }) => { dialog.showMessageBoxSync = () => 1; });
     await app.window();
@@ -249,9 +252,14 @@ async function main() {
         // A slow page delivers a gesture's wheels long after its last move: the runner waits them out.
         addEventListener('wheel', () => { window.__runnerWheelAt = performance.now(); }, { capture: true, passive: true });
       });
-      const api = await page.waitFor(live => !!window.__gpuCanvas && window.__gpuCanvas.info().htmlInCanvas === !live, liveMode, { timeout: 30000,
-        message: liveMode ? 'the GPU canvas without HTML-in-Canvas' : 'the GPU canvas with HTML-in-Canvas' }).catch(() => false);
-      assert.ok(api, liveMode ? 'The GPU canvas did not start without HTML-in-Canvas' : 'The GPU canvas did not start with HTML-in-Canvas');
+      const api = await page.waitFor(browser => !!window.__gpuCanvas && window.__gpuCanvas.info().htmlInCanvas === !browser, browserPath, { timeout: 30000,
+        message: browserPath ? 'the GPU canvas without HTML-in-Canvas' : 'the GPU canvas with HTML-in-Canvas' }).catch(() => false);
+      assert.ok(api, browserPath ? 'The GPU canvas did not start without HTML-in-Canvas' : 'The GPU canvas did not start with HTML-in-Canvas');
+      // Live nodes alone: the page is told so, and loads again without its painter.
+      if (liveMode && await page.evaluate(() => !!window.__gpuCanvas.painter())) {
+        await page.evaluate(() => localStorage.setItem('node-banana-live-nodes', 'on'));
+        return ready();
+      }
     }
     // Drops the workflow on the canvas, as a user opening a saved one does.
     async function drop() {
@@ -485,7 +493,7 @@ async function main() {
 
     await ready();
     report.canvas = await page.evaluate(() => window.__gpuCanvas.info());
-    log(`GPU canvas up: ${liveMode ? 'live mode, no painter' : JSON.stringify(report.canvas.budget)}`);
+    log(`GPU canvas up: ${liveMode ? 'live mode, no painter' : `${browserPath ? 'snapshot painter, ' : ''}${JSON.stringify(report.canvas.budget)}`}`);
 
     // Opening: the loading screen, the first paint.
     await section('open', async () => {
@@ -730,7 +738,7 @@ async function main() {
       // (bare takes all of them; a+b takes both), to find what costs frames. Labels carry the variant.
       const variants = option('--scene-variants', 'base').split(',');
       const PARTS = { subtree: ['sheet', 'subtree'], sheet: ['sheet'], live: ['live'], chrome: ['chrome'], draw: ['draw'], navigator: ['navigator'], groups: ['groups'], marquee: ['marquee'], bare: ['sheet', 'subtree', 'live', 'chrome'] };
-      const zooms = option('--scene-zooms', liveMode ? 'fit,0.5,0.3' : 'fit').split(',');
+      const zooms = option('--scene-zooms', browserPath ? 'fit,0.5,0.3' : 'fit').split(',');
       const traced = [], results = [];
       for (const zoomSpec of zooms) for (const variant of variants) {
         const parts = variant.split('+').flatMap(v => PARTS[v] || []);

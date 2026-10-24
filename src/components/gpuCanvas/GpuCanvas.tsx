@@ -41,6 +41,16 @@ import { EDGE_THICKNESS_PX } from "@/lib/edges/appearance";
 import { OVERVIEW_ZOOM_THRESHOLD } from "@/utils/canvasPerformance";
 import { boundedNodeTypes, HEADER, noop, PAD, PAD_X, type HeaderProps } from "./nodeSheets";
 
+/** localStorage: "on" keeps a page without HTML-in-Canvas on live nodes alone, with no painter (for comparison). */
+const LIVE_NODES_KEY = "node-banana-live-nodes";
+function liveNodesOnly(): boolean {
+  try {
+    return localStorage.getItem(LIVE_NODES_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+
 /** The drags WorkflowCanvas's wrapper takes on drop (a file, a node type from the action bar, a history image). */
 const CANVAS_DRAG_TYPES = ["Files", "application/node-type", HISTORY_DRAG_TYPE];
 /** Workflows at least this large open behind the loading screen while they paint. */
@@ -372,9 +382,14 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
       toldSoftwareRendering = true;
       useToast.getState().show("No graphics card is available, so the canvas draws in software and may be slow", "warning");
     }
+    // Without HTML-in-Canvas (a browser) the painter copies its sheets into images instead (domSnapshot). Live nodes
+    // alone (no painter) remain for a page told so (LIVE_NODES_KEY), to compare against.
     const htmlInCanvas = detectHtmlInCanvas().available;
-    const budget = htmlInCanvas ? atlasBudget(gpuInfo) : null;
-    const painter = budget ? new Painter(scene, { nodeTypes: types, headers: headerProxy, budget, cache: openPaintStore(), salt: APP_VERSION, stats }) : null;
+    const budget = htmlInCanvas || !liveNodesOnly() ? atlasBudget(gpuInfo) : null;
+    const backend = htmlInCanvas ? "element" : "snapshot";
+    const painter = budget
+      ? new Painter(scene, { nodeTypes: types, headers: headerProxy, budget, cache: openPaintStore(), salt: `${APP_VERSION}|${backend}`, stats, backend })
+      : null;
     live.painter = painter;
     engineRef.current = { painter, scene };
 

@@ -31,20 +31,28 @@ same paint, reopen and fidelity results as Electron 44:
   `NODE_BANANA_HTML_IN_CANVAS=0` turns HTML-in-Canvas off for one launch
   (`--disable-blink-features`, since Chromium 158 has it on by default).
 - **Browser**, or any page without HTML-in-Canvas (an Electron whose API
-  changed again): the same canvas, with no painter.
-  The nodes in view are live components instead of pictures, up to
-  `LIVE_MODE_MAX_NODES` (750), at any zoom. With more in view, nodes are the
+  changed again): the same canvas and the same painter, which copies each
+  sheet into an image instead (`src/lib/gpuCanvas/domSnapshot.ts`): the sheet
+  is laid out in a hidden element on the page, cloned into an SVG
+  `<foreignObject>` with the page's style rules (`:root`, `html` and `body`
+  pointed at wrappers carrying those elements' attributes; fonts and other
+  files they name as data URLs), each image, canvas and video frame as a data
+  URL, and form fields' values, then decoded and uploaded. It must be a data
+  URL: Chromium taints an SVG with a foreignObject loaded from a blob URL.
+  Painted images are cached on disk as on the desktop (the cache salt names the
+  backend). Run the perf runner with `--live` to measure this path.
+- **Live nodes alone**: `node-banana-live-nodes` = `on` in localStorage keeps a
+  page without HTML-in-Canvas on no painter, to compare against (runner
+  `--live-nodes`). The nodes in view are live components, up to
+  `LIVE_MODE_MAX_NODES` (750), at any zoom; with more in view, nodes are the
   scene's stand-in cards (`showViewLive` in `GpuCanvas.tsx`). Once the view is
   still, the nodes up to half a view outside it turn live too
-  (`LIVE_MODE_AHEAD`), so a pan finds them live. While the view moves, nothing
-  new turns live: nodes coming into view show their stand-ins, and live nodes go
-  back only once well out of view (`LIVE_MODE_MOVING_MARGIN`). Nodes turn live
-  a few a frame, nearest the middle first: the number grows while frames keep
-  up and halves after a slow one (`LIVE_MODE_ADDED_PER_FRAME`), and the sizes
-  React Flow measures for them reach the
-  store in one write once the mounting stops (`LiveFlow`). Live nodes are not
-  snapped to whole pixels here (there is no painted copy to line up with).
-  Run the perf runner with `--live` to measure this path.
+  (`LIVE_MODE_AHEAD`). While the view moves, nothing new turns live, and live
+  nodes go back only once well out of view (`LIVE_MODE_MOVING_MARGIN`). Nodes
+  turn live a few a frame, nearest the middle first: the number grows while
+  frames keep up and halves after a slow one (`LIVE_MODE_ADDED_PER_FRAME`), and
+  the sizes React Flow measures for them reach the store in one write once the
+  mounting stops (`LiveFlow`). Live nodes are not snapped to whole pixels here.
 
 **When it cannot draw.** If the scene cannot start (no WebGL2) or one of its
 shaders does not compile, the canvas's place shows why, with Try again
