@@ -22,6 +22,14 @@ const MAX_IMAGE_SIDE = 2048;
  * more main-thread time than the browser takes to carry and decode the file (measured on a Mac with 2048 px PNGs).
  */
 const LARGE_IMAGE_RATIO = 4;
+/**
+ * A picture whose file is larger than this is drawn too, whatever its size: each snapshot carries its files as base64
+ * and the SVG is serialised, encoded and decoded whole, so a few multi-MB PNGs (a generator's 2048 px outputs) held
+ * the page for seconds a batch on a Mac.
+ */
+const LARGE_FILE_BYTES = 1024 * 1024;
+/** Without the file's size (no timing entry for it), pictures of more pixels than this count as large files. */
+const LARGE_FILE_PIXELS = 3 * 1024 * 1024;
 /** Data URLs kept for images and frames, by source and drawn size; the oldest go first. */
 const MAX_CACHED_IMAGES = 400;
 /** Files kept as data URLs (fonts, pictures put in as they are); the least recently used go first. */
@@ -190,16 +198,23 @@ function opaque(image: HTMLImageElement, src: string): boolean {
   return found;
 }
 
-/** An <img> as a data URL: its file, unless that is far larger than it shows, then drawn at twice the size it shows. */
+/** Whether a picture's file is large: by the size the page fetched it at, else by its pixels. */
+function largeFile(src: string, natural: { width: number; height: number }): boolean {
+  const entry = performance.getEntriesByName(src).at(-1) as PerformanceResourceTiming | undefined;
+  const bytes = entry?.decodedBodySize || entry?.encodedBodySize;
+  return bytes ? bytes > LARGE_FILE_BYTES : natural.width * natural.height > LARGE_FILE_PIXELS;
+}
+
+/** An <img> as a data URL: its file, unless that is large or far larger than it shows, then drawn at twice the size it shows. */
 async function imageData(image: HTMLImageElement, scale: number): Promise<string> {
   const src = image.currentSrc || image.src;
   if (!src || src.startsWith("data:")) return src;
-  // Not decoded (yet): the file itself, whatever its size, so its node does not paint without it (it is painted
-  // again later, settleNodes having reported it unloaded).
-  if (!image.complete || !image.naturalWidth) return fileAsDataUrl(src);
+  // Not loaded (yet), or broken: left out. Its size is not known yet, and a large file read in whole holds the page
+  // for seconds; settleNodes reports its node unloaded, and the painter paints it again once it has loaded.
+  if (!image.complete || !image.naturalWidth) return "";
   const natural = { width: image.naturalWidth, height: image.naturalHeight };
   const shown = drawnSize(image, natural.width, natural.height, scale);
-  if (/\.svg(\?|$)/i.test(src) || Math.max(natural.width / shown.width, natural.height / shown.height) <= LARGE_IMAGE_RATIO) return fileAsDataUrl(src);
+  if (/\.svg(\?|$)/i.test(src) || (Math.max(natural.width / shown.width, natural.height / shown.height) <= LARGE_IMAGE_RATIO && !largeFile(src, natural))) return fileAsDataUrl(src);
   const drawn = { width: Math.min(natural.width, shown.width * 2), height: Math.min(natural.height, shown.height * 2) };
   const key = `${src}|${drawn.width}x${drawn.height}`;
   const cached = imageCache.get(key);
