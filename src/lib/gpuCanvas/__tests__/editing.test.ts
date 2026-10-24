@@ -261,6 +261,20 @@ describe("connections and painted nodes", () => {
     // Nothing painted near it: nothing to mask.
     expect(paintedCover(graph, [0], (e) => routes[e], within, () => true)).toEqual({ edgeIds: [], boxes: [] });
   });
+
+  it("masks an unselected hidden connection only where another painted node lies over its handle strokes", () => {
+    // a's handle at (300, 50) touches a and b; "over" crosses it, "near" lies within reach of the line but not of the strokes.
+    const nodes = [node("a", 0, 0), node("b", 600, 0), node("over", 290, 40), node("near", 420, 100)];
+    const graph = new SceneGraph(nodes, [edge("e", "a", "b", { hidden: true })], {});
+    const route = { ends: [300, 50, 600, 50], segments: [], stems: [], hidden: true } as unknown as ReturnType<typeof routeSceneEdge>;
+    const within = (x0: number, y0: number, x1: number, y1: number) =>
+      graph.nodes.flatMap((n, i) => (n.x <= x1 && n.x + n.w >= x0 && n.y <= y1 && n.y + n.h >= y0 ? [i] : []));
+    const painted = (id: string) => id === "a" || id === "b";
+    expect(paintedCover(graph, [0], () => route, within, (id) => id !== "over").edgeIds).toEqual(["e"]);
+    expect(paintedCover(graph, [0], () => route, within, (id) => id === "over" || painted(id))).toEqual({ edgeIds: [], boxes: [] });
+    // Its own ends and a node past its strokes never mask it.
+    expect(paintedCover(graph, [0], () => route, within, (id) => id === "over")).toEqual({ edgeIds: [], boxes: [] });
+  });
 });
 
 describe("pickLiveEdges", () => {
