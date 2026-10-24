@@ -10,7 +10,8 @@
 // --checks (open,reopen,pan,change,fidelity,tiers,scene,latency) picks checks.
 // --copies N tiles the stress workflow N times (17 is about 5,100 nodes); --nodes N keeps the first N of them
 // (tiling as many copies as that takes), and --hidden-edges hides every connection, as the FAB's button does.
-// --unique-media N gives the fixture N picture files (copies of the samples) so nodes do not share them.
+// --unique-media N gives the fixture N picture files (copies of the samples) so nodes do not share them;
+// --media png makes them 2048 px PNGs, as a generator saves them, instead of 1536 px JPEGs.
 // --input os (the default on Windows and the Mac) moves the real cursor at
 // --hz (1000) in a maximised window: do not touch the mouse while it runs.
 // --chromium-flags adds switches, e.g. "--no-sandbox --use-angle=swiftshader"
@@ -96,17 +97,20 @@ async function buildFixture(dir, copies, { keep = Infinity, hiddenEdges = false 
   const base = JSON.parse(await fs.readFile(path.join(root, 'examples/stress-workflow.json'), 'utf8'));
   const sources = (await fs.readdir(path.join(root, 'examples/sample-images'))).filter(name => /\.jpe?g$/i.test(name)).sort();
   await fs.mkdir(path.join(dir, 'inputs'), { recursive: true });
+  // As a generator saves them: 2048 px PNGs of several MB.
+  const pngMedia = option('--media', 'jpg') === 'png', extension = pngMedia ? 'png' : 'jpg';
   const ids = [];
   for (const [k, name] of sources.entries()) {
     const id = `sample-${k}`;
-    await sharp(path.join(root, 'examples/sample-images', name)).resize(1536, 1536, { fit: 'inside' }).jpeg({ quality: 88 }).toFile(path.join(dir, 'inputs', `${id}.jpg`));
+    const picture = sharp(path.join(root, 'examples/sample-images', name)).resize(pngMedia ? 2048 : 1536, pngMedia ? 2048 : 1536, { fit: 'inside' });
+    await (pngMedia ? picture.png() : picture.jpeg({ quality: 88 })).toFile(path.join(dir, 'inputs', `${id}.${extension}`));
     ids.push(id);
   }
   // Each picture its own file, as in a real workflow: none is fetched or decoded once for many nodes.
   const unique = Number(option('--unique-media', 0));
   for (let k = ids.length; k < unique; k++) {
     const id = `unique-${k}`;
-    await fs.copyFile(path.join(dir, 'inputs', `${ids[k % sources.length]}.jpg`), path.join(dir, 'inputs', `${id}.jpg`));
+    await fs.copyFile(path.join(dir, 'inputs', `${ids[k % sources.length]}.${extension}`), path.join(dir, 'inputs', `${id}.${extension}`));
     ids.push(id);
   }
   await fs.mkdir(path.join(dir, 'generations'), { recursive: true });

@@ -16,8 +16,12 @@ const ROOT = "data-nb-snapshot-root";
 const BODY = "data-nb-snapshot-body";
 /** Images drawn at more than this many device pixels a side are drawn smaller (a sheet's image never needs more). */
 const MAX_IMAGE_SIDE = 2048;
-/** An image this many times larger than it shows is drawn smaller for the snapshot; others go in as their file. */
-const LARGE_IMAGE_RATIO = 4;
+/**
+ * Pictures up to this many pixels that show at half their size or more go in as their file; others are drawn at
+ * twice the size they show. A large file (a generator's 2048 px PNG is several MB) costs far more to read, carry and
+ * decode in every snapshot than drawing it smaller does, while a small one keeps its exact pixels.
+ */
+const FILE_IMAGE_PIXELS = 1024 * 1024;
 /** Data URLs kept for images and frames, by source and drawn size; the oldest go first. */
 const MAX_CACHED_IMAGES = 400;
 /** Files kept as data URLs (fonts, pictures put in as they are); the least recently used go first. */
@@ -160,23 +164,48 @@ function drawToDataUrl(source: CanvasImageSource, width: number, height: number,
   }
 }
 
-/** An <img> as a data URL at the size it shows. */
+const opaqueCache = new Map<string, boolean>();
+
+/** Whether a picture has no transparency, judged on a 16 px copy: such a one is drawn as a JPEG, which encodes fastest. */
+function opaque(image: HTMLImageElement, src: string): boolean {
+  let found = opaqueCache.get(src);
+  if (found === undefined) {
+    found = false;
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 16;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    try {
+      if (context) {
+        context.drawImage(image, 0, 0, 16, 16);
+        const pixels = context.getImageData(0, 0, 16, 16).data;
+        found = true;
+        for (let i = 3; i < pixels.length; i += 4) if (pixels[i] < 255) { found = false; break; }
+      }
+    } catch {
+      // tainted
+    }
+    opaqueCache.set(src, found);
+    if (opaqueCache.size > MAX_CACHED_FILES) opaqueCache.delete(opaqueCache.keys().next().value!);
+  }
+  return found;
+}
+
+/** An <img> as a data URL: its file when that is small, else drawn at twice the size it shows. */
 async function imageData(image: HTMLImageElement, scale: number): Promise<string> {
   const src = image.currentSrc || image.src;
   if (!src || src.startsWith("data:")) return src;
-  if (!image.complete || !image.naturalWidth) {
-    // Not decoded (yet): the file itself, whatever its size.
-    return fileAsDataUrl(src);
-  }
-  const { width, height } = drawnSize(image, image.naturalWidth, image.naturalHeight, scale);
-  // The file itself, unless it is far larger than it shows: drawing it smaller first resamples it twice, which
-  // blurs fine detail the live node keeps. One far larger is drawn at twice its shown size.
-  if (/\.svg(\?|$)/i.test(src) || Math.max(image.naturalWidth / width, image.naturalHeight / height) <= LARGE_IMAGE_RATIO) return fileAsDataUrl(src);
-  const drawn = { width: Math.min(image.naturalWidth, width * 2), height: Math.min(image.naturalHeight, height * 2) };
+  // Not loaded (yet), or broken: left out. The painter paints a node with an image still loading again once it has
+  // (settleNodes reports it unloaded); reading the whole file in instead could hold the snapshot for seconds.
+  if (!image.complete || !image.naturalWidth) return "";
+  const natural = { width: image.naturalWidth, height: image.naturalHeight };
+  const shown = drawnSize(image, natural.width, natural.height, scale);
+  const drawn = { width: Math.min(natural.width, shown.width * 2), height: Math.min(natural.height, shown.height * 2) };
+  // Drawn smaller only when that halves it at least: once it is resampled twice, fine detail blurs a little.
+  if (/\.svg(\?|$)/i.test(src) || (natural.width * natural.height <= FILE_IMAGE_PIXELS && drawn.width * 2 > natural.width)) return fileAsDataUrl(src);
   const key = `${src}|${drawn.width}x${drawn.height}`;
   const cached = imageCache.get(key);
   if (cached) return cached;
-  const data = drawToDataUrl(image, drawn.width, drawn.height) || (await fileAsDataUrl(src));
+  const data = drawToDataUrl(image, drawn.width, drawn.height, opaque(image, src) ? "image/jpeg" : "image/webp") || (await fileAsDataUrl(src));
   if (data) remember(key, data);
   return data;
 }
