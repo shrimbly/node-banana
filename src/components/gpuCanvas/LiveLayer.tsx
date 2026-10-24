@@ -611,15 +611,6 @@ export class LiveLayer {
     return this.followingFlow;
   }
 
-  /**
-   * While the view moves, the flow's viewport is its own compositor layer: a pan or zoom then moves the picture of the
-   * live nodes instead of repainting every one of them each frame. Once still, it is drawn again at the new scale.
-   */
-  setMoving(moving: boolean) {
-    const viewport = this.element.querySelector<HTMLElement>(".react-flow__viewport");
-    if (viewport) viewport.style.willChange = moving ? "transform" : "";
-  }
-
   setView(view: View) {
     this.alignToPixels();
     if (this.followingFlow) return;

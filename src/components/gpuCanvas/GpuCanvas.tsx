@@ -63,6 +63,8 @@ const LIVE_MODE_MAX_NODES = 400;
  * handles, and its size reaching the store: a pan bringing a row of nodes into view would mount them in one frame.
  */
 const LIVE_MODE_ADDED_PER_FRAME = 3;
+/** While the view moves, live nodes this far out of view (a fraction of the view's size) stay live. */
+const LIVE_MODE_MOVING_MARGIN = 0.5;
 /**
  * From this zoom, connections that show more than a line (labels, stubs, clamps) are live while near the view:
  * where classic stops drawing connections (its overview). Those showing a run's comet are live at any zoom.
@@ -466,7 +468,13 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
         const lowDetail = getLowDetailSettings();
         if (zoom >= (lowDetail.enabled ? lowDetail.zoom : OVERVIEW_ZOOM_THRESHOLD)) {
           const visible = scene.visible(0);
-          if (visible.length <= LIVE_MODE_MAX_NODES) ids = budgetAdded(visible.map((i) => scene.graph.nodes[i].id));
+          if (visible.length <= LIVE_MODE_MAX_NODES) {
+            if (isPanningRef.current) {
+              // While the view moves, nothing new turns live (the nodes coming into view show their stand-ins) and
+              // only those well out of view go back: once it stops, the view's nodes turn live a few a frame.
+              ids = scene.visible(LIVE_MODE_MOVING_MARGIN).map((i) => scene.graph.nodes[i].id).filter((id) => live.has(id, "zoom"));
+            } else ids = budgetAdded(visible.map((i) => scene.graph.nodes[i].id));
+          }
         }
       }
       live.wantOnly("zoom", ids);
@@ -681,13 +689,12 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
         lastView = { x, y, zoom };
         if (!isPanningRef.current) {
           isPanningRef.current = true;
-          live.setMoving(true);
           useWorkflowStore.getState().setHoveredNodeId(null);
         }
         clearTimeout(moveEndTimer);
         moveEndTimer = window.setTimeout(() => {
           isPanningRef.current = false;
-          live.setMoving(false);
+          if (!painter) showViewLive();
         }, MOVE_END_MS);
       }
       // Without a painter the nodes coming into view are live as they arrive, once a frame.
