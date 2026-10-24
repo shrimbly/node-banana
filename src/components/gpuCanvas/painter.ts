@@ -739,12 +739,13 @@ export class Painter {
     const urgentBatch = requests[0].priority === URGENT;
     // A change whose keys are still to be worked out (a frame after the store change) counts as urgent.
     const yielded = () => (!this.loading && this.scene.lastInputAt > t0) || (!urgentBatch && (this.queue.hasUrgent() || this.dirtyKeys.size > 0));
-    // Once a batch for the view has settled it is mostly done: only input stops it. A change then waits for it, as
-    // for an urgent batch (each image is stamped with the key it was rendered for, and the repaint stays queued);
-    // giving way would throw away the render and the wait for images of what the view is waiting on. A background
-    // batch still gives way, so a change made while it paints shows at once.
+    // Once a batch has settled it is mostly done: giving way would throw away its render and its wait for images.
+    // A batch for the view then gives way only to input, and one painting ahead only to input or a change near the
+    // view, which shows at once. Other changes wait for it, as for an urgent batch (each image is stamped with the
+    // key it was rendered for, and the repaint stays queued): nodes painted ahead derive data from what feeds them
+    // as they paint, and the repaints that queues for what they feed would otherwise throw away batch after batch.
     const viewBatch = requests[0].priority <= VIEW;
-    const settledYield = () => (viewBatch ? !this.loading && this.scene.lastInputAt > t0 : yielded());
+    const settledYield = () => (!this.loading && this.scene.lastInputAt > t0) || (!viewBatch && this.queue.hasUrgent((id) => this.near.has(id)));
     if (yielded()) {
       this.queue.restore(misses);
       this.options.stats.record(this.scene.lastInputAt > t0 ? "painter.yielded" : "painter.preempted", misses.length);
