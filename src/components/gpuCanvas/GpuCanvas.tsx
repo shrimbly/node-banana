@@ -57,6 +57,8 @@ const CANVAS_DRAG_TYPES = ["Files", "application/node-type", HISTORY_DRAG_TYPE];
 const LOADING_MIN_NODES = 150;
 /** The loading screen appears only if painting takes longer than this. */
 const LOADING_DELAY_MS = 300;
+/** An opened workflow shows a bare canvas until its view is painted, at most this long, rather than its stand-in cards. */
+const VEIL_MAX_MS = 3000;
 /** An opened workflow framed on default node heights is framed again on painted ones, waiting at most this long. */
 const REFRAME_WAIT_MS = 2000;
 /** Above this zoom every visible node is live. */
@@ -206,6 +208,9 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const liveRef = useRef<HTMLDivElement>(null);
+  // Hidden by hand rather than by state: an opened workflow covers the canvas in the same change that gives the
+  // scene its nodes, before a frame can draw their stand-in cards.
+  const veilRef = useRef<HTMLDivElement>(null);
   // Filled by the live flow as it mounts, read by the engine.
   const [liveConnection] = useState<LiveConnection>(() => ({}));
   const connectLive = useCallback((part: LiveConnection) => void Object.assign(liveConnection, part), [liveConnection]);
@@ -537,6 +542,7 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
         }
         // An opened workflow paints behind its loading screen: nothing of the canvas before it stays held.
         if (opened) for (const id of [...heldAdded]) releaseHeld(id);
+        if (opened && painter) showVeil(veilRef.current, true);
         if (!opened && changes.added.size) showAdded(changes.added);
         // The view state of nodes that went (or of the workflow before an opened one) goes with them, as classic's unmount.
         if (opened) useNodeUiStore.getState().forget();
@@ -968,7 +974,14 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
       }
     }
     painter?.start();
-    if (!painter) return;
+    if (!painter) {
+      showVeil(veilRef.current, false);
+      return;
+    }
+    // A bare canvas until the view is painted, then what the painter made (the stand-in cards are for nodes
+    // panned to before their paint lands, not for the workflow's first look).
+    showVeil(veilRef.current, !painter.status.screenfulDone);
+    const veilTimer = window.setTimeout(() => showVeil(veilRef.current, false), VEIL_MAX_MS);
     // Framed again once every node has its painted height (or the wait is over, on what is known by
     // then), unless the view moved in the meantime.
     const reframe = (force: boolean) => {
@@ -992,6 +1005,7 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
     }, LOADING_DELAY_MS);
     painter.setStatusListener(() => {
       reframe(false);
+      if (painter.status.screenfulDone) showVeil(veilRef.current, false);
       if (!shown) return;
       if (done()) {
         shown = false;
@@ -1003,6 +1017,7 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
     return () => {
       clearTimeout(timer);
       clearTimeout(reframeTimer);
+      clearTimeout(veilTimer);
       painter.setStatusListener(() => {});
       if (shown) painter.setLoading(false);
       setLoading(null);
@@ -1019,11 +1034,20 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
           {flowChildren}
         </LiveFlow>
       </div>
+      {/* Over the scene and the live layer, under the canvas's own chrome */}
+      <div ref={veilRef} aria-hidden className="pointer-events-none absolute inset-0 bg-neutral-900 transition-opacity duration-150" />
       {children}
       {loading && <LoadingScreen painted={loading.painted} total={loading.total} />}
     </div>
   );
 });
+
+/** The bare canvas over an opened workflow until its view is painted; it fades out. */
+function showVeil(veil: HTMLDivElement | null, shown: boolean) {
+  if (!veil) return;
+  veil.style.transitionDuration = shown ? "0ms" : "";
+  veil.style.opacity = shown ? "1" : "0";
+}
 
 /** Covers the canvas while a large workflow paints, as Figma does while a file opens. */
 function LoadingScreen({ painted, total }: Loading) {
