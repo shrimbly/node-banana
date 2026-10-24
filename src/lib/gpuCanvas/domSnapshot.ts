@@ -156,14 +156,19 @@ function drawnSize(element: Element, naturalWidth: number, naturalHeight: number
   return { width: Math.max(1, Math.round(naturalWidth * fit)), height: Math.max(1, Math.round(naturalHeight * fit)) };
 }
 
-function drawToDataUrl(source: CanvasImageSource, width: number, height: number, type = "image/webp"): string {
+/** A picture drawn at `width` × `height`, or null when it cannot be (a tainted canvas, no context). */
+function drawn(source: CanvasImageSource, width: number, height: number): HTMLCanvasElement | null {
   const canvas = document.createElement("canvas");
   canvas.width = width;
   canvas.height = height;
   const context = canvas.getContext("2d");
-  if (!context) return "";
+  if (!context) return null;
   context.imageSmoothingQuality = "high";
   context.drawImage(source, 0, 0, width, height);
+  return canvas;
+}
+
+function encode(canvas: HTMLCanvasElement, type: string): string {
   try {
     return canvas.toDataURL(type, 0.92);
   } catch {
@@ -172,30 +177,37 @@ function drawToDataUrl(source: CanvasImageSource, width: number, height: number,
   }
 }
 
-const opaqueCache = new Map<string, boolean>();
+function drawToDataUrl(source: CanvasImageSource, width: number, height: number, type = "image/webp"): string {
+  const canvas = drawn(source, width, height);
+  return canvas ? encode(canvas, type) : "";
+}
 
-/** Whether a picture has no transparency, judged on a 16 px copy: such a one is drawn as a JPEG, which encodes fastest. */
-function opaque(image: HTMLImageElement, src: string): boolean {
-  let found = opaqueCache.get(src);
-  if (found === undefined) {
-    found = false;
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 16;
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    try {
-      if (context) {
-        context.drawImage(image, 0, 0, 16, 16);
-        const pixels = context.getImageData(0, 0, 16, 16).data;
-        found = true;
-        for (let i = 3; i < pixels.length; i += 4) if (pixels[i] < 255) { found = false; break; }
-      }
-    } catch {
-      // tainted
-    }
-    opaqueCache.set(src, found);
-    if (opaqueCache.size > MAX_CACHED_FILES) opaqueCache.delete(opaqueCache.keys().next().value!);
+/**
+ * Whether a drawn picture has no transparency, judged on a 16 px copy of the drawing (not of the picture: drawing a
+ * large PNG even that small decodes it whole). Such a one is encoded as a JPEG, which encodes fastest.
+ */
+function opaque(canvas: HTMLCanvasElement): boolean {
+  const probe = document.createElement("canvas");
+  probe.width = probe.height = 16;
+  const context = probe.getContext("2d", { willReadFrequently: true });
+  try {
+    if (!context) return false;
+    context.drawImage(canvas, 0, 0, 16, 16);
+    const pixels = context.getImageData(0, 0, 16, 16).data;
+    for (let i = 3; i < pixels.length; i += 4) if (pixels[i] < 255) return false;
+    return true;
+  } catch {
+    return false;
   }
-  return found;
+}
+
+/** A task's end: each picture drawn for a snapshot is its own task, not one long frame for a whole sheet. */
+function nextTask(): Promise<void> {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => resolve();
+    channel.port2.postMessage(null);
+  });
 }
 
 /** Whether a picture's file is large: by the size the page fetched it at, else by its pixels. */
@@ -215,11 +227,13 @@ async function imageData(image: HTMLImageElement, scale: number): Promise<string
   const natural = { width: image.naturalWidth, height: image.naturalHeight };
   const shown = drawnSize(image, natural.width, natural.height, scale);
   if (/\.svg(\?|$)/i.test(src) || (Math.max(natural.width / shown.width, natural.height / shown.height) <= LARGE_IMAGE_RATIO && !largeFile(src, natural))) return fileAsDataUrl(src);
-  const drawn = { width: Math.min(natural.width, shown.width * 2), height: Math.min(natural.height, shown.height * 2) };
-  const key = `${src}|${drawn.width}x${drawn.height}`;
+  const size = { width: Math.min(natural.width, shown.width * 2), height: Math.min(natural.height, shown.height * 2) };
+  const key = `${src}|${size.width}x${size.height}`;
   const cached = imageCache.get(key);
   if (cached) return cached;
-  const data = drawToDataUrl(image, drawn.width, drawn.height, opaque(image, src) ? "image/jpeg" : "image/webp") || (await fileAsDataUrl(src));
+  await nextTask();
+  const canvas = drawn(image, size.width, size.height);
+  const data = (canvas && encode(canvas, opaque(canvas) ? "image/jpeg" : "image/webp")) || (await fileAsDataUrl(src));
   if (data) remember(key, data);
   return data;
 }
