@@ -681,10 +681,14 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
         lastView = { x, y, zoom };
         if (!isPanningRef.current) {
           isPanningRef.current = true;
+          live.setMoving(true);
           useWorkflowStore.getState().setHoveredNodeId(null);
         }
         clearTimeout(moveEndTimer);
-        moveEndTimer = window.setTimeout(() => { isPanningRef.current = false; }, MOVE_END_MS);
+        moveEndTimer = window.setTimeout(() => {
+          isPanningRef.current = false;
+          live.setMoving(false);
+        }, MOVE_END_MS);
       }
       // Without a painter the nodes coming into view are live as they arrive, once a frame.
       if (!painter && !viewLiveFrame) viewLiveFrame = requestAnimationFrame(() => {

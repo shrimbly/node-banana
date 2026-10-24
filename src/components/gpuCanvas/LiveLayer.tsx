@@ -572,7 +572,8 @@ export class LiveLayer {
   private alignToPixels() {
     const graph = this.scene.graph;
     const offsets = new Map<string, string>();
-    for (const id of this.shown) {
+    // Without a painter there is no painted copy to line up with, and each offset written in a pan repaints its node.
+    if (this.painter) for (const id of this.shown) {
       const i = graph.indexOf.get(id);
       if (i == null) continue;
       const [dx, dy] = this.scene.pixelSnap(i);
@@ -608,6 +609,15 @@ export class LiveLayer {
   /** Whether the scene's view is changing to follow the flow's. */
   get followingFlowView() {
     return this.followingFlow;
+  }
+
+  /**
+   * While the view moves, the flow's viewport is its own compositor layer: a pan or zoom then moves the picture of the
+   * live nodes instead of repainting every one of them each frame. Once still, it is drawn again at the new scale.
+   */
+  setMoving(moving: boolean) {
+    const viewport = this.element.querySelector<HTMLElement>(".react-flow__viewport");
+    if (viewport) viewport.style.willChange = moving ? "transform" : "";
   }
 
   setView(view: View) {
