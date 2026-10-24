@@ -15,11 +15,6 @@ contextBridge.exposeInMainWorld('nodeBananaDesktop', {
     },
   },
   openLogs: () => ipcRenderer.invoke('desktop:open-logs'),
-  // The GPU canvas's Chromium feature: whether this launch has it, and the setting for the next.
-  gpuCanvas: {
-    active: () => ipcRenderer.invoke('desktop:gpu-canvas:active'),
-    set: (enabled) => ipcRenderer.invoke('desktop:gpu-canvas:set', enabled === true),
-  },
   onSaveRequest: (callback) => {
     const listener = () => callback();
     ipcRenderer.on('desktop:save-request', listener);

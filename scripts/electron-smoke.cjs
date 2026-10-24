@@ -34,21 +34,18 @@ async function controlInput(desktop, control, action) {
   await nativeMouse(desktop, action === 'hover' ? 'm' : 'c', box.x + box.width / 2, box.y + box.height / 2);
 }
 
-// The desktop app draws with the GPU canvas unless the classic canvas was
-// chosen (Settings › Canvas, or NODE_BANANA_GPU_CANVAS=0 for one run). These
-// find the canvas, its empty area and its nodes on either.
-const CANVAS = '[data-gpu-canvas], .react-flow';
-const gpuCanvas = page => page.evaluate(() => !!window.__gpuCanvas);
+// The canvas, its empty area and its nodes. The GPU canvas holds every node in
+// its scene and only the ones being worked in as React Flow nodes.
+const CANVAS = '[data-gpu-canvas]';
 function canvasPane(page) {
   // The GPU canvas's own <canvas> comes before the React Flow sheets it holds.
-  return page.locator('[data-gpu-canvas] > canvas, .react-flow__pane').first();
+  return page.locator('[data-gpu-canvas] > canvas').first();
 }
 async function canvasNodeIds(page) {
-  return page.evaluate(() => window.__gpuCanvas?.nodeIds() ?? [...document.querySelectorAll('.react-flow__node')].map(node => node.dataset.id));
+  return page.evaluate(() => window.__gpuCanvas.nodeIds());
 }
-/** The node's live component, for typing into it: on the GPU canvas a click selects it, which makes it live. */
+/** The node's live component, for typing into it: a click selects it, which makes it live. */
 async function liveNode(page, id) {
-  if (!await gpuCanvas(page)) return page.locator(`.react-flow__node[data-id="${id}"]`);
   const point = await page.evaluate(id => {
     const rect = window.__gpuCanvas.nodeRect(id), canvas = document.querySelector('[data-gpu-canvas] > canvas').getBoundingClientRect();
     return rect && { x: canvas.x + rect.x + rect.width / 2, y: canvas.y + rect.y + Math.min(rect.height / 2, 40) };
@@ -267,13 +264,13 @@ async function main() {
     await canvasPane(page).click({ position: { x: 100, y: 100 } });
     const initialNodes = await canvasNodeIds(page);
     await page.keyboard.press('Shift+P');
-    await page.waitForFunction(count => (window.__gpuCanvas?.nodeIds() ?? document.querySelectorAll('.react-flow__node')).length === count, initialNodes.length + 1);
+    await page.waitForFunction(count => window.__gpuCanvas?.nodeIds().length === count, initialNodes.length + 1);
     const added = (await canvasNodeIds(page)).find(id => !initialNodes.includes(id));
     const prompt = (await liveNode(page, added)).getByPlaceholder('Describe what to generate...');
     await prompt.fill('Electron smoke test prompt');
     // On the GPU canvas the edit must reach the store, which the node's picture is painted from.
-    assert.equal(await page.evaluate(id => window.__gpuCanvas ? window.__gpuCanvas.data(id)?.prompt : null, added) ?? await prompt.inputValue(), 'Electron smoke test prompt');
-    console.log(`PASS: keyboard shortcut adds a node and its prompt is editable (${await gpuCanvas(page) ? 'GPU' : 'classic'} canvas)`);
+    assert.equal(await page.evaluate(id => window.__gpuCanvas.data(id)?.prompt, added), 'Electron smoke test prompt');
+    console.log('PASS: keyboard shortcut adds a node and its prompt is editable');
     const clipboardPermission = await page.evaluate(async () => {
       return (await navigator.permissions.query({ name: 'clipboard-read' })).state;
     });

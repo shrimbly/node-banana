@@ -128,6 +128,13 @@ describe("filters", () => {
     expect(matchesAssetQuery(lake, { projects: ["/users/me/ads/"] }, "darwin")).toBe(true);
     expect(matchesAssetQuery(lake, { projects: ["/users/me/ads"] }, "linux")).toBe(false);
   });
+
+  it("searches the name an asset was given, as the server does", () => {
+    const named = asset("a1", { name: "Opening shot", prompt: "Golden light" });
+    expect(matchesAssetQuery(named, { q: "opening SHOT" })).toBe(true);
+    expect(matchesAssetQuery(named, { q: "opening golden" })).toBe(true);
+    expect(matchesAssetQuery(asset("a2"), { q: "opening" })).toBe(false);
+  });
 });
 
 describe("paging", () => {

@@ -9,42 +9,13 @@ import { useWorkflowStore } from "@/store/workflowStore";
 import { GROUP_COLOR_ORDER } from "@/store/utils/nodeDefaults";
 import { GroupColor } from "@/types";
 import { isOverviewZoom } from "@/utils/canvasPerformance";
-import { groupBaseColor, groupColorLabel, groupFill, groupLabelColor } from "@/utils/groupColors";
+import { groupBaseColor, groupColorLabel, groupLabelColor } from "@/utils/groupColors";
 import { cn } from "@/components/nodes/ui/cn";
 import { MenuDivider, MenuItem, MenuList, MenuSectionLabel, MenuShortcut, MenuStepper, MenuSurface } from "@/components/ui/Menu";
 import { MAX_RUN_COUNT } from "@/store/utils/runBatch";
 
 /** Inset of the label from the group's left edge, so it starts inside the corner radius. */
 const LABEL_INSET = 10;
-
-interface GroupBackgroundProps {
-  groupId: string;
-}
-
-// Renders just the group background - displayed below nodes (z-index 1).
-// A faint wash of the group's hue and nothing else: the hue is painted once,
-// here, and once more as the label's text colour. Memoised, with the portals
-// below, because the canvas re-renders on every drag frame and would take
-// every group with it.
-const GroupBackground = memo(function GroupBackground({ groupId }: GroupBackgroundProps) {
-  const group = useWorkflowStore((state) => state.groups[groupId]);
-
-  if (!group) return null;
-
-  return (
-    <div
-      className="absolute rounded-xl"
-      style={{
-        left: group.position.x,
-        top: group.position.y,
-        width: group.size.width,
-        height: group.size.height,
-        backgroundColor: groupFill(group.color),
-        pointerEvents: "none",
-      }}
-    />
-  );
-});
 
 /** A passive switch drawn inside a menu row; the row itself is the control. */
 function RowSwitch({ on }: { on: boolean }) {
@@ -531,24 +502,6 @@ export function selectViewportZoom(state: Pick<ReactFlowState, "transform">): nu
   return state.transform[2];
 }
 
-// Renders group backgrounds inside ReactFlow's viewport using ViewportPortal
-// This participates in React Flow's stacking context so z-index works properly
-export const GroupBackgroundsPortal = memo(function GroupBackgroundsPortal() {
-  const groupIds = useWorkflowStore(useShallow((state) => Object.keys(state.groups)));
-
-  if (groupIds.length === 0) return null;
-
-  return (
-    <ViewportPortal>
-      <div style={{ position: "absolute", top: 0, left: 0, zIndex: -1, pointerEvents: "none" }}>
-        {groupIds.map((groupId) => (
-          <GroupBackground key={groupId} groupId={groupId} />
-        ))}
-      </div>
-    </ViewportPortal>
-  );
-});
-
 // Renders group controls (headers, resize handles) using ViewportPortal above nodes
 export function GroupControlsOverlay() {
   const groupIds = useWorkflowStore(useShallow((state) => Object.keys(state.groups)));
@@ -573,11 +526,4 @@ export function GroupControlsOverlay() {
       </div>
     </ViewportPortal>
   );
-}
-
-// Legacy export for backwards compatibility - combines both overlays
-// Note: For proper z-index behavior, use GroupBackgroundsPortal inside ReactFlow
-// and GroupControlsOverlay outside ReactFlow
-export function GroupsOverlay() {
-  return <GroupControlsOverlay />;
 }

@@ -1,47 +1,27 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
-const { applyGpuCanvasSwitch, readGpuCanvasPreference, writeGpuCanvasPreference } = require('../lib/gpu-canvas.cjs');
+const { applyGpuCanvasSwitches } = require('../lib/gpu-canvas.cjs');
 
 function commandLine(initial = {}) {
   const switches = { ...initial };
-  return { switches, getSwitchValue: name => switches[name] ?? '', appendSwitch: (name, value) => { switches[name] = value; } };
+  return { switches, getSwitchValue: name => switches[name] ?? '', appendSwitch: (name, value = '') => { switches[name] = value; } };
 }
 
-test('the GPU canvas is on by default', () => {
-  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'nb-gpu-canvas-'));
-  assert.equal(readGpuCanvasPreference(userData), true);
+test('HTML-in-Canvas is on, beside any other Blink feature', () => {
   const line = commandLine({ 'enable-blink-features': 'Other' });
-  assert.equal(applyGpuCanvasSwitch(line, { userData, env: {} }), true);
+  assert.equal(applyGpuCanvasSwitches(line, { env: {} }), true);
   assert.equal(line.switches['enable-blink-features'], 'Other,CanvasDrawElement');
 });
 
-test('choosing the classic canvas leaves the feature off from the next launch', () => {
-  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'nb-gpu-canvas-'));
-  writeGpuCanvasPreference(userData, false);
-  const off = commandLine();
-  assert.equal(applyGpuCanvasSwitch(off, { userData, env: {} }), false);
-  assert.deepEqual(off.switches, {});
-  writeGpuCanvasPreference(userData, true);
-  assert.equal(applyGpuCanvasSwitch(commandLine(), { userData, env: {} }), true);
+test('WebGL may fall back to SwiftShader, so a machine without a usable GPU still gets a canvas', () => {
+  const line = commandLine();
+  applyGpuCanvasSwitches(line, { env: {} });
+  assert.ok('enable-unsafe-swiftshader' in line.switches);
 });
 
-test('an unreadable setting counts as no choice', () => {
-  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'nb-gpu-canvas-'));
-  fs.writeFileSync(path.join(userData, 'gpu-canvas-v1.json'), '{');
-  assert.equal(readGpuCanvasPreference(userData), true);
-});
-
-test('NODE_BANANA_GPU_CANVAS turns it on or off for one run', () => {
-  const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'nb-gpu-canvas-'));
-  writeGpuCanvasPreference(userData, false);
-  const on = commandLine();
-  assert.equal(applyGpuCanvasSwitch(on, { userData, env: { NODE_BANANA_GPU_CANVAS: '1' } }), true);
-  assert.equal(on.switches['enable-blink-features'], 'CanvasDrawElement');
-  writeGpuCanvasPreference(userData, true);
-  const off = commandLine();
-  assert.equal(applyGpuCanvasSwitch(off, { userData, env: { NODE_BANANA_GPU_CANVAS: '0' } }), false);
-  assert.deepEqual(off.switches, {});
+test('NODE_BANANA_HTML_IN_CANVAS=0 turns HTML-in-Canvas off for one run (Chromium 158 has it on by default), and keeps the software fallback', () => {
+  const line = commandLine();
+  assert.equal(applyGpuCanvasSwitches(line, { env: { NODE_BANANA_HTML_IN_CANVAS: '0' } }), false);
+  assert.deepEqual(Object.keys(line.switches), ['enable-unsafe-swiftshader', 'disable-blink-features']);
+  assert.equal(line.switches['disable-blink-features'], 'CanvasDrawElement');
 });

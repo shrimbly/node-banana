@@ -26,8 +26,8 @@ export interface GpuCanvasBridge {
    * `ready` resolves once they have swapped in.
    */
   holdLive: (ids: readonly string[]) => { ready: Promise<void>; release: () => void };
-  /** Called when the view or the graph's layout changed. */
-  subscribe: (listener: () => void) => () => void;
+  /** Called when the view or the graph's layout changed; `layout` is true for the layout. */
+  subscribe: (listener: (layout: boolean) => void) => () => void;
 }
 
 let current: GpuCanvasBridge | null = null;

@@ -88,6 +88,13 @@ describe("POST /api/assets", () => {
     expect(vi.mocked(facade.beginRecord).mock.calls[0][0].meta).toMatchObject({ id: ASSET_ID, runId: RUN_ID });
   });
 
+  it("passes an upload's origin and display name through", async () => {
+    vi.mocked(facade.beginRecord).mockResolvedValue({ ticket: { uploadId: "up_1", expiresAt: 9 } });
+    const response = await record(page("/api/assets", { json: recordBody({ kind: "video", origin: "uploaded", name: "sunset.mp4" }) }));
+    expect(response.status).toBe(200);
+    expect(vi.mocked(facade.beginRecord).mock.calls[0][0].meta).toMatchObject({ kind: "video", origin: "uploaded", name: "sunset.mp4" });
+  });
+
   it("answers the result for a url source", async () => {
     const result = { asset: assetView(), filename: "x.png", legacyId: "x", reusedFile: false };
     vi.mocked(facade.beginRecord).mockResolvedValue({ result });
@@ -166,6 +173,25 @@ describe("GET/PATCH /api/assets/[id]", () => {
     expect(response.status).toBe(200);
     expect((await response.json()).favorite).toBe(true);
     expect(facade.patchAsset).toHaveBeenCalledWith(ASSET_ID, { favorite: true, tags: ["cats"] });
+  });
+
+  it("passes a display name through trimmed, and refuses one of more than one line", async () => {
+    vi.mocked(facade.patchAsset).mockResolvedValue(assetView({ name: "Sunset" }));
+    const response = await patchAsset(
+      page(`/api/assets/${ASSET_ID}`, { method: "PATCH", json: { name: " Sunset " } }),
+      ctx({ id: ASSET_ID }),
+    );
+    expect(response.status).toBe(200);
+    expect((await response.json()).name).toBe("Sunset");
+    expect(facade.patchAsset).toHaveBeenCalledWith(ASSET_ID, { name: "Sunset" });
+
+    const refused = await patchAsset(
+      page(`/api/assets/${ASSET_ID}`, { method: "PATCH", json: { name: "Sun\nset" } }),
+      ctx({ id: ASSET_ID }),
+    );
+    expect(refused.status).toBe(400);
+    expect(await refused.json()).toMatchObject({ error: "name must be one line.", code: "bad_request" });
+    expect(facade.patchAsset).toHaveBeenCalledTimes(1);
   });
 
   it("refuses an empty patch, and answers 404 for a missing asset", async () => {

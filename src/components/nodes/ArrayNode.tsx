@@ -483,8 +483,8 @@ export function ArrayNode({ id, data, selected }: NodeProps<ArrayNodeType>) {
             {!batch
               ? "Each connection carries one item."
               : itemTotal > 1
-                ? `Each connected Generate or LLM node runs ${itemTotal} times, once per item.`
-                : "Each connected Generate or LLM node runs once per item."}
+                ? `Each connected Generate, LLM or ComfyUI app node runs ${itemTotal} times, once per item.`
+                : "Each connected Generate, LLM or ComfyUI app node runs once per item."}
           </div>
         </div>
       </LogicRows>

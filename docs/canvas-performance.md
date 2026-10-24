@@ -1,5 +1,7 @@
 # Electron canvas performance
 
+> **History.** This is the classic React Flow canvas, which the GPU canvas replaced in 3.0. Its runner (`scripts/electron-canvas-performance.cjs`, `npm run electron:performance`) went with it; the GPU canvas is measured with `scripts/gpu-canvas.cjs` (`docs/gpu-canvas.md`). The trace analysis and OS input it introduced (`scripts/lib/`) are still in use.
+
 How smooth panning the canvas and dragging nodes are, how to measure it the way it is felt, and what has been done about it. Two passes so far: the September 2026 pass on the Mac (React and store work) and the October 2026 pass on Windows (measurement that matches real use, then the main thread and Chromium's own work).
 
 None of the changes alters the canvas at rest. Two alter it mid-gesture, both on edges: an edge under the cursor does not highlight while the canvas pans or a node drags, and edges cannot be clicked mid-gesture (they could not before either).

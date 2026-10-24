@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import type { NodeExecutionContext } from "../types";
-import type { WorkflowNode, WorkflowNodeData } from "@/types";
+import type { ComfyAppNodeData, WorkflowEdge, WorkflowNode, WorkflowNodeData } from "@/types";
 import type { RecordAssetInput, RecordAssetResult, RecordedAssetHandle } from "@/lib/assets/types";
 import { executeNanoBanana } from "../nanoBananaExecutor";
 import { executeGenerateVideo } from "../generateVideoExecutor";
@@ -600,6 +600,29 @@ describe("generateVideo", () => {
     expect(entry.id).toBe("waves_1a2b");
     expect(entry).not.toHaveProperty("assetId");
   });
+
+  it("in a batch, sends each item in the slot the batch feeds, beside the other slots", async () => {
+    const { ctx } = makeCtx(videoNode(), { recordAsset: makeRecorder().recordAsset });
+    (ctx.getConnectedInputs as ReturnType<typeof vi.fn>).mockReturnValue({
+      images: [],
+      videos: [],
+      audio: [],
+      model3d: null,
+      text: "one",
+      textItems: ["one", "two"],
+      textItemsInput: "prompt",
+      dynamicInputs: { prompt: "one", negative_prompt: "blurry" },
+      easeCurve: null,
+    });
+    mockFetch.mockResolvedValue(okJson({ success: true, video: "data:video/mp4;base64,v" }));
+
+    await expect(runBatchIfApplicable(ctx)).resolves.toBe(true);
+
+    expect(mockFetch.mock.calls.map((c) => JSON.parse(c[1].body)).map((body) => [body.prompt, body.dynamicInputs])).toEqual([
+      ["one", { prompt: "one", negative_prompt: "blurry" }],
+      ["two", { prompt: "two", negative_prompt: "blurry" }],
+    ]);
+  });
 });
 
 describe("generateAudio", () => {
@@ -773,6 +796,30 @@ describe("generate3d", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(nodes.get("3d-1")!.data).toMatchObject({ savedFilename: "chair.glb", savedFilePath: "/proj/generations/chair.glb" });
   });
+
+  it("in a batch, generates a model per item, each asset tagged with its index", async () => {
+    const { recordAsset } = makeRecorder();
+    const { ctx } = makeCtx(modelNode(), { recordAsset });
+    (ctx.getConnectedInputs as ReturnType<typeof vi.fn>).mockReturnValue({
+      images: [],
+      videos: [],
+      audio: [],
+      model3d: null,
+      text: "a chair",
+      textItems: ["a chair", "a lamp"],
+      dynamicInputs: {},
+      easeCurve: null,
+    });
+    mockFetch.mockResolvedValue(okJson({ success: true, model3dUrl: "https://cdn.example/m.glb" }));
+
+    await expect(runBatchIfApplicable(ctx)).resolves.toBe(true);
+
+    expect(mockFetch.mock.calls.map((c) => JSON.parse(c[1].body).prompt)).toEqual(["a chair", "a lamp"]);
+    expect(recordAsset.mock.calls.map((c) => [c[0].prompt, c[0].producer.batchIndex])).toEqual([
+      ["a chair", 0],
+      ["a lamp", 1],
+    ]);
+  });
 });
 
 describe("comfyApp", () => {
@@ -834,7 +881,40 @@ describe("comfyApp", () => {
       producer: { nodeId: "comfy-1", nodeType: "comfyApp" },
     });
     expect(mockFetch.mock.calls.some((c) => c[0] === "/api/save-generation")).toBe(false);
+    // The image and the video are both listed in recent generations; the video with its recording
+    const listed = vi.mocked(ctx.addToGlobalHistory).mock.calls;
+    expect(listed.map(([item, recording]) => [item.kind ?? "image", item.image, recording?.assetId])).toEqual([
+      ["image", "data:image/png;base64,big", undefined],
+      ["video", "data:video/mp4;base64,clip", "a000000000002"],
+    ]);
+    expect(listed[1][0]).toMatchObject({ prompt: "Upscaler (steps=20)", model: "Upscaler" });
+  });
+
+  it("lists an app whose only output is a video in recent generations", async () => {
+    vi.useFakeTimers();
+    const { recordAsset } = makeRecorder();
+    const node = { id: "comfy-1", type: "comfyApp", position: { x: 0, y: 0 }, data: { app, paramValues: {}, status: "idle" } } as unknown as WorkflowNode;
+    const { ctx } = makeCtx(node, { recordAsset });
+    mockFetch.mockImplementation(async (url: string) =>
+      url === "/api/comfy/run"
+        ? okJson({ success: true, polling: true, jobId: "job-1", status: "queued" })
+        : okJson({
+            success: true,
+            polling: false,
+            status: "success",
+            outputs: [{ handleId: "12", type: "video", value: "data:video/mp4;base64,clip" }],
+          })
+    );
+
+    const run = executeComfyApp(ctx);
+    await vi.advanceTimersByTimeAsync(2_000);
+    await run;
+
     expect(ctx.addToGlobalHistory).toHaveBeenCalledOnce();
+    expect(ctx.addToGlobalHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "video", image: "data:video/mp4;base64,clip", model: "Upscaler" }),
+      expect.objectContaining({ assetId: "a000000000001" })
+    );
   });
 
   it("runs with the seeds the node shows, then moves each on by its mode", async () => {
@@ -892,6 +972,188 @@ describe("comfyApp", () => {
     expect(recordAsset.mock.calls[0][0].parameters).toMatchObject({ "25:seed": ran });
     // Random, the default: the node now shows the next one.
     expect((nodes.get("comfy-1")!.data as { paramValues: Record<string, unknown> }).paramValues["25:seed"]).toEqual(expect.any(Number));
+  });
+
+  describe("in a batch", () => {
+    const text = (nodeId: string, name: string) => ({ id: `${nodeId}:text`, name, label: name, type: "text", nodeId, inputKey: "text", required: true });
+    const prompted = { ...app, inputs: [text("6", "positive"), text("7", "negative")] };
+    const items = ["a fox", "a hare", "an owl"];
+
+    function batchRun(overrides: Partial<NodeExecutionContext> = {}) {
+      const node = { id: "comfy-1", type: "comfyApp", position: { x: 0, y: 0 }, data: { app: prompted, paramValues: {}, status: "idle" } } as unknown as WorkflowNode;
+      const made = makeCtx(node, overrides);
+      (made.ctx.getConnectedInputs as ReturnType<typeof vi.fn>).mockReturnValue({
+        images: [],
+        videos: [],
+        audio: [],
+        model3d: null,
+        text: items[0],
+        textItems: items,
+        textItemsInput: "positive",
+        dynamicInputs: { positive: items[0], negative: "blurry" },
+        easeCurve: null,
+      });
+      return made;
+    }
+
+    const runBodies = () => mockFetch.mock.calls.filter((c) => c[0] === "/api/comfy/run").map((c) => JSON.parse(c[1].body));
+
+    it("runs the app once per item, each in the slot the batch feeds", async () => {
+      vi.useFakeTimers();
+      const { recordAsset } = makeRecorder();
+      const { ctx, nodes } = batchRun({ recordAsset });
+      let jobs = 0;
+      mockFetch.mockImplementation(async (url: string, init: { body: string }) =>
+        url === "/api/comfy/run"
+          ? okJson({ success: true, polling: true, jobId: `job-${++jobs}`, status: "queued" })
+          : okJson({
+              success: true,
+              polling: false,
+              status: "success",
+              outputs: [{ handleId: "9", type: "image", value: `data:image/png;base64,${JSON.parse(init.body).jobId}` }],
+            })
+      );
+
+      const run = runBatchIfApplicable(ctx);
+      await vi.advanceTimersByTimeAsync(10_000);
+      await expect(run).resolves.toBe(true);
+
+      expect(runBodies().map((body) => body.inputs)).toEqual(items.map((item) => ({ positive: item, negative: "blurry" })));
+      expect(recordAsset.mock.calls.map((c) => [c[0].media, c[0].producer.batchIndex])).toEqual([
+        ["data:image/png;base64,job-1", 0],
+        ["data:image/png;base64,job-2", 1],
+        ["data:image/png;base64,job-3", 2],
+      ]);
+      const data = nodes.get("comfy-1")!.data as ComfyAppNodeData;
+      expect(data.runHistory!.map((entry) => entry.prompt)).toEqual([
+        "Upscaler: an owl · blurry",
+        "Upscaler: a hare · blurry",
+        "Upscaler: a fox · blurry",
+      ]);
+      expect(data.selectedRunHistoryIndex).toBe(0);
+      expect(data.status).toBe("complete");
+    });
+
+    it("hands each item's result to the Output Gallery it feeds, by the handle the edge leaves", async () => {
+      vi.useFakeTimers();
+      const gallery = { id: "gallery-1", type: "outputGallery", position: { x: 0, y: 0 }, data: { images: [], videos: [] } } as unknown as WorkflowNode;
+      const { ctx } = batchRun({
+        recordAsset: makeRecorder().recordAsset,
+        getEdges: () => [
+          { id: "e1", source: "comfy-1", sourceHandle: "9", target: "gallery-1", targetHandle: "image" },
+          { id: "e2", source: "comfy-1", sourceHandle: "12", target: "gallery-1", targetHandle: "video" },
+        ] as WorkflowEdge[],
+        getNodes: () => [gallery],
+      });
+      let jobs = 0;
+      mockFetch.mockImplementation(async (url: string, init: { body: string }) => {
+        if (url === "/api/comfy/run") return okJson({ success: true, polling: true, jobId: `job-${++jobs}`, status: "queued" });
+        const { jobId } = JSON.parse(init.body);
+        return okJson({
+          success: true,
+          polling: false,
+          status: "success",
+          outputs: [
+            { handleId: "9", type: "image", value: `data:image/png;base64,${jobId}` },
+            { handleId: "12", type: "video", value: `data:video/mp4;base64,${jobId}` },
+            { handleId: "15", type: "text", value: "a caption" },
+          ],
+        });
+      });
+
+      const run = runBatchIfApplicable(ctx);
+      await vi.advanceTimersByTimeAsync(10_000);
+      await run;
+
+      expect((ctx.appendOutputGalleryImage as ReturnType<typeof vi.fn>).mock.calls).toEqual([
+        ["gallery-1", "data:image/png;base64,job-1"],
+        ["gallery-1", "data:image/png;base64,job-2"],
+        ["gallery-1", "data:image/png;base64,job-3"],
+      ]);
+      expect((ctx.appendOutputGalleryVideo as ReturnType<typeof vi.fn>).mock.calls.map((c) => c[1])).toEqual([
+        "data:video/mp4;base64,job-1",
+        "data:video/mp4;base64,job-2",
+        "data:video/mp4;base64,job-3",
+      ]);
+    });
+
+    const finished = (value: string) =>
+      okJson({ success: true, polling: false, status: "success", outputs: [{ handleId: "9", type: "image", value }] });
+    const cancels = () =>
+      mockFetch.mock.calls
+        .filter((c) => c[0] === "/api/comfy/poll")
+        .map((c) => JSON.parse(c[1].body))
+        .filter((body) => body.cancel)
+        .map((body) => body.jobId);
+
+    it("stops at a failed item and leaves the node in error with its message", async () => {
+      vi.useFakeTimers();
+      const { ctx, nodes } = batchRun({ recordAsset: makeRecorder().recordAsset });
+      let jobs = 0;
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url !== "/api/comfy/run") return finished("data:image/png;base64,x");
+        jobs += 1;
+        return jobs === 2
+          ? { ok: false, status: 400, text: async () => JSON.stringify({ success: false, error: "Prompt outputs failed validation" }) }
+          : okJson({ success: true, polling: true, jobId: `job-${jobs}`, status: "queued" });
+      });
+
+      const failed = expect(runBatchIfApplicable(ctx)).rejects.toThrow("Prompt outputs failed validation");
+      await vi.advanceTimersByTimeAsync(10_000);
+      await failed;
+
+      expect(runBodies()).toHaveLength(2);
+      const data = nodes.get("comfy-1")!.data as ComfyAppNodeData;
+      expect(data).toMatchObject({ status: "error", error: "Prompt outputs failed validation" });
+      expect(data.runHistory).toHaveLength(1);
+    });
+
+    it("on Stop, cancels the running item's job and runs no more", async () => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const { ctx, nodes } = batchRun({ recordAsset: makeRecorder().recordAsset, signal: controller.signal });
+      let jobs = 0;
+      mockFetch.mockImplementation(async (url: string, init: { body: string }) => {
+        if (url === "/api/comfy/run") return okJson({ success: true, polling: true, jobId: `job-${++jobs}`, status: "queued" });
+        const body = JSON.parse(init.body);
+        if (body.cancel) return okJson({ success: true });
+        // The first item finishes; the second is still rendering
+        return body.jobId === "job-1" ? finished("data:image/png;base64,x") : okJson({ success: true, polling: true, status: "running" });
+      });
+
+      const stopped = expect(runBatchIfApplicable(ctx)).rejects.toMatchObject({ name: "AbortError" });
+      await vi.advanceTimersByTimeAsync(5_000);
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(0);
+      await stopped;
+
+      expect(runBodies()).toHaveLength(2);
+      expect(cancels()).toEqual(["job-2"]);
+      const data = nodes.get("comfy-1")!.data as ComfyAppNodeData;
+      expect(data.status).toBe("idle");
+      expect(data.runHistory).toHaveLength(1);
+    });
+
+    it("on a Stop between items, keeps the finished item and runs no more", async () => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const { ctx, nodes } = batchRun({ recordAsset: makeRecorder().recordAsset, signal: controller.signal });
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url === "/api/comfy/run") return okJson({ success: true, polling: true, jobId: "job-1", status: "queued" });
+        // Stop lands as the first item's result comes back
+        controller.abort();
+        return finished("data:image/png;base64,x");
+      });
+
+      const stopped = expect(runBatchIfApplicable(ctx)).rejects.toMatchObject({ name: "AbortError" });
+      await vi.advanceTimersByTimeAsync(5_000);
+      await stopped;
+
+      expect(runBodies()).toHaveLength(1);
+      const data = nodes.get("comfy-1")!.data as ComfyAppNodeData;
+      expect(data.status).toBe("complete");
+      expect(data.runHistory).toHaveLength(1);
+    });
   });
 
   function comfyRun(recordAsset: NodeExecutionContext["recordAsset"]) {

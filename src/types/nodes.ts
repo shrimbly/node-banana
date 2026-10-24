@@ -158,18 +158,26 @@ export interface RunBatchTag {
 }
 
 /**
- * Image history item for tracking generated images
+ * An entry of the recent-generations list: a generated image or video
  */
 export interface ImageHistoryItem {
   generation?: ImageGenerationMetadata;
   id: string;
-  image: string; // Base64 data URL
+  /** Absent in entries from before videos were listed: an image. */
+  kind?: "image" | "video";
+  image: string; // Data URL or URL of the media; a video's is playable, as in the node's carousel
   timestamp: number; // For display & sorting
   prompt: string; // The prompt used
   aspectRatio: AspectRatio;
   /** A Gemini model, or a free-form producer name (e.g. a ComfyUI app). */
   model: ModelType | string;
   batch?: RunBatchTag;
+  /** The asset library's id for this output, when it was recorded. */
+  assetId?: string;
+  /** A video's length, once the library has measured it. */
+  durationSec?: number;
+  /** A video's poster frame (a library thumbnail URL), once the library has one. */
+  poster?: string;
 }
 
 /**
@@ -212,6 +220,24 @@ export interface ModelInputDef {
 }
 
 /**
+ * A request the provider is running for a node, kept on the node while the
+ * app waits for it and after the app stops waiting (the poll safety net, a
+ * reload, a crash), so the run can be picked up again. Saved with the
+ * workflow as node data. See docs/generation-polling.md.
+ */
+export interface PendingGenerationTask {
+  /** The poll provider ("comfy", "kie"). */
+  provider: string;
+  /** The provider's request id. */
+  taskId: string;
+  modelId: string;
+  modelName: string;
+  mediaType: string;
+  /** When the provider accepted the request (ms). */
+  submittedAt: number;
+}
+
+/**
  * Nano Banana node - AI image generation
  */
 export interface NanoBananaNodeData extends BaseNodeData {
@@ -232,6 +258,7 @@ export interface NanoBananaNodeData extends BaseNodeData {
   parametersExpanded?: boolean; // Collapse state for inline parameter display
   status: NodeStatus;
   error: string | null;
+  pendingTask?: PendingGenerationTask; // The provider's request while it runs, or after the app stopped waiting
   imageHistory: CarouselImageItem[]; // Carousel history (IDs only)
   selectedHistoryIndex: number; // Currently selected image in carousel
   fallbackModel?: SelectedModel; // JSON-compatible with Node Banana Pro
@@ -256,6 +283,7 @@ export interface GenerateVideoNodeData extends BaseNodeData {
   parametersExpanded?: boolean; // Collapse state for inline parameter display
   status: NodeStatus;
   error: string | null;
+  pendingTask?: PendingGenerationTask; // The provider's request while it runs, or after the app stopped waiting
   videoHistory: CarouselVideoItem[]; // Carousel history (IDs only)
   selectedVideoHistoryIndex: number; // Currently selected video in carousel
   fallbackModel?: SelectedModel; // JSON-compatible with Node Banana Pro
@@ -281,6 +309,7 @@ export interface Generate3DNodeData extends BaseNodeData {
   parametersExpanded?: boolean; // Collapse state for inline parameter display
   status: NodeStatus;
   error: string | null;
+  pendingTask?: PendingGenerationTask; // The provider's request while it runs, or after the app stopped waiting
   fallbackModel?: SelectedModel; // JSON-compatible with Node Banana Pro
   __usedFallback?: boolean; // Set by runWithFallback on successful fallback
   __fallbackModelUsed?: string; // Display name of fallback model that succeeded
@@ -314,6 +343,7 @@ export interface GenerateAudioNodeData extends BaseNodeData {
   parametersExpanded?: boolean; // Collapse state for inline parameter display
   status: NodeStatus;
   error: string | null;
+  pendingTask?: PendingGenerationTask; // The provider's request while it runs, or after the app stopped waiting
   audioHistory: CarouselAudioItem[]; // Carousel history (IDs only)
   selectedAudioHistoryIndex: number; // Currently selected audio in carousel
   duration: number | null; // Duration in seconds
@@ -392,13 +422,82 @@ export interface VideoStitchClip {
   handleId: string;              // Which input handle (video-0, video-1, etc.)
 }
 
+/** Where a Stitch timeline clip's video comes from: an input socket's edge, or a library asset. */
+export type StitchClipSource =
+  | { kind: "edge"; edgeId: string }
+  | { kind: "asset"; assetId: string };
+
+/** One clip of the Edit Video sequence. See docs/edit-video.md. */
+export interface StitchTimelineClip {
+  id: string;                 // Stable within the node; generated once
+  source: StitchClipSource;
+  inSec: number;              // Trim start, source seconds, default 0
+  outSec: number | null;      // Trim end, source seconds; null = the source's end
+  muted: boolean;             // The clip's own sound
+  volume: number;             // 0..1 linear gain on the clip's own sound, default 1
+  startSec?: number;          // Stacked: where the trimmed clip starts on the timeline, seconds (0–600). Absent = laid out
+                              // from Overlap. Track ignores it.
+}
+
 /**
- * Video Stitch node - concatenates multiple videos into a single output
+ * A point on a volume curve, gain 0..1 (1 = 0 dB). t: sequence seconds (one loop) for audioCurve, the clip's source
+ * seconds on an audio clip.
+ */
+export interface VolumePoint {
+  t: number;
+  gain: number;
+}
+
+/** Where an audio clip's sound comes from: the node's `audio` socket, or a library asset. */
+export type StitchAudioSource = { kind: "music" } | { kind: "asset"; assetId: string };
+
+/** One clip on an audio row of the Edit Video sequence. See docs/edit-video.md. */
+export interface StitchAudioClip {
+  id: string;                 // Stable within the node; "audio:music" for the music read from a node without audioClips
+  source: StitchAudioSource;
+  row: number;                // 0-based audio row; stored with no empty row (the editor's draft may hold some)
+  startSec: number;           // Where its In plays on the timeline, 0–600 s
+  inSec: number;              // Trim start, source seconds
+  outSec: number | null;      // Trim end, source seconds; null = the source's end
+  muted: boolean;
+  curve: VolumePoint[];       // t in the clip's source seconds; empty = flat at 0 dB
+}
+
+/** How a Stitch sequence is laid out. See docs/edit-video.md. */
+export interface StitchSequenceLayout {
+  /**
+   * "track": one row, clips end to end. "stacked": one row per clip, placed anywhere in time; a clip never placed starts
+   * Overlap before the clip above ends.
+   */
+  mode: "track" | "stacked";
+  /** Stacked: how far a clip overlaps the one above when lined up (0–10 s, 0.1 steps); also where new clips go. Kept while mode is "track". */
+  overlapSec: number;
+  /**
+   * Stacked: the higher row is in front; where clips overlap, it fades in or out over the rows below and the sound
+   * crossfades. Off: the higher row covers, every clip is heard.
+   */
+  crossfade: boolean;
+}
+
+/**
+ * Edit Video node (videoStitch) - joins videos on a timeline into a single output
  */
 export interface VideoStitchNodeData extends BaseNodeData {
   clips: VideoStitchClip[];       // Ordered clip sequence for filmstrip
-  clipOrder: string[];            // Edge IDs in user-defined order (drag reorder)
-  outputVideo: string | null;     // Stitched video blob URL or data URL
+  clipOrder: string[];            // Edge ids in sequence order; with a timeline, kept equal to edgeIdsInOrder(timeline) for older readers
+  /** The sequence. Absent = the editor never wrote this node (a "legacy" node); read it with readStitchDraft. */
+  timeline?: StitchTimelineClip[];
+  /** Music volume curve over one loop; empty or absent = flat at 0 dB. Read only while audioClips is absent. */
+  audioCurve?: VolumePoint[];
+  /** The music track is muted (the clips' own sound still plays). Read only while audioClips is absent. */
+  audioMuted?: boolean;
+  /** Audio clips. Absent = the audio is the connected music alone, read from audioCurve and audioMuted. */
+  audioClips?: StitchAudioClip[];
+  /** Track or Stacked, with the overlap and crossfade. Absent = Track. Only the editor's Done writes it. */
+  sequenceLayout?: StitchSequenceLayout;
+  /** The edit project the editor's Save and Done keep in step with this node (see docs/edit-video.md, "Saved to Edits"). */
+  editProjectId?: string;
+  outputVideo: string | null;     // Rendered video blob URL or data URL
   loopCount: 1 | 2 | 3;          // How many times to repeat the clip sequence (1 = no loop)
   status: NodeStatus;
   error: string | null;

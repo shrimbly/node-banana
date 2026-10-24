@@ -279,7 +279,7 @@ const VIDEO_TARGET_OPTIONS: MenuOption[] = [
   },
   {
     type: "videoStitch",
-    label: "Video Stitch",
+    label: "Edit Video",
     icon: <NodeTypeIcon type="videoStitch" />,
   },
   {
@@ -345,7 +345,7 @@ const VIDEO_SOURCE_OPTIONS: MenuOption[] = [
   },
   {
     type: "videoStitch",
-    label: "Video Stitch",
+    label: "Edit Video",
     icon: <NodeTypeIcon type="videoStitch" />,
   },
   {
@@ -396,7 +396,7 @@ const AUDIO_TARGET_OPTIONS: MenuOption[] = [
   },
   {
     type: "videoStitch",
-    label: "Video Stitch",
+    label: "Edit Video",
     icon: <NodeTypeIcon type="videoStitch" />,
   },
   {

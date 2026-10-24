@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, ImagePlus, Images, LayoutGrid, LibraryBig, Maximize2, X, Check } from "lucide-react";
+import { Download, ImagePlus, Images, LayoutGrid, LibraryBig, Maximize2, Play, X, Check } from "lucide-react";
 import { memo, useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { useWorkflowStore } from "@/store/workflowStore";
@@ -9,6 +9,7 @@ import { getRecorderLibraryStatus } from "@/lib/assets/client/recorder";
 import { useAddMediaNode } from "@/hooks/useAddMediaNode";
 import { downloadMedia } from "@/utils/downloadMedia";
 import { ImageHistoryItem } from "@/types";
+import { formatDuration } from "./assets/assetFormat";
 import { ChromeIconButton } from "./ChromeIconButton";
 import { CHROME_SURFACE } from "./chromeStyles";
 import { MediaViewer, type MediaViewerAction, type MediaViewerItem } from "./MediaViewer";
@@ -25,17 +26,21 @@ const DROPDOWN_WIDTH = 344;
 /** How long "Add to graph" reads "Added" before it resets. */
 const ADDED_MS = 1400;
 
-/** Drag payload a history thumbnail carries; the canvas turns it into an image node. */
+/** Drag payload a history thumbnail carries; the canvas turns it into an image or video node. */
 export const HISTORY_DRAG_TYPE = "application/history-image";
+/** Set beside it for a video: a drag's data cannot be read until the drop, only its types. */
+export const HISTORY_VIDEO_DRAG_TYPE = "application/history-video";
 
 export function setHistoryDragData(
   e: React.DragEvent,
-  item: Pick<ImageHistoryItem, "image" | "prompt" | "timestamp">,
+  item: Pick<ImageHistoryItem, "kind" | "image" | "prompt" | "timestamp">,
 ) {
+  const kind = item.kind ?? "image";
   e.dataTransfer.setData(
     HISTORY_DRAG_TYPE,
-    JSON.stringify({ image: item.image, prompt: item.prompt, timestamp: item.timestamp }),
+    JSON.stringify({ kind, image: item.image, prompt: item.prompt, timestamp: item.timestamp }),
   );
+  if (kind === "video") e.dataTransfer.setData(HISTORY_VIDEO_DRAG_TYPE, "");
   e.dataTransfer.effectAllowed = "copy";
 }
 
@@ -48,7 +53,7 @@ export function setHistoryDragData(
  */
 export function describeProducer(model: string): string {
   if (model === "nano-banana-pro") return "Pro";
-  if (model === "nano-banana" || model === "nano-banana-2" || model === "nano-banana-2-lite") {
+  if (model === "nano-banana" || model === "nano-banana-2" || model === "nano-banana-2.1" || model === "nano-banana-2-lite") {
     return "Standard";
   }
   return model;
@@ -60,6 +65,7 @@ export function producerName(model: string): string {
     case "nano-banana-pro": return "Nano Banana Pro";
     case "nano-banana": return "Nano Banana";
     case "nano-banana-2": return "Nano Banana 2";
+    case "nano-banana-2.1": return "Nano Banana 2.1";
     case "nano-banana-2-lite": return "Nano Banana 2 Lite";
     default: return model;
   }
@@ -85,11 +91,19 @@ export function historyViewerItem(item: ImageHistoryItem): MediaViewerItem {
     ["Created", formatRelativeTime(item.timestamp)],
     ["Model", producerName(item.model)],
   ];
+  if (item.durationSec) details.push(["Length", formatDuration(item.durationSec)]);
   if (item.generation?.size) details.push(["Size", item.generation.size]);
   if (item.generation?.outputFormat) details.push(["Format", item.generation.outputFormat.toUpperCase()]);
   const cost = generationCost(item);
   if (cost) details.push(["Cost", cost]);
-  return { id: item.id, src: item.image, kind: "image", title: item.prompt || "No prompt", details };
+  return {
+    id: item.id,
+    src: item.image,
+    kind: item.kind ?? "image",
+    ...(item.poster ? { thumb: item.poster } : {}),
+    title: item.prompt || "No prompt",
+    details,
+  };
 }
 
 export function formatRelativeTime(timestamp: number): string {
@@ -144,6 +158,47 @@ export function groupRecentByBatch(items: ImageHistoryItem[]): RecentSection[] {
   return sections;
 }
 
+const TILE_MEDIA = "pointer-events-none h-full w-full object-cover";
+
+/**
+ * A tile's picture. A video shows the library's poster, or its first frame
+ * until there is one, with a play mark and its length.
+ */
+function TileMedia({ item, alt }: { item: ImageHistoryItem; alt: string }) {
+  const [posterFailed, setPosterFailed] = useState(false);
+  const [measured, setMeasured] = useState<number | null>(null);
+  if (item.kind !== "video") return <img src={item.image} alt={alt} className={TILE_MEDIA} draggable={false} />;
+
+  const length = item.durationSec ?? measured;
+  return (
+    <>
+      {item.poster && !posterFailed ? (
+        <img src={item.poster} alt={alt} className={TILE_MEDIA} draggable={false} onError={() => setPosterFailed(true)} />
+      ) : (
+        <video
+          src={item.image}
+          aria-label={alt}
+          preload="metadata"
+          muted
+          playsInline
+          className={TILE_MEDIA}
+          onLoadedMetadata={(e) => {
+            const { duration } = e.currentTarget;
+            if (Number.isFinite(duration) && duration > 0) setMeasured(duration);
+          }}
+        />
+      )}
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute left-1 top-1 inline-flex h-4 items-center gap-0.5 rounded-[4px] bg-neutral-950/80 px-1 font-mono text-[10px] leading-4 tabular-nums text-neutral-200"
+      >
+        <Play size={9} strokeWidth={0} fill="currentColor" />
+        {length ? formatDuration(length) : "Video"}
+      </span>
+    </>
+  );
+}
+
 /** One thumbnail in the drop-down grid: click to view, drag to place. */
 function RecentThumb({
   item,
@@ -162,16 +217,11 @@ function RecentThumb({
       draggable
       onClick={() => onOpen(index)}
       onDragStart={(e) => onDragStart(e, item)}
-      aria-label={`View ${item.prompt?.substring(0, 60) || `history image ${index + 1}`}`}
+      aria-label={`View ${item.prompt?.substring(0, 60) || `history ${item.kind === "video" ? "video" : "image"} ${index + 1}`}`}
       className="group relative h-20 cursor-pointer overflow-hidden rounded-lg squircle bg-well shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-[box-shadow,transform] duration-[120ms] ease-out hover:shadow-[inset_0_0_0_2px_#3b82f6] hover:scale-[1.04] active:cursor-grabbing focus-visible:outline-none focus-visible:shadow-[inset_0_0_0_2px_#3b82f6]"
       title={`${item.batch ? `Run ${item.batch.index} of ${item.batch.count} · ` : ""}${formatRelativeTime(item.timestamp)} · ${describeProducer(item.model)}\n${item.prompt?.substring(0, 80) || "No prompt"}${item.generation ? `\n${generationDetails(item)}` : ""}`}
     >
-      <img
-        src={item.image}
-        alt={`History ${index + 1}`}
-        className="pointer-events-none h-full w-full object-cover"
-        draggable={false}
-      />
+      <TileMedia item={item} alt={`History ${index + 1}`} />
       {item.batch && (
         <span
           aria-hidden="true"
@@ -296,13 +346,8 @@ function HistorySidebar({
             className="group flex cursor-pointer gap-3 rounded-lg p-2 transition-colors hover:bg-white/5 active:cursor-grabbing"
           >
             {/* Thumbnail */}
-            <div className="h-14 w-14 shrink-0 overflow-hidden rounded-lg squircle shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-shadow group-hover:shadow-[inset_0_0_0_2px_#3b82f6]">
-              <img
-                src={item.image}
-                alt={`History ${index + 1}`}
-                className="pointer-events-none h-full w-full object-cover"
-                draggable={false}
-              />
+            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg squircle shadow-[inset_0_0_0_1px_rgba(255,255,255,0.08)] transition-shadow group-hover:shadow-[inset_0_0_0_2px_#3b82f6]">
+              <TileMedia item={item} alt={`History ${index + 1}`} />
             </div>
 
             {/* Info */}
@@ -468,6 +513,7 @@ export const GlobalImageHistory = memo(function GlobalImageHistory({
   const viewerActions = useMemo<MediaViewerAction[]>(() => {
     if (!viewed) return [];
     const added = addedId === viewed.id;
+    const kind = viewed.kind ?? "image";
     return [
       {
         label: added ? "Added" : "Add to graph",
@@ -475,7 +521,7 @@ export const GlobalImageHistory = memo(function GlobalImageHistory({
         tone: added ? "success" : "primary",
         shortcut: "Enter",
         onClick: () => {
-          addMediaNode({ kind: "image", src: viewed.image, filename: `history-${viewed.timestamp}.png` });
+          addMediaNode({ kind, src: viewed.image, filename: `history-${viewed.timestamp}.${kind === "video" ? "mp4" : "png"}` });
           setAddedId(viewed.id);
         },
       },
@@ -484,7 +530,7 @@ export const GlobalImageHistory = memo(function GlobalImageHistory({
         icon: Download,
         shortcut: "d",
         onClick: () => {
-          downloadMedia(viewed.image, "image").catch((err) => console.error("History download failed:", err));
+          downloadMedia(viewed.image, kind).catch((err) => console.error("History download failed:", err));
         },
       },
     ];
@@ -492,7 +538,7 @@ export const GlobalImageHistory = memo(function GlobalImageHistory({
 
   if (history.length === 0) return null;
 
-  const countLabel = `${history.length} image${history.length > 1 ? "s" : ""} in history`;
+  const countLabel = `${history.length} item${history.length > 1 ? "s" : ""} in history`;
 
   return (
     <div

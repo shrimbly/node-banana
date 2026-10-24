@@ -108,12 +108,48 @@ function videoLoaded(video: HTMLVideoElement): Promise<void> {
  * frame). Media in other nodes of `root` never holds them.
  */
 export async function settleNodes(root: HTMLElement, ids: readonly string[], until: number, cancelled: () => boolean = () => false): Promise<{ decodeMs: number; unloaded: Set<string> }> {
-  const element = (id: string) => root.querySelector<HTMLElement>(`.react-flow__node[data-id="${CSS.escape(id)}"]`);
-  // The settled nodes' own elements: each node and its floating header.
-  const scope = ids.length ? ids.flatMap((id) => [`.react-flow__node[data-id="${CSS.escape(id)}"]`, `[data-node-header="${CSS.escape(id)}"]`]).join(", ") : null;
-  const within = <K extends keyof HTMLElementTagNameMap>(selector: K): HTMLElementTagNameMap[K][] =>
-    scope ? [...root.querySelectorAll(scope)].flatMap((part) => [...part.querySelectorAll(selector)]) : [];
-  const pendingMarks = () => scope ? [...root.querySelectorAll(scope)].flatMap((part) => [...part.querySelectorAll("[data-paint-pending]")]) : [];
+  // The settled nodes' own elements, each node's and its floating header's, kept between frames: this runs every
+  // frame while nodes settle, and querying the root for each node per frame costs more as the root grows. They are
+  // found again in one pass of the root when one has gone or not shown yet (a missing header at most every 100 ms:
+  // most nodes have none).
+  const nodes = new Map<string, HTMLElement>(), headers = new Map<string, HTMLElement>();
+  let headersScannedAt = -Infinity, checked = false;
+  const refresh = () => {
+    // Once per synchronous pass (a frame's checks call it per node).
+    if (checked) return;
+    checked = true;
+    queueMicrotask(() => { checked = false; });
+    const nodeGone = ids.some((id) => !nodes.get(id)?.isConnected);
+    const headerGone = [...headers.values()].some((part) => !part.isConnected);
+    const headerMissing = headers.size < ids.length && performance.now() - headersScannedAt > 100;
+    if (!nodeGone && !headerGone && !headerMissing) return;
+    const wanted = new Set(ids);
+    if (nodeGone) {
+      nodes.clear();
+      for (const part of root.querySelectorAll<HTMLElement>(".react-flow__node[data-id]")) {
+        const id = part.getAttribute("data-id")!;
+        if (wanted.has(id) && !nodes.has(id)) nodes.set(id, part);
+      }
+    }
+    if (nodeGone || headerGone || headerMissing) {
+      headersScannedAt = performance.now();
+      headers.clear();
+      for (const part of root.querySelectorAll<HTMLElement>("[data-node-header]")) {
+        const id = part.getAttribute("data-node-header")!;
+        if (wanted.has(id) && !headers.has(id)) headers.set(id, part);
+      }
+    }
+  };
+  const element = (id: string) => {
+    refresh();
+    return nodes.get(id) ?? null;
+  };
+  const parts = () => {
+    refresh();
+    return ids.flatMap((id) => [nodes.get(id), headers.get(id)]).filter((part): part is HTMLElement => !!part);
+  };
+  const within = <K extends keyof HTMLElementTagNameMap>(selector: K): HTMLElementTagNameMap[K][] => parts().flatMap((part) => [...part.querySelectorAll(selector)]);
+  const pendingMarks = () => parts().flatMap((part) => [...part.querySelectorAll("[data-paint-pending]")]);
   for (;;) {
     const pending = ids.filter((id) => {
       const node = element(id);

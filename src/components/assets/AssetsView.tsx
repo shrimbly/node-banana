@@ -54,7 +54,7 @@ function isOtherControl(target: EventTarget | null): boolean {
  * canvas. Arrows move through the grid (←/→ step through the detail),
  * Enter opens, Space selects, ⌘A selects all loaded, Delete trashes, ⌘Z
  * undoes the last asset action, F is fullscreen in the detail, ? shows the
- * shortcuts, A goes back to the canvas and C to the chat. ⌘C copies selected text as
+ * shortcuts, A goes back to the canvas, C to the chat and E to Edit video. ⌘C copies selected text as
  * usual, or the open asset's prompt when nothing is selected.
  */
 function handleAssetsKey(event: KeyboardEvent) {
@@ -128,6 +128,11 @@ function handleAssetsKey(event: KeyboardEvent) {
   if (lower === "c" && !event.shiftKey) {
     own();
     if (!event.repeat) store.setAppView("chat");
+    return;
+  }
+  if (lower === "e" && !event.shiftKey) {
+    own();
+    if (!event.repeat) store.setAppView("edit");
     return;
   }
 

@@ -17,7 +17,7 @@
  * painted image is current (it may have been edited while live), then goes
  * back to the scene.
  */
-import { useCallback, useLayoutEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { ReactFlow, useReactFlow, useStoreApi, type DefaultEdgeOptions, type Edge, type EdgeTypes, type InternalNode, type Node, type NodeChange, type NodeDimensionChange, type NodeTypes, type OnEdgesChange, type ReactFlowState } from "@xyflow/react";
 import { FloatingNodeHeaders } from "@/components/nodes/FloatingNodeHeaders";
@@ -249,6 +249,19 @@ export function LiveFlow({ connect, onViewChanged, initialView, nodeTypes, edgeT
   useLayoutEffect(() => state.committed(), [state]);
   // A live node's measured size reaches the store, as on the classic canvas (the painted ones' come from painting).
   const realIds = useMemo(() => new Set(real.map((n) => n.id)), [real]);
+  // Sizes measured while nodes mount wait for a quiet moment and reach the store in one write: each write runs every
+  // store selector over the graph, and a pan in live mode mounts nodes nearly every frame.
+  const pendingSizes = useRef(new Map<string, NodeDimensionChange>());
+  const flushTimer = useRef<{ timer: ReturnType<typeof setTimeout> | undefined; since: number }>({ timer: undefined, since: 0 });
+  const flushSizes = useCallback(() => {
+    clearTimeout(flushTimer.current.timer);
+    flushTimer.current = { timer: undefined, since: 0 };
+    const store = useWorkflowStore.getState();
+    const changes = [...pendingSizes.current.values()].filter((change) => indexOfNode(store.nodes, change.id) >= 0);
+    pendingSizes.current.clear();
+    if (changes.length) store.onNodesChange(changes.map((change) => ({ ...change, setAttributes: false })));
+  }, []);
+  useEffect(() => flushSizes, [flushSizes]);
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     const store = useWorkflowStore.getState();
     for (const change of changes) if (change.type === "dimensions" && change.dimensions && realIds.has(change.id)) onMeasured(change.id);
@@ -261,10 +274,18 @@ export function LiveFlow({ connect, onViewChanged, initialView, nodeTypes, edgeT
       if (change.type !== "dimensions" || change.resizing !== undefined || !change.dimensions || !realIds.has(change.id)) return false;
       const k = indexOfNode(store.nodes, change.id);
       const known = k < 0 ? undefined : store.nodes[k].measured;
-      return k >= 0 && !(known?.width != null && known.height != null && Math.abs(known.width - change.dimensions.width) <= 0.5 && Math.abs(known.height - change.dimensions.height) <= 0.5);
+      const same = known?.width != null && known.height != null && Math.abs(known.width - change.dimensions.width) <= 0.5 && Math.abs(known.height - change.dimensions.height) <= 0.5;
+      // Back to the size the store holds: a size still waiting is out of date.
+      if (same) pendingSizes.current.delete(change.id);
+      return k >= 0 && !same;
     });
-    if (measured.length) store.onNodesChange(measured.map((change) => ({ ...change, setAttributes: false })));
-  }, [realIds, onMeasured]);
+    if (!measured.length) return;
+    for (const change of measured) pendingSizes.current.set(change.id, change);
+    const now = performance.now(), flush = flushTimer.current;
+    if (!flush.since) flush.since = now;
+    clearTimeout(flush.timer);
+    flush.timer = setTimeout(flushSizes, now - flush.since >= SIZE_WRITE_MAX_WAIT_MS ? 0 : SIZE_WRITE_QUIET_MS);
+  }, [realIds, onMeasured, flushSizes]);
   // Presses the scene took have selected already, except on a button or link (liveButtonPress), which selects here
   // as classic's NodeWrapper click; a stopped click (OutputNode, the curve editor, a button's own) never arrives.
   const nodeClick = useCallback((event: ReactMouseEvent, node: Node) => {
@@ -307,6 +328,11 @@ export interface LivePainter {
   restoreMeasured(id: string): boolean;
 }
 
+/** Live nodes' measured sizes reach the store once none has been measured for this long, */
+const SIZE_WRITE_QUIET_MS = 300;
+/** or at the latest this long after the first of them. */
+const SIZE_WRITE_MAX_WAIT_MS = 1500;
+
 /** The elements alignToPixels moves: live node wrappers and floating headers. */
 const SNAP_TARGETS = ".react-flow__node[data-id], [data-node-header]";
 
@@ -320,6 +346,10 @@ export class LiveLayer {
   /** Nodes swapping in: rendered but invisible while their painted image still shows. */
   private entering = new Set<string>();
   private generation = 0;
+  /** Entering nodes waiting to lay out and load (settle), each with its batch's promise. */
+  private settling = new Map<string, Promise<void>>();
+  /** Bumped by dispose, so a batch still settling shows nothing. */
+  private disposed = 0;
   private pending: Promise<void> = Promise.resolve();
   private unsubscribe: () => void;
   private listeners: (() => void)[] = [];
@@ -542,7 +572,8 @@ export class LiveLayer {
   private alignToPixels() {
     const graph = this.scene.graph;
     const offsets = new Map<string, string>();
-    for (const id of this.shown) {
+    // Without a painter there is no painted copy to line up with, and each offset written in a pan repaints its node.
+    if (this.painter) for (const id of this.shown) {
       const i = graph.indexOf.get(id);
       if (i == null) continue;
       const [dx, dy] = this.scene.pixelSnap(i);
@@ -574,6 +605,11 @@ export class LiveLayer {
 
   /** Set while the scene follows a view the flow moved to (connection.viewChanged). */
   private followingFlow = false;
+
+  /** Whether the scene's view is changing to follow the flow's. */
+  get followingFlowView() {
+    return this.followingFlow;
+  }
 
   setView(view: View) {
     this.alignToPixels();
@@ -764,7 +800,6 @@ export class LiveLayer {
   /** Resolves when every wanted node is live and every other node is back in the scene. */
   private async sync() {
     const generation = ++this.generation;
-    const started = performance.now();
     const graph = this.scene.graph;
     // Nodes no longer wanted head back to the scene once their image is current.
     for (const id of [...this.live]) {
@@ -779,11 +814,30 @@ export class LiveLayer {
     this.entering = new Set(entering.filter((id) => !this.leaving.has(id) && this.scene.hasPainted(graph.indexOf.get(id)!)));
     await this.render();
     if (!entering.length || generation !== this.generation) return;
-    for (const id of entering) this.leaving.delete(id);
-    await settleNodes(this.element, entering, performance.now() + 3000, () => generation !== this.generation);
-    if (generation !== this.generation) return;
-    for (const id of entering) {
-      if (!this.wanted.has(id)) continue;
+    // Each batch settles on its own: a later sync (a pan asks for one a frame) adds the nodes it brings and leaves
+    // those already settling to finish, rather than starting every waiting node over.
+    const batch = entering.filter((id) => !this.settling.has(id));
+    if (batch.length) {
+      const settled = this.settle(batch);
+      for (const id of batch) this.settling.set(id, settled);
+    }
+    await Promise.all(entering.map((id) => this.settling.get(id)));
+  }
+
+  /** Waits for a batch of entering nodes to lay out and load, then shows those still wanted live. */
+  private async settle(batch: string[]) {
+    const started = performance.now(), disposed = this.disposed;
+    for (const id of batch) this.leaving.delete(id);
+    try {
+      await settleNodes(this.element, batch, started + 3000, () => this.disposed !== disposed || batch.every((id) => !this.wanted.has(id)));
+    } finally {
+      for (const id of batch) this.settling.delete(id);
+    }
+    if (this.disposed !== disposed) return;
+    let shown = false;
+    for (const id of batch) {
+      if (this.entering.delete(id)) shown = true;
+      if (!this.wanted.has(id) || this.live.has(id)) continue;
       const i = this.scene.graph.indexOf.get(id);
       if (i == null) continue;
       this.live.add(id);
@@ -791,10 +845,7 @@ export class LiveLayer {
       this.applyLiveSize(id);
     }
     // Shown in the frame the scene stops drawing their painted copies.
-    if (this.entering.size) {
-      this.entering.clear();
-      void this.render(true);
-    }
+    if (shown) void this.render(true);
     this.stats.record("live.swapMs", performance.now() - started);
   }
 
@@ -870,6 +921,7 @@ export class LiveLayer {
     this.connection.hold = undefined;
     this.connection.measured = undefined;
     this.generation++;
+    this.disposed++;
     this.snapObserver?.disconnect();
     this.snapObserver = null;
     for (const element of this.snapped.keys()) element.style.translate = "";

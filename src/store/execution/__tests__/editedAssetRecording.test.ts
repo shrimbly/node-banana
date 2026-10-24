@@ -239,6 +239,64 @@ describe("video edits", () => {
     });
   });
 
+  it("records a stacked stitch's overlap and crossfade", async () => {
+    mocks.stitchVideosAsync.mockResolvedValue(bigVideo);
+    const clip = (id: string, edgeId: string) => ({ id, source: { kind: "edge", edgeId }, inSec: 0, outSec: null, muted: false, volume: 1 });
+    const stitch = node("vs-1", "videoStitch", {
+      outputVideo: null,
+      encoderSupported: true,
+      loopCount: 1,
+      timeline: [clip("a", "e1"), clip("b", "e2")],
+      sequenceLayout: { mode: "stacked", overlapSec: 1.5, crossfade: true },
+    });
+    const sources = [node("g1", "generateVideo", { outputVideo: "data:video/mp4;base64,a" }), node("g2", "generateVideo", { outputVideo: "data:video/mp4;base64,b" })];
+    const edges = [
+      { id: "e1", source: "g1", sourceHandle: "video", target: "vs-1", targetHandle: "video-0" },
+      { id: "e2", source: "g2", sourceHandle: "video", target: "vs-1", targetHandle: "video-1" },
+    ] as WorkflowEdge[];
+    const { ctx, recordAsset } = makeCtx(stitch, { videos: ["data:video/mp4;base64,a", "data:video/mp4;base64,b"] }, { nodes: sources, edges });
+
+    await executeVideoStitch(ctx);
+
+    expect(recordAsset).toHaveBeenCalledWith(
+      expect.objectContaining({ parameters: { clips: 2, loopCount: 1, withAudio: false, overlapSec: 1.5, crossfade: true } }),
+    );
+  });
+
+  it("records a placed stitch's crossfade, overlap and each clip's start", async () => {
+    mocks.stitchVideosAsync.mockResolvedValue(bigVideo);
+    const clip = (id: string, edgeId: string, startSec?: number) => ({
+      id,
+      source: { kind: "edge", edgeId },
+      inSec: 0,
+      outSec: null,
+      muted: false,
+      volume: 1,
+      ...(startSec === undefined ? {} : { startSec }),
+    });
+    const stitch = node("vs-1", "videoStitch", {
+      outputVideo: null,
+      encoderSupported: true,
+      loopCount: 1,
+      timeline: [clip("a", "e1", 2.5), clip("b", "e2")],
+      sequenceLayout: { mode: "stacked", overlapSec: 1.5, crossfade: false },
+    });
+    const sources = [node("g1", "generateVideo", { outputVideo: "data:video/mp4;base64,a" }), node("g2", "generateVideo", { outputVideo: "data:video/mp4;base64,b" })];
+    const edges = [
+      { id: "e1", source: "g1", sourceHandle: "video", target: "vs-1", targetHandle: "video-0" },
+      { id: "e2", source: "g2", sourceHandle: "video", target: "vs-1", targetHandle: "video-1" },
+    ] as WorkflowEdge[];
+    const { ctx, recordAsset } = makeCtx(stitch, { videos: ["data:video/mp4;base64,a", "data:video/mp4;base64,b"] }, { nodes: sources, edges });
+
+    await executeVideoStitch(ctx);
+
+    expect(recordAsset).toHaveBeenCalledWith(
+      expect.objectContaining({
+        parameters: { clips: 2, loopCount: 1, withAudio: false, crossfade: false, overlapSec: 1.5, starts: [2.5, null] },
+      }),
+    );
+  });
+
   it("records a trimmed video with its new length", async () => {
     mocks.trimVideoAsync.mockResolvedValue(bigVideo);
     const { ctx, recordAsset } = makeCtx(node("vt-1", "videoTrim", { outputVideo: null, encoderSupported: true, startTime: 1.5, endTime: 4 }), {

@@ -28,8 +28,7 @@ import {
   upsertWorkflowEntry,
 } from "../index";
 import type { JobContext } from "../jobs";
-import { PROJECT_MOVE_MARKER, recoverProjectMove,
-  unfinishedProjectCopy, runProjectsMove } from "../projectMove";
+import { PROJECT_MOVE_MARKER, recoverProjectMove, runProjectsMove } from "../projectMove";
 import { ProjectRegistry, readRegistry } from "../registry";
 import { installBridge, makePng, meta, sha256, streamOf, tempDir } from "./helpers";
 
@@ -243,20 +242,20 @@ describe("the projects move", () => {
     expect(fs.existsSync(path.join(defaultRoot, ".nodebanana", PROJECT_MOVE_MARKER))).toBe(false);
   });
 
-  // Timing-flaky under the full suite (it passes alone and with its folder): on
-  // two of three loaded runs the listing still held the half copy, as if the
-  // library's root at listing time were not this test's. Retried until the
-  // runtime's per-test reset is made to wait for jobs still in flight.
-  it("never lists a copy quitting cut short, and removes it at the next start", { retry: 2 }, async () => {
+  // The status call starts the root's initialisation in the background and
+  // answers before it ends. Its recovery step, finding no marker, removes the
+  // marker path (force) with an async rm; a marker written in that window
+  // went with it on CI's Linux runners, and the half copy was listed. So the
+  // initialisation is waited for before the marker goes down.
+  it("never lists a copy quitting cut short, and removes it at the next start", async () => {
     await getLibraryStatus();
+    await __drainAssetLibraryForTests();
     const source = project(path.join(base, "Old", "Half"), "Half", 2);
     const dest = project(path.join(defaultRoot, "Half"), "Half", 1);
     const marker = path.join(defaultRoot, ".nodebanana", PROJECT_MOVE_MARKER);
     fs.writeFileSync(marker, JSON.stringify({ from: source, dest, phase: "copying" }));
     const listed = (await listProjects()).projects.map((known) => known.dir);
-    // On a loaded run the half copy has been listed; say what the library took as its root and its marker.
-    const seen = `root=${(await getLibraryStatus()).root} copying=${await unfinishedProjectCopy(defaultRoot)} marker=${fs.existsSync(marker)}`;
-    expect(listed, seen).not.toContain(dest);
+    expect(listed).not.toContain(dest);
 
     await recoverProjectMove(defaultRoot);
     expect(fs.existsSync(dest)).toBe(false);

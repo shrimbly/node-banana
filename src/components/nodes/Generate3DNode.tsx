@@ -20,6 +20,7 @@ import {
   EmptyState,
   ErrorMessage,
   ErrorOverlay,
+  PendingTaskNotice,
   LoadingOverlay,
   Spinner,
   schemaSockets,
@@ -69,6 +70,9 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
   const schemaDerived = useSchemaDerived(id, nodeData);
 
   const isRunning = useWorkflowStore((state) => state.isRunning);
+  const resumeGeneration = useWorkflowStore((state) => state.resumeGeneration);
+  // A provider request the node stopped waiting on, offered to pick up again
+  const pendingTask = nodeData.status === "loading" ? undefined : nodeData.pendingTask;
 
   // Handle model selection from browse dialog
   const handleBrowseModelSelect = useCallback((model: ProviderModel) => {
@@ -143,7 +147,7 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
       id={id}
       selected={selected}
       isExecuting={isRunning}
-      hasError={nodeData.status === "error"}
+      hasError={nodeData.status === "error" && !pendingTask}
       media={{ kind: "fixed", height: MEDIA_HEIGHT }}
       inputs={inputSockets}
       outputs={OUTPUT_SOCKETS}
@@ -208,7 +212,8 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
             <span className="text-[10px] text-neutral-500 truncate max-w-full">Connect to 3D Viewer</span>
           )}
           {nodeData.status === "loading" && <LoadingOverlay />}
-          {nodeData.status === "error" && <ErrorOverlay />}
+          {nodeData.status === "error" && !pendingTask && <ErrorOverlay />}
+          {pendingTask && <PendingTaskNotice task={pendingTask} onPickUp={() => resumeGeneration(id)} disabled={isRunning} compact />}
           <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
             <button
               onClick={handleClear3D}
@@ -219,6 +224,8 @@ export function Generate3DNode({ id, data, selected }: NodeProps<Generate3DNodeT
             </button>
           </div>
         </div>
+      ) : pendingTask ? (
+        <PendingTaskNotice task={pendingTask} onPickUp={() => resumeGeneration(id)} disabled={isRunning} compact />
       ) : nodeData.status === "loading" ? (
         <div className="absolute inset-0 flex items-center justify-center bg-neutral-900/40">
           <Spinner className="text-neutral-400" />

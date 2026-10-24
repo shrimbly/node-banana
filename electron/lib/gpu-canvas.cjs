@@ -1,36 +1,24 @@
-// The GPU canvas paints nodes with HTML-in-Canvas, which Chromium 152 only
-// has behind --enable-blink-features=CanvasDrawElement. It is the desktop
-// app's canvas by default; Settings › Canvas can go back to the classic
-// canvas, which also leaves the feature off. The switch must be set before
-// the app is ready, so the choice is kept here, in user data, and applies
-// from the next launch.
-// NODE_BANANA_GPU_CANVAS=1 or =0 turns the feature on or off for one run
-// regardless (runners use it).
-const fs = require('node:fs');
-const path = require('node:path');
-const { atomicWrite } = require('./files.cjs');
-
-const FILE = 'gpu-canvas-v1.json';
+// Chromium switches the GPU canvas needs, set before the app is ready.
+//
+// HTML-in-Canvas (CanvasDrawElement) lets the canvas paint nodes into
+// textures; Chromium 152 has it only behind --enable-blink-features (it is on
+// by default by Chromium 158). Without it the canvas still runs, with the
+// nodes in view live instead of painted. NODE_BANANA_HTML_IN_CANVAS=0 turns it
+// off for one run (to try that mode).
+//
+// --enable-unsafe-swiftshader lets WebGL fall back to SwiftShader, Chromium's
+// CPU renderer, where the GPU is missing or blocklisted. Chromium no longer
+// does that by itself, and the canvas cannot draw without WebGL2. A real GPU
+// is still used whenever there is one.
 const FEATURE = 'CanvasDrawElement';
 
-/** On unless the classic canvas was chosen (an unreadable file counts as no choice). */
-function readGpuCanvasPreference(userData) {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(userData, FILE), 'utf8')).enabled !== false;
-  } catch {
-    return true;
+/** Returns whether HTML-in-Canvas is on for this launch. */
+function applyGpuCanvasSwitches(commandLine, { env = process.env } = {}) {
+  commandLine.appendSwitch('enable-unsafe-swiftshader');
+  if (env.NODE_BANANA_HTML_IN_CANVAS === '0') {
+    commandLine.appendSwitch('disable-blink-features', FEATURE);
+    return false;
   }
-}
-
-function writeGpuCanvasPreference(userData, enabled) {
-  atomicWrite(path.join(userData, FILE), JSON.stringify({ enabled: enabled === true }));
-}
-
-/** Turns the feature on for this launch unless the classic canvas was chosen; returns whether it is on. */
-function applyGpuCanvasSwitch(commandLine, { userData, env = process.env }) {
-  const forced = env.NODE_BANANA_GPU_CANVAS;
-  const active = forced === '1' ? true : forced === '0' ? false : readGpuCanvasPreference(userData);
-  if (!active) return false;
   const existing = commandLine.getSwitchValue('enable-blink-features');
   const features = existing ? existing.split(',').filter(Boolean) : [];
   if (!features.includes(FEATURE)) features.push(FEATURE);
@@ -38,4 +26,4 @@ function applyGpuCanvasSwitch(commandLine, { userData, env = process.env }) {
   return true;
 }
 
-module.exports = { applyGpuCanvasSwitch, readGpuCanvasPreference, writeGpuCanvasPreference };
+module.exports = { applyGpuCanvasSwitches };

@@ -1002,6 +1002,28 @@ describe("OpenAI GPT Image 2.5 schemas", () => {
   });
 });
 
+describe("Gemini image schemas", () => {
+  const extended = ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"];
+
+  it.each([
+    ["nano-banana", ["aspectRatio"], undefined],
+    ["nano-banana-2-lite", ["aspectRatio"], undefined],
+    ["nano-banana-pro", ["aspectRatio", "resolution", "useGoogleSearch"], ["1K", "2K", "4K"]],
+    ["nano-banana-2", ["aspectRatio", "resolution", "useGoogleSearch", "useImageSearch"], ["512", "1K", "2K", "4K"]],
+    ["nano-banana-2.1", ["aspectRatio", "resolution", "useGoogleSearch", "useImageSearch"], ["1K", "2K", "4K"]],
+  ])("lists %s's settings", async (modelId, names, resolutions) => {
+    const response = await GET(createMockSchemaRequest(modelId as string, "gemini"), { params: Promise.resolve({ modelId: modelId as string }) });
+    const data = await response.json();
+    expect(response.status).toBe(200);
+    expect(data.parameters.map((p: { name: string }) => p.name)).toEqual(names);
+    expect(data.parameters.find((p: { name: string }) => p.name === "resolution")?.enum).toEqual(resolutions);
+    if (modelId === "nano-banana-2" || modelId === "nano-banana-2.1") {
+      expect(data.parameters[0].enum).toEqual(extended);
+    }
+    expect(data.inputs.map((i: { name: string }) => i.name)).toEqual(["prompt", "image"]);
+  });
+});
+
 describe("Gemini Omni schemas", () => {
   it.each(["gemini-omni-1.1-flash", "gemini-omni-flash-preview"])("exposes multimodal inputs and supported video settings for %s", async (modelId) => {
     const response = await GET(createMockSchemaRequest(modelId, "gemini"), { params: Promise.resolve({ modelId }) });

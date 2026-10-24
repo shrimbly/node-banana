@@ -9,6 +9,7 @@
  * Every failure throws a 400 naming the field.
  */
 
+import { assetNameProblem } from "@/lib/assets/name";
 import { decodeAssetPageRequest, encodeAssetPageRequest, queryOf } from "@/lib/assets/query";
 import {
   ASSET_ID_PATTERN,
@@ -138,6 +139,14 @@ function tagList(value: unknown, field: string): string[] {
   });
 }
 
+/** A display name, trimmed; "" clears it. */
+function displayName(value: unknown, field: string): string {
+  const name = string(value, field).trim();
+  const problem = assetNameProblem(name, field);
+  if (problem) throw badRequest(problem);
+  return name;
+}
+
 /** A folder the client names, as validateWorkflowPath resolves it. */
 export function folder(value: unknown, field: string): string {
   const result = validateWorkflowPath(string(value, field));
@@ -190,6 +199,10 @@ function recordMeta(value: unknown): RecordAssetMeta {
     const v = optionalString(m[key], `meta.${key}`);
     if (v !== undefined) meta[key] = v;
   }
+  if (m.name !== undefined) {
+    const name = displayName(m.name, "meta.name");
+    if (name) meta.name = name;
+  }
   if (m.model !== undefined) meta.model = modelRef(m.model, "meta.model");
   if (m.parameters !== undefined) meta.parameters = object(m.parameters, "meta.parameters");
   if (m.cost !== undefined) {
@@ -239,7 +252,8 @@ export function parsePatch(body: unknown): AssetPatch {
   if (favorite !== undefined) patch.favorite = favorite;
   const trashed = optionalBoolean(p.trashed, "trashed");
   if (trashed !== undefined) patch.trashed = trashed;
-  if (Object.keys(patch).length === 0) throw badRequest("The patch changes nothing: send tags, favorite or trashed.");
+  if (p.name !== undefined) patch.name = displayName(p.name, "name");
+  if (Object.keys(patch).length === 0) throw badRequest("The patch changes nothing: send tags, favorite, trashed or name.");
   return patch;
 }
 

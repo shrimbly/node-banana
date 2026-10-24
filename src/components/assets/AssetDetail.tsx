@@ -265,9 +265,9 @@ function DetailPanel({ asset }: { asset: AssetView }) {
   const [showParameters, setShowParameters] = useState(false);
   const platform = resolvePlatform(library);
   const actions = workflowActions(asset);
-  const primary = actions[0]!;
+  const primary = actions[0];
   const secondary = actions[1];
-  const primaryBlocked = openWorkflowBlockedReason(asset, primary.mode);
+  const primaryBlocked = primary ? openWorkflowBlockedReason(asset, primary.mode) : null;
   const secondaryBlocked = secondary ? openWorkflowBlockedReason(asset, secondary.mode) : null;
   const one = selectionOf([asset.id]);
   const parameters = Object.entries(asset.parameters ?? {});
@@ -284,9 +284,14 @@ function DetailPanel({ asset }: { asset: AssetView }) {
     >
       <div className="px-6 pb-4 pt-5">
         <DialogEyebrow className="block">{assetEyebrow(asset)}</DialogEyebrow>
-        <h2 className="mt-1.5 line-clamp-3 select-text font-display text-xl font-semibold leading-6 tracking-[-0.02em] text-neutral-100" title={asset.prompt ?? asset.filename}>
+        <h2 className="mt-1.5 line-clamp-3 select-text font-display text-xl font-semibold leading-6 tracking-[-0.02em] text-neutral-100" title={asset.name ?? asset.prompt ?? asset.filename}>
           {assetTitle(asset)}
         </h2>
+        {asset.name && asset.name !== asset.filename && (
+          <p className="mt-1 select-text truncate text-xs text-ink-3" title={asset.filename}>
+            {asset.filename}
+          </p>
+        )}
 
         {asset.missing && (
           <div role="alert" className="mt-4 flex flex-col gap-2 rounded-lg border border-error/40 bg-error/10 p-3">
@@ -300,7 +305,7 @@ function DetailPanel({ asset }: { asset: AssetView }) {
           </div>
         )}
 
-        {view !== "trash" && (
+        {view !== "trash" && primary && (
           <div className="mt-4 flex flex-col gap-1.5">
             <DialogButton variant="primary" size="md" disabled={!!primaryBlocked} onClick={() => void openWorkflowFor(asset, primary.mode)}>
               {primary.label}
@@ -376,7 +381,10 @@ function DetailPanel({ asset }: { asset: AssetView }) {
           <DetailRow label="Created">{formatDateTime(asset.createdAt)}</DetailRow>
           <DetailRow label="Workflow">{workflowLabel(asset.workflow.name ?? asset.workflowName, workflowAt)}</DetailRow>
           <DetailRow label="Project">{asset.workflow.projectPath ? projectLabel(asset.workflow.projectPath) : "Not in a project"}</DetailRow>
-          <DetailRow label="Node">{asset.origin === "edited" && asset.producer.operation ? `${node} · ${operationLabel(asset.producer.operation)}` : node}</DetailRow>
+          {/* No node made an upload; its Workflow row says where it came in */}
+          {asset.origin !== "uploaded" && (
+            <DetailRow label="Node">{asset.origin === "edited" && asset.producer.operation ? `${node} · ${operationLabel(asset.producer.operation)}` : node}</DetailRow>
+          )}
           <DetailRow label="Model">{modelLabel(asset.model)}</DetailRow>
           <DetailRow label="Dimensions">{formatDimensions(asset.width, asset.height)}</DetailRow>
           <DetailRow label="Duration">{asset.durationSec ? formatDuration(asset.durationSec) : null}</DetailRow>

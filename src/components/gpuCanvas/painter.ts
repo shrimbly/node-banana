@@ -75,6 +75,8 @@ const PREFETCH_ZOOM = 0.25;
 const SETTLE_MS = 1500, LOADING_SETTLE_MS = 5000;
 /** Times a node painted before its images loaded is painted again. */
 const MAX_PROVISIONAL_REPAINTS = 3;
+/** How old a cache entry's last use is before a hit marks it used again (the cache drops the least recently used). */
+const TOUCH_AFTER_MS = 24 * 60 * 60 * 1000;
 /** Cache uploads per frame, in texels, so a cache hit never stalls a frame either. */
 const UPLOAD_TEXELS_PER_FRAME = 2048 * 1024;
 
@@ -791,7 +793,7 @@ export class Painter {
     const renderer = this.scene.renderer;
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.stagingGl);
-    paintElement(gl, this.sheet.element);
+    paintElement(gl, this.sheet.element, Math.ceil(this.sheet.width * this.scene.scale), Math.ceil(this.sheet.height * this.scene.scale));
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -1059,20 +1061,15 @@ export class Painter {
         return undefined;
       }
     }));
+    // Inflated together: one at a time, each waited out its own stream's tasks.
+    const inflated = await Promise.all(found.map((entry) => entry ? inflate(entry.bytes).catch(() => null) : null));
     const misses: PaintRequest[] = [];
     const hits: string[] = [];
     let texels = 0;
     for (let k = 0; k < requests.length; k++) {
-      const r = requests[k], entry = found[k];
+      const r = requests[k], entry = found[k], pixels = inflated[k];
       const key = this.keys.get(r.id);
-      if (!entry || !key || this.disposed) {
-        misses.push(r);
-        continue;
-      }
-      let pixels: Uint8Array;
-      try {
-        pixels = await inflate(entry.bytes);
-      } catch {
+      if (!entry || !pixels || !key || this.disposed) {
         misses.push(r);
         continue;
       }
@@ -1100,13 +1097,12 @@ export class Painter {
       paint.images.set(r.tier, { slot, key, w, h: entry.nodeHeight + HEADER + PAD, left });
       this.applyMeasured(r.id, entry.nodeHeight, new Map(entry.handles.map(handleFromCache)), boxFromTuple(entry.card), undefined, boxFromTuple(entry.overhang));
       this.show(r.id, true);
-      hits.push(entry.key);
+      // Marked used a day at most: marking rewrites the entry, which held up the next batch's reads.
+      if (Date.now() - entry.usedAt > TOUCH_AFTER_MS) hits.push(entry.key);
       this.status.cacheHits++;
     }
-    if (hits.length) {
-      void cache.touch(hits).catch(noop);
-      this.options.stats.record("painter.cacheMs", performance.now() - started);
-    }
+    if (hits.length) void cache.touch(hits).catch(noop);
+    if (found.some(Boolean)) this.options.stats.record("painter.cacheMs", performance.now() - started);
     return misses;
   }
 

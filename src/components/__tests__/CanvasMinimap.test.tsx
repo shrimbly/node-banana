@@ -12,13 +12,12 @@ import {
 const mockZoomIn = vi.fn();
 const mockZoomOut = vi.fn();
 const mockFitView = vi.fn();
-const mockSetCenter = vi.fn();
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual<typeof import("@xyflow/react")>("@xyflow/react");
   return {
     ...actual,
-    useReactFlow: () => ({ zoomIn: mockZoomIn, zoomOut: mockZoomOut, fitView: mockFitView, setCenter: mockSetCenter, getZoom: () => 0.8 }),
+    useReactFlow: () => ({ zoomIn: mockZoomIn, zoomOut: mockZoomOut, fitView: mockFitView, }),
   };
 });
 
@@ -40,12 +39,10 @@ describe("CanvasMinimap", () => {
   it("renders the minimap inside the navigator card with the controls row beneath", () => {
     renderNavigator();
 
-    const minimap = document.querySelector(".react-flow__minimap");
-    expect(minimap).toBeInTheDocument();
+    const minimap = screen.getByRole("img", { name: "Mini Map" });
     expect(minimap).toHaveStyle({
       width: `${MINIMAP_GEOMETRY.width}px`,
       height: `${MINIMAP_GEOMETRY.height}px`,
-      position: "static",
     });
 
     const card = screen.getByTestId("canvas-navigator");
@@ -59,14 +56,14 @@ describe("CanvasMinimap", () => {
     renderNavigator();
 
     fireEvent.click(screen.getByRole("button", { name: "Hide minimap" }));
-    expect(document.querySelector(".react-flow__minimap")).not.toBeInTheDocument();
+    expect(screen.queryByRole("img", { name: "Mini Map" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Zoom in" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Show minimap" }));
-    expect(document.querySelector(".react-flow__minimap")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Mini Map" })).toBeInTheDocument();
   });
 
-  it("drives zoom and fit through React Flow", () => {
+  it("drives zoom through React Flow, and fit too while no GPU canvas is mounted", () => {
     renderNavigator();
 
     fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
@@ -76,17 +73,6 @@ describe("CanvasMinimap", () => {
     expect(mockZoomIn).toHaveBeenCalledTimes(1);
     expect(mockZoomOut).toHaveBeenCalledTimes(1);
     expect(mockFitView).toHaveBeenCalledTimes(1);
-  });
-
-  it("brings a clicked spot on the minimap to the middle of the view, at the current zoom", () => {
-    renderNavigator();
-    const svg = screen.getByTestId("rf__minimap").querySelector("svg")!;
-    fireEvent.click(svg);
-    expect(mockSetCenter).toHaveBeenCalledTimes(1);
-    const [x, y, options] = mockSetCenter.mock.calls[0];
-    expect(typeof x).toBe("number");
-    expect(typeof y).toBe("number");
-    expect(options).toEqual({ zoom: 0.8, duration: 250 });
   });
 
   it("shows the zoom level as a whole percentage", () => {

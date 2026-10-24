@@ -43,10 +43,15 @@ export const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 export const WORKFLOW_ID_PATTERN = /^[A-Za-z0-9_.:-]{1,128}$/;
 
 export type AssetKind = "image" | "video" | "audio" | "3d";
-export type AssetOrigin = "generated" | "edited";
+/**
+ * `uploaded`: a video or audio file the user added from their computer, through Add media (in the Edit video view,
+ * and in an Edit Video node's editor, where it goes under "Uploads") or a drop on the view's media pane
+ * (`src/lib/assets/client/upload.ts`). Node Banana 2.2.0 and earlier can't read records of this origin.
+ */
+export type AssetOrigin = "generated" | "edited" | "uploaded";
 
 export const ASSET_KINDS: readonly AssetKind[] = ["image", "video", "audio", "3d"];
-export const ASSET_ORIGINS: readonly AssetOrigin[] = ["generated", "edited"];
+export const ASSET_ORIGINS: readonly AssetOrigin[] = ["generated", "edited", "uploaded"];
 
 /* ------------------------------------------------------------------ */
 /* Records                                                             */
@@ -106,6 +111,8 @@ export interface AssetRecord {
   file: AssetFileLocation;
   /** Basename of the file on disk. */
   filename: string;
+  /** The name the user gave it; absent = `filename`. One line, at most 120 characters (`src/lib/assets/name.ts`). */
+  name?: string;
   width?: number;
   height?: number;
   durationSec?: number;
@@ -190,7 +197,7 @@ export type AssetScope = "library" | "trash" | "missing";
  */
 export interface AssetQuery {
   scope?: AssetScope;
-  /** Case-insensitive substring over prompt, filename, model, workflow name and tags. */
+  /** Case-insensitive substring over prompt, name, filename, model, workflow name and tags. */
   q?: string;
   kinds?: AssetKind[];
   origins?: AssetOrigin[];
@@ -282,6 +289,8 @@ export interface AssetPatch {
   tags?: string[];
   favorite?: boolean;
   trashed?: boolean;
+  /** The display name; `""` clears it. */
+  name?: string;
 }
 
 /** `present`: a record exists (live or trashed) and the file is there. `gone`: permanently deleted, or the record's file is verified absent. `unknown`: this library has never seen the id, or is unavailable. Carousels prune only `gone`. */
@@ -299,6 +308,8 @@ export interface RecordAssetMeta {
   /** MIME type hint from the client (the server sniffs and may override). */
   mime?: string;
   createdAt: number;
+  /** The display name to record it under (an upload's own file name); the library file gets its own name. */
+  name?: string;
   prompt?: string;
   model?: AssetModelRef;
   parameters?: Record<string, unknown>;
@@ -640,6 +651,8 @@ export interface RecordAssetInput {
    */
   media: string | Blob;
   mime?: string;
+  /** The display name (`AssetRecord.name`). */
+  name?: string;
   prompt?: string;
   model?: AssetModelRef;
   parameters?: Record<string, unknown>;

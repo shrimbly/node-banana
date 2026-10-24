@@ -3,7 +3,7 @@ import { createHash } from "crypto";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   atomicWriteFile,
   copyFileVerified,
@@ -61,6 +61,20 @@ describe("atomicWriteFile", () => {
     await atomicWriteFile(file, "two", { fsync: false });
     expect(fs.readFileSync(file, "utf8")).toBe("two");
     expect(fs.readdirSync(dir)).toEqual(["x.json"]);
+  });
+
+  it("writes through a short temp name in the same folder when asked", async () => {
+    const file = path.join(dir, `${"日本語".repeat(26)}.nbedit`);
+    const open = vi.spyOn(fs.promises, "open");
+    try {
+      await atomicWriteFile(file, "one", { fsync: false, shortTemp: true });
+      const temp = String(open.mock.calls[0][0]);
+      expect(path.dirname(temp)).toBe(dir);
+      expect(Buffer.byteLength(path.basename(temp))).toBeLessThan(50);
+    } finally {
+      open.mockRestore();
+    }
+    expect(fs.readdirSync(dir)).toEqual([path.basename(file)]);
   });
 });
 

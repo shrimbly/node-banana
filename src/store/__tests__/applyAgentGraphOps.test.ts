@@ -405,4 +405,53 @@ describe("applyAgentGraphOps", () => {
     ).toHaveLength(1);
     expect(restored.canUndo).toBe(false);
   });
+
+  it("keeps a Stitch node's stacked layout through the real applier's merge of an unrelated setting", async () => {
+    const actual = await vi.importActual<typeof import("@/lib/agent/graph/applyOps")>("@/lib/agent/graph/applyOps");
+    applyGraphOpsMock.mockImplementation(actual.applyGraphOps);
+    const sequenceLayout = { mode: "stacked", overlapSec: 1, crossfade: true };
+    seed([
+      {
+        id: "videoStitch-1",
+        type: "videoStitch",
+        position: { x: 0, y: 0 },
+        data: { clipOrder: [], timeline: [], loopCount: 1, sequenceLayout } as unknown as WorkflowNodeData,
+      },
+    ]);
+
+    useWorkflowStore.getState().applyAgentGraphOps(batch([{ op: "updateNode", id: "videoStitch-1", data: { loopCount: 2 } }]));
+
+    const data = useWorkflowStore.getState().nodes[0].data as { loopCount?: number; sequenceLayout?: unknown };
+    expect(data.loopCount).toBe(2);
+    expect(data.sequenceLayout).toEqual(sequenceLayout);
+  });
+
+  it("keeps every placed clip's start through the real applier's merge of an unrelated setting", async () => {
+    const actual = await vi.importActual<typeof import("@/lib/agent/graph/applyOps")>("@/lib/agent/graph/applyOps");
+    applyGraphOpsMock.mockImplementation(actual.applyGraphOps);
+    const timeline = [
+      { id: "a", source: { kind: "edge", edgeId: "e1" }, inSec: 0, outSec: null, muted: false, volume: 1, startSec: 0 },
+      { id: "b", source: { kind: "edge", edgeId: "e2" }, inSec: 0.8, outSec: null, muted: false, volume: 1, startSec: 6 },
+      { id: "c", source: { kind: "asset", assetId: "x" }, inSec: 0, outSec: 3.2, muted: true, volume: 1, startSec: 11.5 },
+    ];
+    seed([
+      {
+        id: "videoStitch-1",
+        type: "videoStitch",
+        position: { x: 0, y: 0 },
+        data: {
+          clipOrder: ["e1", "e2"],
+          timeline,
+          loopCount: 1,
+          sequenceLayout: { mode: "stacked", overlapSec: 1, crossfade: true },
+        } as unknown as WorkflowNodeData,
+      },
+    ]);
+
+    useWorkflowStore.getState().applyAgentGraphOps(batch([{ op: "updateNode", id: "videoStitch-1", data: { loopCount: 2 } }]));
+
+    const data = useWorkflowStore.getState().nodes[0].data as { loopCount?: number; timeline?: Array<{ startSec?: number }> };
+    expect(data.loopCount).toBe(2);
+    expect(data.timeline?.map((clip) => clip.startSec)).toEqual([0, 6, 11.5]);
+  });
 });

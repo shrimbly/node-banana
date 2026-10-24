@@ -732,6 +732,66 @@ describe("recordAsset", () => {
     expect(errors).toHaveLength(2);
   });
 
+  it("says why a recording failed before done resolves null, and nothing for one that went through", async () => {
+    let refusals = 1;
+    fakeLibrary({
+      route: (call) =>
+        call.url === "/api/assets" && refusals-- > 0 ? jsonResponse({ error: "The file is empty" }, { status: 400 }) : undefined,
+    });
+    const refused = recorder.recordAsset(input(dataUrlOf("A")), RUN);
+    const order: string[] = [];
+    void refused.failed.then(() => order.push("failed"));
+    void refused.done.then(() => order.push("done"));
+    await expect(refused.done).resolves.toBeNull();
+    await expect(refused.failed).resolves.toBe("The file is empty.");
+    expect(order).toEqual(["failed", "done"]);
+
+    const kept = recorder.recordAsset(input(dataUrlOf("B")), RUN);
+    let failed = false;
+    void kept.failed.then(() => (failed = true));
+    await expect(kept.done).resolves.not.toBeNull();
+    await settleAll();
+    expect(failed).toBe(false);
+  });
+
+  it("says why when the library is off for good or the media can't be read", async () => {
+    fakeLibrary();
+    const unreadable = recorder.recordAsset(input("ftp://example.com/x.png"), RUN);
+    await expect(unreadable.failed).resolves.toBe("That kind of media can't be saved.");
+    recorder.applyLibraryStatus(libraryStatus({ available: false, reason: "The library is off on this server", reasonCode: "hosted" }));
+    const off = recorder.recordAsset(input(dataUrlOf("PNG")), RUN);
+    await expect(off.done).resolves.toBeNull();
+    await expect(off.failed).resolves.toBe("The library is off on this server.");
+  });
+
+  it("keeps its own notice back for a caller that tells the user itself", async () => {
+    const errors: string[] = [];
+    recorder.onRecorderError((message) => errors.push(message));
+    fakeLibrary({
+      route: (call) => (call.url === "/api/assets" ? jsonResponse({ error: "Invalid asset metadata" }, { status: 400 }) : undefined),
+    });
+    const quiet = recorder.recordAsset(input(dataUrlOf("A")), RUN, { quiet: true });
+    await expect(quiet.done).resolves.toBeNull();
+    await expect(quiet.failed).resolves.toBe("Invalid asset metadata.");
+    const unreadable = recorder.recordAsset(input("ftp://example.com/x.png"), RUN, { quiet: true });
+    await expect(unreadable.done).resolves.toBeNull();
+    expect(errors).toEqual([]);
+
+    // A quiet failure does not stand in for the notice of a later one
+    await recorder.recordAsset(input(dataUrlOf("B")), RUN).done;
+    expect(errors).toEqual(["Couldn't save an asset to the library: Invalid asset metadata"]);
+  });
+
+  it("sends the display name it was given, and none otherwise", async () => {
+    const server = fakeLibrary();
+    const file = new File(["VIDEO"], "sunset.mp4", { type: "video/mp4" });
+    await recorder.recordAsset(input(file, { kind: "video", origin: "uploaded", name: "sunset.mp4", prompt: undefined, model: undefined }), RUN).done;
+    await recorder.recordAsset(input(dataUrlOf("A")), RUN).done;
+    expect(server.records[0].meta).toMatchObject({ kind: "video", origin: "uploaded", name: "sunset.mp4", mime: "video/mp4" });
+    expect(server.uploads[0].blob).toBe(file);
+    expect("name" in server.records[1].meta).toBe(false);
+  });
+
   it("treats a 409 on a retry as the earlier attempt having landed", async () => {
     vi.useFakeTimers();
     let attempt = 0;

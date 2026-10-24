@@ -1,8 +1,10 @@
+import { StrictMode } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { ScrubRow, VOLUME_HOVER_DELAY_MS, formatTime } from "../ScrubRow";
 import { useVideoSoundStore } from "@/store/videoSoundStore";
 import { VIDEO_PIN_EVENT } from "@/hooks/useVideoAutoplay";
+import { playableVideo } from "@/test/playableVideo";
 
 function video(paused = false) {
   return {
@@ -108,5 +110,51 @@ describe("ScrubRow", () => {
     render(<ScrubRow videoRef={{ current: v }} src="blob:a" />);
     fireEvent.click(screen.getByRole("button", { name: "Play" }));
     expect(v.play).toHaveBeenCalledTimes(1);
+  });
+
+  // A card can mount another <video> for the same URL (Generate Video keyed
+  // its element on the carousel entry, which a run renames): the ref object
+  // stays, what it holds changes.
+  describe("a video remounted under the same source", () => {
+    it("shows Pause and moves the playhead while it plays, and Play once it ends", () => {
+      const first = playableVideo();
+      const ref = { current: first as HTMLVideoElement | null };
+      const { rerender } = render(<ScrubRow videoRef={ref} src="blob:a" />);
+      const next = playableVideo();
+      ref.current = next;
+      rerender(<ScrubRow videoRef={ref} src="blob:a" />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Play" }));
+      expect(next.play).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+      act(() => { next.currentTime = 3; });
+      expect(screen.getByText("0:03 / 0:08")).toBeInTheDocument();
+      act(() => next.end());
+      expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+
+      // The element it replaced no longer moves the row.
+      act(() => { first.currentTime = 6; });
+      expect(screen.getByText("0:03 / 0:08")).toBeInTheDocument();
+    });
+
+    it("reads the new element as it is", () => {
+      const ref = { current: playableVideo() as HTMLVideoElement | null };
+      const { rerender } = render(<ScrubRow videoRef={ref} src="blob:a" />);
+      ref.current = playableVideo({ paused: false, currentTime: 2, duration: 5 });
+      rerender(<ScrubRow videoRef={ref} src="blob:a" />);
+      expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+      expect(screen.getByText("0:02 / 0:05")).toBeInTheDocument();
+    });
+  });
+
+  it("still listens after StrictMode runs its effects twice", () => {
+    const v = playableVideo();
+    render(
+      <StrictMode>
+        <ScrubRow videoRef={{ current: v }} src="blob:a" />
+      </StrictMode>
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
   });
 });

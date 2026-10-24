@@ -3,7 +3,7 @@
 /**
  * The painter's sheet: a real <ReactFlow> at the zoom of the tier being
  * painted, holding a batch of real nodes with their floating headers,
- * rendered inside the scene's <canvas layoutsubtree>: laid out like the page,
+ * rendered inside the scene's <canvas layoutsubtree> (content="drawable" from Chromium 155): laid out like the page,
  * never shown, and painted into a texture in one call. The nodes read the
  * real workflow store, as they do on the canvas, but render read-only
  * (PaintedNodes): nothing a painted copy does writes to the store.
@@ -14,6 +14,7 @@ import { ReactFlow, ReactFlowProvider, useStoreApi, type Node, type NodeTypes, t
 import { FloatingNodeHeaders } from "@/components/nodes/FloatingNodeHeaders";
 import { PaintedNodes } from "@/components/nodes/paintMode";
 import { StoreSocketConnections } from "@/components/nodes/ui/socketConnections";
+import { markDrawable } from "@/lib/gpuCanvas/htmlInCanvas";
 import { nextFrame, noop, settleNodes, type HeaderProps } from "./nodeSheets";
 
 // Transitions and animations would be painted mid-way; the pane is transparent so the margins are.
@@ -80,6 +81,7 @@ export class PainterSheet {
     this.element = document.createElement("div");
     this.element.dataset.gpuCanvasSheet = "";
     this.element.inert = true;
+    markDrawable(this.element);
     this.resize(width, height);
     canvas.appendChild(this.element);
     this.root = createRoot(this.element);

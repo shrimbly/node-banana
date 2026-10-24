@@ -16,6 +16,7 @@
 import { randomUUID } from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
+import { cleanAssetName } from "../name";
 import { DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT } from "../query";
 import {
   ASSET_KINDS,
@@ -26,6 +27,7 @@ import {
   type AssetExistence,
   type AssetFacets,
   type AssetFileLocation,
+  type AssetOrigin,
   type AssetPage,
   type AssetPageRequest,
   type AssetPatch,
@@ -213,6 +215,9 @@ export function parseRecord(value: unknown, expectedId: string, root: string, ra
     favorite: raw.favorite === true,
   };
   if (optionalNumber(raw.trashedAt) === undefined) delete record.trashedAt;
+  const name = cleanAssetName(raw.name);
+  if (name === undefined) delete record.name;
+  else record.name = name;
   if (raw.unreadable === true) record.unreadable = true;
   else delete record.unreadable;
   for (const key of ["width", "height", "durationSec"] as const) {
@@ -228,6 +233,7 @@ function sameMutableState(a: AssetRecord, b: AssetRecord): boolean {
     a.trashedAt === b.trashedAt &&
     a.hasPoster === b.hasPoster &&
     a.unreadable === b.unreadable &&
+    a.name === b.name &&
     a.tags.length === b.tags.length &&
     a.tags.every((tag, index) => tag === b.tags[index])
   );
@@ -1355,6 +1361,8 @@ export class AssetLibrary {
       if (patch.favorite !== undefined) next.favorite = patch.favorite;
       if (patch.trashed === true && next.trashedAt === undefined) next.trashedAt = now;
       if (patch.trashed === false) delete next.trashedAt;
+      if (patch.name) next.name = patch.name;
+      else if (patch.name === "") delete next.name;
       return next;
     });
     if (line) await this.publish([line]);
@@ -1819,12 +1827,19 @@ export class AssetLibrary {
    * anywhere under Generations/; project destinations match only that
    * project's generations folder (by index, then by the legacy
    * `_<md5>.<ext>` name). Sizes must match — a truncated file never wins.
+   *
+   * Uploads and other recordings never share a file. Node Banana 2.2.0 and
+   * earlier can't read an upload's record, so they would release a file it
+   * shares when they delete the other record for good. An upload reuses
+   * only a file another upload holds, never one with no record (such a
+   * build may import it); any other recording never reuses an upload's.
    */
   async findReusableFile(input: {
     sha256: string;
     md5: string;
     bytes: number;
     ext: string;
+    origin: AssetOrigin;
     destination: { type: "library" } | { type: "project"; dir: string };
   }): Promise<{ file: AssetFileLocation; path: string; filename: string; source?: AssetRecord } | null> {
     const sizeMatches = async (file: string) => {
@@ -1836,9 +1851,10 @@ export class AssetLibrary {
       }
     };
     const destination = input.destination;
+    const upload = input.origin === "uploaded";
     for (const record of this.recordsWithHash(input.sha256)) {
       const file = this.filePath(record);
-      if (!file || record.bytes !== input.bytes) continue;
+      if (!file || record.bytes !== input.bytes || (record.origin === "uploaded") !== upload) continue;
       if (destination.type === "library") {
         if (record.file.root !== "library" || !isInsideRoot(this.layout.generations, file, { platform: this.platform })) continue;
       } else if (record.file.root !== "external" || pathKey(path.dirname(file), this.platform) !== pathKey(destination.dir, this.platform)) {
@@ -1848,7 +1864,7 @@ export class AssetLibrary {
         return { file: record.file, path: file, filename: path.basename(file), source: record };
       }
     }
-    if (destination.type === "project") {
+    if (destination.type === "project" && !upload) {
       let names: string[] = [];
       try {
         names = await fs.readdir(destination.dir);
@@ -1859,6 +1875,7 @@ export class AssetLibrary {
       for (const name of names) {
         if (!name.toLowerCase().endsWith(suffix)) continue;
         const file = path.join(destination.dir, name);
+        if (this.recordsAtPath(file).some((record) => record.origin === "uploaded")) continue;
         if (await sizeMatches(file)) return { file: { root: "external", path: file }, path: file, filename: name };
       }
     }

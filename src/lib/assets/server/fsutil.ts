@@ -138,9 +138,15 @@ async function fsyncDirectory(dir: string): Promise<void> {
 export async function atomicWriteFile(
   file: string,
   data: string | Uint8Array,
-  options: { fsync: boolean },
+  options: {
+    fsync: boolean;
+    /** A short temp name in the same folder, for a file whose own name leaves no room for the suffix (255 bytes). */
+    shortTemp?: boolean;
+  },
 ): Promise<void> {
-  const temporary = `${file}.${randomUUID()}.tmp`;
+  const temporary = options.shortTemp
+    ? path.join(path.dirname(file), `.${randomUUID()}.tmp`)
+    : `${file}.${randomUUID()}.tmp`;
   let handle: fs.FileHandle | undefined;
   try {
     handle = await fs.open(temporary, "wx", 0o644);

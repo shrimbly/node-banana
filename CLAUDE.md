@@ -50,8 +50,9 @@ Node Banana is a node-based visual workflow editor for AI image generation. User
 | Cost calculations | `src/utils/costCalculator.ts` |
 | Grid splitting utility | `src/utils/gridSplitter.ts` |
 | Asset library (always-on saving, Assets view) | `src/lib/assets/`, `src/components/assets/`, `docs/asset-library.md` |
-| GPU canvas (the desktop app's canvas; the classic React Flow canvas stays behind a setting for one release: scene, painter, atlas, live layer, disk cache) | `src/lib/gpuCanvas/`, `src/components/gpuCanvas/`, `docs/gpu-canvas.md` |
+| GPU canvas (the only canvas: scene, painter, atlas, live layer, disk cache; without HTML-in-Canvas, as in a browser, the nodes in view are live) | `src/lib/gpuCanvas/`, `src/components/gpuCanvas/`, `docs/gpu-canvas.md` |
 | Full-screen media viewer (stage, dock-scaled filmstrip, details rail; the recent-generations drop-down and the output gallery node both mount it with their own actions) | `src/components/MediaViewer.tsx`, `src/hooks/useAddMediaNode.ts` |
+| Edit video view and edit projects (`Edits/*.nbedit`) | `src/components/edit/`, `src/store/editProjectStore.ts`, `src/lib/edits/`, `docs/edit-video.md` |
 
 ### State Management
 
@@ -65,7 +66,7 @@ All application state lives in `workflowStore.ts` using Zustand. Key patterns:
 - Node components take their writer from `useUpdateNodeData()` (`src/components/nodes/paintMode.tsx`), never straight from the store: inside `<PaintedNodes>` (the GPU canvas's off-screen painted copies) it drops writes, so a node that saves derived data on mount does not write once per paint. Such a node shows the derived value itself when `useIsPaintedNode()` is true, or its painted copy shows what was last saved
 - Node data may hold media by reference (`src/lib/media/references.ts`): a same-origin URL for a library asset (`/api/assets/<id>/file`) or a file in a saved workflow's folder (`/api/workflow-images?…&raw=1`). Opening a saved workflow references its images, video and audio rather than reading them (`?raw=1` serves byte ranges, so video seeks), and a save turns the media it writes into references. Anything that sends media to a provider passes its body through `inlineMediaReferences`, and anything that writes a file meant to carry its media (a save without external storage, the JSON download) inlines them too
 - `NB_STORE_BENCH=1 npx vitest run src/store/__tests__/storeBench.test.ts` times a keystroke, undo, autosave's serialisation and a load at 300 to 10,000 nodes
-- Autosave (`src/store/utils/autoSave.ts`) follows the edits: a saved workflow is written 3 s after the last change, at the latest 30 s after the first, never mid-run or while media is still being written, and at once when the window loses focus; a failure is retried once, then backed off with one notice. "Save automatically" in Settings → Project turns it off (`node-banana-autosave`). The request body reuses each unchanged node's JSON from the last save (`src/store/utils/workflowSerializer.ts`)
+- Autosave (`src/store/utils/autoSave.ts`) follows the edits: a saved workflow is written 3 s after the last change, at the latest 30 s after the first, never mid-run or while media is still being written, waiting out a canvas gesture (pan, drag, marquee) up to that ceiling, and at once when the window loses focus; a failure is retried once, then backed off with one notice. "Save automatically" in Settings → Project turns it off (`node-banana-autosave`); an open edit in the Edit video view follows the same setting (`src/store/utils/editAutoSave.ts`). The request body reuses each unchanged node's JSON from the last save (`src/store/utils/workflowSerializer.ts`)
 
 ### Execution Flow
 
@@ -164,7 +165,7 @@ Returns `{ images: string[], text: string | null }`.
 ## Keyboard Shortcuts
 
 - `Cmd/Ctrl + Enter` - Run workflow (as many times as the Run menu's Runs count)
-- `Cmd/Ctrl + S` - Save workflow (works inside a node's text field; the first save asks for a name and location). The desktop app's File › Save is the same request (`src/store/saveRequestStore.ts`, answered by `FloatingMenu`)
+- `Cmd/Ctrl + S` - Save workflow (works inside a node's text field; the first save asks for a name and location). The desktop app's File › Save is the same request (`src/store/saveRequestStore.ts`, answered by `FloatingMenu`), except while the Edit video view shows, where both save the open edit (`handleDesktopSave` in `src/store/editProjectStore.ts`)
 - `Cmd/Ctrl + C/V` - Copy/paste nodes
 - `Shift + P` - Add prompt node at center
 - `Shift + I` - Add image input node
@@ -181,6 +182,7 @@ Returns `{ images: string[], text: string | null }`.
 - `G` - Arrange selected nodes in grid
 - `C` - Show or hide the full-page agent chat (bare C, outside a text field)
 - `A` - Show or hide the Assets view (bare A; Shift+letters add nodes). In Assets: arrows, Enter, Space, `Cmd/Ctrl + A`, Delete (Trash), `Cmd/Ctrl + Z` (undo the last asset action), `F` (fullscreen detail), Esc
+- `E` - Show or hide the Edit video view (bare E). In it: the editor's keys, `Cmd/Ctrl + S` saves the edit
 - `?` - Show keyboard shortcuts
 
 ## Adding New Node Types
@@ -541,7 +543,8 @@ root is the "Node Banana folder": it defaults to `~/Documents/Node Banana`
 (Windows: `Documents\Node Banana`, or `%USERPROFILE%\Node Banana` when
 Documents syncs to OneDrive; Linux: `XDG_DOCUMENTS_DIR`) and holds projects
 saved by name (`<root>/<Project>/`), `Generations/` for unsaved workflows
-and the hidden `.nodebanana/` metadata. Project workflows still write into
+and the hidden `.nodebanana/` metadata. Edit projects live in `<root>/Edits/`
+and move with the library. Project workflows still write into
 `<project>/generations/` and are indexed in place. See
 `docs/asset-library.md` for the layout, recording, snapshots, deletion and
 projects.
@@ -604,6 +607,10 @@ All routes in `src/app/api/`:
 | `/api/assets/media`, `/runs/[id]`, `/workflows/[id]` | default | Snapshot media, run snapshots, workflow classification |
 | `/api/assets/library`, `/jobs/[id]`, `/import`, `/import/scan`, `/cleanup`, `/export` | default | Library status/location, background jobs (move, import projects, clean up, export), finding the projects under a folder to import |
 | `/api/assets/projects` (`/report`, `/bring-in`, `/offer`, `/folder-name`) | default | Known projects and the "live elsewhere" offer, the page load's project report, bringing projects in (use, move, leave), a new project's folder name |
+| `/api/edits` | default | List the edit projects (never writes); create one (also duplicate, save as new, and make a Finder copy a separate edit). Behind the asset library's guard, as are the three below |
+| `/api/edits/[id]` | default | Read, save (with an `updatedAt` check: 409 with the stored edit, 404 when gone), rename or add a render (PATCH), delete to the Trash |
+| `/api/edits/[id]/reveal` | default | Show the edit's file in Finder/Explorer |
+| `/api/edits/folder/reveal` | default | Open the Edits folder (made if missing) |
 
 ## localStorage Keys
 
@@ -617,7 +624,7 @@ All routes in `src/app/api/`:
 - `node-banana-low-detail` - Low detail when zoomed out (absent or `on` means on; Settings › Canvas)
 - `node-banana-low-detail-zoom` - The zoom low detail starts below (default 0.25)
 - `node-banana-perf-overlay` - The performance overlay is shown (`on`)
-- `node-banana-gpu-canvas` - The GPU canvas (`on`/`off`; Settings › Canvas). Absent means on in the desktop app and off in the browser. The desktop app mirrors it in `gpu-canvas-v1.json` under user data and turns HTML-in-Canvas on at launch unless the classic canvas was chosen (`NODE_BANANA_GPU_CANVAS=1`/`0` overrides one run). Painted node images are cached in IndexedDB (`node-banana-paint-cache`, 512 MB)
+- `node-banana-paint-cache` (IndexedDB, not localStorage) - Painted node images for the GPU canvas, 512 MB
 - `node-banana-comfy-apps` - Saved Comfy nodes (workflow + contract + settings)
 - `node-banana-agent-settings` - Agent harness, and model and thinking-effort choice per harness
 - `node-banana-agent-conversations` - Agent chat history (messages, the agent's summary, workflow name, tab and id; newest 50, size-capped)
@@ -628,6 +635,9 @@ All routes in `src/app/api/`:
 - `node-banana-assets-first-run-shown` - The one-time "Saved to …" hint after the first recorded asset has been shown
 - `node-banana-models-cache` - The browse dialog's model list, one entry per set of configured providers
 - `node-banana-models-notices-dismissed` - Provider failure notices the user closed in the browse dialog (by provider, the error text); cleared by Refresh catalog
+- `node-banana-edit-last` - The edit the Edit video view opens on E
+- `node-banana-edit-library-pane` - The Edit video view's media pane shown or hidden (absent means shown; named for the library pane it replaced)
+- `node-banana-edit-pane-layout` - The media pane's layout, `list` or `grid` (absent means list)
 
 The asset library's location and index live on disk, not in localStorage
 (the desktop and web origins do not share it): `~/.node-banana/library.json`

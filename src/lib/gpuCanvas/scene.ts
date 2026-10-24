@@ -36,6 +36,11 @@ const FLAG_HEADER_LIVE = 64;
  * and its own length (1), the edge's x range for the gradient (2), unused (3).
  */
 const EDGE_STRIDE = 20;
+/**
+ * Spare instances laid out after each edge's pieces: a route that gains a piece or a stem (a node turning live or
+ * selected, an end moved) is written in place, instead of laying out every edge's buffer again.
+ */
+const EDGE_SPARE_PIECES = 2;
 const EDGE_SEGMENTS = 24;
 const EDGE_SELECTED = 1, EDGE_HOVERED = 2, EDGE_ACTIVE = 4, EDGE_HIDDEN = 8, EDGE_DASHED = 16, EDGE_STEM = 32;
 /**
@@ -290,8 +295,7 @@ const OUTLINE_FRAGMENT = /* glsl */ `
 `;
 
 /**
- * A running node seen zoomed out (as NodeLowDetail's .node-low-detail-running
- * draws it today): a tint over the node and a 12 px halo around it, pulsing
+ * A running node seen zoomed out, past the low-detail zoom: a tint over the node and a 12 px halo around it, pulsing
  * between 35% and full strength every 0.9 s; held at 80% under reduced motion.
  */
 const HALO_FRAGMENT = /* glsl */ `
@@ -589,6 +593,9 @@ export class Scene {
   private hovered = -1;
   private index: GridIndex;
   private dirty = true;
+  private backingScale = 1;
+  /** For runners isolating page costs from the GPU's: the view and its listeners run, nothing is drawn. */
+  drawing = true;
   private haloWasShown = false;
   private frameHandle = 0;
   private disposed = false;
@@ -775,7 +782,7 @@ export class Scene {
     for (let e = 0; e < graph.edges.length; e++) {
       const route = this.routes[e] ?? (this.routes[e] = this.route(e));
       this.routeOffset[e] = total;
-      this.routeCount[e] = drawnPieces(route).length + route.stems.length;
+      this.routeCount[e] = drawnPieces(route).length + route.stems.length + EDGE_SPARE_PIECES;
       total += this.routeCount[e];
     }
     this.edgeData = new Float32Array(Math.max(1, total) * EDGE_STRIDE);
@@ -842,6 +849,11 @@ export class Scene {
       }
       at += EDGE_STRIDE;
     }
+    // The slots it does not use draw nothing.
+    for (const end = (this.routeOffset[e] + this.routeCount[e]) * EDGE_STRIDE; at < end; at += EDGE_STRIDE) {
+      this.edgeData.fill(0, at, at + EDGE_STRIDE);
+      this.edgeData[at + 11] = EDGE_HIDDEN;
+    }
     // A connection with a missing handle has no extent: nothing finds it.
     if (route.unresolved) this.edgeBounds.set([Infinity, Infinity, -Infinity, -Infinity], e * 4);
     else this.edgeBounds.set([minX, minY, maxX, maxY], e * 4);
@@ -866,7 +878,7 @@ export class Scene {
     for (const e of list) {
       if (e < 0 || e >= this.graph.edges.length) continue;
       const route = this.route(e);
-      if (drawnPieces(route).length + route.stems.length !== this.routeCount[e]) resized = true;
+      if (drawnPieces(route).length + route.stems.length > this.routeCount[e]) resized = true;
       this.routes[e] = route;
     }
     // A route with more or fewer segments than before moves every edge after it in the buffer: rebuilt once, before the next draw or read.
@@ -1626,13 +1638,14 @@ export class Scene {
     this.renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
     this.uniforms.uViewport.value.set(canvas.clientWidth, canvas.clientHeight);
     this.uniforms.uDpr.value = devicePixelRatio;
+    this.backingScale = canvas.width / (canvas.clientWidth || 1) || devicePixelRatio;
     this.dirty = true;
     for (const listener of this.viewListeners) listener();
   }
 
-  /** Device pixels per css px of the canvas's backing store. */
+  /** Device pixels per css px of the canvas's backing store (kept at each resize: the painter asks per node). */
   get scale() {
-    return this.canvas.width / (this.canvas.clientWidth || 1) || devicePixelRatio;
+    return this.backingScale;
   }
 
   private tick = (now: number) => {
@@ -1653,7 +1666,7 @@ export class Scene {
       this.haloUniforms.uTime.value = now / 1000;
     } else if (this.haloWasShown) this.dirty = true;
     this.haloWasShown = halo;
-    if (this.dirty) {
+    if (this.dirty && this.drawing) {
       const start = performance.now();
       this.dirty = false;
       this.uniforms.uView.value.set(this.view.x, this.view.y, this.view.zoom);

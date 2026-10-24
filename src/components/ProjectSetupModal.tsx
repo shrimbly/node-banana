@@ -42,7 +42,6 @@ import { APP_VERSION } from "@/lib/appVersion";
 import { cn } from "@/components/nodes/ui/cn";
 import { getLowDetailSettings, setLowDetailEnabled, setLowDetailZoom } from "@/components/nodes/lowDetail";
 import { getPerfOverlayVisible, setPerfOverlayVisible } from "@/components/PerfOverlay";
-import { getGpuCanvasEnabled, gpuCanvasSupported, setGpuCanvasEnabled, useGpuCanvasActive, useGpuCanvasFailure } from "@/lib/gpuCanvas/setting";
 import { ComfyMark } from "@/components/icons/ComfyMark";
 
 import { DEFAULT_LLM_MODEL, LLM_PROVIDER_OPTIONS, defaultLLMModel, llmModelLabel, llmModelOptions } from "@/lib/llm/catalog";
@@ -272,9 +271,6 @@ export function ProjectSetupModal({
   const [localCanvasSettings, setLocalCanvasSettings] = useState<CanvasNavigationSettings>(canvasNavigationSettings);
   const [localLowDetail, setLocalLowDetail] = useState(getLowDetailSettings);
   const [localPerfOverlay, setLocalPerfOverlay] = useState(getPerfOverlayVisible);
-  const [localGpuCanvas, setLocalGpuCanvas] = useState(getGpuCanvasEnabled);
-  const gpuCanvasFailure = useGpuCanvasFailure();
-  const gpuCanvasDrawing = useGpuCanvasActive();
 
   // Connection appearance draft (Canvas tab); applied on Save
   const [localEdgeStyle, setLocalEdgeStyle] = useState<EdgeStyle>(edgeStyle);
@@ -336,7 +332,6 @@ export function ProjectSetupModal({
       setLocalCanvasSettings(canvasNavigationSettings);
       setLocalLowDetail(getLowDetailSettings());
       setLocalPerfOverlay(getPerfOverlayVisible());
-      setLocalGpuCanvas(getGpuCanvasEnabled());
       setLocalEdgeStyle(edgeStyle);
       setLocalEdgeAppearance(edgeAppearance);
       setEdgeDefaultSaved(false);
@@ -568,7 +563,6 @@ export function ProjectSetupModal({
     setLowDetailEnabled(localLowDetail.enabled);
     setLowDetailZoom(localLowDetail.zoom);
     setPerfOverlayVisible(localPerfOverlay);
-    if (localGpuCanvas !== getGpuCanvasEnabled()) setGpuCanvasEnabled(localGpuCanvas);
     onClose();
   };
 
@@ -1143,28 +1137,10 @@ export function ProjectSetupModal({
               />
             </DialogRow>
 
-            {/* The GPU canvas needs the desktop app's HTML-in-Canvas feature */}
-            {(gpuCanvasSupported() || !!window.nodeBananaDesktop?.gpuCanvas) && (
-              <DialogRow
-                title="GPU canvas"
-                description={localGpuCanvas && !gpuCanvasSupported()
-                  ? "Restart Node Banana to start drawing with the GPU canvas"
-                  : localGpuCanvas && gpuCanvasFailure
-                  ? "The GPU canvas stopped working, so the classic canvas is drawing until Node Banana restarts"
-                  : localGpuCanvas
-                  ? "Draws every node on the GPU at full detail, so very large workflows stay smooth. Turn it off to use the classic canvas, which this release still includes"
-                  : "Off: the classic canvas is drawing. It will be removed in a coming release"}
-                className="py-[18px]"
-              >
-                <Switch label="GPU canvas" checked={localGpuCanvas} onChange={setLocalGpuCanvas} />
-              </DialogRow>
-            )}
             {/* Low detail when zoomed out */}
             <DialogRow
               title="Low detail when zoomed out"
-              description={gpuCanvasDrawing
-                ? "On the classic canvas, nodes show as cards. The GPU canvas keeps every node at full detail and marks running nodes with a halo instead"
-                : "Nodes show as cards with thumbnails, without headers or controls, so large workflows pan and drag smoothly"}
+              description="Zoomed out, running nodes show a halo so you can find them. In a browser, nodes also show as simple cards, so large workflows pan smoothly"
               className="py-[18px]"
             >
               <Switch
@@ -1175,7 +1151,7 @@ export function ProjectSetupModal({
             </DialogRow>
             <DialogRow
               title="Low detail below"
-              description={gpuCanvasDrawing ? "The zoom level where nodes switch to cards, or running nodes show a halo" : "The zoom level where nodes switch to cards"}
+              description="The zoom level where running nodes show a halo, and in a browser where nodes switch to cards"
               className="py-[18px]"
             >
               <Slider

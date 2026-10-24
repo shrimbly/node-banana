@@ -52,3 +52,5 @@ export { executeImageResize, executeGifEncoder } from "./imageProcessingExecutor
 export { executeComfyApp } from "./comfyAppExecutor";
 
 export { runBatchIfApplicable } from "./batchExecution";
+
+export { resumePendingTask, canResumePendingTask } from "./resumeGeneration";

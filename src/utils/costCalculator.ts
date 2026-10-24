@@ -20,6 +20,12 @@ export const PRICING = {
     "2K": 0.101,
     "4K": 0.151,
   },
+  "nano-banana-2.1": {
+    "512": 0.0336, // nano-banana-2.1 has no 512; priced as 1K
+    "1K": 0.0336,
+    "2K": 0.0504,
+    "4K": 0.113,
+  },
   "nano-banana-2-lite": {
     "512": 0.034,
     "1K": 0.034,
@@ -170,6 +176,10 @@ export function calculatePredictedCost(
       if (modelId === "nano-banana-2" || modelId === "gemini-3.1-flash-image-preview") {
         const res = resolution || "1K";
         return { unitCost: PRICING["nano-banana-2"][res], unit: "image" };
+      }
+      if (modelId === "nano-banana-2.1" || modelId === "gemini-nano-banana-2.1") {
+        const res = resolution || "1K";
+        return { unitCost: PRICING["nano-banana-2.1"][res], unit: "image" };
       }
       if (modelId === "nano-banana-2-lite" || modelId === "gemini-3.1-flash-lite-image") {
         // 1K-only flat pricing, like nano-banana — resolution is ignored

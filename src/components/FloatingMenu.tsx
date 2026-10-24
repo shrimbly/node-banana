@@ -1,6 +1,6 @@
 "use client";
 
-import { FolderOpen, KeyRound, Keyboard, Layers, LayoutTemplate, LibraryBig, Menu, MessageSquareText, MessagesSquare, Plus, Save, Settings, SquareArrowOutUpRight } from "lucide-react";
+import { Film, FolderOpen, KeyRound, Keyboard, Layers, LayoutTemplate, LibraryBig, Menu, MessageSquareText, MessagesSquare, Plus, Save, Settings, SquareArrowOutUpRight } from "lucide-react";
 import {
   useState,
   useMemo,
@@ -520,6 +520,13 @@ export function FloatingMenu() {
               shortcut="A"
               onClick={choose(() => useAssetStore.getState().setAppView("assets"))}
               title="Every generation, from every workflow"
+            />
+            <MenuRow
+              icon={<Film size={16} strokeWidth={1.75} />}
+              label="Edit video"
+              shortcut="E"
+              onClick={choose(() => useAssetStore.getState().setAppView("edit"))}
+              title="Edit videos from any project"
             />
             {saveDirectoryPath && (
               <MenuRow

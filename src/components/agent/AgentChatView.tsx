@@ -55,7 +55,7 @@ function inReadingArea(target: EventTarget | null, root: HTMLElement | null): bo
  * that has just shown it by opening the chat again. A letter typed in the
  * reading area goes to the message box. ? shows the shortcuts. From the
  * sidebar, the header or the tab strip (or anywhere while there is no
- * message box), bare C goes back to the canvas and A to Assets. Never while
+ * message box), bare C goes back to the canvas, A to Assets and E to Edit video. Never while
  * typing, nor while a menu or a dialog is up (their letters are theirs).
  * Escape is not one of them: the view is left on purpose, never by
  * dismissing something.
@@ -83,9 +83,9 @@ function handleChatViewKey(event: KeyboardEvent, root: HTMLElement | null, compo
     return;
   }
   const key = event.key.toLowerCase();
-  if ((key === "c" || key === "a") && !event.shiftKey) {
+  if ((key === "c" || key === "a" || key === "e") && !event.shiftKey) {
     own();
-    if (!event.repeat) useAssetStore.getState().setAppView(key === "c" ? "canvas" : "assets");
+    if (!event.repeat) useAssetStore.getState().setAppView(key === "c" ? "canvas" : key === "a" ? "assets" : "edit");
   }
 }
 
