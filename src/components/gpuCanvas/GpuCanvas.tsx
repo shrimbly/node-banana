@@ -158,6 +158,8 @@ export interface GpuCanvasApi {
    * drawing (the view and everything following it still run).
    */
   diagnose: (part: "subtree" | "sheet" | "live" | "chrome" | "draw" | "navigator" | "groups" | "marquee", on: boolean) => void;
+  /** Hears every view change, with whether the live flow moved it and the caller's stack, for a runner finding what moves the view. */
+  watchView: (listener: (view: View, fromFlow: boolean, stack: string) => void) => () => void;
 }
 
 declare global {
@@ -766,6 +768,7 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
       probeLog: () => painter?.probeLog ?? [],
       info: () => ({ ...scene.info(), budget, htmlInCanvas }),
       diagnose: (part, on) => diagnose(part, on),
+      watchView: (listener) => scene.onViewChanged(() => listener({ ...scene.view }, live.followingFlowView, new Error().stack ?? "")),
     };
     const sheetElement = canvas.querySelector<HTMLElement>("[data-gpu-canvas-sheet]");
     const hidden = new Map<HTMLElement, string>();

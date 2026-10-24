@@ -575,6 +575,11 @@ export class LiveLayer {
   /** Set while the scene follows a view the flow moved to (connection.viewChanged). */
   private followingFlow = false;
 
+  /** Whether the scene's view is changing to follow the flow's. */
+  get followingFlowView() {
+    return this.followingFlow;
+  }
+
   setView(view: View) {
     this.alignToPixels();
     if (this.followingFlow) return;

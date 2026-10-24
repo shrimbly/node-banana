@@ -13,6 +13,10 @@
 // --hz (1000) in a maximised window: do not touch the mouse while it runs.
 // --chromium-flags adds switches, e.g. "--no-sandbox --use-angle=swiftshader"
 // on a Linux box with no GPU (run under xvfb-run).
+// --live runs the browser path: HTML-in-Canvas off (NODE_BANANA_HTML_IN_CANVAS=0), so there is no painter and the
+// nodes in view are live components, as in a browser. Its checks are open,reopen,pan,writes,scene,latency (the
+// painter's change, fidelity and tiers do not apply), and the scene gestures run at each of --scene-zooms
+// (fit,0.5,0.3 by default there; fit elsewhere), where a zoom is a fraction about the fitted view's centre.
 // --fresh-paint also compares each node painted alone, bypassing the disk cache.
 // --profile records a CPU profile of each gesture through Electron's own
 // debugger (<output>/<label>.cpuprofile) and prints its heaviest functions.
@@ -149,7 +153,8 @@ async function buildFixture(dir, copies) {
 }
 
 async function main() {
-  const checks = option('--checks', 'open,reopen,pan,change,fidelity,tiers,scene,latency').split(',');
+  const liveMode = flag('--live');
+  const checks = option('--checks', liveMode ? 'open,reopen,pan,writes,scene,latency' : 'open,reopen,pan,change,fidelity,tiers,scene,latency').split(',');
   const copies = Number(option('--copies', 17));
   const osInput = option('--input', ['win32', 'darwin'].includes(process.platform) ? 'os' : 'synthetic') === 'os' ? createOsInput() : undefined;
   assert.ok(!osInput || osInput.available, '--input os needs Windows or macOS');
@@ -175,14 +180,15 @@ async function main() {
   const workflowText = JSON.stringify(workflow);
 
   const report = { date: new Date().toISOString(), platform: process.platform, arch: process.arch, cpu: os.cpus()[0]?.model, input: osInput ? 'os' : 'synthetic', inputHz: hz,
-    gestureMs: seconds * 1000, chromiumFlags: flags, nodes: workflow.nodes.length, edges: workflow.edges.length };
+    gestureMs: seconds * 1000, chromiumFlags: flags, mode: liveMode ? 'live' : 'painted', nodes: workflow.nodes.length, edges: workflow.edges.length };
   const save = () => fs.writeFile(output, JSON.stringify(report, null, 2));
   let app;
   try {
     log('Launching…');
     // --electron <binary> runs another Electron (one on a newer Chromium) on the same app.
     app = await launchElectron({ executable: option('--electron', require('electron')), args: [...flags, root], cwd: root,
-      env: { ...process.env, NODE_BANANA_ELECTRON_USER_DATA: profile, NODE_BANANA_ELECTRON_PORT: String(port) } });
+      env: { ...process.env, NODE_BANANA_ELECTRON_USER_DATA: profile, NODE_BANANA_ELECTRON_PORT: String(port),
+        ...(liveMode ? { NODE_BANANA_HTML_IN_CANVAS: '0' } : {}) } });
     const { page } = app;
     await app.run(({ dialog }) => { dialog.showMessageBoxSync = () => 1; });
     await app.window();
@@ -235,9 +241,12 @@ async function main() {
         window.__runnerInput = {};
         addEventListener('pointerup', event => { window.__runnerInput.up = { x: event.clientX, y: event.clientY }; }, { capture: true, passive: true });
         addEventListener('pointermove', event => { window.__runnerInput.move = { x: event.clientX, y: event.clientY }; }, { capture: true, passive: true });
+        // A slow page delivers a gesture's wheels long after its last move: the runner waits them out.
+        addEventListener('wheel', () => { window.__runnerWheelAt = performance.now(); }, { capture: true, passive: true });
       });
-      const api = await page.waitFor(() => !!window.__gpuCanvas && window.__gpuCanvas.info().htmlInCanvas, null, { timeout: 30000, message: 'the GPU canvas with HTML-in-Canvas' }).catch(() => false);
-      assert.ok(api, 'The GPU canvas did not start with HTML-in-Canvas');
+      const api = await page.waitFor(live => !!window.__gpuCanvas && window.__gpuCanvas.info().htmlInCanvas === !live, liveMode, { timeout: 30000,
+        message: liveMode ? 'the GPU canvas without HTML-in-Canvas' : 'the GPU canvas with HTML-in-Canvas' }).catch(() => false);
+      assert.ok(api, liveMode ? 'The GPU canvas did not start without HTML-in-Canvas' : 'The GPU canvas did not start with HTML-in-Canvas');
     }
     // Drops the workflow on the canvas, as a user opening a saved one does.
     async function drop() {
@@ -258,6 +267,7 @@ async function main() {
       await drop();
       await page.waitFor(n => window.__gpuCanvas?.nodeIds().length === n, workflow.nodes.length, { timeout: 120000, message: 'the workflow in the scene' });
       const loaded = Date.now();
+      if (liveMode) return openLive(label, t0, loaded);
       let sawLoading = false;
       await page.waitFor(() => { const s = window.__gpuCanvas.painter(); return s && s.screenfulDone && s.painted >= s.total; }, null, { timeout: Number(option('--paint-timeout', 300000)), interval: 100,
         message: `${label}: every node painted` }).catch(error => { throw error; });
@@ -268,6 +278,20 @@ async function main() {
       sawLoading = await page.waitFor(() => !document.querySelector('[data-gpu-canvas] [role="status"]'), null, { timeout: 2000, interval: 50, message: 'the loading screen to go' }).then(() => false, () => true);
       const result = { loadMs: loaded - t0, paintedMs, loadingScreenStillUp: sawLoading, loadingScreenGoneMs: sawLoading ? null : Date.now() - shownAfter, status, stats: await page.evaluate(() => window.__gpuCanvas.stats.summary()) };
       log(`${label}: in the scene after ${result.loadMs} ms; screenful ${status.screenfulMs} ms, every node ${status.allMs} ms; ${status.cacheHits} cache hits, ${status.batches} batches`);
+      return result;
+    }
+
+    // Live mode has no painter: opened is the view's nodes live with their images loaded, and the loading screen gone.
+    async function openLive(label, t0, loaded) {
+      await page.waitFor(() => {
+        const live = window.__gpuCanvas.live();
+        const nodes = [...document.querySelectorAll('[data-gpu-canvas-live] .react-flow__node')];
+        return live.length > 0 && nodes.length >= live.length && nodes.every(n => [...n.querySelectorAll('img')].every(img => img.complete))
+          && !document.querySelector('[data-gpu-canvas] [role="status"]');
+      }, null, { timeout: Number(option('--paint-timeout', 300000)), interval: 50, message: `${label}: the view's nodes live` });
+      const result = { loadMs: loaded - t0, viewLiveMs: Date.now() - loaded, live: await page.evaluate(() => window.__gpuCanvas.live().length),
+        stats: await page.evaluate(() => window.__gpuCanvas.stats.summary()) };
+      log(`${label}: in the scene after ${result.loadMs} ms; ${result.live} nodes live with their images ${result.viewLiveMs} ms later`);
       return result;
     }
 
@@ -368,6 +392,7 @@ async function main() {
       const last = events.at(-1);
       await page.waitFor(({ type, x, y }) => { const seen = type === 'up' ? window.__runnerInput.up : window.__runnerInput.move;
         return seen && Math.abs(seen.x - x) <= 1.5 && Math.abs(seen.y - y) <= 1.5; }, last, { message: `${name} to reach the page` });
+      await page.waitFor(() => !(performance.now() - (window.__runnerWheelAt ?? -Infinity) < 300), null, { timeout: 60000, interval: 50, message: `${name}'s wheels to arrive` });
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       const pageStats = await page.evaluate(() => window.__gpuCanvas?.stats.summary() ?? null);
       // A store write mid-gesture re-runs every selector over the graph: name them.
@@ -451,7 +476,7 @@ async function main() {
 
     await ready();
     report.canvas = await page.evaluate(() => window.__gpuCanvas.info());
-    log(`GPU canvas up: ${JSON.stringify(report.canvas.budget)}`);
+    log(`GPU canvas up: ${liveMode ? 'live mode, no painter' : JSON.stringify(report.canvas.budget)}`);
 
     // Opening: the loading screen, the first paint.
     await section('open', async () => {
@@ -477,11 +502,12 @@ async function main() {
       for (let round = 0; round < 3; round++) {
         await page.evaluate(round => { const v = window.__gpuCanvas.view(); window.__gpuCanvas.setView({ zoom: 1, x: v.x - 4000 - round * 3000, y: v.y - 1500 }); }, round);
         await delay(150);
-        results.push(await measure('pan-sweep', `pan-while-painting-${round + 1}`, traced));
+        results.push(await measure('pan-sweep', `${liveMode ? 'pan-into-view' : 'pan-while-painting'}-${round + 1}`, traced));
         await delay(1000);
       }
       const result = traceResult(traced, results);
       result.yielded = await page.evaluate(() => window.__gpuCanvas.stats.summary().samples['painter.yielded'] ?? null);
+      if (liveMode) result.live = await page.evaluate(() => window.__gpuCanvas.live().length);
       await checkErrors();
       return result;
     });
@@ -689,26 +715,44 @@ async function main() {
     await section('scene', async () => {
       // The scene's own frame rate: wait for the painter's background work to finish (pan-while-painting measures it busy).
       const idleStarted = Date.now();
-      await page.waitFor(() => { const p = window.__gpuCanvas.painter(); return !p.running && p.queued === 0; }, null, { timeout: 180000, interval: 500, message: 'the painter to finish' })
+      await page.waitFor(() => { const p = window.__gpuCanvas.painter(); return !p || (!p.running && p.queued === 0); }, null, { timeout: 180000, interval: 500, message: 'the painter to finish' })
         .then(() => log(`  painter idle after ${Date.now() - idleStarted} ms`), () => log('  painter still busy after 180 s'));
       // --scene-variants base,subtree,sheet,live,chrome,draw,bare: repeat the gestures with a part of the page taken away
       // (bare takes all of them; a+b takes both), to find what costs frames. Labels carry the variant.
       const variants = option('--scene-variants', 'base').split(',');
       const PARTS = { subtree: ['sheet', 'subtree'], sheet: ['sheet'], live: ['live'], chrome: ['chrome'], draw: ['draw'], navigator: ['navigator'], groups: ['groups'], marquee: ['marquee'], bare: ['sheet', 'subtree', 'live', 'chrome'] };
+      const zooms = option('--scene-zooms', liveMode ? 'fit,0.5,0.3' : 'fit').split(',');
       const traced = [], results = [];
-      for (const variant of variants) {
+      for (const zoomSpec of zooms) for (const variant of variants) {
         const parts = variant.split('+').flatMap(v => PARTS[v] || []);
         await page.evaluate(parts => { for (const part of parts) window.__gpuCanvas.diagnose(part, false); }, parts);
         for (let round = 0; round < 2; round++) for (const name of gestureNames) {
           // Every gesture starts from the same place: nothing selected (a marquee leaves its nodes selected,
           // and selected nodes are live), the whole graph in view, and the view still there after the wait.
           for (let attempt = 0; attempt < 3; attempt++) {
-            const fitted = await page.evaluate(() => { window.__gpuCanvas.select([]); window.__gpuCanvas.fit(); return window.__gpuCanvas.view().zoom; });
+            const fitted = await page.evaluate(zoom => {
+              const c = window.__gpuCanvas;
+              c.select([]);
+              c.fit();
+              if (zoom !== 'fit') {
+                const v = c.view(), box = document.querySelector('[data-gpu-canvas]').getBoundingClientRect(), width = box.width, height = box.height, z = Number(zoom);
+                // About the fitted view's centre, at that zoom.
+                const cx = (width / 2 - v.x) / v.zoom, cy = (height / 2 - v.y) / v.zoom;
+                c.setView({ zoom: z, x: width / 2 - cx * z, y: height / 2 - cy * z });
+              }
+              return c.view().zoom;
+            }, zoomSpec);
+            // What moves the view after it was set, should anything.
+            await page.evaluate(() => { window.__viewMoves = []; window.__unwatchView = window.__gpuCanvas.watchView((view, fromFlow, stack) => {
+              if (window.__viewMoves.length < 5) window.__viewMoves.push({ zoom: +view.zoom.toFixed(4), fromFlow, stack: stack.split('\n').slice(2, 10).map(l => l.trim()).join(' < ') });
+            }); });
             await delay(1500);
-            const zoom = await page.evaluate(() => window.__gpuCanvas.view().zoom);
+            const { zoom, moves } = await page.evaluate(() => { window.__unwatchView(); return { zoom: window.__gpuCanvas.view().zoom, moves: window.__viewMoves }; });
             if (Math.abs(zoom - fitted) < 1e-6) break;
             log(`  ${name}: the view moved from ${fitted.toFixed(3)} to ${zoom.toFixed(3)} after fitting; fitting again`);
+            for (const move of moves.slice(0, 1)) log(`    to ${move.zoom}${move.fromFlow ? ' following the live flow' : ''}: ${move.stack}`);
           }
+          const at = zoomSpec === 'fit' ? '' : `@${zoomSpec}`;
           if (!round && name === gestureNames[0]) {
             // What the page keeps live at this view: those are what a pan moves besides the scene.
             const held = await page.evaluate(() => {
@@ -717,11 +761,11 @@ async function main() {
               const count = s => document.querySelectorAll(s).length;
               return { zoom: +window.__gpuCanvas.view().zoom.toFixed(3), types, nodes: count('.react-flow__node'), edges: count('.react-flow__edge'), canvases: count('canvas'), media: count('video, audio'), elements: count('*') };
             });
-            log(`  live at ${variant}: ${JSON.stringify(held)}`);
+            log(`  live at ${variant}${at}: ${JSON.stringify(held)}`);
           }
-          results.push(await measure(name, variant === 'base' ? name : `${name}:${variant}`, traced));
+          results.push(await measure(name, `${variant === 'base' ? name : `${name}:${variant}`}${at}`, traced));
         }
-        if (variant === 'base') await fs.writeFile(path.join(shots, 'fit.png'), await page.screenshot());
+        if (variant === 'base') await fs.writeFile(path.join(shots, `fit${zoomSpec === 'fit' ? '' : `-${zoomSpec}`}.png`), await page.screenshot());
         await page.evaluate(parts => { for (const part of [...parts].reverse()) window.__gpuCanvas.diagnose(part, true); }, parts);
       }
       await checkErrors();
