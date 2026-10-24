@@ -252,16 +252,20 @@ export async function snapshotElement(element: HTMLElement, width: number, heigh
   const root = document.createElement("div"), body = document.createElement("div"), style = document.createElement("style");
   copyAttributes(document.documentElement, root, ROOT);
   copyAttributes(document.body, body, BODY);
-  // The page's root and body never paint the sheet's margins: they stay transparent.
+  // The page's root and body never paint the sheet's margins: they stay transparent. The root is zoomed rather
+  // than the SVG scaled: Chromium lays a zoomed page out as it does at that device pixel ratio, snapping boxes and
+  // glyphs to device pixels, where a scaled one snaps them to css pixels first and lands up to a pixel off.
   style.textContent = `${css}\n[${ROOT}],[${BODY}]{margin:0!important;padding:0!important;border:0!important;background:transparent!important;`
-    + `width:${width}px!important;height:${height}px!important;overflow:hidden!important;position:relative!important;min-height:0!important}`;
+    + `width:${width}px!important;height:${height}px!important;overflow:hidden!important;position:relative!important;min-height:0!important}`
+    + `[${ROOT}]{zoom:${scale}!important}`;
   copy.style.left = "0px";
   copy.style.top = "0px";
   root.append(style, body);
   body.append(copy);
   const markup = new XMLSerializer().serializeToString(root);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${Math.ceil(width * scale)}" height="${Math.ceil(height * scale)}" viewBox="0 0 ${width} ${height}">`
-    + `<foreignObject x="0" y="0" width="${width}" height="${height}">${markup}</foreignObject></svg>`;
+  const deviceWidth = Math.ceil(width * scale), deviceHeight = Math.ceil(height * scale);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${deviceWidth}" height="${deviceHeight}">`
+    + `<foreignObject x="0" y="0" width="${deviceWidth}" height="${deviceHeight}">${markup}</foreignObject></svg>`;
   const image = new Image();
   image.decoding = "async";
   image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
