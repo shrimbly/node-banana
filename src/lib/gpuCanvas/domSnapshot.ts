@@ -257,7 +257,7 @@ async function copyOf(element: HTMLElement, scale: number): Promise<HTMLElement>
       const width = original.videoWidth, height = original.videoHeight;
       if (original.readyState >= 2 && width && height) {
         const size = drawnSize(original, width, height, scale);
-        target.replaceWith(pictureOf(original, target, drawToDataUrl(original, Math.min(width, size.width * 2), Math.min(height, size.height * 2))));
+        target.replaceWith(pictureOf(original, target, drawToDataUrl(original, Math.min(width, size.width * 2), Math.min(height, size.height * 2), "image/jpeg")));
       } else {
         const poster = original.poster;
         const image = pictureOf(original, target, "");
