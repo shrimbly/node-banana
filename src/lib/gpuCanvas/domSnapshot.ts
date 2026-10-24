@@ -20,6 +20,8 @@ const MAX_IMAGE_SIDE = 2048;
 const LARGE_IMAGE_RATIO = 4;
 /** Data URLs kept for images and frames, by source and drawn size; the oldest go first. */
 const MAX_CACHED_IMAGES = 400;
+/** Files kept as data URLs (fonts, pictures put in as they are); the least recently used go first. */
+const MAX_CACHED_FILES = 300;
 
 const fileCache = new Map<string, Promise<string>>();
 const imageCache = new Map<string, string>();
@@ -28,7 +30,10 @@ let cssCache: { key: string; text: Promise<string> } | null = null;
 /** A same-origin (or CORS) file as a data URL; empty if it cannot be read. */
 function fileAsDataUrl(url: string): Promise<string> {
   let found = fileCache.get(url);
-  if (!found) {
+  if (found) {
+    fileCache.delete(url);
+    fileCache.set(url, found);
+  } else {
     found = fetch(url)
       .then((response) => (response.ok ? response.blob() : Promise.reject(new Error(String(response.status)))))
       .then((blob) => new Promise<string>((resolve, reject) => {
@@ -39,6 +44,7 @@ function fileAsDataUrl(url: string): Promise<string> {
       }))
       .catch(() => "");
     fileCache.set(url, found);
+    while (fileCache.size > MAX_CACHED_FILES) fileCache.delete(fileCache.keys().next().value!);
   }
   return found;
 }
