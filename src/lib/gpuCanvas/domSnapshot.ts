@@ -17,11 +17,11 @@ const BODY = "data-nb-snapshot-body";
 /** Images drawn at more than this many device pixels a side are drawn smaller (a sheet's image never needs more). */
 const MAX_IMAGE_SIDE = 2048;
 /**
- * Pictures up to this many pixels that show at half their size or more go in as their file; others are drawn at
- * twice the size they show. A large file (a generator's 2048 px PNG is several MB) costs far more to read, carry and
- * decode in every snapshot than drawing it smaller does, while a small one keeps its exact pixels.
+ * A picture this many times larger than it shows is drawn smaller for the snapshot; others go in as their file.
+ * Drawing one smaller first resamples it twice, which blurs fine detail the live node keeps, and encoding it costs
+ * more main-thread time than the browser takes to carry and decode the file (measured on a Mac with 2048 px PNGs).
  */
-const FILE_IMAGE_PIXELS = 1024 * 1024;
+const LARGE_IMAGE_RATIO = 4;
 /** Data URLs kept for images and frames, by source and drawn size; the oldest go first. */
 const MAX_CACHED_IMAGES = 400;
 /** Files kept as data URLs (fonts, pictures put in as they are); the least recently used go first. */
@@ -190,18 +190,17 @@ function opaque(image: HTMLImageElement, src: string): boolean {
   return found;
 }
 
-/** An <img> as a data URL: its file when that is small, else drawn at twice the size it shows. */
+/** An <img> as a data URL: its file, unless that is far larger than it shows, then drawn at twice the size it shows. */
 async function imageData(image: HTMLImageElement, scale: number): Promise<string> {
   const src = image.currentSrc || image.src;
   if (!src || src.startsWith("data:")) return src;
-  // Not loaded (yet), or broken: left out. The painter paints a node with an image still loading again once it has
-  // (settleNodes reports it unloaded); reading the whole file in instead could hold the snapshot for seconds.
-  if (!image.complete || !image.naturalWidth) return "";
+  // Not decoded (yet): the file itself, whatever its size, so its node does not paint without it (it is painted
+  // again later, settleNodes having reported it unloaded).
+  if (!image.complete || !image.naturalWidth) return fileAsDataUrl(src);
   const natural = { width: image.naturalWidth, height: image.naturalHeight };
   const shown = drawnSize(image, natural.width, natural.height, scale);
+  if (/\.svg(\?|$)/i.test(src) || Math.max(natural.width / shown.width, natural.height / shown.height) <= LARGE_IMAGE_RATIO) return fileAsDataUrl(src);
   const drawn = { width: Math.min(natural.width, shown.width * 2), height: Math.min(natural.height, shown.height * 2) };
-  // Drawn smaller only when that halves it at least: once it is resampled twice, fine detail blurs a little.
-  if (/\.svg(\?|$)/i.test(src) || (natural.width * natural.height <= FILE_IMAGE_PIXELS && drawn.width * 2 > natural.width)) return fileAsDataUrl(src);
   const key = `${src}|${drawn.width}x${drawn.height}`;
   const cached = imageCache.get(key);
   if (cached) return cached;

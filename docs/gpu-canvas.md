@@ -40,12 +40,11 @@ same paint, reopen and fidelity results as Electron 44:
   URL, and form fields' values, then decoded and uploaded. It must be a data
   URL: Chromium taints an SVG with a foreignObject loaded from a blob URL.
   The page is zoomed, not the SVG scaled, so text and boxes snap to device
-  pixels as on the page. A picture goes in as its file only when it is small
-  (up to 1 MP, shown at half its size or more); others are drawn at twice the
-  size they show (JPEG when opaque), since a generator's multi-MB PNG read in
-  whole held snapshots for seconds. One still loading is left out and its node
-  painted again once it loads. Runner `--media png --unique-media N` measures
-  with such files.
+  pixels as on the page. A picture goes in as its file unless it is more than
+  four times the size it shows; then it is drawn at twice that size (JPEG when
+  opaque). Drawing every large picture smaller instead blurred fine detail and,
+  on a Mac, cost more main-thread time than carrying the files. Runner
+  `--media png --unique-media N` measures with a generator's 2048 px PNGs.
   Painted images are cached on disk as on the desktop (the cache salt names the
   backend). Run the perf runner with `--live` to measure this path.
 - **Live nodes alone**: `node-banana-live-nodes` = `on` in localStorage keeps a
