@@ -30,6 +30,7 @@ const providers: ProviderInfo[] = [
   { id: "kie", name: "Kie.ai", apiKeyUrl: "https://kie.ai/api-key" },
   { id: "wavespeed", name: "WaveSpeed", apiKeyUrl: "https://wavespeed.ai/accesskey" },
   { id: "comfy", name: "ComfyUI", apiKeyUrl: "https://platform.comfy.org/profile/api-keys?onboarding=router" },
+  { id: "atlas", name: "Atlas Cloud", apiKeyUrl: "https://www.atlascloud.ai/console/api-keys" },
 ];
 
 /**
@@ -48,6 +49,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
     fal: false,
     kie: false,
     wavespeed: false,
+    atlas: false,
     comfy: false,
   });
   const [localKeys, setLocalKeys] = useState<Record<ProviderType, string>>(() => {
@@ -59,6 +61,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
       fal: "",
       kie: "",
       wavespeed: "",
+      atlas: "",
       comfy: "",
     };
     for (const id of Object.keys(keys) as ProviderType[]) {

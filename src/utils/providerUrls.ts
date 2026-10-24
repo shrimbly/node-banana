@@ -23,6 +23,8 @@ export function getModelPageUrl(
       return `https://wavespeed.ai`;
     case "openai":
       return `https://platform.openai.com/docs/guides/images`;
+    case "atlas":
+      return `https://www.atlascloud.ai/models`;
     case "comfy":
       return "https://docs.comfy.org/development/comfy-router/models";
     default:
@@ -47,6 +49,8 @@ export function getProviderDisplayName(provider: ProviderType): string {
       return "WaveSpeed";
     case "openai":
       return "OpenAI";
+    case "atlas":
+      return "Atlas Cloud";
     case "comfy":
       return "ComfyUI";
     default:

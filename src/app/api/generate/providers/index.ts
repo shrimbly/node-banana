@@ -7,4 +7,5 @@ export { generateWithReplicate } from "./replicate";
 export { clearFalInputMappingCache, generateWithFalQueue } from "./fal";
 export { generateWithWaveSpeed } from "./wavespeed";
 export { generateWithOpenAI } from "./openai";
+export { generateWithAtlas } from "./atlas";
 export { generateWithComfy } from "./comfy";
