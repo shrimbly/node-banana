@@ -52,19 +52,24 @@ const REFRAME_WAIT_MS = 2000;
 /** Above this zoom every visible node is live. */
 const LIVE_ZOOM = 1;
 /**
- * Without HTML-in-Canvas (a browser, or a Chromium whose API changed) nothing is painted: every node in view is live
- * from the low-detail zoom up (or the overview's, with low detail off), as classic renders them, and the rest are
- * stand-in cards. Past this many nodes in view they are all stand-ins, as no page holds that many live.
+ * Without HTML-in-Canvas (a browser, or a Chromium whose API changed) nothing is painted: every node in view is live,
+ * at any zoom, as classic renders them, and the rest are stand-in cards. Past this many nodes in view they are all
+ * stand-ins, as no page holds that many live.
  */
-const LIVE_MODE_MAX_NODES = 400;
+const LIVE_MODE_MAX_NODES = 750;
 /**
- * Without a painter, at most this many nodes turn live a frame, those nearest the middle of the view first; the rest
- * show their stand-in cards until a later frame. Each one mounted is a React render, React Flow measuring it and its
- * handles, and its size reaching the store: a pan bringing a row of nodes into view would mount them in one frame.
+ * Without a painter, nodes turn live a few a frame, those nearest the middle of the view first; the rest show their
+ * stand-in cards until a later frame. Each one mounted is a React render, React Flow measuring it and its handles,
+ * and its size reaching the store, so the number a frame follows how long frames take: it grows while they keep up
+ * with the display and halves after a slow one, between these bounds.
  */
-const LIVE_MODE_ADDED_PER_FRAME = 3;
+const LIVE_MODE_ADDED_PER_FRAME = { min: 2, start: 6, max: 40 };
+/** A frame taking longer than this (ms) halves the number of nodes turning live a frame; a quicker one adds one. */
+const LIVE_MODE_SLOW_FRAME_MS = 20;
+/** Once the view is still, nodes this far out of view (a fraction of its size) turn live too, so a pan finds them. */
+const LIVE_MODE_AHEAD = 0.5;
 /** While the view moves, live nodes this far out of view (a fraction of the view's size) stay live. */
-const LIVE_MODE_MOVING_MARGIN = 0.5;
+const LIVE_MODE_MOVING_MARGIN = 0.75;
 /**
  * From this zoom, connections that show more than a line (labels, stubs, clamps) are live while near the view:
  * where classic stops drawing connections (its overview). Those showing a run's comet are live at any zoom.
@@ -440,41 +445,45 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
       live.wantOnly("added", added);
     };
 
-    // Without a painter, the nodes in view held back by LIVE_MODE_ADDED_PER_FRAME turn live on the next frames.
-    let heldViewFrame = 0;
+    // Without a painter, the nodes held back by LIVE_MODE_ADDED_PER_FRAME turn live on the next frames.
+    let heldViewFrame = 0, addedPerFrame = LIVE_MODE_ADDED_PER_FRAME.start, lastHeldFrame = 0;
     const budgetAdded = (ids: string[]) => {
       const kept = ids.filter((id) => live.has(id, "zoom"));
       const fresh = ids.filter((id) => !live.has(id, "zoom"));
-      if (fresh.length <= LIVE_MODE_ADDED_PER_FRAME) return ids;
-      const centre = scene.toWorld(scene.canvas.clientWidth / 2, scene.canvas.clientHeight / 2);
-      const distance = (id: string) => {
-        const n = scene.graph.nodes[scene.graph.indexOf.get(id)!];
-        return Math.hypot(n.x + n.w / 2 - centre.x, n.y + n.h / 2 - centre.y);
-      };
-      fresh.sort((a, b) => distance(a) - distance(b));
-      if (!heldViewFrame) heldViewFrame = requestAnimationFrame(() => {
+      if (fresh.length <= addedPerFrame) return ids;
+      if (!heldViewFrame) heldViewFrame = requestAnimationFrame((now) => {
         heldViewFrame = 0;
+        // How long the frame that mounted the last batch took sets the next batch.
+        const took = lastHeldFrame ? now - lastHeldFrame : 0;
+        const { min, max } = LIVE_MODE_ADDED_PER_FRAME;
+        if (took > LIVE_MODE_SLOW_FRAME_MS) addedPerFrame = Math.max(min, addedPerFrame >> 1);
+        else if (took) addedPerFrame = Math.min(max, addedPerFrame + 1);
         showViewLive();
+        lastHeldFrame = now;
       });
-      return [...kept, ...fresh.slice(0, LIVE_MODE_ADDED_PER_FRAME)];
+      return [...kept, ...fresh.slice(0, addedPerFrame)];
     };
-    // The nodes live for the view: those visible above 100%, or without a painter every one in view (LIVE_MODE_MAX_NODES).
+    // The nodes live for the view: those visible above 100%, or without a painter every one in view and, once the
+    // view is still, those just outside it (LIVE_MODE_MAX_NODES at most), nearest the middle first.
     const showViewLive = () => {
       const { zoom } = scene.view;
       let ids: string[] = [];
       if (painter) {
         if (zoom > LIVE_ZOOM) ids = scene.visible(0).map((i) => scene.graph.nodes[i].id);
-      } else {
-        const lowDetail = getLowDetailSettings();
-        if (zoom >= (lowDetail.enabled ? lowDetail.zoom : OVERVIEW_ZOOM_THRESHOLD)) {
-          const visible = scene.visible(0);
-          if (visible.length <= LIVE_MODE_MAX_NODES) {
-            if (isPanningRef.current) {
-              // While the view moves, nothing new turns live (the nodes coming into view show their stand-ins) and
-              // only those well out of view go back: once it stops, the view's nodes turn live a few a frame.
-              ids = scene.visible(LIVE_MODE_MOVING_MARGIN).map((i) => scene.graph.nodes[i].id).filter((id) => live.has(id, "zoom"));
-            } else ids = budgetAdded(visible.map((i) => scene.graph.nodes[i].id));
-          }
+      } else if (scene.visible(0).length <= LIVE_MODE_MAX_NODES) {
+        if (isPanningRef.current) {
+          // While the view moves, nothing new turns live (the nodes coming into view show their stand-ins) and
+          // only those well out of view go back: once it stops, the nodes turn live a few a frame.
+          ids = scene.visible(LIVE_MODE_MOVING_MARGIN).map((i) => scene.graph.nodes[i].id).filter((id) => live.has(id, "zoom"));
+        } else {
+          lastHeldFrame = 0;
+          const centre = scene.toWorld(scene.canvas.clientWidth / 2, scene.canvas.clientHeight / 2);
+          const distance = (i: number) => {
+            const n = scene.graph.nodes[i];
+            return Math.hypot(n.x + n.w / 2 - centre.x, n.y + n.h / 2 - centre.y);
+          };
+          const near = scene.visible(LIVE_MODE_AHEAD).map((i) => ({ i, d: distance(i) })).sort((a, b) => a.d - b.d);
+          ids = budgetAdded(near.slice(0, LIVE_MODE_MAX_NODES).map(({ i }) => scene.graph.nodes[i].id));
         }
       }
       live.wantOnly("zoom", ids);
