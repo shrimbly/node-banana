@@ -739,6 +739,12 @@ export class Painter {
     const urgentBatch = requests[0].priority === URGENT;
     // A change whose keys are still to be worked out (a frame after the store change) counts as urgent.
     const yielded = () => (!this.loading && this.scene.lastInputAt > t0) || (!urgentBatch && (this.queue.hasUrgent() || this.dirtyKeys.size > 0));
+    // Once a batch for the view has settled it is mostly done: only input stops it. A change then waits for it, as
+    // for an urgent batch (each image is stamped with the key it was rendered for, and the repaint stays queued);
+    // giving way would throw away the render and the wait for images of what the view is waiting on. A background
+    // batch still gives way, so a change made while it paints shows at once.
+    const viewBatch = requests[0].priority <= VIEW;
+    const settledYield = () => (viewBatch ? !this.loading && this.scene.lastInputAt > t0 : yielded());
     if (yielded()) {
       this.queue.restore(misses);
       this.options.stats.record(this.scene.lastInputAt > t0 ? "painter.yielded" : "painter.preempted", misses.length);
@@ -768,9 +774,9 @@ export class Painter {
       const p = placed.get(r.id)!;
       return [r.id, { x: p.x + this.boxOf(r.id).left, y: p.y + HEADER }];
     }));
-    const inPlace = await this.sheet.positioned(nodePositions, 2000, () => this.disposed || yielded());
+    const inPlace = await this.sheet.positioned(nodePositions, 2000, () => this.disposed || settledYield());
     if (this.disposed) return;
-    if (!inPlace && !yielded() && this.unplacedRetries < 2) {
+    if (!inPlace && !settledYield() && this.unplacedRetries < 2) {
       // Still elsewhere: painting now would misplace it. Try again (twice, then paint what is there).
       this.unplacedRetries++;
       this.queue.restore(fits);
@@ -778,7 +784,7 @@ export class Painter {
       return;
     }
     this.unplacedRetries = 0;
-    if (yielded()) {
+    if (settledYield()) {
       this.queue.restore(misses);
       this.options.stats.record(this.scene.lastInputAt > t0 ? "painter.yielded" : "painter.preempted", misses.length);
       return;
@@ -792,7 +798,7 @@ export class Painter {
     await nextFrame();
     await nextFrame();
     if (this.disposed) return;
-    if (yielded()) {
+    if (settledYield()) {
       this.queue.restore(misses);
       this.options.stats.record(this.scene.lastInputAt > t0 ? "painter.yielded" : "painter.preempted", misses.length);
       return;
@@ -818,7 +824,7 @@ export class Painter {
       }
       this.snapshotFailures = 0;
       if (this.disposed) return;
-      if (yielded()) {
+      if (settledYield()) {
         this.queue.restore(misses);
         this.options.stats.record(this.scene.lastInputAt > t0 ? "painter.yielded" : "painter.preempted", misses.length);
         return;
