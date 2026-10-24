@@ -58,6 +58,12 @@ const LIVE_ZOOM = 1;
  */
 const LIVE_MODE_MAX_NODES = 400;
 /**
+ * Without a painter, at most this many nodes turn live a frame, those nearest the middle of the view first; the rest
+ * show their stand-in cards until a later frame. Each one mounted is a React render, React Flow measuring it and its
+ * handles, and its size reaching the store: a pan bringing a row of nodes into view would mount them in one frame.
+ */
+const LIVE_MODE_ADDED_PER_FRAME = 3;
+/**
  * From this zoom, connections that show more than a line (labels, stubs, clamps) are live while near the view:
  * where classic stops drawing connections (its overview). Those showing a run's comet are live at any zoom.
  */
@@ -432,6 +438,24 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
       live.wantOnly("added", added);
     };
 
+    // Without a painter, the nodes in view held back by LIVE_MODE_ADDED_PER_FRAME turn live on the next frames.
+    let heldViewFrame = 0;
+    const budgetAdded = (ids: string[]) => {
+      const kept = ids.filter((id) => live.has(id, "zoom"));
+      const fresh = ids.filter((id) => !live.has(id, "zoom"));
+      if (fresh.length <= LIVE_MODE_ADDED_PER_FRAME) return ids;
+      const centre = scene.toWorld(scene.canvas.clientWidth / 2, scene.canvas.clientHeight / 2);
+      const distance = (id: string) => {
+        const n = scene.graph.nodes[scene.graph.indexOf.get(id)!];
+        return Math.hypot(n.x + n.w / 2 - centre.x, n.y + n.h / 2 - centre.y);
+      };
+      fresh.sort((a, b) => distance(a) - distance(b));
+      if (!heldViewFrame) heldViewFrame = requestAnimationFrame(() => {
+        heldViewFrame = 0;
+        showViewLive();
+      });
+      return [...kept, ...fresh.slice(0, LIVE_MODE_ADDED_PER_FRAME)];
+    };
     // The nodes live for the view: those visible above 100%, or without a painter every one in view (LIVE_MODE_MAX_NODES).
     const showViewLive = () => {
       const { zoom } = scene.view;
@@ -442,7 +466,7 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
         const lowDetail = getLowDetailSettings();
         if (zoom >= (lowDetail.enabled ? lowDetail.zoom : OVERVIEW_ZOOM_THRESHOLD)) {
           const visible = scene.visible(0);
-          if (visible.length <= LIVE_MODE_MAX_NODES) ids = visible.map((i) => scene.graph.nodes[i].id);
+          if (visible.length <= LIVE_MODE_MAX_NODES) ids = budgetAdded(visible.map((i) => scene.graph.nodes[i].id));
         }
       }
       live.wantOnly("zoom", ids);
@@ -818,6 +842,7 @@ export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, default
       clearTimeout(moveEndTimer);
       cancelAnimationFrame(liveEdgesFrame);
       cancelAnimationFrame(viewLiveFrame);
+      cancelAnimationFrame(heldViewFrame);
       cancelAnimationFrame(chromeFrame);
       unsubscribeChromeLayout();
       document.removeEventListener("click", measureChrome, true);

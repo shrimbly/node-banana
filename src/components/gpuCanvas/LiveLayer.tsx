@@ -17,7 +17,7 @@
  * painted image is current (it may have been edited while live), then goes
  * back to the scene.
  */
-import { useCallback, useLayoutEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { ReactFlow, useReactFlow, useStoreApi, type DefaultEdgeOptions, type Edge, type EdgeTypes, type InternalNode, type Node, type NodeChange, type NodeDimensionChange, type NodeTypes, type OnEdgesChange, type ReactFlowState } from "@xyflow/react";
 import { FloatingNodeHeaders } from "@/components/nodes/FloatingNodeHeaders";
@@ -249,6 +249,19 @@ export function LiveFlow({ connect, onViewChanged, initialView, nodeTypes, edgeT
   useLayoutEffect(() => state.committed(), [state]);
   // A live node's measured size reaches the store, as on the classic canvas (the painted ones' come from painting).
   const realIds = useMemo(() => new Set(real.map((n) => n.id)), [real]);
+  // Sizes measured while nodes mount wait for a quiet moment and reach the store in one write: each write runs every
+  // store selector over the graph, and a pan in live mode mounts nodes nearly every frame.
+  const pendingSizes = useRef(new Map<string, NodeDimensionChange>());
+  const flushTimer = useRef<{ timer: ReturnType<typeof setTimeout> | undefined; since: number }>({ timer: undefined, since: 0 });
+  const flushSizes = useCallback(() => {
+    clearTimeout(flushTimer.current.timer);
+    flushTimer.current = { timer: undefined, since: 0 };
+    const store = useWorkflowStore.getState();
+    const changes = [...pendingSizes.current.values()].filter((change) => indexOfNode(store.nodes, change.id) >= 0);
+    pendingSizes.current.clear();
+    if (changes.length) store.onNodesChange(changes.map((change) => ({ ...change, setAttributes: false })));
+  }, []);
+  useEffect(() => flushSizes, [flushSizes]);
   const onNodesChange = useCallback((changes: NodeChange[]) => {
     const store = useWorkflowStore.getState();
     for (const change of changes) if (change.type === "dimensions" && change.dimensions && realIds.has(change.id)) onMeasured(change.id);
@@ -261,10 +274,18 @@ export function LiveFlow({ connect, onViewChanged, initialView, nodeTypes, edgeT
       if (change.type !== "dimensions" || change.resizing !== undefined || !change.dimensions || !realIds.has(change.id)) return false;
       const k = indexOfNode(store.nodes, change.id);
       const known = k < 0 ? undefined : store.nodes[k].measured;
-      return k >= 0 && !(known?.width != null && known.height != null && Math.abs(known.width - change.dimensions.width) <= 0.5 && Math.abs(known.height - change.dimensions.height) <= 0.5);
+      const same = known?.width != null && known.height != null && Math.abs(known.width - change.dimensions.width) <= 0.5 && Math.abs(known.height - change.dimensions.height) <= 0.5;
+      // Back to the size the store holds: a size still waiting is out of date.
+      if (same) pendingSizes.current.delete(change.id);
+      return k >= 0 && !same;
     });
-    if (measured.length) store.onNodesChange(measured.map((change) => ({ ...change, setAttributes: false })));
-  }, [realIds, onMeasured]);
+    if (!measured.length) return;
+    for (const change of measured) pendingSizes.current.set(change.id, change);
+    const now = performance.now(), flush = flushTimer.current;
+    if (!flush.since) flush.since = now;
+    clearTimeout(flush.timer);
+    flush.timer = setTimeout(flushSizes, now - flush.since >= SIZE_WRITE_MAX_WAIT_MS ? 0 : SIZE_WRITE_QUIET_MS);
+  }, [realIds, onMeasured, flushSizes]);
   // Presses the scene took have selected already, except on a button or link (liveButtonPress), which selects here
   // as classic's NodeWrapper click; a stopped click (OutputNode, the curve editor, a button's own) never arrives.
   const nodeClick = useCallback((event: ReactMouseEvent, node: Node) => {
@@ -306,6 +327,11 @@ export interface LivePainter {
   /** Gives the scene (and the store) the node's box, handles and cards as its painted image has them. */
   restoreMeasured(id: string): boolean;
 }
+
+/** Live nodes' measured sizes reach the store once none has been measured for this long, */
+const SIZE_WRITE_QUIET_MS = 300;
+/** or at the latest this long after the first of them. */
+const SIZE_WRITE_MAX_WAIT_MS = 1500;
 
 /** The elements alignToPixels moves: live node wrappers and floating headers. */
 const SNAP_TARGETS = ".react-flow__node[data-id], [data-node-header]";
