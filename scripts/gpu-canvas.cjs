@@ -283,13 +283,17 @@ async function main() {
 
     // Live mode has no painter: opened is the view's nodes live with their images loaded, and the loading screen gone.
     async function openLive(label, t0, loaded) {
+      // Nodes turn live a few per frame, so the view is live once the count has held for 300 ms (not counted in the time).
+      await page.evaluate(() => { window.__runnerLiveSeen = { count: -1, at: 0 }; });
       await page.waitFor(() => {
         const live = window.__gpuCanvas.live();
+        const seen = window.__runnerLiveSeen;
+        if (live.length !== seen.count) { seen.count = live.length; seen.at = Date.now(); return false; }
         const nodes = [...document.querySelectorAll('[data-gpu-canvas-live] .react-flow__node')];
-        return live.length > 0 && nodes.length >= live.length && nodes.every(n => [...n.querySelectorAll('img')].every(img => img.complete))
+        return live.length > 0 && Date.now() - seen.at >= 300 && nodes.length >= live.length && nodes.every(n => [...n.querySelectorAll('img')].every(img => img.complete))
           && !document.querySelector('[data-gpu-canvas] [role="status"]');
       }, null, { timeout: Number(option('--paint-timeout', 300000)), interval: 50, message: `${label}: the view's nodes live` });
-      const result = { loadMs: loaded - t0, viewLiveMs: Date.now() - loaded, live: await page.evaluate(() => window.__gpuCanvas.live().length),
+      const result = { loadMs: loaded - t0, viewLiveMs: Date.now() - 300 - loaded, live: await page.evaluate(() => window.__gpuCanvas.live().length),
         stats: await page.evaluate(() => window.__gpuCanvas.stats.summary()) };
       log(`${label}: in the scene after ${result.loadMs} ms; ${result.live} nodes live with their images ${result.viewLiveMs} ms later`);
       return result;
