@@ -346,6 +346,10 @@ export class LiveLayer {
   /** Nodes swapping in: rendered but invisible while their painted image still shows. */
   private entering = new Set<string>();
   private generation = 0;
+  /** Entering nodes waiting to lay out and load (settle), each with its batch's promise. */
+  private settling = new Map<string, Promise<void>>();
+  /** Bumped by dispose, so a batch still settling shows nothing. */
+  private disposed = 0;
   private pending: Promise<void> = Promise.resolve();
   private unsubscribe: () => void;
   private listeners: (() => void)[] = [];
@@ -795,7 +799,6 @@ export class LiveLayer {
   /** Resolves when every wanted node is live and every other node is back in the scene. */
   private async sync() {
     const generation = ++this.generation;
-    const started = performance.now();
     const graph = this.scene.graph;
     // Nodes no longer wanted head back to the scene once their image is current.
     for (const id of [...this.live]) {
@@ -810,11 +813,30 @@ export class LiveLayer {
     this.entering = new Set(entering.filter((id) => !this.leaving.has(id) && this.scene.hasPainted(graph.indexOf.get(id)!)));
     await this.render();
     if (!entering.length || generation !== this.generation) return;
-    for (const id of entering) this.leaving.delete(id);
-    await settleNodes(this.element, entering, performance.now() + 3000, () => generation !== this.generation);
-    if (generation !== this.generation) return;
-    for (const id of entering) {
-      if (!this.wanted.has(id)) continue;
+    // Each batch settles on its own: a later sync (a pan asks for one a frame) adds the nodes it brings and leaves
+    // those already settling to finish, rather than starting every waiting node over.
+    const batch = entering.filter((id) => !this.settling.has(id));
+    if (batch.length) {
+      const settled = this.settle(batch);
+      for (const id of batch) this.settling.set(id, settled);
+    }
+    await Promise.all(entering.map((id) => this.settling.get(id)));
+  }
+
+  /** Waits for a batch of entering nodes to lay out and load, then shows those still wanted live. */
+  private async settle(batch: string[]) {
+    const started = performance.now(), disposed = this.disposed;
+    for (const id of batch) this.leaving.delete(id);
+    try {
+      await settleNodes(this.element, batch, started + 3000, () => this.disposed !== disposed || batch.every((id) => !this.wanted.has(id)));
+    } finally {
+      for (const id of batch) this.settling.delete(id);
+    }
+    if (this.disposed !== disposed) return;
+    let shown = false;
+    for (const id of batch) {
+      if (this.entering.delete(id)) shown = true;
+      if (!this.wanted.has(id) || this.live.has(id)) continue;
       const i = this.scene.graph.indexOf.get(id);
       if (i == null) continue;
       this.live.add(id);
@@ -822,10 +844,7 @@ export class LiveLayer {
       this.applyLiveSize(id);
     }
     // Shown in the frame the scene stops drawing their painted copies.
-    if (this.entering.size) {
-      this.entering.clear();
-      void this.render(true);
-    }
+    if (shown) void this.render(true);
     this.stats.record("live.swapMs", performance.now() - started);
   }
 
@@ -901,6 +920,7 @@ export class LiveLayer {
     this.connection.hold = undefined;
     this.connection.measured = undefined;
     this.generation++;
+    this.disposed++;
     this.snapObserver?.disconnect();
     this.snapObserver = null;
     for (const element of this.snapped.keys()) element.style.translate = "";
