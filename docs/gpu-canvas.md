@@ -47,11 +47,16 @@ same paint, reopen and fidelity results as Electron 44:
   for seconds a batch; drawing small files too only blurred fine detail. A
   picture still loading is left out and its node painted again once it loads.
   Runner `--media png --unique-media N` measures with 2048 px PNGs.
+  Settings › Canvas › Picture quality changes this rule: Fast draws every
+  picture larger than it shows at the size it shows, Sharp always takes the
+  file; either adds `|pq:` to the paint key (Balanced, the default, adds
+  nothing), so a change repaints nodes as the view reaches them.
   Painted images are cached on disk as on the desktop (the cache salt names the
   backend). Run the perf runner with `--live` to measure this path.
-- **Live nodes alone**: `node-banana-live-nodes` = `on` in localStorage keeps a
-  page without HTML-in-Canvas on no painter, to compare against (runner
-  `--live-nodes`). The nodes in view are live components, up to
+- **Live nodes alone**: Settings › Canvas › Nodes in a browser › Live
+  (`node-banana-live-nodes` = `on` in localStorage) keeps a page without
+  HTML-in-Canvas on no painter (runner `--live-nodes`); switching it builds
+  the canvas again, without a reload. The nodes in view are live components, up to
   `LIVE_MODE_MAX_NODES` (750), at any zoom; with more in view, nodes are the
   scene's stand-in cards (`showViewLive` in `GpuCanvas.tsx`). Once the view is
   still, the nodes up to half a view outside it turn live too
@@ -696,3 +701,22 @@ The stats also keep frames over 250 ms with the painter phase they ended in,
 and the browser's long animation frames with their slowest scripts; the
 `tiers` check prints both. That is how a stall outside the painter (an
 autosave settling every node's media in one task) was found.
+
+## Settings › Canvas
+
+How the canvas trades speed for detail, in `src/lib/gpuCanvas/canvasSettings.ts`
+(`node-banana-canvas-performance`, plus `node-banana-live-nodes`), each read
+where it applies so a change needs no reload. The defaults are the canvas as
+described above.
+
+| Setting | Default | What it changes |
+|---------|---------|-----------------|
+| Wait for nodes when opening | on | The open veil (`VEIL_MAX_MS`); off shows stand-in cards at once |
+| Loading screen for large workflows | on | `LOADING_MIN_NODES`; off paints on the smaller sheets while the user pans |
+| Connection details from | 15% | The zoom connections' labels, stubs and clamps turn live from |
+| Nodes in a browser | Painted | Live: no painter, as above |
+| Picture quality in a browser | Balanced | domSnapshot's picture rule, as above |
+
+Low detail (its switch and zoom, `src/components/nodes/lowDetail.ts`) and the
+performance overlay sit beside them. The runner's `--live --checks settings`
+switches to live nodes and back, then a new picture quality, without a reload.

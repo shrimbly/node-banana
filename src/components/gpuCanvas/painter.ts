@@ -39,6 +39,7 @@ import type { Slot } from "@/lib/gpuCanvas/atlasLayout";
 import type { AtlasBudget } from "@/lib/gpuCanvas/budget";
 import { enableLayoutSubtree, paintElement } from "@/lib/gpuCanvas/htmlInCanvas";
 import { snapshotElement } from "@/lib/gpuCanvas/domSnapshot";
+import { getCanvasSettings } from "@/lib/gpuCanvas/canvasSettings";
 import { edgesByNode, READS_RUN_IN_PROGRESS, runMark, upstreamPaintKeys, withRunMark, type RunState } from "@/lib/gpuCanvas/paintKey";
 import { BACKGROUND, EIGHTH, PREFETCH, PaintQueue, URGENT, VIEW, packSheet, tierToShow, tiersFor, wantedTier, type PaintRequest } from "@/lib/gpuCanvas/paintQueue";
 import { cachedHandle, cacheKey, deflate, handleFromCache, inflate, PAINT_CACHE_BYTES, PAINT_CACHE_FORMAT, type CachedHandle, type PaintStore } from "@/lib/gpuCanvas/paintCache";
@@ -453,11 +454,19 @@ export class Painter {
     if (hint) key += `|h:${hint}`;
     if (ui) key += `|ui:${JSON.stringify(ui)}`;
     if (SCRUB_ROW_NODE_TYPES.has(node.type ?? "")) key += `|snd:${soundAudible(useVideoSoundStore.getState()) ? 1 : 0}`;
+    // A snapshot copies pictures as Settings › Canvas says (domSnapshot); the default adds nothing, so its paints stay cached.
+    const quality = getCanvasSettings().pictureQuality;
+    if (this.options.backend === "snapshot" && quality !== "balanced") key += `|pq:${quality}`;
     return key;
   }
 
-  /** Something outside a node's base key changed for these nodes: those whose key did are repainted. */
-  private rekey(ids: Iterable<string>) {
+  /** Settings › Canvas › Picture quality changed: a snapshot painter paints the nodes again, those away from the view as it comes to them. */
+  pictureQualityChanged() {
+    if (this.options.backend === "snapshot") this.rekey([...this.baseKeys.keys()], true);
+  }
+
+  /** Something outside a node's base key changed for these nodes: those whose key did are repainted (`nearOnly`: as `stale`). */
+  private rekey(ids: Iterable<string>, nearOnly = false) {
     const { nodes } = useWorkflowStore.getState();
     const now = performance.now();
     for (const id of ids) {
@@ -466,7 +475,7 @@ export class Painter {
       const key = this.fullKey(nodes[i], base);
       if (this.keys.get(id) === key) continue;
       this.keys.set(id, key);
-      this.stale(id, now);
+      this.stale(id, now, nearOnly);
     }
   }
 

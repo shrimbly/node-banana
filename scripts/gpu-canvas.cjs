@@ -7,7 +7,8 @@
 //   npm run build
 //   node scripts/gpu-canvas.cjs --output gpu-canvas-mac.json
 //
-// --checks (open,reopen,pan,change,fidelity,tiers,scene,latency) picks checks.
+// --checks (open,reopen,pan,change,fidelity,tiers,scene,latency) picks checks; settings (with --live) switches
+// Settings › Canvas without a reload.
 // --copies N tiles the stress workflow N times (17 is about 5,100 nodes); --nodes N keeps the first N of them
 // (tiling as many copies as that takes), and --hidden-edges hides every connection, as the FAB's button does.
 // --unique-media N gives the fixture N picture files (copies of the samples) so nodes do not share them;
@@ -524,6 +525,22 @@ async function main() {
       return openWorkflow('reopen');
     });
     if (!checks.includes('open') && !checks.includes('reopen')) await openWorkflow('open');
+
+    // Settings › Canvas applied without a reload (the browser path): live nodes and back, then a new picture quality.
+    await section('settings', async () => {
+      if (!browserPath || liveMode) return { skipped: 'runs on the browser path with its painter (--live)' };
+      const t0 = Date.now();
+      await page.evaluate(() => window.__bananaCanvasSettings({ browserNodes: 'live' }));
+      await page.waitFor(() => !!window.__gpuCanvas && !window.__gpuCanvas.painter() && window.__gpuCanvas.live().length > 0, null, { timeout: 30000, message: 'live nodes without a reload' });
+      const result = { liveMs: Date.now() - t0, live: await page.evaluate(() => window.__gpuCanvas.live().length) };
+      const t1 = Date.now();
+      await page.evaluate(() => window.__bananaCanvasSettings({ browserNodes: 'painted', pictureQuality: 'fast' }));
+      await page.waitFor(() => { const s = window.__gpuCanvas?.painter(); return !!s && s.screenfulDone; }, null, { timeout: 120000, message: 'painted again at fast picture quality' });
+      result.paintedMs = Date.now() - t1;
+      await page.evaluate(() => window.__bananaCanvasSettings({ pictureQuality: 'balanced' }));
+      await checkErrors();
+      return result;
+    });
 
     // Pans while the view's tier is painting: a jump starts painting, then a pan begins.
     await section('pan', async () => {

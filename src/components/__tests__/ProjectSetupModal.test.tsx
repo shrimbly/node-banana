@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { ProjectSetupModal } from "@/components/ProjectSetupModal";
 import { ProviderSettings } from "@/types";
 
@@ -1568,5 +1568,28 @@ describe("Canvas tab: low detail and the performance overlay", () => {
     render(<ProjectSetupModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} mode="settings" initialTab="canvas" />);
     fireEvent.click(screen.getByRole("switch", { name: "Low detail when zoomed out" }));
     expect(screen.getByRole("slider", { name: "Low detail below" })).toBeDisabled();
+  });
+
+  it("sets how the canvas trades speed for detail, all on Save", async () => {
+    const { getCanvasSettings, setCanvasSettings, DEFAULT_CANVAS_SETTINGS } = await import("@/lib/gpuCanvas/canvasSettings");
+    setCanvasSettings(DEFAULT_CANVAS_SETTINGS);
+    mockUseWorkflowStore.mockImplementation((selector) =>
+      selector(createDefaultState({ canvasNavigationSettings: navSettings, updateCanvasNavigationSettings: vi.fn() }))
+    );
+    mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
+    render(<ProjectSetupModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} mode="settings" initialTab="canvas" />);
+
+    fireEvent.click(screen.getByRole("switch", { name: "Wait for nodes when opening" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Loading screen for large workflows" }));
+    fireEvent.change(screen.getByRole("slider", { name: "Connection details from" }), { target: { value: "50" } });
+    fireEvent.click(within(screen.getByRole("group", { name: "Picture quality in a browser" })).getByRole("button", { name: "Sharp" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Nodes in a browser" })).getByRole("button", { name: "Live" }));
+    // Picture quality has no say over live nodes
+    expect(within(screen.getByRole("group", { name: "Picture quality in a browser" })).getByRole("button", { name: "Sharp" })).toBeDisabled();
+    expect(getCanvasSettings()).toEqual(DEFAULT_CANVAS_SETTINGS);
+
+    fireEvent.click(screen.getByText("Save"));
+    expect(getCanvasSettings()).toEqual({ browserNodes: "live", pictureQuality: "sharp", waitForPaint: false, loadingScreen: false, connectionDetailZoom: 0.5 });
+    setCanvasSettings(DEFAULT_CANVAS_SETTINGS);
   });
 });

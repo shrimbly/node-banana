@@ -12,6 +12,8 @@
  * from a blob URL, and a WebGL upload of it then throws.
  */
 
+import { getCanvasSettings } from "./canvasSettings";
+
 const ROOT = "data-nb-snapshot-root";
 const BODY = "data-nb-snapshot-body";
 /** Images drawn at more than this many device pixels a side are drawn smaller (a sheet's image never needs more). */
@@ -226,8 +228,12 @@ async function imageData(image: HTMLImageElement, scale: number): Promise<string
   if (!image.complete || !image.naturalWidth) return "";
   const natural = { width: image.naturalWidth, height: image.naturalHeight };
   const shown = drawnSize(image, natural.width, natural.height, scale);
-  if (/\.svg(\?|$)/i.test(src) || (Math.max(natural.width / shown.width, natural.height / shown.height) <= LARGE_IMAGE_RATIO && !largeFile(src, natural))) return fileAsDataUrl(src);
-  const size = { width: Math.min(natural.width, shown.width * 2), height: Math.min(natural.height, shown.height * 2) };
+  // Settings › Canvas › Picture quality: "sharp" always takes the file, "fast" draws every picture larger than it
+  // shows at the size it shows.
+  const quality = getCanvasSettings().pictureQuality, ratio = Math.max(natural.width / shown.width, natural.height / shown.height);
+  if (/\.svg(\?|$)/i.test(src) || quality === "sharp" || (ratio <= (quality === "fast" ? 1 : LARGE_IMAGE_RATIO) && (quality === "fast" || !largeFile(src, natural)))) return fileAsDataUrl(src);
+  const drawnScale = quality === "fast" ? 1 : 2;
+  const size = { width: Math.min(natural.width, Math.round(shown.width * drawnScale)), height: Math.min(natural.height, Math.round(shown.height * drawnScale)) };
   const key = `${src}|${size.width}x${size.height}`;
   const cached = imageCache.get(key);
   if (cached) return cached;

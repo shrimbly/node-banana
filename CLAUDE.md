@@ -624,7 +624,8 @@ All routes in `src/app/api/`:
 - `node-banana-low-detail` - Low detail when zoomed out (absent or `on` means on; Settings › Canvas)
 - `node-banana-low-detail-zoom` - The zoom low detail starts below (default 0.25)
 - `node-banana-perf-overlay` - The performance overlay is shown (`on`)
-- `node-banana-live-nodes` - Without HTML-in-Canvas, nodes are live components with no painter (`on`; for comparison, runner `--live-nodes`)
+- `node-banana-live-nodes` - Without HTML-in-Canvas, nodes are live components with no painter (`on`; Settings › Canvas › Nodes in a browser, runner `--live-nodes`)
+- `node-banana-canvas-performance` - Settings › Canvas speed-for-detail choices: picture quality in a browser, waiting for nodes when opening, the loading screen, the zoom connection details start at (`src/lib/gpuCanvas/canvasSettings.ts`)
 - `node-banana-paint-cache` (IndexedDB, not localStorage) - Painted node images for the GPU canvas, 512 MB
 - `node-banana-comfy-apps` - Saved Comfy nodes (workflow + contract + settings)
 - `node-banana-agent-settings` - Agent harness, and model and thinking-effort choice per harness
