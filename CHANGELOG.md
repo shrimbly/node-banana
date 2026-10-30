@@ -4,6 +4,47 @@ All notable changes to Node Banana will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.2.0] - 2026-10-22
+
+The Video Stitch node becomes Edit Video, with an editor on a timeline and a
+video editing view of its own. Generated videos appear in the recent
+generations. A long generation is never abandoned, and a refused run says why.
+
+### Added
+
+- Edit Video: the Video Stitch node is now Edit Video, and Open editor on its card opens a near-full-screen editor. Trim, split, reorder, mute and add clips on a timeline, with the preview above it. Render encodes what the editor shows.
+- Stacked timeline: one row per clip, each starting before the clip above ends, like sequence layers in After Effects. Drag a clip to any time or row. Crossfade dissolves the overlaps. With Crossfade off, the clip above covers the clips below.
+- Audio clips: the music and audio files from the library are clips on rows under the video. Move, trim, split or mute each one, and give it a volume curve with Fade in, Fade out and Flat.
+- Select, copy and paste clips: ⌘-click, ⇧-click, a box or ⌘A select several clips. ⌘C, ⌘X, ⌘V and ⌘D copy, cut, paste and duplicate them, in the same node or in another Edit Video node.
+- Frame to canvas: a button under the preview puts the frame at the playhead on the canvas as an image node, at the sequence's full size.
+- The Edit video view: bare E opens a full-screen editor for edit projects. An edit project is a timeline saved on its own in the Edits folder, with videos and audio from any project. The pane beside the timeline shows the edit's own media as a list or a grid, where you can rename or remove an item. Render keeps the video in the asset library.
+- Add media, with Upload: Add media opens the asset library in a dialog with search and filters. Upload, at the top right, brings in video and audio files from your computer. You can also drop files on the dialog or on the media pane.
+- A node's edit is in Edits too: Save or Done in a node's editor also keeps the sequence as an edit project, named after the node or the workflow.
+- Videos in recent generations: the recent-generations list shows generated videos beside the images. Open one in the viewer, add it to the canvas, download it or drag it onto the canvas.
+- Pick a run up again: a node keeps its Kie or Comfy Router request when the app stops waiting or is closed. Pick up collects the result later. Comfy Router keeps a result for 24 hours.
+
+### Fixed
+
+- Long runs no longer time out at ten minutes. A run is polled for as long as the provider says it is running, with a safety net at 90 minutes.
+- A refused run says why. When Comfy Router refuses a run, the node shows the provider's own explanation at once.
+- The Generate Video card's player follows playback. Before, the button stayed on Play and the playhead stood still while the video played.
+- Array batches run ComfyUI app nodes once per item. Before, the app ran once with the first item. Generate 3D nodes batch the same way.
+- Annotate's Cancel and Done take clicks on the desktop. The dialog now sits below the window's drag region.
+- Edit Video renders clips in the order shown on the card.
+- Rendered clips keep their timing and sound. Joins no longer drift, and a clip with a different sample rate is no longer silent.
+- Edit Video keeps a socket for every connected clip after clips are removed.
+
+## [2.1.1] - 2026-10-15
+
+### Added
+
+- **Nano Banana 2.1 on Gemini** — Google's Nano Banana 2.1 joins the Generate Image node's Gemini models, at 1K, 2K or 4K, with Nano Banana 2's wide 1:4 to 8:1 ratios and its Google and Image Search grounding, from $0.034 an image. The node, the split-grid editor, the Gemini request and the agent now read each Gemini model's settings from one table.
+- **Comfy Router models brought up to date** — Nano Banana 2.1; Pika's own routes for Nano Banana Pro, Nano Banana 2, GPT Image 2, Pika 2.5 (text and image to video) and Seedance 2.0; and Higgsfield's Genjutsu Motion Transfer, which recasts a video with up to eight reference images. Imagen 3, Imagen 3 Fast, Veo 3 and Veo 3 Fast, which the Router no longer serves, are gone.
+
+### Fixed
+
+- **"Keys could not be saved securely: Invalid credential field"** — On the desktop, entering the Comfy key under Settings → Providers refused the whole save, and with it any other key saved at the same time, because the secure store did not know that provider's name. It does now.
+
 ## [2.1.0] - 2026-10-12
 
 Windows is back, the agent grows a full-page chat that runs workflows and

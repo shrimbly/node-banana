@@ -53,8 +53,11 @@ export function useAdaptiveImageSrc(
   const [thumbnailSrc, setThumbnailSrc] = useState<string | null>(null);
   const prevSrcRef = useRef<string | null>(null);
 
-  // Eagerly generate thumbnail when fullSrc changes
+  // Eagerly generate thumbnail when fullSrc changes. A painted copy only takes one already made: it is mounted for a
+  // moment, and decoding and encoding every picture of a workflow as it paints held the page for seconds (the
+  // snapshot draws a large picture at the size it shows anyway).
   useEffect(() => {
+    if (painted) return;
     if (!fullSrc) {
       setThumbnailSrc(null);
       prevSrcRef.current = null;
@@ -101,9 +104,10 @@ export function useAdaptiveImageSrc(
 
     // Suppress unhandled rejection — fullSrc falls back gracefully
     promise.catch(() => {});
-  }, [fullSrc]);
+  }, [fullSrc, painted]);
 
   if (!fullSrc) return null;
+  if (painted) return (thumbnailWanted && getThumbnail(fullSrc)) || fullSrc;
 
   return thumbnailWanted && thumbnailSrc ? thumbnailSrc : fullSrc;
 }

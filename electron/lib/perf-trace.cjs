@@ -31,7 +31,7 @@ const PAGE_PROBE = `(() => {
     new PerformanceObserver(list => {
       for (const frame of list.getEntries()) {
         const script = [...(frame.scripts || [])].sort((a, b) => b.duration - a.duration)[0];
-        const where = script ? [script.invokerType, script.invoker, (script.sourceURL || '').split('/').pop(), script.sourceFunctionName].filter(Boolean).join(' ') : 'rendering';
+        const where = script ? [script.invokerType, script.invoker, (script.sourceURL || '').split('/').pop() + ':' + (script.sourceCharPosition ?? ''), script.sourceFunctionName].filter(Boolean).join(' ') : 'rendering';
         emit('banana:loaf ' + where.slice(0, 160), { start: frame.startTime, duration: frame.duration });
       }
     }).observe({ type: 'long-animation-frame' });

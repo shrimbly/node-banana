@@ -403,6 +403,20 @@ async function write<T>(fn: (library: AssetLibrary) => Promise<T>): Promise<T> {
   return counted(rt, () => library.writing(() => fn(library)));
 }
 
+/** The active library root, for reads. Throws 503 "unavailable" when there is no library (hosted, or the root can't be used). */
+export async function libraryRootForRead(): Promise<string> {
+  return (await availableLibrary(runtime())).location.root;
+}
+
+/**
+ * Runs `fn` with the active root as a counted library write, for files the
+ * library keeps beside its own (the edit files): refused with 503 "paused"
+ * while a move copies, and waited for by a move.
+ */
+export async function writeInLibraryRoot<T>(fn: (root: string) => Promise<T>): Promise<T> {
+  return write((library) => fn(library.root));
+}
+
 /** Counts `fn` as an in-flight write (after checking the pause, synchronously). */
 async function counted<T>(rt: Runtime, fn: () => Promise<T>): Promise<T> {
   assertWritable(rt);

@@ -16,7 +16,9 @@
  * full-screen sheet upload stalled the GPU for 106 ms just as a pan began.
  * Sheets are also capped in device pixels, so one upload stays small at 2×.
  * Behind the loading screen nobody can pan, so the painter uses larger
- * sheets and does not wait.
+ * sheets and does not wait. Settings › Canvas › Sharpen while panning turns
+ * the waiting off too: batches run and the view's tiers are chosen while the
+ * view moves, at the cost of a hitch now and then.
  *
  * What a node's image depends on is its paint key (paintKey.ts). The painter
  * recomputes the keys of the nodes a store change touched (and the nodes
@@ -38,6 +40,8 @@ import { PaintedAtlas, type BlitItem } from "@/lib/gpuCanvas/atlas";
 import type { Slot } from "@/lib/gpuCanvas/atlasLayout";
 import type { AtlasBudget } from "@/lib/gpuCanvas/budget";
 import { enableLayoutSubtree, paintElement } from "@/lib/gpuCanvas/htmlInCanvas";
+import { snapshotElement } from "@/lib/gpuCanvas/domSnapshot";
+import { getCanvasSettings } from "@/lib/gpuCanvas/canvasSettings";
 import { edgesByNode, READS_RUN_IN_PROGRESS, runMark, upstreamPaintKeys, withRunMark, type RunState } from "@/lib/gpuCanvas/paintKey";
 import { BACKGROUND, EIGHTH, PREFETCH, PaintQueue, URGENT, VIEW, packSheet, tierToShow, tiersFor, wantedTier, type PaintRequest } from "@/lib/gpuCanvas/paintQueue";
 import { cachedHandle, cacheKey, deflate, handleFromCache, inflate, PAINT_CACHE_BYTES, PAINT_CACHE_FORMAT, type CachedHandle, type PaintStore } from "@/lib/gpuCanvas/paintCache";
@@ -56,7 +60,7 @@ const LOADING_SHEET_TEXELS = { w: 4096, h: 3072 };
 const QUIET_MS = 120;
 /** Space between nodes on the sheet, in css px. */
 const GAP_PX = 4;
-/** The view's tiers are chosen this long after it stops moving. */
+/** The view's tiers are chosen this long after it stops moving (and this often while it moves, when sharpening while panning). */
 const VIEW_SETTLE_MS = 50;
 /** Nodes this far outside the view (in screens) are painted ahead and kept from eviction. */
 const MARGIN = 0.25;
@@ -75,6 +79,8 @@ const PREFETCH_ZOOM = 0.25;
 const SETTLE_MS = 1500, LOADING_SETTLE_MS = 5000;
 /** Times a node painted before its images loaded is painted again. */
 const MAX_PROVISIONAL_REPAINTS = 3;
+/** How old a cache entry's last use is before a hit marks it used again (the cache drops the least recently used). */
+const TOUCH_AFTER_MS = 24 * 60 * 60 * 1000;
 /** Cache uploads per frame, in texels, so a cache hit never stalls a frame either. */
 const UPLOAD_TEXELS_PER_FRAME = 2048 * 1024;
 
@@ -139,6 +145,8 @@ export interface PainterOptions {
   /** Anything outside the graph that changes how nodes look (app version). */
   salt: string;
   stats: GpuCanvasStats;
+  /** How the sheet becomes pixels: HTML-in-Canvas paints it ("element"), or it is copied into an image ("snapshot"). */
+  backend: "element" | "snapshot";
 }
 
 const NO_HEADERS: HeaderProps = {
@@ -157,6 +165,9 @@ export class Painter {
   readonly tiers: number[];
   readonly status: PainterStatus;
   private sheet: PainterSheet;
+  /** The page element the sheet is laid out in when it is copied into an image rather than painted by the canvas. */
+  private sheetHost: HTMLDivElement | null = null;
+  private snapshotFailures = 0;
   private staging = new THREE.Texture();
   private stagingGl: WebGLTexture;
   private paints = new Map<string, NodePaint>();
@@ -200,13 +211,19 @@ export class Painter {
   private onStatus: () => void = noop;
 
   constructor(private scene: Scene, private options: PainterOptions) {
-    enableLayoutSubtree(scene.canvas);
+    if (options.backend === "snapshot") {
+      // Laid out on the page but never seen: copied into an image (snapshotElement) rather than painted by the canvas.
+      this.sheetHost = document.createElement("div");
+      this.sheetHost.dataset.gpuCanvasSheetHost = "";
+      this.sheetHost.style.cssText = "position:fixed;left:0;top:0;width:0;height:0;overflow:visible;opacity:0;pointer-events:none;z-index:-1;";
+      document.body.appendChild(this.sheetHost);
+    } else enableLayoutSubtree(scene.canvas);
     this.tiers = tiersFor(scene.scale);
     this.hints = options.headers.hints ?? {};
     // A getter: the sheet spreads the headers on every batch, and takes the hints as they are then.
     const hints = () => this.hints;
     const headers: HeaderProps = { ...NO_HEADERS, getNodeTitle: options.headers.getNodeTitle, get hints() { return hints(); } };
-    this.sheet = new PainterSheet(scene.canvas, SHEET_TEXELS.w / scene.scale, SHEET_TEXELS.h / scene.scale, options.nodeTypes, headers);
+    this.sheet = new PainterSheet(this.sheetHost ?? scene.canvas, SHEET_TEXELS.w / scene.scale, SHEET_TEXELS.h / scene.scale, options.nodeTypes, headers);
     this.atlas = new PaintedAtlas(scene.renderer, options.budget.layerSize, options.budget.layers);
     scene.setPaintedAtlas(this.atlas.target.texture);
     this.status = {
@@ -221,8 +238,13 @@ export class Painter {
     props.__webglInit = true;
 
     this.unsubscribers.push(scene.onViewChanged(() => {
+      // Sharpening while panning, a pending refresh is kept rather than put off, so tiers follow a long pan.
+      if (this.viewTimer && !this.holdsForInput()) return;
       clearTimeout(this.viewTimer);
-      if (this.startedAt) this.viewTimer = window.setTimeout(() => this.refreshView(), VIEW_SETTLE_MS);
+      if (this.startedAt) this.viewTimer = window.setTimeout(() => {
+        this.viewTimer = 0;
+        this.refreshView();
+      }, VIEW_SETTLE_MS);
     }));
     this.unsubscribers.push(subscribeToWorkflowNodeChanges((changes) => this.nodesChanged(changes)));
     this.unsubscribers.push(useWorkflowStore.subscribe((state, previous) => {
@@ -439,11 +461,19 @@ export class Painter {
     if (hint) key += `|h:${hint}`;
     if (ui) key += `|ui:${JSON.stringify(ui)}`;
     if (SCRUB_ROW_NODE_TYPES.has(node.type ?? "")) key += `|snd:${soundAudible(useVideoSoundStore.getState()) ? 1 : 0}`;
+    // A snapshot copies pictures as Settings › Canvas says (domSnapshot); the default adds nothing, so its paints stay cached.
+    const quality = getCanvasSettings().pictureQuality;
+    if (this.options.backend === "snapshot" && quality !== "balanced") key += `|pq:${quality}`;
     return key;
   }
 
-  /** Something outside a node's base key changed for these nodes: those whose key did are repainted. */
-  private rekey(ids: Iterable<string>) {
+  /** Settings › Canvas › Picture quality changed: a snapshot painter paints the nodes again, those away from the view as it comes to them. */
+  pictureQualityChanged() {
+    if (this.options.backend === "snapshot") this.rekey([...this.baseKeys.keys()], true);
+  }
+
+  /** Something outside a node's base key changed for these nodes: those whose key did are repainted (`nearOnly`: as `stale`). */
+  private rekey(ids: Iterable<string>, nearOnly = false) {
     const { nodes } = useWorkflowStore.getState();
     const now = performance.now();
     for (const id of ids) {
@@ -452,7 +482,7 @@ export class Painter {
       const key = this.fullKey(nodes[i], base);
       if (this.keys.get(id) === key) continue;
       this.keys.set(id, key);
-      this.stale(id, now);
+      this.stale(id, now, nearOnly);
     }
   }
 
@@ -626,14 +656,17 @@ export class Painter {
 
   // ---- the loop ----
 
+  /** Painting waits for the view to be still: not behind the loading screen, nor when Settings › Canvas says to sharpen while panning. */
+  private holdsForInput() {
+    return !this.loading && !getCanvasSettings().sharpenWhilePanning;
+  }
+
   private async run() {
     if (this.running || !this.startedAt || this.disposed) return;
     this.running = this.status.running = true;
     try {
       while (this.queue.size && !this.disposed) {
-        if (!this.loading) {
-          while ((this.scene.interacting || performance.now() - this.scene.lastInputAt < QUIET_MS) && !this.disposed) await nextFrame();
-        }
+        while (this.holdsForInput() && (this.scene.interacting || performance.now() - this.scene.lastInputAt < QUIET_MS) && !this.disposed) await nextFrame();
         // A change's keys come a frame after it: don't start other work in that frame.
         while (this.dirtyKeys.size && !this.disposed) await nextFrame();
         await this.batch();
@@ -724,10 +757,18 @@ export class Painter {
     // Input, or a change to paint, arrived while the sheet was getting ready: give way.
     const urgentBatch = requests[0].priority === URGENT;
     // A change whose keys are still to be worked out (a frame after the store change) counts as urgent.
-    const yielded = () => (!this.loading && this.scene.lastInputAt > t0) || (!urgentBatch && (this.queue.hasUrgent() || this.dirtyKeys.size > 0));
+    const inputArrived = () => this.holdsForInput() && this.scene.lastInputAt > t0;
+    const yielded = () => inputArrived() || (!urgentBatch && (this.queue.hasUrgent() || this.dirtyKeys.size > 0));
+    // Once a batch has settled it is mostly done: giving way would throw away its render and its wait for images.
+    // A batch for the view then gives way only to input, and one painting ahead only to input or a change near the
+    // view, which shows at once. Other changes wait for it, as for an urgent batch (each image is stamped with the
+    // key it was rendered for, and the repaint stays queued): nodes painted ahead derive data from what feeds them
+    // as they paint, and the repaints that queues for what they feed would otherwise throw away batch after batch.
+    const viewBatch = requests[0].priority <= VIEW;
+    const settledYield = () => inputArrived() || (!viewBatch && this.queue.hasUrgent((id) => this.near.has(id)));
     if (yielded()) {
       this.queue.restore(misses);
-      this.options.stats.record(this.scene.lastInputAt > t0 ? "painter.yielded" : "painter.preempted", misses.length);
+      this.options.stats.record(inputArrived() ? "painter.yielded" : "painter.preempted", misses.length);
       return;
     }
     this.phase(`settle ${tier} ×${misses.length}`);
@@ -754,9 +795,9 @@ export class Painter {
       const p = placed.get(r.id)!;
       return [r.id, { x: p.x + this.boxOf(r.id).left, y: p.y + HEADER }];
     }));
-    const inPlace = await this.sheet.positioned(nodePositions, 2000, () => this.disposed || yielded());
+    const inPlace = await this.sheet.positioned(nodePositions, 2000, () => this.disposed || settledYield());
     if (this.disposed) return;
-    if (!inPlace && !yielded() && this.unplacedRetries < 2) {
+    if (!inPlace && !settledYield() && this.unplacedRetries < 2) {
       // Still elsewhere: painting now would misplace it. Try again (twice, then paint what is there).
       this.unplacedRetries++;
       this.queue.restore(fits);
@@ -764,9 +805,9 @@ export class Painter {
       return;
     }
     this.unplacedRetries = 0;
-    if (yielded()) {
+    if (settledYield()) {
       this.queue.restore(misses);
-      this.options.stats.record(this.scene.lastInputAt > t0 ? "painter.yielded" : "painter.preempted", misses.length);
+      this.options.stats.record(inputArrived() ? "painter.yielded" : "painter.preempted", misses.length);
       return;
     }
     const scrolled = this.sheet.resetScroll();
@@ -778,9 +819,9 @@ export class Painter {
     await nextFrame();
     await nextFrame();
     if (this.disposed) return;
-    if (yielded()) {
+    if (settledYield()) {
       this.queue.restore(misses);
-      this.options.stats.record(this.scene.lastInputAt > t0 ? "painter.yielded" : "painter.preempted", misses.length);
+      this.options.stats.record(inputArrived() ? "painter.yielded" : "painter.preempted", misses.length);
       return;
     }
     if (this.probeIds.size) this.probe(fits.map((r) => r.id), placed, tier);
@@ -790,8 +831,34 @@ export class Painter {
     // Paint the sheet into the staging texture.
     const renderer = this.scene.renderer;
     const gl = this.gl;
-    gl.bindTexture(gl.TEXTURE_2D, this.stagingGl);
-    paintElement(gl, this.sheet.element);
+    const texels = { width: Math.ceil(this.sheet.width * this.scene.scale), height: Math.ceil(this.sheet.height * this.scene.scale) };
+    if (this.options.backend === "snapshot") {
+      let image: HTMLImageElement;
+      try {
+        image = await snapshotElement(this.sheet.element, this.sheet.width, this.sheet.height, this.scene.scale);
+      } catch {
+        // A sheet that will not decode is tried again twice; then its nodes keep their stand-ins until they change.
+        this.options.stats.record("painter.snapshotFailed", misses.length);
+        if (++this.snapshotFailures < 3) this.queue.restore(misses);
+        else this.resolveWaiters(misses);
+        return;
+      }
+      this.snapshotFailures = 0;
+      if (this.disposed) return;
+      if (settledYield()) {
+        this.queue.restore(misses);
+        this.options.stats.record(inputArrived() ? "painter.yielded" : "painter.preempted", misses.length);
+        return;
+      }
+      this.options.stats.record("painter.snapshotMs", performance.now() - t3);
+      gl.bindTexture(gl.TEXTURE_2D, this.stagingGl);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    } else {
+      gl.bindTexture(gl.TEXTURE_2D, this.stagingGl);
+      paintElement(gl, this.sheet.element, texels.width, texels.height);
+    }
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
@@ -1059,20 +1126,15 @@ export class Painter {
         return undefined;
       }
     }));
+    // Inflated together: one at a time, each waited out its own stream's tasks.
+    const inflated = await Promise.all(found.map((entry) => entry ? inflate(entry.bytes).catch(() => null) : null));
     const misses: PaintRequest[] = [];
     const hits: string[] = [];
     let texels = 0;
     for (let k = 0; k < requests.length; k++) {
-      const r = requests[k], entry = found[k];
+      const r = requests[k], entry = found[k], pixels = inflated[k];
       const key = this.keys.get(r.id);
-      if (!entry || !key || this.disposed) {
-        misses.push(r);
-        continue;
-      }
-      let pixels: Uint8Array;
-      try {
-        pixels = await inflate(entry.bytes);
-      } catch {
+      if (!entry || !pixels || !key || this.disposed) {
         misses.push(r);
         continue;
       }
@@ -1100,13 +1162,12 @@ export class Painter {
       paint.images.set(r.tier, { slot, key, w, h: entry.nodeHeight + HEADER + PAD, left });
       this.applyMeasured(r.id, entry.nodeHeight, new Map(entry.handles.map(handleFromCache)), boxFromTuple(entry.card), undefined, boxFromTuple(entry.overhang));
       this.show(r.id, true);
-      hits.push(entry.key);
+      // Marked used a day at most: marking rewrites the entry, which held up the next batch's reads.
+      if (Date.now() - entry.usedAt > TOUCH_AFTER_MS) hits.push(entry.key);
       this.status.cacheHits++;
     }
-    if (hits.length) {
-      void cache.touch(hits).catch(noop);
-      this.options.stats.record("painter.cacheMs", performance.now() - started);
-    }
+    if (hits.length) void cache.touch(hits).catch(noop);
+    if (found.some(Boolean)) this.options.stats.record("painter.cacheMs", performance.now() - started);
     return misses;
   }
 
@@ -1223,6 +1284,7 @@ export class Painter {
     }
     gl.deleteTexture(this.stagingGl);
     this.sheet.dispose();
+    this.sheetHost?.remove();
     this.atlas.dispose();
   }
 }

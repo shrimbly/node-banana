@@ -11,7 +11,7 @@ import {
 } from "../autoSave";
 
 /** A tiny store with zustand's subscribe shape and fake timers the test drives. */
-function harness(initial: Partial<AutoSaveState> = {}) {
+function harness(initial: Partial<AutoSaveState> = {}, busy?: () => boolean) {
   let state: AutoSaveState = {
     autoSaveEnabled: true,
     hasUnsavedChanges: false,
@@ -63,7 +63,7 @@ function harness(initial: Partial<AutoSaveState> = {}) {
     return true;
   });
   const onFailure = vi.fn();
-  const auto = createAutoSave({ getState: () => state, subscribe: (l) => { listeners.add(l); return () => listeners.delete(l); }, save, onFailure, timers });
+  const auto = createAutoSave({ getState: () => state, subscribe: (l) => { listeners.add(l); return () => listeners.delete(l); }, save, onFailure, busy, timers });
   const edit = () => setState({ hasUnsavedChanges: true, nodes: [{}] });
   const dueIn = () => (pending.length ? Math.min(...pending.map((p) => p.at)) - now : null);
   return { auto, save, onFailure, setState, edit, advance, dueIn, state: () => state };
@@ -140,6 +140,23 @@ describe("createAutoSave", () => {
     h.setState({ isRunning: false });
     await h.advance(AUTOSAVE_SETTLE_MS);
     expect(h.save).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits out a canvas gesture, but not past the ceiling", async () => {
+    let gesture = true;
+    const h = harness({}, () => gesture);
+    h.auto.start();
+    h.edit();
+    await h.advance(AUTOSAVE_SETTLE_MS * 2);
+    expect(h.save).not.toHaveBeenCalled();
+    gesture = false;
+    await h.advance(1_000);
+    expect(h.save).toHaveBeenCalledTimes(1);
+
+    gesture = true;
+    h.edit();
+    await h.advance(AUTOSAVE_CEILING_MS);
+    expect(h.save).toHaveBeenCalledTimes(2);
   });
 
   it("retries once after a failure, then backs off with one notice", async () => {

@@ -44,6 +44,8 @@ export interface ConnectedInputs {
   model3d: string | null;
   text: string | null;
   textItems: string[]; // All items from array batch mode (empty when not in batch)
+  /** The named slot (a `dynamicInputs` key) the batch's items go into, when its edge targets one. */
+  textItemsInput?: string;
   dynamicInputs: Record<string, string | string[]>;
   easeCurve: { bezierHandles: [number, number, number, number]; easingPreset: string | null; outputDuration: number } | null;
 }
@@ -205,6 +207,7 @@ export function getConnectedInputsPure(
   let model3d: string | null = null;
   let text: string | null = null;
   const textItems: string[] = [];
+  let textItemsInput: string | undefined;
   const dynamicInputs: Record<string, string | string[]> = {};
   let easeCurve: ConnectedInputs["easeCurve"] = null;
 
@@ -292,6 +295,13 @@ export function getConnectedInputsPure(
           textItems.push(...items);
           // Set text to first item for backward compatibility
           if (text === null) text = items[0];
+          // The slot the edge feeds holds the first item too; the batch loop
+          // puts each item there in turn (a Comfy app reads only its slots)
+          const schemaName = edge.targetHandle ? handleToSchemaName[edge.targetHandle] : undefined;
+          if (schemaName) {
+            addPassthroughDynamicInput(edge.targetHandle, items[0]);
+            textItemsInput ??= schemaName;
+          }
         }
         return; // Skip normal getSourceOutput processing
       }
@@ -463,7 +473,7 @@ export function getConnectedInputsPure(
     text = Array.isArray(schemaPrompt) ? schemaPrompt[0] ?? text : schemaPrompt;
   }
 
-  return { images, videos, audio, model3d, text, textItems, dynamicInputs, easeCurve };
+  return { images, videos, audio, model3d, text, textItems, ...(textItemsInput ? { textItemsInput } : {}), dynamicInputs, easeCurve };
 }
 
 /**
@@ -485,8 +495,15 @@ export interface NodeReadiness {
  */
 export function nodeReadinessPure(nodes: Pick<WorkflowNode, "id" | "type" | "data">[], edges: WorkflowEdge[]): Record<string, NodeReadiness> {
   const readiness: Record<string, NodeReadiness> = {};
+  // Edges by target, so the check is linear in the graph rather than nodes × edges
+  const incoming = new Map<string, WorkflowEdge[]>();
+  for (const e of edges) {
+    const list = incoming.get(e.target);
+    if (list) list.push(e);
+    else incoming.set(e.target, [e]);
+  }
   const connected = (nodeId: string, accept: (handle: string | null | undefined) => boolean, includeLoops = false) =>
-    edges.some((e) => e.target === nodeId && (includeLoops || !e.data?.isLoop) && accept(e.targetHandle));
+    incoming.get(nodeId)?.some((e) => (includeLoops || !e.data?.isLoop) && accept(e.targetHandle)) ?? false;
   const isType = (handle: string | null | undefined, type: string) => handle === type || Boolean(handle?.startsWith(`${type}-`));
 
   for (const node of nodes) {

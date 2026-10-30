@@ -1,14 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
 import { WorkflowCanvas } from "@/components/WorkflowCanvas";
 import { AGENT_BUTTON_MARGIN } from "@/lib/agent/client/layout";
 import { useAssetStore } from "@/store/assetStore";
+import { useStitchEditorStore } from "@/store/stitchEditorStore";
 
 /**
  * The canvas stays mounted (inert, invisible) under the Assets and chat
  * views, and its window-level key handler must not act on the hidden graph;
- * bare A and C are how it opens them. Rendered the
+ * bare A, C and E are how it opens them. Rendered the
  * way WorkflowCanvas.test.tsx renders it, with the store mocked; the
  * Assets view's side of the contract (the modal count it holds) is
  * modelled by `isModalOpen`.
@@ -16,7 +17,7 @@ import { useAssetStore } from "@/store/assetStore";
 
 const mocks = vi.hoisted(() => ({
   state: {} as Record<string, unknown>,
-  reactFlowProps: { current: null as Record<string, unknown> | null },
+  gpuEditing: { current: null as Record<string, unknown> | null },
   historyProps: { current: null as { rightInset?: number; anchorRight?: number } | null },
 }));
 
@@ -38,13 +39,8 @@ vi.mock("@/store/workflowStore", () => {
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual<typeof import("@xyflow/react")>("@xyflow/react");
-  const React = await vi.importActual<typeof import("react")>("react");
   return {
     ...actual,
-    ReactFlow: (props: Record<string, unknown>) => {
-      mocks.reactFlowProps.current = props;
-      return React.createElement(actual.ReactFlow, props);
-    },
     useStore: (selector: (state: { transform: [number, number, number]; nodeLookup: Map<string, unknown> }) => unknown) =>
       selector({ transform: [0, 0, 1], nodeLookup: new Map() }),
     useUpdateNodeInternals: () => vi.fn(),
@@ -58,6 +54,16 @@ vi.mock("@xyflow/react", async () => {
   };
 });
 
+// The GPU canvas needs WebGL2, which jsdom lacks: keep what WorkflowCanvas hands its editor, and draw what it lays over it.
+vi.mock("@/components/gpuCanvas/GpuCanvas", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
+  return {
+    GpuCanvas: (props: { editing: Record<string, unknown>; children?: React.ReactNode }) => {
+      mocks.gpuEditing.current = props.editing;
+      return React.createElement(React.Fragment, null, props.children);
+    },
+  };
+});
 vi.mock("@/components/ConnectionDropMenu", () => ({ ConnectionDropMenu: () => null }));
 vi.mock("@/components/MultiSelectToolbar", () => ({ MultiSelectToolbar: () => null }));
 vi.mock("@/components/GlobalImageHistory", () => ({
@@ -71,7 +77,7 @@ vi.mock("@/components/agent/AgentPanel", () => ({ AgentPanel: () => null }));
 vi.mock("@/components/agent/AgentSession", () => ({
   useAgentPresence: () => ({ busy: false, presence: { harness: "claude", harnessChosen: false, attention: false } }),
 }));
-vi.mock("@/components/GroupsOverlay", () => ({ GroupBackgroundsPortal: () => null, GroupControlsOverlay: () => null }));
+vi.mock("@/components/GroupsOverlay", () => ({ GroupControlsOverlay: () => null }));
 vi.mock("@/components/quickstart", () => ({ WelcomeModal: () => null }));
 vi.mock("@/utils/logger", () => ({ logger: { log: vi.fn(), error: vi.fn() } }));
 
@@ -159,11 +165,12 @@ describe("WorkflowCanvas behind the Assets view", () => {
     expect(mockSetShortcutsDialogOpen).not.toHaveBeenCalled();
   });
 
-  it("leaves Delete to nothing: React Flow's delete key is off while the view holds the modal count", () => {
+  it("leaves Delete to nothing: the canvas's editor is off while the view holds the modal count", async () => {
     mocks.state = state({ isModalOpen: true });
     useAssetStore.setState({ appView: "assets" });
     renderCanvas();
-    expect(mocks.reactFlowProps.current!.deleteKeyCode).toBeNull();
+    await waitFor(() => expect(mocks.gpuEditing.current).not.toBeNull());
+    expect(mocks.gpuEditing.current!.disabled).toBe(true);
     fireEvent.keyDown(window, { key: "Delete" });
     fireEvent.keyDown(window, { key: "Backspace" });
     expect(mockOnNodesChange).not.toHaveBeenCalledWith(expect.arrayContaining([expect.objectContaining({ type: "remove" })]));
@@ -202,12 +209,13 @@ describe("WorkflowCanvas behind the Assets view", () => {
     expect(useAssetStore.getState().appView).toBe("assets");
   });
 
-  it("does not switch views while the connection-drop menu is open, whose Enter would add a node unseen", () => {
+  it("does not switch views while the connection-drop menu is open, whose Enter would add a node unseen", async () => {
     const elementsFromPoint = document.elementsFromPoint;
     document.elementsFromPoint = () => [];
     try {
       renderCanvas();
-      const onConnectEnd = mocks.reactFlowProps.current!.onConnectEnd as (event: unknown, state: unknown) => void;
+      await waitFor(() => expect(mocks.gpuEditing.current).not.toBeNull());
+      const onConnectEnd = mocks.gpuEditing.current!.onConnectEnd as (event: unknown, state: unknown) => void;
       act(() =>
         onConnectEnd(
           { clientX: 300, clientY: 200 },
@@ -227,6 +235,69 @@ describe("WorkflowCanvas behind the Assets view", () => {
     fireEvent.keyDown(window, { key: "a" });
     fireEvent.keyDown(window, { key: "c" });
     expect(useAssetStore.getState().appView).toBe("canvas");
+  });
+});
+
+describe("WorkflowCanvas and the Edit video view", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.state = state();
+    useAssetStore.setState({ appView: "canvas" });
+  });
+  afterEach(() => {
+    useAssetStore.setState({ appView: "canvas" });
+    useStitchEditorStore.getState().close();
+  });
+
+  it("shows Edit video on a bare E, but not with Shift, a modifier or on repeat", () => {
+    renderCanvas();
+    fireEvent.keyDown(window, { key: "E", shiftKey: true });
+    fireEvent.keyDown(window, { key: "e", metaKey: true });
+    fireEvent.keyDown(window, { key: "e", ctrlKey: true });
+    fireEvent.keyDown(window, { key: "e", altKey: true });
+    fireEvent.keyDown(window, { key: "e", repeat: true });
+    expect(useAssetStore.getState().appView).toBe("canvas");
+
+    fireEvent.keyDown(window, { key: "e" });
+    expect(useAssetStore.getState().appView).toBe("edit");
+  });
+
+  it("keeps the A and C guards: no switch over a dialog, a menu, a text field or the Edit Video dialog", () => {
+    mocks.state = state({ isModalOpen: true });
+    const { unmount } = renderCanvas();
+    fireEvent.keyDown(window, { key: "e" });
+    expect(useAssetStore.getState().appView).toBe("canvas");
+    unmount();
+
+    mocks.state = state();
+    renderCanvas();
+    const menu = document.createElement("div");
+    menu.setAttribute("role", "menu");
+    document.body.appendChild(menu);
+    try {
+      fireEvent.keyDown(window, { key: "e" });
+      expect(useAssetStore.getState().appView).toBe("canvas");
+    } finally {
+      menu.remove();
+    }
+
+    const field = document.createElement("input");
+    document.body.appendChild(field);
+    try {
+      field.focus();
+      fireEvent.keyDown(field, { key: "e" });
+      expect(useAssetStore.getState().appView).toBe("canvas");
+    } finally {
+      field.remove();
+    }
+
+    useStitchEditorStore.setState({ isOpen: true, nodeId: "stitch-1" });
+    fireEvent.keyDown(window, { key: "e" });
+    expect(useAssetStore.getState().appView).toBe("canvas");
+    useStitchEditorStore.getState().close();
+
+    fireEvent.keyDown(window, { key: "e" });
+    expect(useAssetStore.getState().appView).toBe("edit");
   });
 });
 
@@ -307,9 +378,9 @@ describe("WorkflowCanvas and the chat view", () => {
     expect(mockSetShortcutsDialogOpen).not.toHaveBeenCalled();
   });
 
-  it("puts notifications back in the corner while the chat hides the agent window", () => {
+  it("puts notifications back in the corner while the chat hides the agent window", async () => {
     renderCanvas();
-    fireEvent.click(screen.getByRole("button", { name: "Open agent" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Open agent" }));
     const windowEdge = mocks.historyProps.current?.anchorRight;
     expect(windowEdge).toBeGreaterThan(AGENT_BUTTON_MARGIN);
 

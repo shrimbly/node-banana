@@ -7,9 +7,11 @@
  * goes. URL sources are downloaded the same way. Then, serialised per
  * SHA-256: reuse a file with the same bytes in the destination if there is
  * one, else rename the partial into place; measure it; write the sidecar.
- * Bytes nothing can open (readable.ts) are still written and recorded — a
- * recording is never refused or lost for that — but the record is marked
- * `unreadable`, so it is not listed.
+ * Uploads share files only with uploads (see `findReusableFile`), and one
+ * in a format the library doesn't store is refused. Bytes nothing can open
+ * (readable.ts) are still written and recorded — a recording is never
+ * refused or lost for that — but the record is marked `unreadable`, so it
+ * is not listed.
  *
  * Every recording gets its own record under the client-minted id — records
  * are never collapsed, only bytes are shared.
@@ -297,6 +299,12 @@ export class Ingestor {
       throw new LibraryError("The file is empty", 400, "bad_request");
     }
     const type = decideMediaType({ head: streamed.head, kind: meta.kind, hintMime: hints.mime, hintExt: hints.ext });
+    if (meta.origin === "uploaded" && type.assumed) {
+      // The user's own file in a format the library doesn't store (AVI, AIFF…): kept, it would be named and
+      // served as the kind's default, which it isn't.
+      await discardPartial(streamed);
+      throw new LibraryError("The file isn't in a video or audio format the library can keep", 415, "unsupported");
+    }
 
     // The library's lock, which a permanent delete takes too before it releases a file with these bytes.
     return library.shaLocks.run(streamed.sha256, async () => {
@@ -311,6 +319,7 @@ export class Ingestor {
         md5: streamed.md5,
         bytes: streamed.bytes,
         ext: type.ext,
+        origin: meta.origin,
         destination: destination.type === "library" ? { type: "library" } : { type: "project", dir: destination.dir },
       });
 
@@ -369,6 +378,7 @@ export class Ingestor {
         md5: streamed.md5,
         file: location,
         filename,
+        name: meta.name,
         ...(measured.width && measured.height
           ? { width: measured.width, height: measured.height }
           : meta.width && meta.height

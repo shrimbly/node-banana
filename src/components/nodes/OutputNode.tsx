@@ -1,7 +1,7 @@
 "use client";
 
 import { LIGHTBOX_BUTTON } from "../chromeStyles";
-import { useCallback, useState, useMemo, useEffect, useRef } from "react";
+import { useCallback, useState, useMemo } from "react";
 import { Download, SquareArrowOutUpRight, X } from "lucide-react";
 import { NodeProps, Node } from "@xyflow/react";
 import { Dialog } from "@/components/ui/Dialog";
@@ -14,8 +14,7 @@ import { useVideoAutoplay } from "@/hooks/useVideoAutoplay";
 import { useAdaptiveImageSrc } from "@/hooks/useAdaptiveImageSrc";
 import { downloadMedia, MediaType } from "@/utils/downloadMedia";
 import { EmptyState, ScrubRow, type SocketSpec } from "./ui";
-import { useHoldLive, useIsPaintedNode } from "./paintMode";
-import { useGpuCanvasActive } from "@/lib/gpuCanvas/setting";
+import { useHoldLive } from "./paintMode";
 
 type OutputNodeType = Node<OutputNodeData, "output">;
 
@@ -30,19 +29,9 @@ const AUDIO_HEIGHT = 64;
 export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
   const nodeData = data;
   useCommentNavigation(id);
-  const regenerateNode = useWorkflowStore((state) => state.regenerateNode);
-  const connectedEdgeCount = useWorkflowStore(
-    (state) => state.edges.filter((edge) => edge.target === id).length
-  );
   const isRunning = useWorkflowStore((state) => state.isRunning);
   const [showLightbox, setShowLightbox] = useState(false);
   useHoldLive(showLightbox);
-  // A painted copy never runs anything; on the GPU canvas, where this node is
-  // mounted only while worked in, the canvas runs it on a new connection
-  // instead (outputAutoRun.ts).
-  const painted = useIsPaintedNode();
-  const gpuCanvas = useGpuCanvasActive();
-  const previousEdgeCountRef = useRef<number | null>(null);
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
 
   // Determine if content is audio
@@ -74,20 +63,6 @@ export function OutputNode({ id, data, selected }: NodeProps<OutputNodeType>) {
   const adaptiveImage = useAdaptiveImageSrc(imageSrc, id);
   const videoBlobUrl = useVideoBlobUrl(isVideo ? contentSrc ?? null : null);
   const videoAutoplayRef = useVideoAutoplay(id, videoBlobUrl);
-
-  // Auto-trigger execution when a new connection is made
-  useEffect(() => {
-    if (painted || gpuCanvas) return;
-    if (previousEdgeCountRef.current === null) {
-      // First run — just record the baseline, don't trigger
-      previousEdgeCountRef.current = connectedEdgeCount;
-      return;
-    }
-    if (connectedEdgeCount > previousEdgeCountRef.current) {
-      regenerateNode(id);
-    }
-    previousEdgeCountRef.current = connectedEdgeCount;
-  }, [connectedEdgeCount, id, regenerateNode, painted, gpuCanvas]);
 
   const handleDownload = useCallback(async () => {
     if (!contentSrc) return;

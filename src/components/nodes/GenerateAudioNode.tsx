@@ -24,6 +24,7 @@ import {
   ControlsCard,
   EmptyState,
   ErrorMessage,
+  PendingTaskNotice,
   Spinner,
   type SocketSpec,
 } from "./ui";
@@ -119,6 +120,9 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
   const schemaDerived = useSchemaDerived(id, nodeData);
 
   const isRunning = useWorkflowStore((state) => state.isRunning);
+  const resumeGeneration = useWorkflowStore((state) => state.resumeGeneration);
+  // A provider request the node stopped waiting on, offered to pick up again
+  const pendingTask = nodeData.status === "loading" ? undefined : nodeData.pendingTask;
 
   // Load audio by ID from generations folder
   const loadAudioById = useLoadGenerationById("audio", "Audio");
@@ -250,7 +254,7 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
         id={id}
         selected={selected}
         isExecuting={isRunning}
-        hasError={nodeData.status === "error"}
+        hasError={nodeData.status === "error" && !pendingTask}
         media={{ kind: "fixed", height: MEDIA_HEIGHT }}
         inputs={inputSockets}
         outputs={OUTPUT_SOCKETS}
@@ -305,6 +309,7 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
               batch={nodeData.audioHistory?.[nodeData.selectedAudioHistoryIndex || 0]?.batch}
               timestamp={nodeData.audioHistory?.[nodeData.selectedAudioHistoryIndex || 0]?.timestamp}
             />
+            {pendingTask && <PendingTaskNotice task={pendingTask} onPickUp={() => resumeGeneration(id)} disabled={isRunning} compact />}
             <div className="absolute top-1 right-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
               <button
                 onClick={() => downloadMedia(nodeData.outputAudio!, "audio").catch(() => {})}
@@ -322,6 +327,8 @@ export function GenerateAudioNode({ id, data, selected }: NodeProps<GenerateAudi
               </button>
             </div>
           </>
+        ) : pendingTask ? (
+          <PendingTaskNotice task={pendingTask} onPickUp={() => resumeGeneration(id)} disabled={isRunning} compact />
         ) : nodeData.status === "loading" ? (
           <div className="absolute inset-0 flex items-center justify-center gap-2 bg-neutral-900/40">
             <Spinner className="text-neutral-400" />

@@ -203,18 +203,33 @@ describe("connections and painted nodes", () => {
     const route = { segments: pathToCubics("M0,0 L50,0 L50,50 L100,50"), stems: [{ segment: pathToCubics("M0,0 L-20,0")[0], width: 6 }], ends: [0, 0, 100, 50], width: 2, dashed: false, hidden: false };
     const fake = {
       routes: [route], graph: { edges: [{ source: 0, target: 1, color: [1, 1, 1] }] }, edgeLive: new Set(), edgeHeld: -1, edgeSelected: new Set(), hoveredEdge: -1, selected: new Set(),
-      routeOffset: [0], edgeData: new Float32Array(4 * 20), edgeBounds: new Float32Array(4),
+      routeOffset: [0], routeCount: [4], edgeData: new Float32Array(4 * 20), edgeBounds: new Float32Array(4),
     };
     (Scene.prototype as unknown as { writeEdge(e: number): void }).writeEdge.call(fake, 0);
     const caps = [0, 1, 2, 3].map((k) => fake.edgeData[k * 20 + 11] & (EDGE_CAP_START | EDGE_CAP_END));
     expect(caps).toEqual([EDGE_CAP_START, 0, EDGE_CAP_END, EDGE_CAP_START | EDGE_CAP_END]);
   });
 
+  it("hides the spare slots after a connection's pieces", () => {
+    const route = { segments: pathToCubics("M0,0 L50,0"), stems: [], ends: [0, 0, 50, 0], width: 2, dashed: false, hidden: false };
+    const fake = {
+      routes: [route], graph: { edges: [{ source: 0, target: 1, color: [1, 1, 1] }] }, edgeLive: new Set(), edgeHeld: -1, edgeSelected: new Set(), hoveredEdge: -1, selected: new Set(),
+      routeOffset: [0], routeCount: [3], edgeData: new Float32Array(3 * 20).fill(7), edgeBounds: new Float32Array(4),
+    };
+    (Scene.prototype as unknown as { writeEdge(e: number): void }).writeEdge.call(fake, 0);
+    const hidden = 8;
+    expect(fake.edgeData[11] & hidden).toBe(0);
+    for (const k of [1, 2]) {
+      expect(fake.edgeData[k * 20 + 11]).toBe(hidden);
+      expect(fake.edgeData[k * 20 + 12]).toBe(0);
+    }
+  });
+
   it("draws a long curve in pieces, continuous and capped at its ends only", () => {
     const route = { segments: [[0, 0, 400, 0, 0, 300, 400, 300]], stems: [], ends: [0, 0, 400, 300], width: 2, dashed: false, hidden: false };
     const fake = {
       routes: [route], graph: { edges: [{ source: 0, target: 1, color: [1, 1, 1] }] }, edgeLive: new Set(), edgeHeld: -1, edgeSelected: new Set(), hoveredEdge: -1, selected: new Set(),
-      routeOffset: [0], edgeData: new Float32Array(16 * 20), edgeBounds: new Float32Array(4),
+      routeOffset: [0], routeCount: [16], edgeData: new Float32Array(16 * 20), edgeBounds: new Float32Array(4),
     };
     (Scene.prototype as unknown as { writeEdge(e: number): void }).writeEdge.call(fake, 0);
     const pieces: number[][] = [];
@@ -245,6 +260,20 @@ describe("connections and painted nodes", () => {
     expect(cover.boxes).toEqual([{ x: 300, y: -50 - PAINTED_HEADER_HEIGHT, w: 300, h: graph.nodes[2].h + PAINTED_HEADER_HEIGHT }]);
     // Nothing painted near it: nothing to mask.
     expect(paintedCover(graph, [0], (e) => routes[e], within, () => true)).toEqual({ edgeIds: [], boxes: [] });
+  });
+
+  it("masks an unselected hidden connection only where another painted node lies over its handle strokes", () => {
+    // a's handle at (300, 50) touches a and b; "over" crosses it, "near" lies within reach of the line but not of the strokes.
+    const nodes = [node("a", 0, 0), node("b", 600, 0), node("over", 290, 40), node("near", 420, 100)];
+    const graph = new SceneGraph(nodes, [edge("e", "a", "b", { hidden: true })], {});
+    const route = { ends: [300, 50, 600, 50], segments: [], stems: [], hidden: true } as unknown as ReturnType<typeof routeSceneEdge>;
+    const within = (x0: number, y0: number, x1: number, y1: number) =>
+      graph.nodes.flatMap((n, i) => (n.x <= x1 && n.x + n.w >= x0 && n.y <= y1 && n.y + n.h >= y0 ? [i] : []));
+    const painted = (id: string) => id === "a" || id === "b";
+    expect(paintedCover(graph, [0], () => route, within, (id) => id !== "over").edgeIds).toEqual(["e"]);
+    expect(paintedCover(graph, [0], () => route, within, (id) => id === "over" || painted(id))).toEqual({ edgeIds: [], boxes: [] });
+    // Its own ends and a node past its strokes never mask it.
+    expect(paintedCover(graph, [0], () => route, within, (id) => id === "over")).toEqual({ edgeIds: [], boxes: [] });
   });
 });
 

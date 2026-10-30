@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { act, render, screen, fireEvent, waitFor } from "@testing-library/react";
-import { WorkflowCanvas, isDraggingNodeRef } from "@/components/WorkflowCanvas";
+import { WorkflowCanvas } from "@/components/WorkflowCanvas";
 import { ReactFlowProvider } from "@xyflow/react";
 
 // Mock the workflow store
@@ -46,6 +46,7 @@ const mockGetViewport = vi.fn(() => ({ x: 0, y: 0, zoom: 1 }));
 const mockZoomIn = vi.fn();
 const mockZoomOut = vi.fn();
 const mockSetViewport = vi.fn();
+const mockSetNodes = vi.fn();
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual<typeof import("@xyflow/react")>("@xyflow/react");
@@ -65,7 +66,22 @@ vi.mock("@xyflow/react", async () => {
       zoomIn: mockZoomIn,
       zoomOut: mockZoomOut,
       setViewport: mockSetViewport,
+      setNodes: mockSetNodes,
     }),
+  };
+});
+
+// The GPU canvas needs WebGL2, which jsdom lacks: stand in a React Flow that
+// holds what WorkflowCanvas hands it (the navigator), and keep its props.
+const mockGpuCanvasProps = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }));
+vi.mock("@/components/gpuCanvas/GpuCanvas", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
+  const { ReactFlow } = await vi.importActual<typeof import("@xyflow/react")>("@xyflow/react");
+  return {
+    GpuCanvas: (props: { children?: React.ReactNode; flowChildren?: React.ReactNode }) => {
+      mockGpuCanvasProps.current = props;
+      return React.createElement(React.Fragment, null, React.createElement(ReactFlow, { nodes: [], edges: [] }, props.flowChildren), props.children);
+    },
   };
 });
 
@@ -88,7 +104,6 @@ vi.mock("@/components/agent/AgentSession", () => ({
 }));
 
 vi.mock("@/components/GroupsOverlay", () => ({
-  GroupBackgroundsPortal: () => null,
   GroupControlsOverlay: () => null,
 }));
 
@@ -174,62 +189,6 @@ function TestWrapper({ children }: { children: React.ReactNode }) {
 }
 
 describe("WorkflowCanvas", () => {
-  it("keeps React Flow configuration stable across position and saved viewport updates", () => {
-    let state = { ...createDefaultState(), canvasViewport: { x: 10, y: 20, zoom: 0.8 } as { x: number; y: number; zoom: number } | null };
-    mockUseWorkflowStore.mockImplementation((selector) => selector(state));
-    const { rerender } = render(<TestWrapper><WorkflowCanvas /></TestWrapper>);
-    const before = mockReactFlowProps.current!;
-    state = { ...state, canvasViewport: { x: 100, y: 200, zoom: 0.8 }, nodes: [...state.nodes] };
-    rerender(<TestWrapper><WorkflowCanvas /></TestWrapper>);
-    const after = mockReactFlowProps.current!;
-    for (const key of ["onEdgesChange", "onConnectEnd", "onSelectionStart", "onSelectionEnd", "onEdgeClick", "onEdgeContextMenu", "defaultViewport"]) {
-      expect(after[key], key).toBe(before[key]);
-    }
-    expect(after.defaultViewport).toEqual({ x: 10, y: 20, zoom: 0.8 });
-    expect(after.fitView).toBe(false);
-    state = { ...state, canvasViewport: null };
-    rerender(<TestWrapper><WorkflowCanvas /></TestWrapper>);
-    expect(mockReactFlowProps.current!.fitView).toBe(true);
-  });
-
-  it("keeps automatic edge selection out of node marquee selection", () => {
-    mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState()));
-    render(<TestWrapper><WorkflowCanvas /></TestWrapper>);
-    const props = mockReactFlowProps.current!;
-    act(() => (props.onSelectionStart as () => void)());
-    mockOnEdgesChange.mockClear();
-    const select = [{ type: "select", id: "edge-1", selected: true }];
-    act(() => (props.onEdgesChange as (changes: unknown[]) => void)(select));
-    expect(mockOnEdgesChange).toHaveBeenLastCalledWith([]);
-    act(() => (props.onSelectionEnd as () => void)());
-    act(() => (props.onEdgesChange as (changes: unknown[]) => void)(select));
-    expect(mockOnEdgesChange).toHaveBeenLastCalledWith(select);
-  });
-
-  it("keeps a node the marquee took beside a column of aligned nodes", () => {
-    // CANVAS-5: an Array feeding three Generate nodes stacked at one x. The
-    // column's x spread is zero, so an outlier test on positions read the Array
-    // as stray and dropped it whenever the selection changed.
-    const array = { ...createMockNode("array-1", "array"), position: { x: 0, y: 300 }, selected: true };
-    const generates = [0, 350, 700].map((y, index) => ({ ...createMockNode(`generate-${index}`, "nanoBanana"), position: { x: 500, y }, selected: true }));
-    mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes: [array, ...generates] })));
-    render(<TestWrapper><WorkflowCanvas /></TestWrapper>);
-    mockOnNodesChange.mockClear();
-    act(() => (mockReactFlowProps.current!.onSelectionChange as (params: unknown) => void)({ nodes: [array, ...generates], edges: [] }));
-    expect(mockOnNodesChange).not.toHaveBeenCalled();
-  });
-
-  it("anchors noodle selection above the release point converted to flow coordinates", () => {
-    mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({
-      nodes: [], edges: [{ id: "edge-1", source: "a", target: "b", selected: true }],
-    })));
-    mockScreenToFlowPosition.mockReturnValueOnce({ x: 130, y: 220 });
-    render(<TestWrapper><WorkflowCanvas /></TestWrapper>);
-    act(() => (mockReactFlowProps.current!.onSelectionEnd as (event: unknown) => void)({ clientX: 310, clientY: 480 }));
-    expect(mockScreenToFlowPosition).toHaveBeenLastCalledWith({ x: 310, y: 480 });
-    expect(mockSetWorkflowState).toHaveBeenCalledWith({ edgeMenuAnchor: { edgeId: "edge-1", x: 130, y: 220 } });
-  });
-
   beforeEach(() => {
     vi.clearAllMocks();
     mockViewport.zoom = 1;
@@ -241,17 +200,6 @@ describe("WorkflowCanvas", () => {
   });
 
   describe("Basic Rendering", () => {
-    it("should render ReactFlow component", () => {
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-
-      // ReactFlow container should be present
-      expect(document.querySelector(".react-flow")).toBeInTheDocument();
-    });
-
     it("re-measures every node's handles after a workflow loads", async () => {
       mockUseWorkflowStore.mockImplementation((selector) =>
         selector(createDefaultState({ nodes: [createMockNode("a", "prompt"), createMockNode("b", "nanoBanana")], workflowLoadCount: 1 }))
@@ -285,105 +233,20 @@ describe("WorkflowCanvas", () => {
       expect(document.querySelector(".bg-canvas-bg")).toHaveClass("canvas-overview");
     });
 
-    it("mounts only what is in view when zoomed out, except while a node holds the focused field", () => {
-      mockViewport.zoom = 0.1;
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-      const onlyVisible = () => mockReactFlowProps.current!.onlyRenderVisibleElements;
-      expect(onlyVisible()).toBe(true);
-
-      // An edit commits on blur, which a node React Flow unmounted never sends
-      const host = document.createElement("div");
-      host.className = "react-flow__node";
-      host.setAttribute("data-id", "prompt-1");
-      host.tabIndex = 0;
-      const field = document.createElement("textarea");
-      host.appendChild(field);
-      document.body.appendChild(host);
-      try {
-        act(() => {
-          field.focus();
-          fireEvent.focusIn(field);
-        });
-        expect(onlyVisible()).toBe(false);
-
-        // Focus on the node itself, which a press on a node takes, holds no edit
-        act(() => {
-          host.focus();
-          fireEvent.focusOut(field, { relatedTarget: host });
-          fireEvent.focusIn(host);
-        });
-        expect(onlyVisible()).toBe(true);
-      } finally {
-        host.remove();
-      }
-    });
-
-    it("removes edges from React Flow while in overview mode", () => {
-      mockViewport.zoom = 0.1;
-      mockUseWorkflowStore.mockImplementation((selector) =>
-        selector(
-          createDefaultState({
-            edges: [
-              { id: "router-edge", source: "source", target: "router" },
-            ],
-          })
-        )
-      );
-
+    it("mounts the navigator with its canvas controls", async () => {
       render(
         <TestWrapper>
           <WorkflowCanvas />
         </TestWrapper>
       );
 
-      expect(mockReactFlowProps.current?.edges).toEqual([]);
-    });
-
-    it("keeps edges rendered above the fifteen-percent threshold", () => {
-      const edge = { id: "router-edge", source: "source", target: "router" };
-      mockViewport.zoom = 0.2;
-      mockUseWorkflowStore.mockImplementation((selector) =>
-        selector(createDefaultState({ edges: [edge] }))
-      );
-
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-
-      expect(mockReactFlowProps.current?.edges).toEqual([edge]);
-    });
-
-    it("should render Background component", () => {
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-
-      // Background pattern should be rendered
-      expect(document.querySelector(".react-flow__background")).toBeInTheDocument();
-    });
-
-    it("mounts the navigator with its canvas controls", () => {
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-
-      expect(screen.getByRole("button", { name: "Zoom in" })).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: "Zoom in" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Zoom out" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Fit view" })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: /lock canvas/i })).toBeInTheDocument();
     });
 
-    it("should render MiniMap component", () => {
+    it("should render MiniMap component", async () => {
       render(
         <TestWrapper>
           <WorkflowCanvas />
@@ -391,315 +254,38 @@ describe("WorkflowCanvas", () => {
       );
 
       // MiniMap should be rendered
-      const minimap = document.querySelector(".react-flow__minimap");
-      expect(minimap).toBeInTheDocument();
-      expect(minimap).not.toHaveStyle({ width: "100%", height: "100%" });
+      expect(await screen.findByRole("img", { name: "Mini Map" })).toBeInTheDocument();
     });
 
-    it("allows the minimap to be hidden and restored", () => {
+    it("allows the minimap to be hidden and restored", async () => {
       render(
         <TestWrapper>
           <WorkflowCanvas />
         </TestWrapper>
       );
 
-      fireEvent.click(screen.getByRole("button", { name: "Hide minimap" }));
-      expect(document.querySelector(".react-flow__minimap")).not.toBeInTheDocument();
+      fireEvent.click(await screen.findByRole("button", { name: "Hide minimap" }));
+      expect(screen.queryByRole("img", { name: "Mini Map" })).not.toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: "Show minimap" }));
-      expect(document.querySelector(".react-flow__minimap")).toBeInTheDocument();
+      expect(screen.getByRole("img", { name: "Mini Map" })).toBeInTheDocument();
     });
 
-    it("hands the navigator's lock to React Flow as props, where 12.11 reads it", () => {
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-      const interaction = () => {
-        const { nodesDraggable, nodesConnectable, elementsSelectable } = mockReactFlowProps.current as Record<string, unknown>;
-        return { nodesDraggable, nodesConnectable, elementsSelectable };
-      };
-      expect(interaction()).toEqual({ nodesDraggable: true, nodesConnectable: true, elementsSelectable: true });
-
-      fireEvent.click(screen.getByRole("button", { name: "Lock canvas" }));
-      expect(interaction()).toEqual({ nodesDraggable: false, nodesConnectable: false, elementsSelectable: false });
-      expect(screen.getByRole("button", { name: "Unlock canvas" })).toHaveAttribute("aria-pressed", "true");
-
-      fireEvent.click(screen.getByRole("button", { name: "Unlock canvas" }));
-      expect(interaction()).toEqual({ nodesDraggable: true, nodesConnectable: true, elementsSelectable: true });
-    });
-
-    it("keeps the minimap inside the navigator card at its explicit size", () => {
+    it("keeps the minimap inside the navigator card at its explicit size", async () => {
       render(
         <TestWrapper>
           <WorkflowCanvas />
         </TestWrapper>
       );
 
-      const minimap = document.querySelector(".react-flow__minimap");
+      const minimap = await screen.findByRole("img", { name: "Mini Map" });
       const navigator = screen.getByTestId("canvas-navigator");
 
       // Static, so it flows inside the card instead of pinning itself to the pane corner.
       // Width is the 238px navigator card minus its 1px borders and 6px minimap insets.
-      expect(minimap).toHaveStyle({ width: "224px", height: "150px", margin: "0px", position: "static" });
+      expect(minimap).toHaveStyle({ width: "224px", height: "150px" });
       expect(navigator).toHaveStyle({ margin: "16px" });
       expect(navigator).toContainElement(screen.getByRole("button", { name: "Hide minimap" }));
-    });
-
-    it("keeps edges visible and holds native pan state on this canvas until the moves stop", () => {
-      vi.useFakeTimers();
-      try {
-        const edge = { id: "edge-1", source: "source", target: "target" };
-        mockViewport.zoom = 0.2;
-        mockUseWorkflowStore.mockImplementation((selector) =>
-          selector(createDefaultState({ edges: [edge] }))
-        );
-
-        render(
-          <TestWrapper>
-            <WorkflowCanvas />
-          </TestWrapper>
-        );
-
-        const canvas = document.querySelector(".bg-canvas-bg") as HTMLElement;
-        const move = (handler: "onMoveStart" | "onMoveEnd") =>
-          act(() => {
-            (mockReactFlowProps.current?.[handler] as (() => void) | undefined)?.();
-          });
-        move("onMoveStart");
-
-        expect(mockReactFlowProps.current?.edges).toEqual([edge]);
-        expect(canvas).toHaveClass("canvas-native-navigation-active");
-        expect(document.documentElement).toHaveClass("canvas-interacting");
-        expect(document.documentElement).not.toHaveClass("canvas-native-navigation-active");
-
-        // A wheel pan reports a start/end pair every frame; the classes must
-        // not flip off between them, since each flip restyles the document
-        move("onMoveEnd");
-        move("onMoveStart");
-        move("onMoveEnd");
-        expect(canvas).toHaveClass("canvas-native-navigation-active");
-        expect(document.documentElement).toHaveClass("canvas-interacting");
-
-        act(() => {
-          vi.advanceTimersByTime(200);
-        });
-        expect(canvas).not.toHaveClass("canvas-native-navigation-active");
-        expect(document.documentElement).not.toHaveClass("canvas-interacting");
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
-    it("captures the pointer on the pressed element when a press becomes a pan or a node drag, never on a wheel pan", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState()));
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-      const wrapper = document.querySelector(".bg-canvas-bg") as HTMLElement;
-      const props = () => mockReactFlowProps.current as Record<string, (...args: unknown[]) => void>;
-      const pressed = document.createElement("div");
-      wrapper.appendChild(pressed);
-      const captured: number[] = [];
-      Object.assign(pressed, { setPointerCapture: (id: number) => captured.push(id), hasPointerCapture: () => false });
-      const pointer = (type: string, target: EventTarget, pointerId = 7) => {
-        const event = new Event(type, { bubbles: true });
-        Object.defineProperty(event, "pointerId", { value: pointerId });
-        target.dispatchEvent(event);
-      };
-      const node = { id: "node-1", position: { x: 0, y: 0 }, data: {} };
-
-      pointer("pointerdown", pressed);
-      act(() => props().onMoveStart());
-      expect(captured).toEqual([7]);
-      pointer("pointerup", window);
-
-      pointer("pointerdown", pressed, 9);
-      act(() => props().onNodeDragStart({}, node));
-      expect(captured).toEqual([7, 9]);
-      act(() => props().onNodeDragStop({}, node));
-      pointer("pointerup", window, 9);
-
-      // A wheel pan has no press to capture
-      act(() => props().onMoveStart());
-      expect(captured).toEqual([7, 9]);
-      pressed.remove();
-    });
-
-    it("keeps a node drag's moves out of the store between the first move and the drop", () => {
-      const node = { id: "node-1", type: "prompt", position: { x: 0, y: 0 }, data: {} };
-      // The store applies what it is given, as the real one does
-      let storeNodes: typeof node[] = [node];
-      mockOnNodesChange.mockImplementation((changes: { id: string; position?: { x: number; y: number } }[]) => {
-        storeNodes = storeNodes.map((n) => {
-          const change = changes.find((c) => c.id === n.id && c.position);
-          return change ? { ...n, position: change.position! } : n;
-        });
-      });
-      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes: storeNodes })));
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-      const props = () => mockReactFlowProps.current as Record<string, (...args: unknown[]) => void> & { nodes: typeof node[] };
-      const move = (x: number, dragging: boolean) =>
-        act(() => props().onNodesChange([{ type: "position", id: "node-1", position: { x, y: 0 }, dragging }]));
-
-      move(10, true);
-      expect(mockOnNodesChange).toHaveBeenCalledTimes(1);
-      move(20, true);
-      move(30, true);
-      // React Flow is handed each move; the store is not
-      expect(mockOnNodesChange).toHaveBeenCalledTimes(1);
-      expect(props().nodes.find((n) => n.id === "node-1")?.position).toEqual({ x: 30, y: 0 });
-      move(30, false);
-      expect(mockOnNodesChange).toHaveBeenCalledTimes(2);
-      expect(storeNodes[0].position).toEqual({ x: 30, y: 0 });
-
-      // A drag that stops without React Flow's drop change still lands where it was left
-      move(40, true);
-      move(50, true);
-      act(() => props().onNodeDragStop({}, node));
-      expect(mockOnNodesChange).toHaveBeenLastCalledWith([{ type: "position", id: "node-1", position: { x: 50, y: 0 }, dragging: false }]);
-      mockOnNodesChange.mockReset();
-    });
-
-    it("shows what changes in the store during a node drag, with the dragged node where the drag has it", () => {
-      const node = { id: "node-1", type: "prompt", position: { x: 0, y: 0 }, data: { prompt: "before" } };
-      let storeNodes: { id: string; type: string; position: { x: number; y: number }; data: Record<string, unknown> }[] = [node];
-      mockOnNodesChange.mockImplementation((changes: { id: string; position?: { x: number; y: number } }[]) => {
-        storeNodes = storeNodes.map((n) => {
-          const change = changes.find((c) => c.id === n.id && c.position);
-          return change ? { ...n, position: change.position! } : n;
-        });
-      });
-      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes: storeNodes })));
-      // A new element each time, so a rerender reads the store again
-      const ui = () => (
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-      const { rerender } = render(ui());
-      const props = () => mockReactFlowProps.current as Record<string, (...args: unknown[]) => void> & { nodes: typeof storeNodes };
-      const move = (x: number, dragging: boolean) =>
-        act(() => props().onNodesChange([{ type: "position", id: "node-1", position: { x, y: 0 }, dragging }]));
-
-      move(10, true);
-      move(20, true);
-      // Mid-drag, a run writes the node's data and the agent adds a node
-      storeNodes = [
-        { ...storeNodes[0], data: { prompt: "after" } },
-        { id: "node-2", type: "prompt", position: { x: 200, y: 0 }, data: {} },
-      ];
-      rerender(ui());
-      expect(props().nodes.map((n) => n.id)).toEqual(["node-1", "node-2"]);
-      expect(props().nodes[0]).toMatchObject({ position: { x: 20, y: 0 }, data: { prompt: "after" } });
-
-      move(30, true);
-      expect(props().nodes[0].position).toEqual({ x: 30, y: 0 });
-      move(30, false);
-      expect(storeNodes[0]).toMatchObject({ position: { x: 30, y: 0 }, data: { prompt: "after" } });
-      mockOnNodesChange.mockReset();
-    });
-
-    it("lets go of a node drag whose canvas is replaced mid-drag", () => {
-      const node = { id: "node-1", type: "prompt", position: { x: 0, y: 0 }, data: {} };
-      let canvasGeneration = 1;
-      let storeNodes = [node];
-      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes: storeNodes, canvasGeneration })));
-      // A new element each time, so a rerender reads the store again
-      const ui = () => (
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-      const { rerender } = render(ui());
-      const props = () => mockReactFlowProps.current as Record<string, (...args: unknown[]) => void> & { nodes: typeof storeNodes };
-      const move = (x: number, dragging: boolean) =>
-        act(() => props().onNodesChange([{ type: "position", id: "node-1", position: { x, y: 0 }, dragging }]));
-
-      move(10, true);
-      move(20, true);
-      expect(mockOnNodesChange).toHaveBeenCalledTimes(1);
-      // Another tab: its own node-1, where that workflow put it
-      canvasGeneration = 2;
-      storeNodes = [{ ...node, position: { x: 500, y: 500 } }];
-      rerender(ui());
-      expect(props().nodes[0].position).toEqual({ x: 500, y: 500 });
-      // The rest of the drag, and its drop, belonged to the old canvas
-      move(30, true);
-      move(30, false);
-      expect(mockOnNodesChange).toHaveBeenCalledTimes(1);
-      expect(props().nodes[0].position).toEqual({ x: 500, y: 500 });
-    });
-
-    it("hands the canvas back when React Flow aborts a node drag", async () => {
-      const node = { id: "node-1", type: "prompt", position: { x: 0, y: 0 }, data: {} };
-      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ nodes: [node] })));
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-      const props = () => mockReactFlowProps.current as Record<string, (...args: unknown[]) => void>;
-      const move = (x: number, dragging: boolean) =>
-        act(() => props().onNodesChange([{ type: "position", id: "node-1", position: { x, y: 0 }, dragging }]));
-
-      act(() => props().onNodeDragStart({}, node));
-      move(10, true);
-      move(20, true);
-      expect(document.documentElement).toHaveClass("canvas-interacting");
-      // The node is deleted mid-drag: React Flow drops the drag and never calls onNodeDragStop
-      move(20, false);
-      await act(async () => {});
-      expect(isDraggingNodeRef.current).toBe(false);
-      // Edges and node content take the pointer again
-      expect(document.documentElement).not.toHaveClass("canvas-interacting");
-    });
-
-    it("keeps pointer events off for the whole of a node drag that follows a pan", () => {
-      vi.useFakeTimers();
-      try {
-        mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState()));
-        render(
-          <TestWrapper>
-            <WorkflowCanvas />
-          </TestWrapper>
-        );
-        const props = () => mockReactFlowProps.current as Record<string, (...args: unknown[]) => void>;
-        const node = { id: "node-1", position: { x: 0, y: 0 }, data: {} };
-
-        // The pan's idle timer runs out during the drag and must not clear the drag's class
-        act(() => props().onMoveStart());
-        act(() => props().onMoveEnd());
-        act(() => props().onNodeDragStart({}, node));
-        act(() => {
-          vi.advanceTimersByTime(200);
-        });
-        expect(document.documentElement).toHaveClass("canvas-interacting");
-        act(() => props().onNodeDragStop({}, node));
-        expect(document.documentElement).not.toHaveClass("canvas-interacting");
-
-        // A drag that ends inside the pan's window leaves the next pan able to switch the classes back on
-        act(() => props().onMoveStart());
-        act(() => props().onMoveEnd());
-        act(() => props().onNodeDragStart({}, node));
-        act(() => props().onNodeDragStop({}, node));
-        expect(document.documentElement).not.toHaveClass("canvas-interacting");
-        act(() => props().onMoveStart());
-        expect(document.documentElement).toHaveClass("canvas-interacting");
-        act(() => {
-          vi.advanceTimersByTime(200);
-        });
-        expect(document.documentElement).not.toHaveClass("canvas-interacting");
-      } finally {
-        vi.useRealTimers();
-      }
     });
 
     it("should render MultiSelectToolbar component", () => {
@@ -710,6 +296,27 @@ describe("WorkflowCanvas", () => {
       );
 
       expect(screen.getByTestId("multi-select-toolbar")).toBeInTheDocument();
+    });
+  });
+
+  describe("When the canvas cannot draw", () => {
+    it("shows why in the canvas's place, and draws again when asked to", async () => {
+      const { reportGpuCanvasFailure } = await import("@/lib/gpuCanvas/failure");
+      vi.spyOn(console, "error").mockImplementation(() => {});
+      render(
+        <TestWrapper>
+          <WorkflowCanvas />
+        </TestWrapper>
+      );
+      await screen.findByRole("button", { name: "Zoom in" });
+
+      act(() => reportGpuCanvasFailure("WebGL2 is not available"));
+      expect(screen.getByRole("alert")).toHaveTextContent("WebGL2 is not available.");
+      expect(screen.queryByRole("button", { name: "Zoom in" })).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: "Zoom in" })).toBeInTheDocument();
     });
   });
 
@@ -765,37 +372,6 @@ describe("WorkflowCanvas", () => {
       );
 
       expect(screen.queryByTestId("welcome-modal")).not.toBeInTheDocument();
-    });
-  });
-
-  describe("Node Types Registration", () => {
-    it("should register all required node types for the canvas", () => {
-      // We verify the canvas renders with the node types object defined
-      // The actual node type registration happens at module level
-      // This test confirms the canvas component can be rendered
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-
-      // Canvas should render and have the ReactFlow component
-      expect(document.querySelector(".react-flow")).toBeInTheDocument();
-    });
-  });
-
-  describe("Edge Types Registration", () => {
-    it("should register editable and reference edge types for the canvas", () => {
-      // Edge types are registered at module level
-      // This test confirms the canvas renders with edge type config
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-
-      // Canvas should render with edge types configured
-      expect(document.querySelector(".react-flow")).toBeInTheDocument();
     });
   });
 
@@ -939,6 +515,55 @@ describe("WorkflowCanvas", () => {
 
       expect(mockAddNode).toHaveBeenCalledWith("prompt", expect.any(Object));
     });
+
+    // A recent-generations tile carries its kind; a video makes a Video Input node at the drop point
+    const historyDrag = (kind: "image" | "video", image: string) => {
+      const payload = JSON.stringify({ kind, image, prompt: "", timestamp: 1 });
+      return {
+        types: ["application/history-image", ...(kind === "video" ? ["application/history-video"] : [])],
+        items: [],
+        files: [],
+        dropEffect: "",
+        effectAllowed: "",
+        getData: vi.fn((type: string) => (type === "application/history-image" ? payload : "")),
+      };
+    };
+
+    it("says a dragged history video makes a video node", () => {
+      render(
+        <TestWrapper>
+          <WorkflowCanvas />
+        </TestWrapper>
+      );
+      const canvas = document.querySelector(".bg-canvas-bg") as HTMLElement;
+      fireEvent.dragOver(canvas, { dataTransfer: historyDrag("video", "https://cdn.example/clip.mp4") });
+      expect(screen.getByText("Drop video to create node")).toBeInTheDocument();
+      fireEvent.dragOver(canvas, { dataTransfer: historyDrag("image", "data:image/png;base64,x") });
+      expect(screen.getByText("Drop image to create node")).toBeInTheDocument();
+    });
+
+    it("makes a Video Input node where a history video is dropped, and an Image Input node for an image", () => {
+      render(
+        <TestWrapper>
+          <WorkflowCanvas />
+        </TestWrapper>
+      );
+      const canvas = document.querySelector(".bg-canvas-bg") as HTMLElement;
+      // jsdom's drop events carry no coordinates: the drop point is whatever the flow position comes to
+      mockScreenToFlowPosition.mockReturnValueOnce({ x: 500, y: 300 });
+      fireEvent.drop(canvas, { dataTransfer: historyDrag("video", "https://cdn.example/clip.mp4") });
+      expect(mockAddNode).toHaveBeenCalledWith("videoInput", { x: 500, y: 300 }, {
+        video: "https://cdn.example/clip.mp4",
+        filename: expect.stringMatching(/^history-\d+\.mp4$/),
+      });
+
+      mockScreenToFlowPosition.mockReturnValueOnce({ x: 40, y: 60 });
+      fireEvent.drop(canvas, { dataTransfer: historyDrag("image", "data:image/png;base64,x") });
+      expect(mockAddNode).toHaveBeenCalledWith("imageInput", { x: 40, y: 60 }, {
+        image: "data:image/png;base64,x",
+        filename: expect.stringMatching(/^history-\d+\.png$/),
+      });
+    });
   });
 
   describe("Keyboard Shortcuts", () => {
@@ -1075,104 +700,6 @@ describe("WorkflowCanvas", () => {
       fireEvent.keyDown(window, { key: "a", shiftKey: true });
 
       expect(mockAddNode).toHaveBeenCalledWith("annotation", expect.any(Object));
-    });
-  });
-
-  describe("Connection Validation", () => {
-    it("should render canvas with isValidConnection callback configured", () => {
-      // The isValidConnection function is passed to ReactFlow to validate connections
-      // This test confirms the canvas is properly configured
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-
-      // Canvas should have ReactFlow with validation configured
-      expect(document.querySelector(".react-flow")).toBeInTheDocument();
-    });
-  });
-
-  describe("Group Handling", () => {
-    it("should render canvas with group support enabled", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({
-          groups: {
-            "group-1": {
-              id: "group-1",
-              position: { x: 100, y: 100 },
-              size: { width: 400, height: 400 },
-              locked: false,
-            },
-          },
-        }));
-      });
-
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-
-      // The canvas should render with groups functionality enabled
-      expect(document.querySelector(".react-flow")).toBeInTheDocument();
-    });
-  });
-
-  describe("Canvas Configuration", () => {
-    it("should configure delete key codes for node deletion", () => {
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-
-      // ReactFlow is configured with deleteKeyCode={["Backspace", "Delete"]}
-      expect(document.querySelector(".react-flow")).toBeInTheDocument();
-    });
-
-    it("should configure multi-selection with Shift key", () => {
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-
-      // ReactFlow is configured with multiSelectionKeyCode="Shift"
-      expect(document.querySelector(".react-flow")).toBeInTheDocument();
-    });
-
-    it("should configure zoom constraints", () => {
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-
-      // ReactFlow is configured with minZoom={0.1} maxZoom={4}
-      expect(document.querySelector(".react-flow")).toBeInTheDocument();
-    });
-
-    it("should use editable as default edge type", () => {
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-
-      // ReactFlow is configured with defaultEdgeOptions={{ type: "editable" }}
-      expect(document.querySelector(".react-flow")).toBeInTheDocument();
-    });
-
-    it("never pans while a marquee nears the canvas edge", () => {
-      render(
-        <TestWrapper>
-          <WorkflowCanvas />
-        </TestWrapper>
-      );
-
-      // React Flow 12.11 does by default, under selections measured before the pan
-      expect(mockReactFlowProps.current).toMatchObject({ autoPanOnSelection: false });
     });
   });
 

@@ -51,9 +51,17 @@ export function ScrubRow({ videoRef, src, className, leading, trailing }: ScrubR
   const soundOn = useVideoSoundStore((s) => s.on);
   const volume = useVideoSoundStore((s) => s.volume);
   const audible = soundAudible({ on: soundOn, volume });
+  /** The element the row listens to, for the source it was showing. */
+  const bound = useRef<{ video: HTMLVideoElement; src: string | null | undefined; unbind: () => void } | null>(null);
 
+  // A card can mount another <video> while the ref object stays the same
+  // (a new key on the element), so look at what the ref holds after every
+  // render and move the listeners when the element or its source changes.
   useEffect(() => {
     const video = videoRef.current;
+    if (video === bound.current?.video && src === bound.current.src) return;
+    bound.current?.unbind();
+    bound.current = null;
     if (!video) return;
     const onTime = () => setTime(video.currentTime);
     const onMeta = () => setDuration(video.duration);
@@ -65,20 +73,33 @@ export function ScrubRow({ videoRef, src, className, leading, trailing }: ScrubR
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
     video.addEventListener("ended", onPause);
+    // Show the element as it is: a remounted one may be playing already.
     if (video.readyState >= 1) onMeta();
-    setPlaying(!video.paused);
-    setTime(video.currentTime);
-    return () => {
-      video.removeEventListener("timeupdate", onTime);
-      video.removeEventListener("loadedmetadata", onMeta);
-      video.removeEventListener("durationchange", onMeta);
-      video.removeEventListener("play", onPlay);
-      video.removeEventListener("pause", onPause);
-      video.removeEventListener("ended", onPause);
+    if (video.paused) onPause();
+    else onPlay();
+    onTime();
+    bound.current = {
+      video,
+      src,
+      unbind: () => {
+        video.removeEventListener("timeupdate", onTime);
+        video.removeEventListener("loadedmetadata", onMeta);
+        video.removeEventListener("durationchange", onMeta);
+        video.removeEventListener("play", onPlay);
+        video.removeEventListener("pause", onPause);
+        video.removeEventListener("ended", onPause);
+      },
     };
-  }, [videoRef, src]);
+  });
 
-  useEffect(() => () => clearTimeout(openTimer.current), []);
+  useEffect(
+    () => () => {
+      bound.current?.unbind();
+      bound.current = null;
+      clearTimeout(openTimer.current);
+    },
+    []
+  );
 
   const toggle = () => {
     const video = videoRef.current;

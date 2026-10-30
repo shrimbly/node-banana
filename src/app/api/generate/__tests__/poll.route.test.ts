@@ -84,6 +84,21 @@ describe("/api/generate/poll route", () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
+  describe("kie", () => {
+    it("should return 422 with the model name and Kie's reason when the task failed", async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ code: 200, data: { state: "fail", failMsg: "Prompt was flagged" } }));
+
+      const response = await POST(createMockPostRequest(
+        { taskId: "k1", provider: "kie", modelId: "kling-2.6/text-to-video", modelName: "Kling 2.6", mediaType: "video" },
+        { "X-Kie-Key": "test-kie-key" }
+      ));
+      const data = await response.json();
+
+      expect(response.status).toBe(422);
+      expect(data).toEqual({ success: false, error: "Kling 2.6: Prompt was flagged" });
+    });
+  });
+
   describe("comfy", () => {
     it("should return 401 when no Comfy API key is configured", async () => {
       const response = await POST(createMockPostRequest(comfyPoll));
@@ -147,28 +162,55 @@ describe("/api/generate/poll route", () => {
       expect(mockFetch.mock.calls[2][0]).toBe("https://example.com/a.png");
     });
 
-    it("should return 500 with the model name when the task failed", async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({ status: "COMPLETED", error_type: "content_moderation" }));
+    // A failed run is final (422); a 500 would read as "ask again" to the client
+    it("should return 422 with the model name and the partner's words when the run was refused", async () => {
+      const detail = "The model's generated output was refused by the provider's content policy.";
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ status: "COMPLETED", error_type: "content_policy_violation" }))
+        .mockResolvedValueOnce(jsonResponse({ detail, error_type: "content_policy_violation" }, 400));
 
       const response = await POST(createMockPostRequest(comfyPoll, COMFY_HEADERS));
       const data = await response.json();
 
-      expect(response.status).toBe(500);
-      expect(data).toEqual({ success: false, error: "FLUX.2 Pro: Comfy Router: content_moderation" });
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(response.status).toBe(422);
+      expect(data).toEqual({ success: false, error: `FLUX.2 Pro: ${detail} (content_policy_violation)` });
+      expect(mockFetch.mock.calls[1][0]).toBe("https://api.comfy.org/v2/models/bfl/flux-2-pro/requests/req_1");
     });
 
-    it("should return 500 when the result has expired", async () => {
+    it("should return 422 when the result has expired", async () => {
       mockFetch.mockResolvedValueOnce(jsonResponse(null, 410));
 
       const response = await POST(createMockPostRequest(comfyPoll, COMFY_HEADERS));
       const data = await response.json();
 
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(422);
       expect(data.error).toBe("FLUX.2 Pro: Comfy Router result expired");
     });
 
-    it("should return 500 when the collected result carries the partner's failure", async () => {
+    it("should pass a rejected key through, since it says nothing about the run", async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({}, 401));
+
+      const response = await POST(createMockPostRequest(comfyPoll, COMFY_HEADERS));
+      const data = await response.json();
+
+      expect(response.status).toBe(401);
+      expect(data).toEqual({ success: false, error: "Comfy API key was rejected" });
+    });
+
+    it("should return the Router's status and explanation when collecting the result is refused", async () => {
+      const detail = "The model's generated output was refused by the provider's content policy.";
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ status: "COMPLETED" }))
+        .mockResolvedValueOnce(jsonResponse({ detail, error_type: "content_policy_violation" }, 400));
+
+      const response = await POST(createMockPostRequest(comfyPoll, COMFY_HEADERS));
+      const data = await response.json();
+
+      expect(response.status).toBe(400);
+      expect(data.error).toBe(`FLUX.2 Pro: ${detail} (content_policy_violation)`);
+    });
+
+    it("should return 422 when the collected result carries the partner's failure", async () => {
       process.env.COMFY_API_KEY = "env-comfy-key";
       mockFetch
         .mockResolvedValueOnce(jsonResponse({ status: "COMPLETED" }))
@@ -177,9 +219,21 @@ describe("/api/generate/poll route", () => {
       const response = await POST(createMockPostRequest(comfyPoll));
       const data = await response.json();
 
-      expect(response.status).toBe(500);
+      expect(response.status).toBe(422);
       expect(data.error).toBe("FLUX.2 Pro: Black Forest Labs: Content Moderated");
       expect(mockFetch.mock.calls[0][1].headers["X-API-Key"]).toBe("env-comfy-key");
+    });
+
+    it("should return 500 when the result cannot be reached, so the client asks again", async () => {
+      mockFetch
+        .mockResolvedValueOnce(jsonResponse({ status: "COMPLETED" }))
+        .mockRejectedValueOnce(new TypeError("fetch failed"));
+
+      const response = await POST(createMockPostRequest(comfyPoll, COMFY_HEADERS));
+      const data = await response.json();
+
+      expect(response.status).toBe(500);
+      expect(data.error).toBe("fetch failed");
     });
   });
 });

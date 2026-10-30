@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 
-import { getSourceOutput } from "../connectedInputs";
+import { getConnectedInputsPure, getSourceOutput } from "../connectedInputs";
+import { appToInputSchema } from "@/lib/comfy/nodeSchema";
 import type { ComfyAppDefinition } from "@/lib/comfy/types";
-import type { WorkflowNode } from "@/types";
+import type { WorkflowEdge, WorkflowNode } from "@/types";
 
 const app = (): ComfyAppDefinition => ({
   id: "app-1",
@@ -67,5 +68,26 @@ describe("getSourceOutput for a Comfy app", () => {
       data: { app: null, outputs: {}, outputImage: null },
     } as unknown as WorkflowNode;
     expect(getSourceOutput(bare, "9")).toEqual({ type: "image", value: null });
+  });
+});
+
+describe("getConnectedInputsPure for a Comfy app fed by a batching array", () => {
+  const text = (nodeId: string, name: string) => ({ id: `${nodeId}:text`, name, label: name, type: "text" as const, nodeId, inputKey: "text", required: true });
+  const prompted: ComfyAppDefinition = { ...app(), inputs: [text("6", "positive"), text("7", "negative")] };
+  const textEdge = (source: string, targetHandle: string): WorkflowEdge =>
+    ({ id: `${source}-comfy`, source, target: "comfy-1", sourceHandle: "text", targetHandle }) as WorkflowEdge;
+
+  it("fills the slot the batch edge feeds and names it, beside the app's other slots", () => {
+    const nodes = [
+      { id: "arr", type: "array", position: { x: 0, y: 0 }, data: { outputItems: ["a fox", "a hare", "an owl"], batchMode: true } },
+      { id: "neg", type: "prompt", position: { x: 0, y: 0 }, data: { prompt: "blurry" } },
+      { id: "comfy-1", type: "comfyApp", position: { x: 0, y: 0 }, data: { app: prompted, inputSchema: appToInputSchema(prompted) } },
+    ] as unknown as WorkflowNode[];
+
+    const result = getConnectedInputsPure("comfy-1", nodes, [textEdge("arr", "text-0"), textEdge("neg", "text-1")]);
+
+    expect(result.textItems).toEqual(["a fox", "a hare", "an owl"]);
+    expect(result.textItemsInput).toBe("positive");
+    expect(result.dynamicInputs).toEqual({ positive: "a fox", negative: "blurry" });
   });
 });

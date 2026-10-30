@@ -22,7 +22,7 @@ import {
   sweepStaleTemps,
   unlinkWithRetry,
 } from "./fsutil";
-import { acquireLock, DATA_DIR, GENERATIONS_DIR, WRITERS_DIR } from "./layout";
+import { acquireLock, DATA_DIR, EDITS_DIR, GENERATIONS_DIR, WRITERS_DIR } from "./layout";
 import type { AssetLibrary } from "./library";
 import { decideMediaType, imageDimensionsFromFile, probeAudioVideo, readHead } from "./media";
 import { isUnreadableFile } from "./readable";
@@ -718,11 +718,23 @@ async function isNonEmptyDir(dir: string, ignore: readonly string[] = []): Promi
   }
 }
 
+/** Whether `dir` holds an edit file (what the move copies from Edits/), not only Finder clutter or a project's files. */
+async function holdsEditFiles(dir: string): Promise<boolean> {
+  try {
+    return (await fs.readdir(dir, { withFileTypes: true })).some(
+      (dirent) => dirent.isFile() && dirent.name.toLowerCase().endsWith(".nbedit"),
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Checks a move destination before the job starts: absolute, not the
  * current root, neither inside the other (after resolving symlinks such as
  * macOS's /var → /private/var, case-folded where the disk folds case), and
- * not already holding a library.
+ * not already holding a library (nor another library's edits, which the
+ * copy would overwrite).
  */
 export async function validateMoveTarget(fromRoot: string, target: unknown, platform: NodeJS.Platform = process.platform): Promise<string> {
   if (typeof target !== "string" || !path.isAbsolute(target) || target.includes("\0")) {
@@ -742,7 +754,11 @@ export async function validateMoveTarget(fromRoot: string, target: unknown, plat
     if (error instanceof LibraryError) throw error;
   }
   // A writers folder alone is no library: the other build can recreate it in a root the library just left.
-  if ((await isNonEmptyDir(path.join(to, DATA_DIR), [WRITERS_DIR])) || (await isNonEmptyDir(path.join(to, GENERATIONS_DIR)))) {
+  if (
+    (await isNonEmptyDir(path.join(to, DATA_DIR), [WRITERS_DIR])) ||
+    (await isNonEmptyDir(path.join(to, GENERATIONS_DIR))) ||
+    (await holdsEditFiles(path.join(to, EDITS_DIR)))
+  ) {
     throw new LibraryError(
       "That folder already holds a Node Banana library. Use it as it is, or choose an empty folder.",
       409,
@@ -769,8 +785,8 @@ export const MOVE_SOURCE_MARKER = "move-source.json";
 const DAY_FOLDER = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * Library-owned files only: the day folders of Generations/ and
- * .nodebanana/ — never projects (not even a project file that ended up
+ * Library-owned files only: the day folders of Generations/, the edit files
+ * in Edits/ and .nodebanana/ — never projects (not even a project file that ended up
  * under Generations/), caches, locks, move markers or temp files.
  */
 async function buildManifest(root: string, library?: AssetLibrary): Promise<ManifestEntry[]> {
@@ -806,6 +822,7 @@ async function buildManifest(root: string, library?: AssetLibrary): Promise<Mani
     }
   };
   await walk(path.join(root, GENERATIONS_DIR), (dirent) => dirent.isDirectory() && DAY_FOLDER.test(dirent.name));
+  await walk(path.join(root, EDITS_DIR), (dirent) => dirent.isFile() && dirent.name.toLowerCase().endsWith(".nbedit"));
   await walk(data);
   return entries;
 }
@@ -859,11 +876,10 @@ function relKey(rel: string): string {
   return rel.split(path.sep).join("/");
 }
 
-/** A target path the move may have written: inside the target's Generations or data folder. */
+/** A target path the move may have written: inside the target's Generations, Edits or data folder. */
 function movedPath(toRoot: string, rel: string): string | null {
   const dest = path.join(toRoot, ...rel.split("/"));
-  const inside =
-    isInsideRoot(path.join(toRoot, GENERATIONS_DIR), dest) || isInsideRoot(path.join(toRoot, DATA_DIR), dest);
+  const inside = [GENERATIONS_DIR, EDITS_DIR, DATA_DIR].some((dir) => isInsideRoot(path.join(toRoot, dir), dest));
   return inside ? dest : null;
 }
 

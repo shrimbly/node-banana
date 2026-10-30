@@ -19,7 +19,7 @@ export const KNOWN_SCAN_LIMITS: Partial<ScanLimits> = { timeoutMs: 5_000 };
 /** Folders outside the Node Banana folder looked at per listing. */
 export const MAX_OUTSIDE_PROJECTS = 500;
 /** Folder names a project never gets: the library's own. Compared case-insensitively. */
-export const RESERVED_FOLDER_NAMES: readonly string[] = ["generations", ".nodebanana"];
+export const RESERVED_FOLDER_NAMES: readonly string[] = ["generations", ".nodebanana", "edits"];
 /** Longest folder name a project gets from its name. */
 const MAX_FOLDER_NAME = 80;
 const DESCRIBE_CONCURRENCY = 8;

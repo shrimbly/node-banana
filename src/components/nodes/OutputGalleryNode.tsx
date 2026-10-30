@@ -53,7 +53,7 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
   const [addedId, setAddedId] = useState<string | null>(null);
   const setAppView = useAssetStore((state) => state.setAppView);
   // The gallery holds bare data URLs; the generation history knows what made
-  // each one, so a gallery image that is in the history gets the same prompt
+  // each one, so a gallery item that is in the history gets the same prompt
   // and details the history viewer shows for it.
   const globalImageHistory = useWorkflowStore((state) => state.globalImageHistory);
   const historyBySrc = useMemo(() => {
@@ -301,14 +301,17 @@ export function OutputGalleryNode({ id, data, selected }: NodeProps<OutputGaller
   const videoThumbnailOf = (src: string) => videoThumbnails.get(src) ?? videoPoster(src)?.thumbnail;
   const postersPending = extractedFor !== videoSrcs && videoSrcs.some((src) => !videoThumbnailOf(src));
 
-  // The viewer's items: images then videos, as the grid shows them. An image
+  // The viewer's items: images then videos, as the grid shows them. An item
   // the history knows is described the way the history viewer describes it.
   const viewerItems = useMemo<MediaViewerItem[]>(
     () =>
       displayMedia.map((item, idx) => {
         const id = `${item.type}-${idx}`;
-        const known = item.type === "image" ? historyBySrc.get(item.src) : undefined;
-        if (known) return { ...historyViewerItem(known), id };
+        const known = historyBySrc.get(item.src);
+        if (known && (known.kind ?? "image") === item.type) {
+          const viewed = historyViewerItem(known);
+          return { ...viewed, id, thumb: viewed.thumb ?? videoThumbnails.get(item.src) };
+        }
         return {
           id,
           src: item.src,

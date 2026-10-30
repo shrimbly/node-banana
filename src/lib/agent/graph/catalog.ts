@@ -14,7 +14,6 @@
  */
 
 import type {
-  AspectRatio,
   BackgroundRemovalModel,
   HandleType,
   MatchMode,
@@ -23,7 +22,7 @@ import type {
   NodeType,
   Resolution,
 } from "@/types";
-import { GEMINI_IMAGE_MODELS } from "@/types";
+import { EXTENDED_ASPECT_RATIOS, GEMINI_IMAGE_MODELS, GEMINI_IMAGE_OPTIONS, type GeminiImageOptions } from "@/types";
 import { getAllEasingNames } from "@/lib/easing-functions";
 import {
   DEFAULT_LLM_MODEL,
@@ -103,61 +102,36 @@ export interface NodeCatalogEntry {
 // Models the agent can set
 // ---------------------------------------------------------------------------
 
-// Mirrors the module-private option lists in GenerateImageNode.tsx (which
-// picks them by model id); keep in sync when a Gemini image model changes.
-export const BASE_ASPECT_RATIOS: readonly AspectRatio[] = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
-export const EXTENDED_ASPECT_RATIOS: readonly AspectRatio[] = ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"];
 export const ALL_RESOLUTIONS: readonly Resolution[] = ["512", "1K", "2K", "4K"];
 
-export interface ImageModelSpec {
+export interface ImageModelSpec extends GeminiImageOptions {
   id: ModelType;
   label: string;
-  aspectRatios: readonly AspectRatio[];
-  /** Empty: the model has no resolution setting. */
-  resolutions: readonly Resolution[];
-  googleSearch: boolean;
-  imageSearch: boolean;
   note: string;
 }
 
-/** What GenerateImageNode offers per Gemini model (its settings render from these rules). */
-const IMAGE_MODEL_OPTIONS: Record<ModelType, Omit<ImageModelSpec, "id" | "label">> = {
-  "nano-banana": {
-    aspectRatios: BASE_ASPECT_RATIOS,
-    resolutions: [],
-    googleSearch: false,
-    imageSearch: false,
-    note: "Gemini 2.5 Flash Image: fast; no resolution setting.",
-  },
-  "nano-banana-2": {
-    aspectRatios: EXTENDED_ASPECT_RATIOS,
-    resolutions: ["512", "1K", "2K", "4K"],
-    googleSearch: true,
-    imageSearch: true,
-    note: "Gemini 3.1 Flash Image: efficient, 512-4K, extra aspect ratios (1:4, 1:8, 4:1, 8:1), Google and image search.",
-  },
-  "nano-banana-2-lite": {
-    aspectRatios: BASE_ASPECT_RATIOS,
-    resolutions: [],
-    googleSearch: false,
-    imageSearch: false,
-    note: "Gemini 3.1 Flash Lite Image: cheapest, 1K only.",
-  },
-  "nano-banana-pro": {
-    aspectRatios: BASE_ASPECT_RATIOS,
-    resolutions: ["1K", "2K", "4K"],
-    googleSearch: true,
-    imageSearch: false,
-    note: "Gemini 3 Pro Image: highest quality, 1K-4K, Google Search grounding. The default when the user has not saved another; leave model unset to keep theirs.",
-  },
+/** What each Gemini model is for; its settings come from GEMINI_IMAGE_OPTIONS, which GenerateImageNode renders. */
+const IMAGE_MODEL_NOTES: Record<ModelType, string> = {
+  "nano-banana": "Gemini 2.5 Flash Image: fast; no resolution setting.",
+  "nano-banana-2": "Gemini 3.1 Flash Image: efficient, 512-4K, extra aspect ratios (1:4, 1:8, 4:1, 8:1), Google and image search.",
+  "nano-banana-2.1": "Nano Banana 2.1: Nano Banana 2's successor, more realistic, follows prompts and renders text better; 1K-4K, extra aspect ratios (1:4, 1:8, 4:1, 8:1), Google and image search.",
+  "nano-banana-2-lite": "Gemini 3.1 Flash Lite Image: cheapest, 1K only.",
+  "nano-banana-pro": "Gemini 3 Pro Image: highest quality, 1K-4K, Google Search grounding. The default when the user has not saved another; leave model unset to keep theirs.",
 };
 
 /** The Gemini image models, in the order and with the names the node's model menu uses. */
 export const IMAGE_MODELS: readonly ImageModelSpec[] = GEMINI_IMAGE_MODELS.map(({ value, label }) => ({
   id: value,
   label,
-  ...IMAGE_MODEL_OPTIONS[value],
+  ...GEMINI_IMAGE_OPTIONS[value],
+  note: IMAGE_MODEL_NOTES[value],
 }));
+
+/** The Gemini image models with a feature, for the agent's messages: "a, b and c". */
+export function imageModelsWith(has: (model: ImageModelSpec) => boolean, conjunction = "and"): string {
+  const ids = IMAGE_MODELS.filter(has).map((m) => m.id);
+  return ids.length > 1 ? `${ids.slice(0, -1).join(", ")} ${conjunction} ${ids[ids.length - 1]}` : ids.join("");
+}
 
 /** Model ids people use for the Gemini image models, mapped to ours. */
 export const IMAGE_MODEL_ALIASES: Record<string, ModelType> = {
@@ -166,6 +140,7 @@ export const IMAGE_MODEL_ALIASES: Record<string, ModelType> = {
   "gemini-3-pro-image-preview": "nano-banana-pro",
   "gemini-3-pro-image": "nano-banana-pro",
   "gemini-3.1-flash-image-preview": "nano-banana-2",
+  "gemini-nano-banana-2.1": "nano-banana-2.1",
   "nano-banana-2-flash": "nano-banana-2",
   "nano-banana-lite": "nano-banana-2-lite",
 };
@@ -496,10 +471,10 @@ export const NODE_CATALOG: Record<NodeType, NodeCatalogEntry> = {
     outputs: [img("image", "Image")],
     settings: [
       { field: "model", kind: "model", description: `Any image model search_models finds for a provider the user has a key for: a Gemini id (${IMAGE_MODEL_IDS.join(", ")}) or another provider's (OpenAI, fal, Replicate, Kie, WaveSpeed, ComfyUI) as its exact id or {"provider": "...", "modelId": "..."}.`, default: "omit to use the user's saved default (nano-banana-pro if none)" },
-      { field: "aspectRatio", kind: "enum", values: EXTENDED_ASPECT_RATIOS, description: "Output aspect ratio. 1:4, 1:8, 4:1 and 8:1 need nano-banana-2.", default: "omit to use the user's saved default (1:1 if none)" },
-      { field: "resolution", kind: "enum", values: ALL_RESOLUTIONS, description: "nano-banana-pro: 1K|2K|4K; nano-banana-2: 512|1K|2K|4K; others have none.", default: "omit to use the user's saved default (1K if none)" },
-      { field: "useGoogleSearch", kind: "boolean", description: "Ground the image in Google Search (nano-banana-pro, nano-banana-2).", default: "false" },
-      { field: "useImageSearch", kind: "boolean", description: "Use image search (nano-banana-2 only).", default: "false" },
+      { field: "aspectRatio", kind: "enum", values: EXTENDED_ASPECT_RATIOS, description: `Output aspect ratio. 1:4, 1:8, 4:1 and 8:1 need ${imageModelsWith((m) => m.aspectRatios.includes("8:1"), "or")}.`, default: "omit to use the user's saved default (1:1 if none)" },
+      { field: "resolution", kind: "enum", values: ALL_RESOLUTIONS, description: `${IMAGE_MODELS.filter((m) => m.resolutions.length > 0).map((m) => `${m.id}: ${m.resolutions.join("|")}`).join("; ")}; others have none.`, default: "omit to use the user's saved default (1K if none)" },
+      { field: "useGoogleSearch", kind: "boolean", description: `Ground the image in Google Search (${imageModelsWith((m) => m.googleSearch)}).`, default: "false" },
+      { field: "useImageSearch", kind: "boolean", description: `Use image search (${imageModelsWith((m) => m.imageSearch)} only).`, default: "false" },
       { ...modelParametersSetting, description: `Other providers' models only (Gemini image models use the fields above). ${modelParametersSetting.description}` },
     ],
     agentCreatable: true,

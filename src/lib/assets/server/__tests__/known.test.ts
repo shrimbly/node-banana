@@ -8,6 +8,7 @@ import {
   holdsOnlyProjectContent,
   isPersonalFolder,
   listKnownProjects,
+  looksLikeProjectsFolder,
   outermost,
   projectFolderName,
   sanitiseFolderName,
@@ -247,8 +248,23 @@ describe("project folder names", () => {
     expect(await uniqueFolderName(root, "Cats")).toEqual({ folder: "Cats 3", taken: true });
     expect(await uniqueFolderName(root, "Dogs")).toEqual({ folder: "Dogs 2", taken: true });
     expect(await uniqueFolderName(root, "Generations")).toEqual({ folder: "Generations 2", taken: true });
+    expect(await uniqueFolderName(root, "Edits")).toEqual({ folder: "Edits 2", taken: true });
     expect(await projectFolderName(root, "cats")).toEqual({ folder: "cats 3", path: path.join(root, "cats 3"), taken: true });
     expect(await projectFolderName(path.join(base, "missing"), "New")).toMatchObject({ folder: "New", taken: false });
+  });
+});
+
+describe("looksLikeProjectsFolder", () => {
+  it("passes over the library's Edits folder, as it does Generations", async () => {
+    const project = path.join(root, "Spring");
+    fs.mkdirSync(project);
+    fs.writeFileSync(path.join(project, "spring.json"), workflow("Spring"));
+    fs.mkdirSync(path.join(root, "Generations"));
+    fs.mkdirSync(path.join(root, "Edits"));
+    fs.writeFileSync(path.join(root, "Edits", "Trip.nbedit"), "{}");
+    expect(await looksLikeProjectsFolder(root, [project])).toBe(true);
+    fs.mkdirSync(path.join(root, "Holiday photos"));
+    expect(await looksLikeProjectsFolder(root, [project])).toBe(false);
   });
 });
 

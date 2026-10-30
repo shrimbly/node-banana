@@ -28,6 +28,7 @@ export { ScrubRow, formatTime } from "./ScrubRow";
 export { Spinner, LoadingOverlay } from "./Spinner";
 export { EmptyState } from "./EmptyState";
 export { ErrorOverlay, ErrorMessage } from "./ErrorOverlay";
+export { PendingTaskNotice } from "./PendingTaskNotice";
 export {
   Socket,
   SocketColumn,

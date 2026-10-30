@@ -11,7 +11,7 @@ import {
   type ResizeControlVariant,
 } from "@xyflow/react";
 import { useWorkflowStore } from "@/store/workflowStore";
-import { isPanningRef, isDraggingNodeRef } from "@/components/WorkflowCanvas";
+import { isPanningRef } from "@/components/WorkflowCanvas";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import { useShowHandleLabels } from "@/hooks/useShowHandleLabels";
 import type { NodeType } from "@/types";
@@ -297,11 +297,11 @@ export function NodeShell({
       data-node-shell
       onDoubleClick={handleDoubleClick}
       onMouseEnter={(e) => {
-        if (e.buttons !== 0 || isPanningRef.current || isDraggingNodeRef.current) return;
+        if (e.buttons !== 0 || isPanningRef.current) return;
         setHoveredNodeId(id);
       }}
       onMouseLeave={(e) => {
-        if (e.buttons !== 0 || isPanningRef.current || isDraggingNodeRef.current) return;
+        if (e.buttons !== 0 || isPanningRef.current) return;
         setHoveredNodeId(null);
       }}
     >

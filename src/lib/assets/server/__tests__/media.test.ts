@@ -59,8 +59,11 @@ describe("decideMediaType", () => {
   it("falls back to the hint, the URL extension, then the kind's default", () => {
     const text = Buffer.from("v 0 0 0\nv 1 0 0\n");
     expect(decideMediaType({ head: text, kind: "3d", hintMime: "model/obj" })).toMatchObject({ ext: "obj", sniffed: false });
+    expect(decideMediaType({ head: text, kind: "3d", hintMime: "model/obj" })).not.toHaveProperty("assumed");
     expect(decideMediaType({ head: text, kind: "3d", hintExt: "stl" })).toMatchObject({ ext: "stl" });
-    expect(decideMediaType({ head: text, kind: "3d" })).toMatchObject({ ext: "glb" });
+    // Nothing named it: the kind's default, said to be assumed
+    expect(decideMediaType({ head: text, kind: "3d" })).toMatchObject({ ext: "glb", assumed: true });
+    expect(decideMediaType({ head: text, kind: "video", hintMime: "video/x-msvideo" })).toMatchObject({ ext: "mp4", assumed: true });
   });
 
   it("stores AVIF and HEIC stills as images, not mp4 video", () => {

@@ -100,10 +100,11 @@ export function searchTerms(q: string | undefined): string[] {
     .slice(0, 16);
 }
 
-/** The lowercase haystack for a record: prompt, filename, model, workflow name and tags. */
+/** The lowercase haystack for a record: prompt, display name, filename, model, workflow name and tags. */
 export function recordSearchText(record: AssetRecord): string {
   return [
     record.prompt ?? "",
+    record.name ?? "",
     record.filename,
     record.model?.modelId ?? "",
     record.model?.displayName ?? "",

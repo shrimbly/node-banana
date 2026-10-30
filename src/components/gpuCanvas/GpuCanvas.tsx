@@ -6,7 +6,7 @@
  * component, and only the nodes being worked in as live components over it.
  * See docs/gpu-canvas.md.
  */
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import type { DefaultEdgeOptions, EdgeTypes, NodeTypes } from "@xyflow/react";
 import { frameLoadedGraph } from "@/utils/frameGraph";
 import { isPanningRef } from "@/components/WorkflowCanvas";
@@ -18,10 +18,10 @@ import { controlsOverhang, headersUnder, NODE_HEADER, SceneGraph } from "@/lib/g
 import { Scene, type View } from "@/lib/gpuCanvas/scene";
 import { holdOverScrollArea, type SceneWheel } from "@/lib/gpuCanvas/wheel";
 import { atlasBudget, readGpuInfo } from "@/lib/gpuCanvas/budget";
-import { detectHtmlInCanvas } from "@/lib/gpuCanvas/htmlInCanvas";
+import { detectHtmlInCanvas, enableLayoutSubtree } from "@/lib/gpuCanvas/htmlInCanvas";
 import { openPaintStore } from "@/lib/gpuCanvas/paintCache";
 import { GpuCanvasStats } from "@/lib/gpuCanvas/stats";
-import { getLowDetailSettings, setZoomedOut } from "@/components/nodes/lowDetail";
+import { getLowDetailSettings } from "@/components/nodes/lowDetail";
 import { createPanActivityTracker } from "@/hooks/useWheelPanZoom";
 import { Painter, type PainterStatus } from "./painter";
 import { LiveFlow, LiveLayer, type LiveConnection } from "./LiveLayer";
@@ -39,6 +39,7 @@ import { dimOpacities } from "@/lib/gpuCanvas/dimming";
 import type { HookPath } from "@/components/edges/EdgeHookSelection";
 import { EDGE_THICKNESS_PX } from "@/lib/edges/appearance";
 import { OVERVIEW_ZOOM_THRESHOLD } from "@/utils/canvasPerformance";
+import { getCanvasSettings, subscribeCanvasSettings } from "@/lib/gpuCanvas/canvasSettings";
 import { boundedNodeTypes, HEADER, noop, PAD, PAD_X, type HeaderProps } from "./nodeSheets";
 
 /** The drags WorkflowCanvas's wrapper takes on drop (a file, a node type from the action bar, a history image). */
@@ -47,17 +48,40 @@ const CANVAS_DRAG_TYPES = ["Files", "application/node-type", HISTORY_DRAG_TYPE];
 const LOADING_MIN_NODES = 150;
 /** The loading screen appears only if painting takes longer than this. */
 const LOADING_DELAY_MS = 300;
+/** An opened workflow shows a bare canvas until its view is painted, at most this long, rather than its stand-in cards. */
+const VEIL_MAX_MS = 3000;
 /** An opened workflow framed on default node heights is framed again on painted ones, waiting at most this long. */
 const REFRAME_WAIT_MS = 2000;
 /** Above this zoom every visible node is live. */
 const LIVE_ZOOM = 1;
 /**
- * From this zoom, connections that show more than a line (labels, stubs, clamps) are live while near the view:
- * where classic stops drawing connections (its overview). Those showing a run's comet are live at any zoom.
+ * Without HTML-in-Canvas (a browser, or a Chromium whose API changed) nothing is painted: every node in view is live,
+ * at any zoom, as classic renders them, and the rest are stand-in cards. Past this many nodes in view they are all
+ * stand-ins, as no page holds that many live.
  */
-const LIVE_EDGE_ZOOM = OVERVIEW_ZOOM_THRESHOLD;
+const LIVE_MODE_MAX_NODES = 750;
+/**
+ * Without a painter, nodes turn live a few a frame, those nearest the middle of the view first; the rest show their
+ * stand-in cards until a later frame. Each one mounted is a React render, React Flow measuring it and its handles,
+ * and its size reaching the store, so the number a frame follows how long frames take: it grows while they keep up
+ * with the display and halves after a slow one, between these bounds.
+ */
+const LIVE_MODE_ADDED_PER_FRAME = { min: 2, start: 6, max: 16 };
+/** A frame taking longer than this (ms) halves the number of nodes turning live a frame; a quicker one adds one. */
+const LIVE_MODE_SLOW_FRAME_MS = 20;
+/** Once the view is still, nodes this far out of view (a fraction of its size) turn live too, so a pan finds them. */
+const LIVE_MODE_AHEAD = 0.5;
+/** While the view moves, live nodes this far out of view (a fraction of the view's size) stay live. */
+const LIVE_MODE_MOVING_MARGIN = 0.75;
 /** At most this many live connections besides the selected ones, unless more are on screen (pickLiveEdges). */
 const MAX_LIVE_EDGES = 250;
+/** At most this many connections turn live a frame (each mounts its pills and its ends' stand-ins). */
+const LIVE_EDGES_ADDED_PER_FRAME = 24;
+/**
+ * Selected nodes are live (their grips and toolbars), up to this many: a marquee across a zoomed-out graph or
+ * Select all takes hundreds or thousands, and mounting them all stalls the page. Past it they are drawn selected.
+ */
+const MAX_SELECTED_LIVE = 40;
 /** Added nodes on screen made live until painted (the rest are held undrawn until painted: `Scene.holdStandIn`). */
 const MAX_ADDED_LIVE = 8;
 /** How long an added node stays live at most, should its paint not land. */
@@ -97,11 +121,18 @@ export interface GpuCanvasProps {
   children?: ReactNode;
   /** Drawn inside the page's React Flow, in its viewport's context (group controls, the navigator). */
   flowChildren?: ReactNode;
-  /** The scene could not start or draw (no WebGL2, a shader failed): the page falls back to the classic canvas. */
+  /** The scene could not start or draw (no WebGL2, a shader failed): the page shows why in the canvas's place. */
   onFailure: (reason: string) => void;
   /** The GPU reset and WebGL is back (or gave up coming back): the page builds the canvas again. */
   onContextLost: () => void;
 }
+
+/**
+ * WebGL drawn by the CPU: the desktop app allows SwiftShader (--enable-unsafe-swiftshader) so a machine
+ * whose GPU is missing or blocked still gets a canvas, and says so once a session.
+ */
+const SOFTWARE_RENDERER = /swiftshader|llvmpipe|software/i;
+let toldSoftwareRendering = false;
 
 export interface GpuCanvasApi {
   stats: GpuCanvasStats;
@@ -124,17 +155,24 @@ export interface GpuCanvasApi {
   change: (id: string, data: Record<string, unknown>) => void;
   /** A node's data as the store holds it. */
   data: (id: string) => Record<string, unknown> | null;
+  /** Selects exactly these nodes, as a marquee does (one store write). */
+  select: (ids: string[]) => void;
+  /** Holds the canvas as a marquee would (selections are drawn, not made live, until it ends). */
+  marquee: (active: boolean) => void;
   /** Records the sheet state (placement, sizes, text fields, images) whenever these nodes are painted. */
   probe: (ids: string[]) => void;
   probeLog: () => Record<string, unknown>[];
   info: () => ReturnType<Scene["info"]> & { budget: ReturnType<typeof atlasBudget> | null; htmlInCanvas: boolean };
   /**
    * For a runner isolating frame-rate costs: takes a part of the page away
-   * (on = false) or puts it back. "subtree" is the canvas's layoutsubtree
+   * (on = false) or puts it back. "subtree" is the canvas's layoutsubtree (content="drawable")
    * attribute, "sheet" the painter's sheet inside it, "live" the live layer,
-   * "chrome" everything on the page but the canvas and the live layer.
+   * "chrome" everything on the page but the canvas and the live layer, "draw" the scene's
+   * drawing (the view and everything following it still run).
    */
-  diagnose: (part: "subtree" | "sheet" | "live" | "chrome", on: boolean) => void;
+  diagnose: (part: "subtree" | "sheet" | "live" | "chrome" | "draw" | "navigator" | "groups" | "marquee", on: boolean) => void;
+  /** Hears every view change, with whether the live flow moved it and the caller's stack, for a runner finding what moves the view. */
+  watchView: (listener: (view: View, fromFlow: boolean, stack: string) => void) => () => void;
 }
 
 declare global {
@@ -148,10 +186,17 @@ interface Loading {
   total: number;
 }
 
-export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, wheel, wheelRoot, editing, dimBackground = false, children, flowChildren, onFailure, onContextLost }: GpuCanvasProps) {
+/**
+ * Memoised: the canvas page re-renders for many store changes (each selection step, each keystroke) that the
+ * canvas takes from the store itself, and its props stay the same objects then.
+ */
+export const GpuCanvas = memo(function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, wheel, wheelRoot, editing, dimBackground = false, children, flowChildren, onFailure, onContextLost }: GpuCanvasProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const liveRef = useRef<HTMLDivElement>(null);
+  // Hidden by hand rather than by state: an opened workflow covers the canvas in the same change that gives the
+  // scene its nodes, before a frame can draw their stand-in cards.
+  const veilRef = useRef<HTMLDivElement>(null);
   // Filled by the live flow as it mounts, read by the engine.
   const [liveConnection] = useState<LiveConnection>(() => ({}));
   const connectLive = useCallback((part: LiveConnection) => void Object.assign(liveConnection, part), [liveConnection]);
@@ -162,6 +207,11 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
   const [initialView] = useState(() => useWorkflowStore.getState().canvasViewport ?? { x: 0, y: 0, zoom: 1 });
   const types = useMemo(() => boundedNodeTypes(nodeTypes), [nodeTypes]);
   const [loading, setLoading] = useState<Loading | null>(null);
+  // Without HTML-in-Canvas, Settings › Canvas › Nodes in a browser: switching it builds the canvas again.
+  const [browserNodes, setBrowserNodes] = useState(() => getCanvasSettings().browserNodes);
+  useEffect(() => subscribeCanvasSettings((next) => {
+    if (!detectHtmlInCanvas().available) setBrowserNodes(next.browserNodes);
+  }), []);
   // The latest props, read by the engine without rebuilding it.
   const propsRef = useRef({ headers, wheel, wheelRoot, editing, dimBackground, onFailure, onContextLost });
   useLayoutEffect(() => {
@@ -174,16 +224,35 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
   useEffect(() => {
     const host = hostRef.current, canvas = canvasRef.current, liveElement = liveRef.current;
     if (!host || !canvas || !liveElement) return;
-    // Today's canvas sets this from its zoom; nodes here are never at low detail.
-    setZoomedOut(false);
     const stats = new GpuCanvasStats();
     stats.observeLongFrames();
+    // What writes the store, for runners: a write mid-gesture re-runs every selector over the whole graph.
+    const unsubscribeStoreWrites = useWorkflowStore.subscribe((state, previous) => {
+      const keys = (Object.keys(state) as (keyof typeof state)[]).filter((key) => key !== "nodes" && state[key] !== previous[key]);
+      if (keys.length) stats.storeWrite(keys.sort().join(","));
+    });
+    const unsubscribeNodeWrites = subscribeToWorkflowNodeChanges((changes) => {
+      if (changes.added.size || changes.removed.size) return stats.storeWrite("nodes:added/removed");
+      const fields = new Set<string>();
+      for (const id of changes.updated) {
+        const before = changes.previous[indexOfNode(changes.previous, id)], after = changes.nodes[indexOfNode(changes.nodes, id)];
+        if (!before || !after) continue;
+        const a = after as unknown as Record<string, unknown>, b = before as unknown as Record<string, unknown>;
+        for (const key of Object.keys(a)) {
+          if (key === "data") {
+            const ad = a.data as Record<string, unknown>, bd = b.data as Record<string, unknown>;
+            for (const field of Object.keys(ad)) if (ad[field] !== bd[field]) fields.add(`data.${field}`);
+          } else if (a[key] !== b[key]) fields.add(key);
+        }
+      }
+      stats.storeWrite(`nodes(${changes.updated.size}):${[...fields].sort().join(",")}`);
+    });
     const store = useWorkflowStore.getState();
     const graph = new SceneGraph(store.nodes, store.edges, store.groups);
     // Held while the user navigates, as today's canvas does, so work that
     // waits for a quiet canvas (the desktop recovery checkpoint) waits for it.
     const interacting = createPanActivityTracker({
-      // A node or wire drag holds the class itself: a pause mid-drag must not take it away (as classic's isDraggingNodeRef).
+      // A node or wire drag holds the class itself: a pause mid-drag must not take it away.
       setActive: (active) => {
         if (active || !editor.holdsInteracting) document.documentElement.classList.toggle("canvas-interacting", active);
       },
@@ -304,18 +373,30 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
     live.setView(scene.view);
 
     const gl = scene.renderer.getContext() as WebGL2RenderingContext;
+    const gpuInfo = readGpuInfo(gl);
+    if (SOFTWARE_RENDERER.test(gpuInfo.renderer) && !toldSoftwareRendering) {
+      toldSoftwareRendering = true;
+      useToast.getState().show("No graphics card is available, so the canvas draws in software and may be slow", "warning");
+    }
+    // Without HTML-in-Canvas (a browser) the painter copies its sheets into images instead (domSnapshot). Live nodes
+    // alone (no painter) remain for a page told so (Settings › Canvas › Nodes in a browser).
     const htmlInCanvas = detectHtmlInCanvas().available;
-    const budget = htmlInCanvas ? atlasBudget(readGpuInfo(gl)) : null;
-    const painter = budget ? new Painter(scene, { nodeTypes: types, headers: headerProxy, budget, cache: openPaintStore(), salt: APP_VERSION, stats }) : null;
+    const budget = htmlInCanvas || getCanvasSettings().browserNodes !== "live" ? atlasBudget(gpuInfo) : null;
+    const backend = htmlInCanvas ? "element" : "snapshot";
+    const painter = budget
+      ? new Painter(scene, { nodeTypes: types, headers: headerProxy, budget, cache: openPaintStore(), salt: `${APP_VERSION}|${backend}`, stats, backend })
+      : null;
     live.painter = painter;
     engineRef.current = { painter, scene };
 
-    // Selected nodes are live; store selection follows clicks.
+    // Selected nodes are live (up to MAX_SELECTED_LIVE); store selection follows clicks. Mid-marquee they are only
+    // drawn selected: each step would otherwise mount the nodes it took.
     const selectedIds = new Set(store.nodes.filter((n) => n.selected).map((n) => n.id));
     const showSelection = () => {
       scene.setSelected([...selectedIds].map((id) => scene.graph.indexOf.get(id)).filter((i): i is number => i != null));
-      live.wantOnly("selected", selectedIds);
+      if (!editor.marqueeing) live.wantOnly("selected", selectedIds.size <= MAX_SELECTED_LIVE ? selectedIds : []);
     };
+    editor.onMarqueeEnd = showSelection;
     showSelection();
 
     // React Flow's SelectionListener: WorkflowCanvas hears of every change in the selected nodes or
@@ -367,7 +448,7 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       }
       for (const id of onScreen.slice(MAX_ADDED_LIVE)) {
         // A node the live layer renders anyway (selected) needs no hold.
-        if (selectedIds.has(id) || live.renders(id) || heldAdded.has(id)) continue;
+        if ((selectedIds.size <= MAX_SELECTED_LIVE && selectedIds.has(id)) || live.renders(id) || heldAdded.has(id)) continue;
         heldAdded.add(id);
         scene.holdStandIn(id, true);
         void painted(id).then(() => {
@@ -376,6 +457,57 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       }
       live.wantOnly("added", added);
     };
+
+    // Without a painter, the nodes held back by LIVE_MODE_ADDED_PER_FRAME turn live on the next frames.
+    let heldViewFrame = 0, addedPerFrame = LIVE_MODE_ADDED_PER_FRAME.start, lastHeldFrame = 0;
+    const budgetAdded = (ids: string[]) => {
+      const kept = ids.filter((id) => live.has(id, "zoom"));
+      const fresh = ids.filter((id) => !live.has(id, "zoom"));
+      if (fresh.length <= addedPerFrame) return ids;
+      if (!heldViewFrame) heldViewFrame = requestAnimationFrame((now) => {
+        heldViewFrame = 0;
+        // How long the frame that mounted the last batch took sets the next batch.
+        const took = lastHeldFrame ? now - lastHeldFrame : 0;
+        const { min, max } = LIVE_MODE_ADDED_PER_FRAME;
+        if (took > LIVE_MODE_SLOW_FRAME_MS) addedPerFrame = Math.max(min, addedPerFrame >> 1);
+        else if (took) addedPerFrame = Math.min(max, addedPerFrame + 1);
+        showViewLive();
+        lastHeldFrame = now;
+      });
+      return [...kept, ...fresh.slice(0, addedPerFrame)];
+    };
+    // The nodes live for the view: those visible above 100%, or without a painter every one in view and, once the
+    // view is still, those just outside it (LIVE_MODE_MAX_NODES at most), nearest the middle first.
+    let viewLive: string[] = [];
+    const showViewLive = () => {
+      const { zoom } = scene.view;
+      let ids: string[] = [];
+      if (painter) {
+        if (zoom > LIVE_ZOOM) ids = scene.visible(0).map((i) => scene.graph.nodes[i].id);
+      } else if (isPanningRef.current) {
+        // While the view moves, nothing new turns live (the nodes coming into view show their stand-ins) and
+        // only those well out of view go back: once it stops, the nodes turn live a few a frame. Each frame
+        // looks at the live nodes alone: zoomed out, the view holds the whole graph.
+        const w = scene.canvas.clientWidth, h = scene.canvas.clientHeight, m = LIVE_MODE_MOVING_MARGIN;
+        const a = scene.toWorld(-w * m, -h * m), b = scene.toWorld(w * (1 + m), h * (1 + m));
+        ids = viewLive.filter((id) => {
+          const n = scene.graph.nodes[scene.graph.indexOf.get(id) ?? -1];
+          return !!n && n.x < b.x && n.x + n.w > a.x && n.y < b.y && n.y + n.h > a.y;
+        });
+      } else if (scene.visible(0).length <= LIVE_MODE_MAX_NODES) {
+        lastHeldFrame = 0;
+        const centre = scene.toWorld(scene.canvas.clientWidth / 2, scene.canvas.clientHeight / 2);
+        const distance = (i: number) => {
+          const n = scene.graph.nodes[i];
+          return Math.hypot(n.x + n.w / 2 - centre.x, n.y + n.h / 2 - centre.y);
+        };
+        const near = scene.visible(LIVE_MODE_AHEAD).map((i) => ({ i, d: distance(i) })).sort((a, b) => a.d - b.d);
+        ids = budgetAdded(near.slice(0, LIVE_MODE_MAX_NODES).map(({ i }) => scene.graph.nodes[i].id));
+      }
+      viewLive = ids;
+      live.wantOnly("zoom", ids);
+    };
+    if (!painter) showViewLive();
 
     // Store changes reach the graph, the scene, the painter and the live layer.
     const unsubscribeNodes = subscribeToWorkflowNodeChanges((changes) => {
@@ -401,6 +533,7 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
         }
         // An opened workflow paints behind its loading screen: nothing of the canvas before it stays held.
         if (opened) for (const id of [...heldAdded]) releaseHeld(id);
+        if (opened && painter && getCanvasSettings().waitForPaint) showVeil(veilRef.current, true);
         if (!opened && changes.added.size) showAdded(changes.added);
         // The view state of nodes that went (or of the workflow before an opened one) goes with them, as classic's unmount.
         if (opened) useNodeUiStore.getState().forget();
@@ -421,6 +554,8 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       }
       showSelection();
       showLiveEdges();
+      // Without a painter a node added, removed or moved in or out of view is live or a stand-in at once.
+      if (!painter && (moved === null || moved.length)) showViewLive();
       selectionChanged();
     });
     const showEdgeSelection = () => {
@@ -429,24 +564,46 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
     };
     showEdgeSelection();
     // Connections the live layer renders: the selected ones, and those on screen that show more than a line.
-    let liveEdgesKey = "", liveEdgesSource: unknown = null;
+    let liveEdgesKey = "", liveEdgesSource: unknown = null, liveEdgeIds = new Set<string>(), heldEdgesFrame = 0;
     const showLiveEdges = () => {
       const { edges } = useWorkflowStore.getState();
       const ids = edges.filter((e) => e.selected).map((e) => e.id);
-      const all = scene.view.zoom >= LIVE_EDGE_ZOOM;
+      // From the connection detail zoom (Settings › Canvas; where classic stops drawing connections, unless changed),
+      // connections that show more than a line (labels, stubs, clamps) are live while near the view. Those showing a
+      // run's comet are live at any zoom.
+      const all = scene.view.zoom >= getCanvasSettings().connectionDetailZoom;
       const w = scene.canvas.clientWidth, h = scene.canvas.clientHeight;
       const a = scene.toWorld(-w * 0.25, -h * 0.25), b = scene.toWorld(w * 1.25, h * 1.25);
-      const candidates: { id: string; distance: number; onScreen: boolean }[] = [];
+      const candidates: { id: string; distance: number; onScreen: boolean; e: number }[] = [];
       const centre = scene.toWorld(w / 2, h / 2);
       const s0 = scene.toWorld(0, 0), s1 = scene.toWorld(w, h);
-      const onScreen = new Set(scene.edgesWithin(s0.x, s0.y, s1.x, s1.y));
       for (const e of scene.edgesWithin(a.x, a.y, b.x, b.y)) {
         const edge = scene.graph.edges[e], route = scene.edgeRoute(e);
         if (!route?.decorated || edge.edge.selected || (!all && !route.running)) continue;
-        candidates.push({ id: edge.id, distance: Math.hypot(route.labelX - centre.x, route.labelY - centre.y), onScreen: onScreen.has(e) });
+        candidates.push({ id: edge.id, distance: Math.hypot(route.labelX - centre.x, route.labelY - centre.y), onScreen: false, e });
       }
-      // Those on screen are never capped; the limit bounds only those made live early in the margin.
-      for (const id of pickLiveEdges(candidates, MAX_LIVE_EDGES)) ids.push(id);
+      // Which of them are on screen, asked only when there are some: zoomed out, a frame's pan asked it of every edge.
+      if (candidates.length) {
+        const onScreen = new Set(scene.edgesWithin(s0.x, s0.y, s1.x, s1.y));
+        for (const c of candidates) c.onScreen = onScreen.has(c.e);
+      }
+      // Those on screen are never capped; the limit bounds only those made live early in the margin. Ones not live
+      // yet wait while the view moves (a zoom crossing the detail zoom would bring every hidden connection's pills at
+      // once), then come LIVE_EDGES_ADDED_PER_FRAME a frame, nearest first; a run's comet shows at once.
+      const picked = pickLiveEdges(candidates, MAX_LIVE_EDGES);
+      const running = new Set(candidates.filter((c) => scene.edgeRoute(c.e)?.running).map((c) => c.id));
+      const fresh = picked.filter((id) => !liveEdgeIds.has(id) && !running.has(id));
+      const waiting = isPanningRef.current ? fresh.length : Math.max(0, fresh.length - LIVE_EDGES_ADDED_PER_FRAME);
+      if (waiting) {
+        const distance = new Map(candidates.map((c) => [c.id, c.distance]));
+        const held = new Set(fresh.sort((p, q) => distance.get(p)! - distance.get(q)!).slice(fresh.length - waiting));
+        for (const id of picked) if (!held.has(id)) ids.push(id);
+        if (!isPanningRef.current && !heldEdgesFrame) heldEdgesFrame = requestAnimationFrame(() => {
+          heldEdgesFrame = 0;
+          showLiveEdges();
+        });
+      } else for (const id of picked) ids.push(id);
+      liveEdgeIds = new Set(ids);
       const key = ids.join("\n");
       if (key === liveEdgesKey && edges === liveEdgesSource) return;
       liveEdgesKey = key;
@@ -454,6 +611,11 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       live.setEdges(ids);
     };
     showLiveEdges();
+    // Settings › Canvas: pictures painted again at the new quality, connections live from the new zoom.
+    const unsubscribeSettings = subscribeCanvasSettings((next, previous) => {
+      if (next.pictureQuality !== previous.pictureQuality) painter?.pictureQualityChanged();
+      if (next.connectionDetailZoom !== previous.connectionDetailZoom) showLiveEdges();
+    });
     // Nodes downstream of a disabled Switch output and skipped ones are dimmed, as classic's classes dim them.
     const showDimming = (instant = false) => {
       const { dimmedNodeIds, skippedNodeIds } = useWorkflowStore.getState();
@@ -567,7 +729,7 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
     // As classic's onMoveStart: a moving view drops the hovered node's header controls and video preview,
     // and live nodes take no hover (NodeShell reads isPanningRef) until it has been still a moment (onMoveEnd).
     // The scene still hovers what comes under the pointer, so a node turning live there takes the next wheels.
-    let settleTimer = 0, moveEndTimer = 0, liveEdgesFrame = 0, lastView = { ...scene.view };
+    let settleTimer = 0, moveEndTimer = 0, liveEdgesFrame = 0, viewLiveFrame = 0, lastView = { ...scene.view };
     const unsubscribeView = scene.onViewChanged(() => {
       // Connections coming into view are live as they arrive, once a frame while the view moves.
       if (!liveEdgesFrame) liveEdgesFrame = requestAnimationFrame(() => {
@@ -582,14 +744,22 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
           useWorkflowStore.getState().setHoveredNodeId(null);
         }
         clearTimeout(moveEndTimer);
-        moveEndTimer = window.setTimeout(() => { isPanningRef.current = false; }, MOVE_END_MS);
+        moveEndTimer = window.setTimeout(() => {
+          isPanningRef.current = false;
+          showLiveEdges();
+          if (!painter) showViewLive();
+        }, MOVE_END_MS);
       }
+      // Without a painter the nodes coming into view are live as they arrive, once a frame.
+      if (!painter && !viewLiveFrame) viewLiveFrame = requestAnimationFrame(() => {
+        viewLiveFrame = 0;
+        showViewLive();
+      });
       // Above 100% every visible node is live, once the view settles; the view is kept for the tab.
       clearTimeout(settleTimer);
       settleTimer = window.setTimeout(() => {
-        const visible = scene.view.zoom > LIVE_ZOOM ? scene.visible(0).map((i) => scene.graph.nodes[i].id) : [];
         showLiveEdges();
-        live.wantOnly("zoom", visible);
+        showViewLive();
         measureChrome();
         useWorkflowStore.getState().setCanvasViewport({ ...scene.view });
       }, 120);
@@ -625,7 +795,7 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
         return { ready: live.settled(), release: () => { for (const release of releases) release(); } };
       },
       subscribe: (listener) => {
-        const offView = scene.onViewChanged(listener), offLayout = scene.onLayoutChanged(listener);
+        const offView = scene.onViewChanged(() => listener(false)), offLayout = scene.onLayoutChanged(() => listener(true));
         return () => { offView(); offLayout(); };
       },
     });
@@ -670,6 +840,15 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
         const i = indexOfNode(nodes, id);
         return i >= 0 ? (nodes[i].data as unknown as Record<string, unknown>) : null;
       },
+      select: (ids) => {
+        const state = useWorkflowStore.getState(), next = new Set(ids);
+        const changes = state.nodes.filter((n) => !!n.selected !== next.has(n.id)).map((n) => ({ type: "select" as const, id: n.id, selected: next.has(n.id) }));
+        if (changes.length) state.onNodesChange(changes);
+      },
+      marquee: (active) => {
+        editor.marqueeing = active;
+        if (!active) editor.onMarqueeEnd?.();
+      },
       probe: (ids) => {
         painter?.probeIds.clear();
         for (const id of ids) painter?.probeIds.add(id);
@@ -677,11 +856,22 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       probeLog: () => painter?.probeLog ?? [],
       info: () => ({ ...scene.info(), budget, htmlInCanvas }),
       diagnose: (part, on) => diagnose(part, on),
+      watchView: (listener) => scene.onViewChanged(() => listener({ ...scene.view }, live.followingFlowView, new Error().stack ?? "")),
     };
     const sheetElement = canvas.querySelector<HTMLElement>("[data-gpu-canvas-sheet]");
     const hidden = new Map<HTMLElement, string>();
-    function diagnose(part: "subtree" | "sheet" | "live" | "chrome", on: boolean) {
-      if (part === "subtree") canvas!.toggleAttribute("layoutsubtree", on);
+    const diagnosed: Record<string, string> = {};
+    const diagnoseStyle = document.createElement("style");
+    document.head.appendChild(diagnoseStyle);
+    function diagnose(part: "subtree" | "sheet" | "live" | "chrome" | "draw" | "navigator" | "groups" | "marquee", on: boolean) {
+      if (part === "draw") scene.drawing = on;
+      // Parts of the live layer: the navigator, the group headers, the marquee's box.
+      else if (part === "navigator" || part === "groups" || part === "marquee") {
+        const selector = { navigator: '[data-testid="canvas-navigator"]', groups: ".group-controls-overlay", marquee: "[data-gpu-canvas-marquee]" }[part];
+        diagnosed[part] = on ? "" : `${selector} { display: none !important; }`;
+        diagnoseStyle.textContent = Object.values(diagnosed).join("\n");
+      }
+      else if (part === "subtree") enableLayoutSubtree(canvas!, on);
       else if (part === "sheet" && sheetElement) {
         if (on) canvas!.appendChild(sheetElement);
         else sheetElement.remove();
@@ -703,6 +893,7 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
     }
 
     return () => {
+      diagnoseStyle.remove();
       // A node or connection drag still running ends first (its cancel path: the auto-pan loop, the connection
       // drag store and the held `canvas-interacting`), while the live layer and the store subscriptions are there.
       scene.cancelGesture();
@@ -714,6 +905,9 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       clearTimeout(settleTimer);
       clearTimeout(moveEndTimer);
       cancelAnimationFrame(liveEdgesFrame);
+      cancelAnimationFrame(viewLiveFrame);
+      cancelAnimationFrame(heldViewFrame);
+      cancelAnimationFrame(heldEdgesFrame);
       cancelAnimationFrame(chromeFrame);
       unsubscribeChromeLayout();
       document.removeEventListener("click", measureChrome, true);
@@ -727,10 +921,13 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       clearTimeout(hoverTimer);
       disposed = true;
       unsubscribeNodes();
+      unsubscribeSettings();
       unsubscribeStore();
       unsubscribeView();
       engineRef.current = null;
       if (window.__gpuCanvas?.stats === stats) delete window.__gpuCanvas;
+      unsubscribeStoreWrites();
+      unsubscribeNodeWrites();
       interacting.dispose();
       setGpuCanvasBridge(null);
       editor.dispose();
@@ -745,8 +942,9 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       painter?.dispose();
       scene.dispose();
     };
-    // The engine is built once per mount; props it needs later are read through propsRef.
-  }, [types, liveConnection, connectLive]);
+    // The engine is built once per mount (and again for Settings › Canvas › Nodes in a browser); props it needs
+    // later are read through propsRef.
+  }, [types, liveConnection, connectLive, browserNodes]);
 
   useEffect(() => {
     engineRef.current?.scene.setGridDim(dimBackground ? 0.3 : 1);
@@ -777,7 +975,14 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       }
     }
     painter?.start();
-    if (!painter) return;
+    if (!painter) {
+      showVeil(veilRef.current, false);
+      return;
+    }
+    // A bare canvas until the view is painted, then what the painter made (the stand-in cards are for nodes
+    // panned to before their paint lands, not for the workflow's first look).
+    showVeil(veilRef.current, getCanvasSettings().waitForPaint && !painter.status.screenfulDone);
+    const veilTimer = window.setTimeout(() => showVeil(veilRef.current, false), VEIL_MAX_MS);
     // Framed again once every node has its painted height (or the wait is over, on what is known by
     // then), unless the view moved in the meantime.
     const reframe = (force: boolean) => {
@@ -790,7 +995,7 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
       useWorkflowStore.getState().setCanvasViewport(framed);
     };
     const reframeTimer = window.setTimeout(() => reframe(true), REFRAME_WAIT_MS);
-    const large = painter.status.total >= LOADING_MIN_NODES;
+    const large = getCanvasSettings().loadingScreen && painter.status.total >= LOADING_MIN_NODES;
     const done = () => painter.status.screenfulDone && painter.status.painted >= painter.status.total;
     let shown = false;
     const timer = window.setTimeout(() => {
@@ -801,6 +1006,7 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
     }, LOADING_DELAY_MS);
     painter.setStatusListener(() => {
       reframe(false);
+      if (painter.status.screenfulDone) showVeil(veilRef.current, false);
       if (!shown) return;
       if (done()) {
         shown = false;
@@ -812,11 +1018,12 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
     return () => {
       clearTimeout(timer);
       clearTimeout(reframeTimer);
+      clearTimeout(veilTimer);
       painter.setStatusListener(() => {});
       if (shown) painter.setLoading(false);
       setLoading(null);
     };
-  }, [loadCount, types]);
+  }, [loadCount, types, browserNodes]);
 
   return (
     <div ref={hostRef} className="absolute inset-0 overflow-hidden bg-neutral-900" data-gpu-canvas="">
@@ -828,10 +1035,19 @@ export function GpuCanvas({ nodeTypes, edgeTypes, defaultEdgeOptions, headers, w
           {flowChildren}
         </LiveFlow>
       </div>
+      {/* Over the scene and the live layer, under the canvas's own chrome */}
+      <div ref={veilRef} aria-hidden className="pointer-events-none absolute inset-0 bg-neutral-900 transition-opacity duration-150" />
       {children}
       {loading && <LoadingScreen painted={loading.painted} total={loading.total} />}
     </div>
   );
+});
+
+/** The bare canvas over an opened workflow until its view is painted; it fades out. */
+function showVeil(veil: HTMLDivElement | null, shown: boolean) {
+  if (!veil) return;
+  veil.style.transitionDuration = shown ? "0ms" : "";
+  veil.style.opacity = shown ? "1" : "0";
 }
 
 /** Covers the canvas while a large workflow paints, as Figma does while a file opens. */

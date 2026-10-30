@@ -100,7 +100,7 @@ export const NODE_TITLES: Record<string, string> = {
   output: 'Output',
   outputGallery: 'Output Gallery',
   imageCompare: 'Image Compare',
-  videoStitch: 'Video Stitch',
+  videoStitch: 'Edit Video',
   easeCurve: 'Ease Curve',
   videoTrim: 'Video Trim',
   videoFrameGrab: 'Frame Grab',

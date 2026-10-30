@@ -44,6 +44,17 @@ describe("ControlsCard", () => {
     expect(screen.getByText("1K")).toBeInTheDocument();
     expect(screen.getAllByText("·")).toHaveLength(1);
   });
+
+  it("SummaryValues' truncated line keeps a space each side of its dots, also with the dots left out", () => {
+    const { container } = render(<SummaryValues truncate items={["0:15", "1 crossfade", "1 gap", "loop 1×"]} />);
+    const line = container.firstElementChild as HTMLElement;
+    expect(line.textContent).toBe("0:15 · 1 crossfade · 1 gap · loop 1×");
+    expect(line).toHaveAttribute("title", "0:15 · 1 crossfade · 1 gap · loop 1×");
+    // What a screen reader reads: the dots are hidden, the words stay apart
+    const spoken = line.cloneNode(true) as HTMLElement;
+    spoken.querySelectorAll("[aria-hidden]").forEach((dot) => dot.remove());
+    expect(spoken.textContent!.replace(/\s+/g, " ")).toBe("0:15 1 crossfade 1 gap loop 1×");
+  });
 });
 
 describe("ControlsCard sizing", () => {

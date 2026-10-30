@@ -29,7 +29,7 @@ import type {
   Resolution,
   SelectedModel,
 } from "@/types";
-import { GEMINI_IMAGE_MODELS } from "@/types";
+import { GEMINI_IMAGE_MODELS, geminiImageOptions } from "@/types";
 import { parseAspectRatio } from "@/utils/nodeDimensions";
 import type { ProviderModel } from "@/lib/providers/types";
 import { ModelSearchDialog } from "../modals/ModelSearchDialog";
@@ -104,11 +104,6 @@ export function TemplateEditableEdge({
     </>
   );
 }
-
-const BASE_ASPECT_RATIOS: AspectRatio[] = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
-const EXTENDED_ASPECT_RATIOS: AspectRatio[] = ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"];
-const RESOLUTIONS_PRO: Resolution[] = ["1K", "2K", "4K"];
-const RESOLUTIONS_NB2: Resolution[] = ["512", "1K", "2K", "4K"];
 
 /** Centre of the n-th socket on a side, from the media card's top edge. */
 export function templateHandleTop(index: number): number {
@@ -238,15 +233,13 @@ function useGenerateControls(nodeId: string, overrides: Record<string, unknown>,
     : null;
   const aspectRatio = (overrides.aspectRatio as AspectRatio | undefined) ?? "1:1";
   const resolution = (overrides.resolution as Resolution | undefined) ?? "1K";
-  const supportsResolution = currentModelId === "nano-banana-pro" || currentModelId === "nano-banana-2";
-  const aspectRatios = currentModelId === "nano-banana-2" ? EXTENDED_ASPECT_RATIOS : BASE_ASPECT_RATIOS;
-  const resolutions = currentModelId === "nano-banana-2" ? RESOLUTIONS_NB2 : RESOLUTIONS_PRO;
+  const modelOptions = geminiImageOptions(currentModelId);
+  const supportsResolution = modelOptions.resolutions.length > 0;
 
   const handleGeminiModelChange = useCallback(
     (value: string) => {
       const model = value as ModelType;
-      const nextAspectRatios = model === "nano-banana-2" ? EXTENDED_ASPECT_RATIOS : BASE_ASPECT_RATIOS;
-      const nextResolutions = model === "nano-banana-2" ? RESOLUTIONS_NB2 : RESOLUTIONS_PRO;
+      const next = geminiImageOptions(model);
       setOverrides(nodeId, {
         ...overrides,
         model,
@@ -255,8 +248,8 @@ function useGenerateControls(nodeId: string, overrides: Record<string, unknown>,
           modelId: model,
           displayName: GEMINI_IMAGE_MODELS.find((m) => m.value === model)?.label || model,
         },
-        aspectRatio: nextAspectRatios.includes(aspectRatio) ? aspectRatio : nextAspectRatios[0],
-        resolution: nextResolutions.includes(resolution) ? resolution : nextResolutions[0],
+        aspectRatio: next.aspectRatios.includes(aspectRatio) ? aspectRatio : next.aspectRatios[0],
+        resolution: next.resolutions.length === 0 || next.resolutions.includes(resolution) ? resolution : next.resolutions[0],
       });
     },
     [nodeId, overrides, aspectRatio, resolution, setOverrides]
@@ -300,25 +293,25 @@ function useGenerateControls(nodeId: string, overrides: Record<string, unknown>,
       <SelectField
         label="Aspect ratio"
         value={aspectRatio}
-        options={aspectRatios}
+        options={modelOptions.aspectRatios}
         onChange={(v) => setOverrides(nodeId, { ...overrides, aspectRatio: v })}
       />
       {supportsResolution && (
         <SelectField
           label="Resolution"
           value={resolution}
-          options={resolutions}
+          options={modelOptions.resolutions}
           onChange={(v) => setOverrides(nodeId, { ...overrides, resolution: v })}
         />
       )}
-      {(currentModelId === "nano-banana-pro" || currentModelId === "nano-banana-2") && (
+      {modelOptions.googleSearch && (
         <CheckboxField
           label="Google Search"
           checked={Boolean(overrides.useGoogleSearch)}
           onChange={(v) => setOverrides(nodeId, { ...overrides, useGoogleSearch: v })}
         />
       )}
-      {currentModelId === "nano-banana-2" && (
+      {modelOptions.imageSearch && (
         <CheckboxField
           label="Image Search"
           checked={Boolean(overrides.useImageSearch)}

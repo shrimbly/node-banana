@@ -13,8 +13,10 @@ import { executeNanoBanana } from "./nanoBananaExecutor";
 import { executeGenerateVideo } from "./generateVideoExecutor";
 import { executeGenerateAudio } from "./generateAudioExecutor";
 import { executeLlmGenerate } from "./llmGenerateExecutor";
+import { executeGenerate3D } from "./generate3dExecutor";
+import { executeComfyApp } from "./comfyAppExecutor";
 
-const BATCH_NODE_TYPES = new Set(["nanoBanana", "generateVideo", "generateAudio", "llmGenerate"]);
+const BATCH_NODE_TYPES = new Set(["nanoBanana", "generateVideo", "generateAudio", "generate3d", "llmGenerate", "comfyApp"]);
 
 /**
  * Attempts to run batch execution for a node.
@@ -60,17 +62,19 @@ export async function runBatchIfApplicable(
       batchTotal: totalItems,
     });
 
-    // Wrap context so getConnectedInputs returns current batch item as text,
-    // and so each item's asset says which item of the batch it was
+    // Wrap context so getConnectedInputs returns current batch item as text
+    // and in the slot the batch feeds, and so each item's asset says which
+    // item of the batch it was
     const { recordAsset } = executionCtx;
     const batchCtx: NodeExecutionContext = {
       ...executionCtx,
       getConnectedInputs: (nodeId: string) => {
-        const inputs = executionCtx.getConnectedInputs(nodeId);
+        const { textItemsInput, ...inputs } = executionCtx.getConnectedInputs(nodeId);
         return {
           ...inputs,
           text: items[i],
           textItems: [],
+          ...(textItemsInput ? { dynamicInputs: { ...inputs.dynamicInputs, [textItemsInput]: items[i] } } : {}),
         };
       },
       ...(recordAsset
@@ -88,16 +92,18 @@ export async function runBatchIfApplicable(
       case "generateAudio":
         await executeGenerateAudio(batchCtx, options);
         break;
+      case "generate3d":
+        await executeGenerate3D(batchCtx, options);
+        break;
       case "llmGenerate":
         await executeLlmGenerate(batchCtx, options);
         break;
+      case "comfyApp":
+        await executeComfyApp(batchCtx);
+        break;
     }
-
-    if (i < totalItems - 1) {
-      executionCtx.updateNodeData(node.id, {
-        status: "loading",
-      } as Partial<WorkflowNodeData>);
-    }
+    // The next item sets "loading" itself, after checking for a Stop, so a
+    // Stop between items leaves this item's result showing
   }
 
   return true;

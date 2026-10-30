@@ -56,7 +56,11 @@ export interface SegmentedOption<T extends string> {
   title?: string;
 }
 
-/** Ink segmented control on a #262626 track. */
+/**
+ * Ink segmented control on a #262626 track. `sm` sizes the buttons to their
+ * labels at 24px (the Stitch editor's loop control) instead of sharing the
+ * track's width.
+ */
 export function Segmented<T extends string>({
   options,
   value,
@@ -64,6 +68,7 @@ export function Segmented<T extends string>({
   label,
   className,
   disabled,
+  size = "md",
 }: {
   options: SegmentedOption<T>[];
   value: T;
@@ -72,6 +77,7 @@ export function Segmented<T extends string>({
   label: string;
   className?: string;
   disabled?: boolean;
+  size?: "sm" | "md";
 }) {
   return (
     <div role="group" aria-label={label} className={cn("flex gap-0.5 p-0.5 rounded-lg bg-card", className)}>
@@ -86,7 +92,8 @@ export function Segmented<T extends string>({
             disabled={disabled}
             onClick={() => onChange(option.value)}
             className={cn(
-              "flex-1 h-7 px-2 rounded-md font-display text-xs tracking-[-0.01em] whitespace-nowrap transition-colors",
+              size === "sm" ? "h-6 px-2.5" : "flex-1 h-7 px-2",
+              "rounded-md font-display text-xs tracking-[-0.01em] whitespace-nowrap transition-colors",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-selection",
               "disabled:opacity-50 disabled:cursor-not-allowed",
               active ? "bg-neutral-200 text-neutral-900 font-semibold" : "text-neutral-400 font-medium hover:text-neutral-200"

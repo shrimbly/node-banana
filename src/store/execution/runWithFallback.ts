@@ -14,6 +14,7 @@
  */
 
 import type { SelectedModel, WorkflowNodeData } from "@/types";
+import { GenerationStillRunningError } from "./pollTaskCompletion";
 
 export interface RunWithFallbackOptions {
   nodeId: string;
@@ -28,6 +29,14 @@ export interface RunWithFallbackOptions {
 
 function isAbortError(err: unknown): boolean {
   return err instanceof DOMException && err.name === "AbortError";
+}
+
+/**
+ * Not a failure to fall back from: stopped, or still running on the provider,
+ * where a fallback would start a second paid run beside the first.
+ */
+function endsTheRun(err: unknown): boolean {
+  return isAbortError(err) || err instanceof GenerationStillRunningError;
 }
 
 function errorMessage(err: unknown): string {
@@ -57,7 +66,7 @@ export async function runWithFallback(
     await runOnce(primary, undefined);
     return;
   } catch (err) {
-    if (isAbortError(err)) throw err;
+    if (endsTheRun(err)) throw err;
     primaryError = err;
   }
 
@@ -89,7 +98,7 @@ export async function runWithFallback(
       __primaryError: primaryErrMsg,
     });
   } catch (err) {
-    if (isAbortError(err)) throw err;
+    if (endsTheRun(err)) throw err;
     const fallbackErrMsg = errorMessage(err);
     const combined = `Primary failed: ${primaryErrMsg}. Fallback failed: ${fallbackErrMsg}`;
     updateNodeData(nodeId, {

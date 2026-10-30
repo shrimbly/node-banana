@@ -7,7 +7,7 @@
 import { NextResponse } from "next/server";
 import { retryTransient } from "@/lib/providers/retry";
 import { GoogleGenAI } from "@google/genai";
-import { GenerateResponse, ModelType } from "@/types";
+import { GenerateResponse, geminiImageOptions, ModelType } from "@/types";
 import { GenerationOutput } from "@/lib/providers/types";
 
 /**
@@ -17,6 +17,7 @@ export const MODEL_MAP: Record<ModelType, string> = {
   "nano-banana": "gemini-2.5-flash-image",
   "nano-banana-pro": "gemini-3-pro-image-preview",
   "nano-banana-2": "gemini-3.1-flash-image-preview",
+  "nano-banana-2.1": "gemini-nano-banana-2.1",
   "nano-banana-2-lite": "gemini-3.1-flash-lite-image",
 };
 
@@ -76,23 +77,24 @@ export async function generateWithGemini(
     };
   }
 
-  // Add resolution for Nano Banana Pro and Nano Banana 2
-  if ((model === "nano-banana-pro" || model === "nano-banana-2") && resolution) {
+  // Add resolution for the models that take one
+  const options = geminiImageOptions(model);
+  if (options.resolutions.length > 0 && resolution) {
     if (!config.imageConfig) {
       config.imageConfig = {};
     }
     (config.imageConfig as Record<string, unknown>).imageSize = resolution;
   }
 
-  // Add tools array for Google Search (Nano Banana Pro and Nano Banana 2)
+  // Add tools array for Google Search
   const tools = [];
-  if (model === "nano-banana-2" && (useGoogleSearch || useImageSearch)) {
-    // Nano Banana 2 uses searchTypes to enable web and/or image search independently
+  if (options.imageSearch && (useGoogleSearch || useImageSearch)) {
+    // Models with image search (Nano Banana 2, 2.1) take searchTypes to enable web and/or image search independently
     const searchTypes: Record<string, Record<string, never>> = {};
     if (useGoogleSearch) searchTypes.webSearch = {};
     if (useImageSearch) searchTypes.imageSearch = {};
     tools.push({ googleSearch: { searchTypes } });
-  } else if (model === "nano-banana-pro" && useGoogleSearch) {
+  } else if (options.googleSearch && useGoogleSearch) {
     tools.push({ googleSearch: {} });
   }
 

@@ -42,7 +42,8 @@ import { APP_VERSION } from "@/lib/appVersion";
 import { cn } from "@/components/nodes/ui/cn";
 import { getLowDetailSettings, setLowDetailEnabled, setLowDetailZoom } from "@/components/nodes/lowDetail";
 import { getPerfOverlayVisible, setPerfOverlayVisible } from "@/components/PerfOverlay";
-import { getGpuCanvasEnabled, gpuCanvasSupported, setGpuCanvasEnabled, useGpuCanvasActive, useGpuCanvasFailure } from "@/lib/gpuCanvas/setting";
+import { getCanvasSettings, setCanvasSettings, type BrowserNodes, type PictureQuality } from "@/lib/gpuCanvas/canvasSettings";
+import { detectHtmlInCanvas } from "@/lib/gpuCanvas/htmlInCanvas";
 import { ComfyMark } from "@/components/icons/ComfyMark";
 
 import { DEFAULT_LLM_MODEL, LLM_PROVIDER_OPTIONS, defaultLLMModel, llmModelLabel, llmModelOptions } from "@/lib/llm/catalog";
@@ -103,7 +104,7 @@ const SETTINGS_PAGES: { id: SettingsTab; label: string; title: string; descripti
   { id: "providers", label: "Providers", title: "Providers", description: "API keys for the model providers this project can call." },
   { id: "comfy", label: "ComfyUI", title: "ComfyUI", description: "Where Comfy app nodes run." },
   { id: "nodeDefaults", label: "Node defaults", title: "Node defaults", description: "Applied when a node is added from the bar or a shortcut." },
-  { id: "canvas", label: "Canvas", title: "Canvas", description: "How you navigate and select on the canvas." },
+  { id: "canvas", label: "Canvas", title: "Canvas", description: "How you navigate and select on the canvas, and how it trades speed for detail." },
   { id: "noodles", label: "Noodles", title: "Noodles", description: "How the connections between nodes are drawn." },
 ];
 
@@ -124,6 +125,17 @@ const PAN_MODES: SegmentedOption<PanMode>[] = [
   { value: "space", label: "Space + Drag" },
   { value: "middleMouse", label: "Middle Mouse" },
   { value: "always", label: "Always On" },
+];
+
+const BROWSER_NODES: SegmentedOption<BrowserNodes>[] = [
+  { value: "painted", label: "Painted" },
+  { value: "live", label: "Live" },
+];
+
+const PICTURE_QUALITIES: SegmentedOption<PictureQuality>[] = [
+  { value: "fast", label: "Fast" },
+  { value: "balanced", label: "Balanced" },
+  { value: "sharp", label: "Sharp" },
 ];
 
 const ZOOM_MODES: SegmentedOption<ZoomMode>[] = [
@@ -272,9 +284,9 @@ export function ProjectSetupModal({
   const [localCanvasSettings, setLocalCanvasSettings] = useState<CanvasNavigationSettings>(canvasNavigationSettings);
   const [localLowDetail, setLocalLowDetail] = useState(getLowDetailSettings);
   const [localPerfOverlay, setLocalPerfOverlay] = useState(getPerfOverlayVisible);
-  const [localGpuCanvas, setLocalGpuCanvas] = useState(getGpuCanvasEnabled);
-  const gpuCanvasFailure = useGpuCanvasFailure();
-  const gpuCanvasDrawing = useGpuCanvasActive();
+  const [localCanvasPerformance, setLocalCanvasPerformance] = useState(getCanvasSettings);
+  // The desktop app paints nodes itself (HTML-in-Canvas): the browser's painting settings do not apply there.
+  const [paintsNodesItself] = useState(() => typeof window !== "undefined" && detectHtmlInCanvas().available);
 
   // Connection appearance draft (Canvas tab); applied on Save
   const [localEdgeStyle, setLocalEdgeStyle] = useState<EdgeStyle>(edgeStyle);
@@ -336,7 +348,7 @@ export function ProjectSetupModal({
       setLocalCanvasSettings(canvasNavigationSettings);
       setLocalLowDetail(getLowDetailSettings());
       setLocalPerfOverlay(getPerfOverlayVisible());
-      setLocalGpuCanvas(getGpuCanvasEnabled());
+      setLocalCanvasPerformance(getCanvasSettings());
       setLocalEdgeStyle(edgeStyle);
       setLocalEdgeAppearance(edgeAppearance);
       setEdgeDefaultSaved(false);
@@ -568,7 +580,7 @@ export function ProjectSetupModal({
     setLowDetailEnabled(localLowDetail.enabled);
     setLowDetailZoom(localLowDetail.zoom);
     setPerfOverlayVisible(localPerfOverlay);
-    if (localGpuCanvas !== getGpuCanvasEnabled()) setGpuCanvasEnabled(localGpuCanvas);
+    setCanvasSettings(localCanvasPerformance);
     onClose();
   };
 
@@ -1143,28 +1155,10 @@ export function ProjectSetupModal({
               />
             </DialogRow>
 
-            {/* The GPU canvas needs the desktop app's HTML-in-Canvas feature */}
-            {(gpuCanvasSupported() || !!window.nodeBananaDesktop?.gpuCanvas) && (
-              <DialogRow
-                title="GPU canvas"
-                description={localGpuCanvas && !gpuCanvasSupported()
-                  ? "Restart Node Banana to start drawing with the GPU canvas"
-                  : localGpuCanvas && gpuCanvasFailure
-                  ? "The GPU canvas stopped working, so the classic canvas is drawing until Node Banana restarts"
-                  : localGpuCanvas
-                  ? "Draws every node on the GPU at full detail, so very large workflows stay smooth. Turn it off to use the classic canvas, which this release still includes"
-                  : "Off: the classic canvas is drawing. It will be removed in a coming release"}
-                className="py-[18px]"
-              >
-                <Switch label="GPU canvas" checked={localGpuCanvas} onChange={setLocalGpuCanvas} />
-              </DialogRow>
-            )}
             {/* Low detail when zoomed out */}
             <DialogRow
               title="Low detail when zoomed out"
-              description={gpuCanvasDrawing
-                ? "On the classic canvas, nodes show as cards. The GPU canvas keeps every node at full detail and marks running nodes with a halo instead"
-                : "Nodes show as cards with thumbnails, without headers or controls, so large workflows pan and drag smoothly"}
+              description="Zoomed out, running nodes show a halo over their picture rather than their live progress, so you can find them and large runs stay smooth"
               className="py-[18px]"
             >
               <Switch
@@ -1175,7 +1169,7 @@ export function ProjectSetupModal({
             </DialogRow>
             <DialogRow
               title="Low detail below"
-              description={gpuCanvasDrawing ? "The zoom level where nodes switch to cards, or running nodes show a halo" : "The zoom level where nodes switch to cards"}
+              description="The zoom level where running nodes switch to a halo"
               className="py-[18px]"
             >
               <Slider
@@ -1188,6 +1182,97 @@ export function ProjectSetupModal({
                 label="Low detail below"
                 readout={`${Math.round(localLowDetail.zoom * 100)}%`}
                 disabled={!localLowDetail.enabled}
+              />
+            </DialogRow>
+            <DialogRow
+              title="Sharpen while panning"
+              description="Pictures sharpen while you pan, not only once you stop. Panning may stutter now and then while they draw"
+              className="py-[18px]"
+            >
+              <Switch
+                label="Sharpen while panning"
+                checked={localCanvasPerformance.sharpenWhilePanning}
+                onChange={(sharpenWhilePanning) => setLocalCanvasPerformance({ ...localCanvasPerformance, sharpenWhilePanning })}
+              />
+            </DialogRow>
+            <DialogRow
+              title="Wait for nodes when opening"
+              description="An opened workflow shows an empty canvas until the nodes in view are drawn, rather than placeholder cards"
+              className="py-[18px]"
+            >
+              <Switch
+                label="Wait for nodes when opening"
+                checked={localCanvasPerformance.waitForPaint}
+                onChange={(waitForPaint) => setLocalCanvasPerformance({ ...localCanvasPerformance, waitForPaint })}
+              />
+            </DialogRow>
+            <DialogRow
+              title="Loading screen for large workflows"
+              description="Workflows of 150 nodes or more open behind a loading screen while every node is drawn, which draws them faster. Off, you can pan while they draw"
+              className="py-[18px]"
+            >
+              <Switch
+                label="Loading screen for large workflows"
+                checked={localCanvasPerformance.loadingScreen}
+                onChange={(loadingScreen) => setLocalCanvasPerformance({ ...localCanvasPerformance, loadingScreen })}
+              />
+            </DialogRow>
+            <DialogRow
+              title="Connection details from"
+              description="From this zoom level, connections show their labels and end stubs. Higher keeps zoomed-out panning smoother"
+              className="py-[18px]"
+            >
+              <Slider
+                className="w-[232px] shrink-0"
+                min={10}
+                max={100}
+                step={5}
+                value={Math.round(localCanvasPerformance.connectionDetailZoom * 100)}
+                onChange={(value) => setLocalCanvasPerformance({ ...localCanvasPerformance, connectionDetailZoom: value / 100 })}
+                label="Connection details from"
+                readout={`${Math.round(localCanvasPerformance.connectionDetailZoom * 100)}%`}
+              />
+            </DialogRow>
+            <DialogRow
+              title="Nodes in a browser"
+              description={
+                paintsNodesItself
+                  ? "The desktop app draws nodes itself, so this applies only in a browser"
+                  : localCanvasPerformance.browserNodes === "painted"
+                    ? "Nodes are drawn as pictures and turn live as you work in them, so large workflows pan smoothly"
+                    : "Every node in view is live, as nodes used to be: no wait for pictures, but large workflows pan slowly"
+              }
+              className="py-[18px]"
+            >
+              <Segmented
+                className="w-[232px] shrink-0"
+                label="Nodes in a browser"
+                options={BROWSER_NODES}
+                value={localCanvasPerformance.browserNodes}
+                onChange={(browserNodes) => setLocalCanvasPerformance({ ...localCanvasPerformance, browserNodes })}
+                disabled={paintsNodesItself}
+              />
+            </DialogRow>
+            <DialogRow
+              title="Picture quality in a browser"
+              description={
+                paintsNodesItself
+                  ? "The desktop app draws nodes itself, so this applies only in a browser"
+                  : localCanvasPerformance.pictureQuality === "fast"
+                    ? "Pictures in drawn nodes are scaled to the size they show: quickest to appear, softer when you zoom in"
+                    : localCanvasPerformance.pictureQuality === "balanced"
+                      ? "Pictures in drawn nodes keep their full resolution, except large files, which are scaled to twice the size they show"
+                      : "Pictures in drawn nodes always keep their full resolution: sharpest, slowest to appear with large files"
+              }
+              className="py-[18px]"
+            >
+              <Segmented
+                className="w-[312px] shrink-0"
+                label="Picture quality in a browser"
+                options={PICTURE_QUALITIES}
+                value={localCanvasPerformance.pictureQuality}
+                onChange={(pictureQuality) => setLocalCanvasPerformance({ ...localCanvasPerformance, pictureQuality })}
+                disabled={paintsNodesItself || localCanvasPerformance.browserNodes === "live"}
               />
             </DialogRow>
             <DialogRow

@@ -8,7 +8,9 @@
  * (`AUTOSAVE_SETTLE_MS`), and at the latest `AUTOSAVE_CEILING_MS` after the
  * first change, so continuous editing still lands. It never saves during a
  * run, during another save, while media is still being written, or when
- * nothing changed. A failed save is retried once, then left alone for
+ * nothing changed. While the canvas is mid-gesture (`busy`: a pan, a drag)
+ * a due save waits, looking again each second, up to the ceiling from the
+ * first change: writing the workflow costs frames the gesture needs. A failed save is retried once, then left alone for
  * `AUTOSAVE_BACKOFF_MS` with one quiet notice.
  *
  * The timers are injected so the tests can drive it.
@@ -18,6 +20,7 @@ export const AUTOSAVE_SETTLE_MS = 3_000;
 export const AUTOSAVE_CEILING_MS = 30_000;
 export const AUTOSAVE_RETRY_MS = 10_000;
 export const AUTOSAVE_BACKOFF_MS = 120_000;
+export const AUTOSAVE_BUSY_RETRY_MS = 1_000;
 
 /** The slice of the store the scheduler reads. */
 export interface AutoSaveState {
@@ -50,6 +53,8 @@ export interface AutoSaveOptions {
   save: () => Promise<boolean>;
   /** Called once when a save has failed twice; the next attempt is after the backoff. */
   onFailure?: (error: unknown) => void;
+  /** The canvas is mid-gesture: a due save waits for it, up to the ceiling. */
+  busy?: () => boolean;
   timers?: AutoSaveTimers;
 }
 
@@ -89,7 +94,7 @@ function edited(state: AutoSaveState, previous: AutoSaveState): boolean {
   );
 }
 
-export function createAutoSave({ getState, subscribe, save, onFailure, timers = realTimers }: AutoSaveOptions): AutoSave {
+export function createAutoSave({ getState, subscribe, save, onFailure, busy, timers = realTimers }: AutoSaveOptions): AutoSave {
   let unsubscribe: (() => void) | null = null;
   let timer: unknown = null;
   let dirtySince: number | null = null;
@@ -116,7 +121,7 @@ export function createAutoSave({ getState, subscribe, save, onFailure, timers = 
     scheduleAt(Math.min(now + AUTOSAVE_SETTLE_MS, dirtySince + AUTOSAVE_CEILING_MS));
   };
 
-  const attempt = async (): Promise<boolean> => {
+  const attempt = async (force = false): Promise<boolean> => {
     const state = getState();
     if (!autoSaveWanted(state)) {
       dirtySince = null;
@@ -125,6 +130,10 @@ export function createAutoSave({ getState, subscribe, save, onFailure, timers = 
     if (!autoSaveAllowed(state) || saving) {
       // A run or another save is in flight; look again shortly.
       scheduleAt(timers.now() + AUTOSAVE_SETTLE_MS);
+      return false;
+    }
+    if (!force && busy?.() && dirtySince !== null && timers.now() - dirtySince < AUTOSAVE_CEILING_MS) {
+      scheduleAt(Math.min(timers.now() + AUTOSAVE_BUSY_RETRY_MS, dirtySince + AUTOSAVE_CEILING_MS));
       return false;
     }
     saving = true;
@@ -183,7 +192,7 @@ export function createAutoSave({ getState, subscribe, save, onFailure, timers = 
       const state = getState();
       if (!autoSaveWanted(state) || !autoSaveAllowed(state) || saving) return false;
       clear();
-      return attempt();
+      return attempt(true);
     },
   };
 }
