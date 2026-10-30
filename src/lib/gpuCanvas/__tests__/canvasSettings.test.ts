@@ -11,14 +11,14 @@ describe("canvas settings", () => {
   it("starts on the defaults", async () => {
     const { getCanvasSettings, DEFAULT_CANVAS_SETTINGS } = await load();
     expect(getCanvasSettings()).toEqual(DEFAULT_CANVAS_SETTINGS);
-    expect(DEFAULT_CANVAS_SETTINGS).toEqual({ browserNodes: "painted", pictureQuality: "balanced", waitForPaint: true, loadingScreen: true, connectionDetailZoom: 0.15 });
+    expect(DEFAULT_CANVAS_SETTINGS).toEqual({ browserNodes: "painted", pictureQuality: "balanced", waitForPaint: true, loadingScreen: true, connectionDetailZoom: 0.15, sharpenWhilePanning: false });
   });
 
   it("reads what was stored, the runner's live-nodes switch included, and ignores what is not valid", async () => {
     localStorage.setItem("node-banana-live-nodes", "on");
-    localStorage.setItem("node-banana-canvas-performance", JSON.stringify({ pictureQuality: "huge", waitForPaint: false, loadingScreen: "no", connectionDetailZoom: 0.5 }));
+    localStorage.setItem("node-banana-canvas-performance", JSON.stringify({ pictureQuality: "huge", waitForPaint: false, loadingScreen: "no", connectionDetailZoom: 0.5, sharpenWhilePanning: true }));
     const { getCanvasSettings } = await load();
-    expect(getCanvasSettings()).toEqual({ browserNodes: "live", pictureQuality: "balanced", waitForPaint: false, loadingScreen: true, connectionDetailZoom: 0.5 });
+    expect(getCanvasSettings()).toEqual({ browserNodes: "live", pictureQuality: "balanced", waitForPaint: false, loadingScreen: true, connectionDetailZoom: 0.5, sharpenWhilePanning: true });
   });
 
   it("stores a change and tells listeners, once", async () => {

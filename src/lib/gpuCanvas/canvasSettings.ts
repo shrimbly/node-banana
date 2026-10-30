@@ -17,6 +17,9 @@
  *   painted, rather than stand-in cards.
  * - loadingScreen: large workflows open behind the loading screen while they paint.
  * - connectionDetailZoom: from this zoom, connections show their labels and stubs.
+ * - sharpenWhilePanning: the painter works while the view moves (painter.ts),
+ *   rather than waiting for it to be still, so pictures sharpen during a long
+ *   pan at the cost of a hitch now and then.
  *
  * The rest live in "node-banana-canvas-performance" as JSON.
  */
@@ -31,6 +34,7 @@ export interface CanvasSettings {
   waitForPaint: boolean;
   loadingScreen: boolean;
   connectionDetailZoom: number;
+  sharpenWhilePanning: boolean;
 }
 
 export const DEFAULT_CANVAS_SETTINGS: CanvasSettings = {
@@ -39,6 +43,7 @@ export const DEFAULT_CANVAS_SETTINGS: CanvasSettings = {
   waitForPaint: true,
   loadingScreen: true,
   connectionDetailZoom: OVERVIEW_ZOOM_THRESHOLD,
+  sharpenWhilePanning: false,
 };
 
 const LIVE_NODES_KEY = "node-banana-live-nodes";
@@ -53,6 +58,7 @@ function read(): CanvasSettings {
     if (QUALITIES.includes(stored.pictureQuality as PictureQuality)) settings.pictureQuality = stored.pictureQuality!;
     if (typeof stored.waitForPaint === "boolean") settings.waitForPaint = stored.waitForPaint;
     if (typeof stored.loadingScreen === "boolean") settings.loadingScreen = stored.loadingScreen;
+    if (typeof stored.sharpenWhilePanning === "boolean") settings.sharpenWhilePanning = stored.sharpenWhilePanning;
     const zoom = Number(stored.connectionDetailZoom);
     if (zoom > 0 && zoom <= 2) settings.connectionDetailZoom = zoom;
   } catch {

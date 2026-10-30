@@ -16,7 +16,9 @@
  * full-screen sheet upload stalled the GPU for 106 ms just as a pan began.
  * Sheets are also capped in device pixels, so one upload stays small at 2×.
  * Behind the loading screen nobody can pan, so the painter uses larger
- * sheets and does not wait.
+ * sheets and does not wait. Settings › Canvas › Sharpen while panning turns
+ * the waiting off too: batches run and the view's tiers are chosen while the
+ * view moves, at the cost of a hitch now and then.
  *
  * What a node's image depends on is its paint key (paintKey.ts). The painter
  * recomputes the keys of the nodes a store change touched (and the nodes
@@ -58,7 +60,7 @@ const LOADING_SHEET_TEXELS = { w: 4096, h: 3072 };
 const QUIET_MS = 120;
 /** Space between nodes on the sheet, in css px. */
 const GAP_PX = 4;
-/** The view's tiers are chosen this long after it stops moving. */
+/** The view's tiers are chosen this long after it stops moving (and this often while it moves, when sharpening while panning). */
 const VIEW_SETTLE_MS = 50;
 /** Nodes this far outside the view (in screens) are painted ahead and kept from eviction. */
 const MARGIN = 0.25;
@@ -236,8 +238,13 @@ export class Painter {
     props.__webglInit = true;
 
     this.unsubscribers.push(scene.onViewChanged(() => {
+      // Sharpening while panning, a pending refresh is kept rather than put off, so tiers follow a long pan.
+      if (this.viewTimer && !this.holdsForInput()) return;
       clearTimeout(this.viewTimer);
-      if (this.startedAt) this.viewTimer = window.setTimeout(() => this.refreshView(), VIEW_SETTLE_MS);
+      if (this.startedAt) this.viewTimer = window.setTimeout(() => {
+        this.viewTimer = 0;
+        this.refreshView();
+      }, VIEW_SETTLE_MS);
     }));
     this.unsubscribers.push(subscribeToWorkflowNodeChanges((changes) => this.nodesChanged(changes)));
     this.unsubscribers.push(useWorkflowStore.subscribe((state, previous) => {
@@ -649,14 +656,17 @@ export class Painter {
 
   // ---- the loop ----
 
+  /** Painting waits for the view to be still: not behind the loading screen, nor when Settings › Canvas says to sharpen while panning. */
+  private holdsForInput() {
+    return !this.loading && !getCanvasSettings().sharpenWhilePanning;
+  }
+
   private async run() {
     if (this.running || !this.startedAt || this.disposed) return;
     this.running = this.status.running = true;
     try {
       while (this.queue.size && !this.disposed) {
-        if (!this.loading) {
-          while ((this.scene.interacting || performance.now() - this.scene.lastInputAt < QUIET_MS) && !this.disposed) await nextFrame();
-        }
+        while (this.holdsForInput() && (this.scene.interacting || performance.now() - this.scene.lastInputAt < QUIET_MS) && !this.disposed) await nextFrame();
         // A change's keys come a frame after it: don't start other work in that frame.
         while (this.dirtyKeys.size && !this.disposed) await nextFrame();
         await this.batch();
@@ -747,17 +757,18 @@ export class Painter {
     // Input, or a change to paint, arrived while the sheet was getting ready: give way.
     const urgentBatch = requests[0].priority === URGENT;
     // A change whose keys are still to be worked out (a frame after the store change) counts as urgent.
-    const yielded = () => (!this.loading && this.scene.lastInputAt > t0) || (!urgentBatch && (this.queue.hasUrgent() || this.dirtyKeys.size > 0));
+    const inputArrived = () => this.holdsForInput() && this.scene.lastInputAt > t0;
+    const yielded = () => inputArrived() || (!urgentBatch && (this.queue.hasUrgent() || this.dirtyKeys.size > 0));
     // Once a batch has settled it is mostly done: giving way would throw away its render and its wait for images.
     // A batch for the view then gives way only to input, and one painting ahead only to input or a change near the
     // view, which shows at once. Other changes wait for it, as for an urgent batch (each image is stamped with the
     // key it was rendered for, and the repaint stays queued): nodes painted ahead derive data from what feeds them
     // as they paint, and the repaints that queues for what they feed would otherwise throw away batch after batch.
     const viewBatch = requests[0].priority <= VIEW;
-    const settledYield = () => (!this.loading && this.scene.lastInputAt > t0) || (!viewBatch && this.queue.hasUrgent((id) => this.near.has(id)));
+    const settledYield = () => inputArrived() || (!viewBatch && this.queue.hasUrgent((id) => this.near.has(id)));
     if (yielded()) {
       this.queue.restore(misses);
-      this.options.stats.record(this.scene.lastInputAt > t0 ? "painter.yielded" : "painter.preempted", misses.length);
+      this.options.stats.record(inputArrived() ? "painter.yielded" : "painter.preempted", misses.length);
       return;
     }
     this.phase(`settle ${tier} ×${misses.length}`);
@@ -796,7 +807,7 @@ export class Painter {
     this.unplacedRetries = 0;
     if (settledYield()) {
       this.queue.restore(misses);
-      this.options.stats.record(this.scene.lastInputAt > t0 ? "painter.yielded" : "painter.preempted", misses.length);
+      this.options.stats.record(inputArrived() ? "painter.yielded" : "painter.preempted", misses.length);
       return;
     }
     const scrolled = this.sheet.resetScroll();
@@ -810,7 +821,7 @@ export class Painter {
     if (this.disposed) return;
     if (settledYield()) {
       this.queue.restore(misses);
-      this.options.stats.record(this.scene.lastInputAt > t0 ? "painter.yielded" : "painter.preempted", misses.length);
+      this.options.stats.record(inputArrived() ? "painter.yielded" : "painter.preempted", misses.length);
       return;
     }
     if (this.probeIds.size) this.probe(fits.map((r) => r.id), placed, tier);
@@ -836,7 +847,7 @@ export class Painter {
       if (this.disposed) return;
       if (settledYield()) {
         this.queue.restore(misses);
-        this.options.stats.record(this.scene.lastInputAt > t0 ? "painter.yielded" : "painter.preempted", misses.length);
+        this.options.stats.record(inputArrived() ? "painter.yielded" : "painter.preempted", misses.length);
         return;
       }
       this.options.stats.record("painter.snapshotMs", performance.now() - t3);

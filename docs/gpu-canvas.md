@@ -134,7 +134,10 @@ Batches are 48 nodes, 96 at the 1/4 tier.
 - **Painting gives way to input.** A batch starts only 120 ms after the last
   input, and a batch whose sheet became ready after input arrived goes back
   to the queue unpainted. Sheets are 2048×1536 texels; disk cache uploads
-  are spread to 2 M texels a frame.
+  are spread to 2 M texels a frame. Settings › Canvas › Sharpen while
+  panning turns this off: batches run while the view moves, and the view's
+  tiers are chosen every 50 ms of a pan rather than once it stops, so a long
+  trackpad pan sharpens as it goes, with a hitch now and then.
 - **Changes come first.** A store change marks the node and everything
   downstream of it stale a frame later (keys are not computed on the typing path). Their
   images at the view's tier and at 1/8 are queued urgent; an urgent batch
@@ -714,6 +717,7 @@ described above.
 | Wait for nodes when opening | on | The open veil (`VEIL_MAX_MS`); off shows stand-in cards at once |
 | Loading screen for large workflows | on | `LOADING_MIN_NODES`; off paints on the smaller sheets while the user pans |
 | Connection details from | 15% | The zoom connections' labels, stubs and clamps turn live from |
+| Sharpen while panning | off | On, painting does not wait for the view to be still (above) |
 | Nodes in a browser | Painted | Live: no painter, as above |
 | Picture quality in a browser | Balanced | domSnapshot's picture rule, as above |
 

@@ -1579,6 +1579,7 @@ describe("Canvas tab: low detail and the performance overlay", () => {
     mockFetch.mockResolvedValue({ ok: true, json: () => Promise.resolve({}) });
     render(<ProjectSetupModal isOpen={true} onClose={vi.fn()} onSave={vi.fn()} mode="settings" initialTab="canvas" />);
 
+    fireEvent.click(screen.getByRole("switch", { name: "Sharpen while panning" }));
     fireEvent.click(screen.getByRole("switch", { name: "Wait for nodes when opening" }));
     fireEvent.click(screen.getByRole("switch", { name: "Loading screen for large workflows" }));
     fireEvent.change(screen.getByRole("slider", { name: "Connection details from" }), { target: { value: "50" } });
@@ -1589,7 +1590,7 @@ describe("Canvas tab: low detail and the performance overlay", () => {
     expect(getCanvasSettings()).toEqual(DEFAULT_CANVAS_SETTINGS);
 
     fireEvent.click(screen.getByText("Save"));
-    expect(getCanvasSettings()).toEqual({ browserNodes: "live", pictureQuality: "sharp", waitForPaint: false, loadingScreen: false, connectionDetailZoom: 0.5 });
+    expect(getCanvasSettings()).toEqual({ browserNodes: "live", pictureQuality: "sharp", waitForPaint: false, loadingScreen: false, connectionDetailZoom: 0.5, sharpenWhilePanning: true });
     setCanvasSettings(DEFAULT_CANVAS_SETTINGS);
   });
 });

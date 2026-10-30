@@ -1185,6 +1185,17 @@ export function ProjectSetupModal({
               />
             </DialogRow>
             <DialogRow
+              title="Sharpen while panning"
+              description="Pictures sharpen while you pan, not only once you stop. Panning may stutter now and then while they draw"
+              className="py-[18px]"
+            >
+              <Switch
+                label="Sharpen while panning"
+                checked={localCanvasPerformance.sharpenWhilePanning}
+                onChange={(sharpenWhilePanning) => setLocalCanvasPerformance({ ...localCanvasPerformance, sharpenWhilePanning })}
+              />
+            </DialogRow>
+            <DialogRow
               title="Wait for nodes when opening"
               description="An opened workflow shows an empty canvas until the nodes in view are drawn, rather than placeholder cards"
               className="py-[18px]"
