@@ -1590,7 +1590,7 @@ describe("Canvas tab: low detail and the performance overlay", () => {
     expect(getCanvasSettings()).toEqual(DEFAULT_CANVAS_SETTINGS);
 
     fireEvent.click(screen.getByText("Save"));
-    expect(getCanvasSettings()).toEqual({ browserNodes: "live", pictureQuality: "sharp", waitForPaint: false, loadingScreen: false, connectionDetailZoom: 0.5, sharpenWhilePanning: true });
+    expect(getCanvasSettings()).toEqual({ browserNodes: "live", pictureQuality: "sharp", waitForPaint: false, loadingScreen: false, connectionDetailZoom: 0.5, sharpenWhilePanning: false });
     setCanvasSettings(DEFAULT_CANVAS_SETTINGS);
   });
 });

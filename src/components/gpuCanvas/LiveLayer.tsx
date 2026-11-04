@@ -527,6 +527,16 @@ export class LiveLayer {
 
   private holds = new Map<string, number>();
 
+  /**
+   * The pointer is known to be off the live nodes (a wheel landed on the canvas). The browser sends no pointerout
+   * when a pan carries a node away from a still pointer, and until it does the node there would never be hovered.
+   */
+  pointerOffNodes() {
+    if (!this.pointerNode) return;
+    this.pointerNode = null;
+    this.onPointerNode?.(null);
+  }
+
   /** Keeps a node live until the release is called; holds count. */
   hold(id: string): () => void {
     this.holds.set(id, (this.holds.get(id) ?? 0) + 1);

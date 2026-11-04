@@ -10,15 +10,15 @@
  * Images found in the disk cache skip the sheet: they are uploaded straight
  * into their slot.
  *
- * Painting gives way to input. No batch starts during a pan or within
- * QUIET_MS of the last wheel or pointer move, and a batch whose sheet is
- * ready when input arrives is put back rather than painted: on the Mac, one
- * full-screen sheet upload stalled the GPU for 106 ms just as a pan began.
- * Sheets are also capped in device pixels, so one upload stays small at 2×.
- * Behind the loading screen nobody can pan, so the painter uses larger
- * sheets and does not wait. Settings › Canvas › Sharpen while panning turns
- * the waiting off too: batches run and the view's tiers are chosen while the
- * view moves, at the cost of a hitch now and then.
+ * Painting carries on during a pan (Settings › Canvas › Sharpen while
+ * panning): batches run and the view's tiers are chosen while the view moves,
+ * at the cost of a hitch now and then. With that off, painting gives way to
+ * input: no batch starts during a pan or within QUIET_MS of the last wheel or
+ * pointer move, and a batch whose sheet is ready when input arrives is put
+ * back rather than painted: on the Mac, one full-screen sheet upload stalled
+ * the GPU for 106 ms just as a pan began. Sheets are also capped in device
+ * pixels, so one upload stays small at 2×. Behind the loading screen nobody
+ * can pan, so the painter uses larger sheets and does not wait.
  *
  * What a node's image depends on is its paint key (paintKey.ts). The painter
  * recomputes the keys of the nodes a store change touched (and the nodes

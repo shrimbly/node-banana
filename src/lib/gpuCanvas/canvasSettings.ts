@@ -18,8 +18,8 @@
  * - loadingScreen: large workflows open behind the loading screen while they paint.
  * - connectionDetailZoom: from this zoom, connections show their labels and stubs.
  * - sharpenWhilePanning: the painter works while the view moves (painter.ts),
- *   rather than waiting for it to be still, so pictures sharpen during a long
- *   pan at the cost of a hitch now and then.
+ *   so pictures sharpen during a long pan at the cost of a hitch now and then;
+ *   off, it waits for the view to be still.
  *
  * The rest live in "node-banana-canvas-performance" as JSON.
  */
@@ -43,7 +43,7 @@ export const DEFAULT_CANVAS_SETTINGS: CanvasSettings = {
   waitForPaint: true,
   loadingScreen: true,
   connectionDetailZoom: OVERVIEW_ZOOM_THRESHOLD,
-  sharpenWhilePanning: false,
+  sharpenWhilePanning: true,
 };
 
 const LIVE_NODES_KEY = "node-banana-live-nodes";

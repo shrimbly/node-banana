@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import { defaultCanvasNavigationSettings, type CanvasNavigationSettings } from "@/types/canvas";
-import { holdOverScrollArea, sceneWheel, type SceneWheelOptions } from "../wheel";
+import { holdOverScrollArea, sceneWheel, wheelHold, type SceneWheelOptions } from "../wheel";
 import { zoomPath } from "../viewPath";
 
 function wheel(init: WheelEventInit, target: Element = document.body) {
@@ -114,5 +114,27 @@ describe("holdOverScrollArea", () => {
   it("lets a pinch zoom over a textarea, not over a .nowheel area", () => {
     expect(holdOverScrollArea(pinch, textarea)).toBe(pinch);
     expect(holdOverScrollArea(pinch, list)).toEqual({ type: "block" });
+  });
+});
+
+describe("wheelHold", () => {
+  it("holds a run of wheels over one node for a limited time", () => {
+    const may = wheelHold(150, 500);
+    expect(may("a", 1000)).toBe(true);
+    expect(may("a", 1100)).toBe(true);
+    expect(may("a", 1200)).toBe(true);
+    expect(may("a", 1300)).toBe(true);
+    expect(may("a", 1400)).toBe(true);
+    expect(may("a", 1500)).toBe(false);
+    expect(may("a", 1600)).toBe(false);
+  });
+
+  it("starts over on another node or after a pause", () => {
+    const may = wheelHold(150, 500);
+    may("a", 1000);
+    for (let t = 1100; t <= 1500; t += 100) may("a", t);
+    expect(may("a", 1600)).toBe(false);
+    expect(may("b", 1650)).toBe(true);
+    expect(may("b", 2000)).toBe(true);
   });
 });

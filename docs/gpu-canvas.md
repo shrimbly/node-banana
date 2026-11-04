@@ -131,13 +131,14 @@ Batches are 48 nodes, 96 at the 1/4 tier.
   moves the measured handles at once (right-hand ones with the right side,
   `refitMeasured`) until the node is measured again, as React Flow measures
   its handles on the frame a node's size changes.
-- **Painting gives way to input.** A batch starts only 120 ms after the last
-  input, and a batch whose sheet became ready after input arrived goes back
-  to the queue unpainted. Sheets are 2048×1536 texels; disk cache uploads
-  are spread to 2 M texels a frame. Settings › Canvas › Sharpen while
-  panning turns this off: batches run while the view moves, and the view's
-  tiers are chosen every 50 ms of a pan rather than once it stops, so a long
-  trackpad pan sharpens as it goes, with a hitch now and then.
+- **Painting carries on during a pan.** Batches run while the view moves,
+  and the view's tiers are chosen every 50 ms of a pan, so a long trackpad
+  pan sharpens as it goes, with a hitch now and then. Settings › Canvas ›
+  Sharpen while panning off makes painting give way to input: a batch starts
+  only 120 ms after the last input, a batch whose sheet became ready after
+  input arrived goes back to the queue unpainted, and tiers are chosen once
+  the view stops. Sheets are 2048×1536 texels; disk cache uploads are spread
+  to 2 M texels a frame.
 - **Changes come first.** A store change marks the node and everything
   downstream of it stale a frame later (keys are not computed on the typing path). Their
   images at the view's tier and at 1/8 are queued urgent; an urgent batch
@@ -553,8 +554,12 @@ The scene takes every press and asks the editor what it starts:
   inner areas take the wheels that follow. Until then, a wheel over a
   painted textarea or `.nowheel` area that held more than it showed when
   painted (`scrollAreaBoxes`, kept with the paint and in the disk cache) is
-  held rather than panning or stepping the zoom (`holdOverScrollArea`); a
-  pinch still zooms over a textarea, not over `.nowheel`. As classic's `onMoveStart`, a
+  held rather than panning or stepping the zoom (`holdOverScrollArea`), for
+  at most `WHEEL_HOLD_MAX_MS`; a pan under way carries on over such an area,
+  as classic's wheel stays with where it began. A pinch still zooms over a
+  textarea, not over `.nowheel`. The browser sends no pointerout when a pan
+  carries a live node from under a still pointer, so a wheel on the canvas
+  also ends the live layer's hover (`pointerOffNodes`). As classic's `onMoveStart`, a
   moving view clears the store's hovered node (header controls, video hover
   previews) and sets `isPanningRef` until it has been still 150 ms.
 - Two fingers pinch about their midpoint and pan with it, as d3-zoom's touch
@@ -717,7 +722,7 @@ described above.
 | Wait for nodes when opening | on | The open veil (`VEIL_MAX_MS`); off shows stand-in cards at once |
 | Loading screen for large workflows | on | `LOADING_MIN_NODES`; off paints on the smaller sheets while the user pans |
 | Connection details from | 15% | The zoom connections' labels, stubs and clamps turn live from |
-| Sharpen while panning | off | On, painting does not wait for the view to be still (above) |
+| Sharpen while panning | on | Off, painting waits for the view to be still (above) |
 | Nodes in a browser | Painted | Live: no painter, as above |
 | Picture quality in a browser | Balanced | domSnapshot's picture rule, as above |
 
