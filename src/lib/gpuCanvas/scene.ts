@@ -774,6 +774,9 @@ export class Scene {
       this.edgeGeometry.setIndex(indices);
     }
     const geometry = this.edgeGeometry;
+    // three keeps the instance count it first drew this geometry with as a cap, and the buffer below may be larger
+    // (connections shown that were hidden when the workflow opened): dispose drops the cap and the old buffer.
+    geometry.dispose();
     if (this.routes.length !== graph.edges.length) this.routes = graph.edges.map(() => null);
     let total = 0;
     this.routeOffset = new Array(graph.edges.length);
