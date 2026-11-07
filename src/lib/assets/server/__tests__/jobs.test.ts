@@ -29,6 +29,7 @@ import { Ingestor } from "../ingest";
 import { JobRunner, runExport, runImport, runMove, validateMoveTarget, type JobContext } from "../jobs";
 import { AssetLibrary } from "../library";
 import { newAssetId } from "../../client/ids";
+import { createEdit, listEdits } from "@/lib/edits/server";
 import { installBridge, makePng, makeWav, md5, meta, sha256, streamOf, tempDir, TINY_MP4 } from "./helpers";
 
 let base: string;
@@ -149,6 +150,30 @@ describe("move", () => {
     const left = path.join(base, "Left");
     fs.mkdirSync(path.join(left, ".nodebanana", "writers"), { recursive: true });
     expect(await validateMoveTarget(root, left)).toBe(left);
+    // Another library's edits: the copy would write over them.
+    const edits = path.join(base, "Edits left");
+    fs.mkdirSync(path.join(edits, "Edits", "generations"), { recursive: true });
+    expect(await validateMoveTarget(root, edits)).toBe(edits);
+    // Finder's clutter, or a project called Edits, is no other library's edits.
+    fs.writeFileSync(path.join(edits, "Edits", ".DS_Store"), "x");
+    fs.writeFileSync(path.join(edits, "Edits", "Edits.json"), "{}");
+    expect(await validateMoveTarget(root, edits)).toBe(edits);
+    fs.writeFileSync(path.join(edits, "Edits", "Trip.nbedit"), "{}");
+    await expect(validateMoveTarget(root, edits)).rejects.toMatchObject({ code: "conflict" });
+  });
+
+  it("carries the edit files, and only those, from the Edits folder", async () => {
+    const oldRoot = (await getLibraryStatus()).root!;
+    await record();
+    const edit = await createEdit({ name: "Trip" });
+    fs.writeFileSync(path.join(oldRoot, "Edits", "notes.txt"), "the user's own file");
+
+    const newRoot = path.join(base, "External", "NB");
+    expect(await finished((await setLibraryRoot({ root: newRoot, mode: "move" })).job!)).toMatchObject({ state: "done" });
+    expect(walk(path.join(newRoot, "Edits"))).toEqual(["Trip.nbedit"]);
+    expect(walk(path.join(oldRoot, "Edits"))).toEqual(["notes.txt"]);
+    expect((await listEdits()).edits.map((e) => [e.id, e.name])).toEqual([[edit.id, "Trip"]]);
+    expect((await listEdits()).folder).toBe(path.join(newRoot, "Edits"));
   });
 
   it("leaves no data folder in the old root, so the library can be moved back there", async () => {
@@ -537,6 +562,46 @@ describe("move", () => {
     expect(fs.readdirSync(dir)).toHaveLength(4);
     // A move that ended (even badly) leaves no marker to recover from.
     expect(walk(path.join(source, ".nodebanana")).filter((file) => file.startsWith("move"))).toEqual([]);
+  });
+});
+
+describe("move: edit files", () => {
+  it("removes the edit files it copied when cancelled, and leaves the source's", async () => {
+    const source = path.join(base, "Source");
+    const library = new AssetLibrary(source);
+    await library.ready();
+    const editsDir = path.join(source, "Edits");
+    fs.mkdirSync(editsDir);
+    for (let i = 0; i < 2; i++) fs.writeFileSync(path.join(editsDir, `Edit ${i}.nbedit`), `{"n":${i}}`);
+    const target = path.join(base, "Cancelled");
+    const controller = new AbortController();
+    let copiedEdits: string[] = [];
+    const ctx: JobContext = {
+      ...jobContext(),
+      signal: controller.signal,
+      checkCancelled: () => {
+        // Cancelled once both edit files are in the target.
+        copiedEdits = walk(path.join(target, "Edits"));
+        if (copiedEdits.length === 2) controller.abort();
+        if (controller.signal.aborted) throw Object.assign(new Error("Cancelled"), { code: "cancelled" });
+      },
+    };
+    let switched = false;
+    await expect(
+      runMove(ctx, {
+        library,
+        waitForWrites: async () => true,
+        toRoot: target,
+        setPaused: () => {},
+        switchRoot: async () => {
+          switched = true;
+        },
+      }),
+    ).rejects.toThrow(/Cancelled/);
+    expect(copiedEdits).toEqual(["Edit 0.nbedit", "Edit 1.nbedit"]);
+    expect(switched).toBe(false);
+    expect(walk(target)).toEqual([]);
+    expect(fs.readdirSync(editsDir).sort()).toEqual(["Edit 0.nbedit", "Edit 1.nbedit"]);
   });
 });
 

@@ -678,6 +678,19 @@ describe("AgentChatView", () => {
       expect(useAssetStore.getState().appView).toBe("assets");
     });
 
+    it("goes to Edit video on a bare E from the sidebar, and E typed in the message box stays a letter", async () => {
+      render(<Harness />);
+      const textarea = await waitForComposer();
+      fireEvent.keyDown(textarea, { key: "e" });
+      expect(useAssetStore.getState().appView).toBe("chat");
+      const inSidebar = within(sidebar()).getByRole("button", { name: "Collapse sidebar" });
+      fireEvent.keyDown(inSidebar, { key: "E", shiftKey: true });
+      fireEvent.keyDown(inSidebar, { key: "e", repeat: true });
+      expect(useAssetStore.getState().appView).toBe("chat");
+      fireEvent.keyDown(inSidebar, { key: "e" });
+      expect(useAssetStore.getState().appView).toBe("edit");
+    });
+
     it("never hands a C it acted on to a canvas listener added after its own", async () => {
       render(<Harness />);
       await waitForComposer();

@@ -128,20 +128,21 @@ export function formatDimensions(width?: number, height?: number): string | null
 
 export const KIND_LABELS: Record<AssetKind, string> = { image: "Image", video: "Video", audio: "Audio", "3d": "3D" };
 export const KIND_PLURALS: Record<AssetKind, string> = { image: "Images", video: "Videos", audio: "Audio", "3d": "3D" };
-export const ORIGIN_LABELS: Record<AssetOrigin, string> = { generated: "Generated", edited: "Edited" };
+export const ORIGIN_LABELS: Record<AssetOrigin, string> = { generated: "Generated", edited: "Edited", uploaded: "Uploaded" };
 
-/** What an edited asset did, in words: "resize" → "Resized". */
+/** What an edited asset did, or how an upload came in, in words: "resize" → "Resized". */
 const OPERATION_LABELS: Record<string, string> = {
   annotate: "Annotated",
   removeBackground: "Background removed",
   resize: "Resized",
   gif: "GIF",
-  stitch: "Stitched",
+  stitch: "Video edit",
   trim: "Trimmed",
   easeCurve: "Ease curve",
   frameGrab: "Frame grab",
   splitGrid: "Grid split",
   splitToNodes: "Split to nodes",
+  upload: "Upload",
 };
 
 export function operationLabel(operation?: string): string | null {
@@ -172,14 +173,15 @@ export function workflowLabel(name: string | null | undefined, at: number): stri
   return trimmed ? trimmed : `Untitled · ${formatShortStamp(at)}`;
 }
 
-/** The asset's title: the prompt's first line, else the file name. */
 /**
- * The first line of the prompt; without one, what made the asset and where:
- * "Split to nodes · cell 3 · Product shots", "Video · Untitled".
+ * The name the user gave the asset; else the first line of the prompt; else
+ * what made the asset and where: "Split to nodes · cell 3 · Product shots",
+ * "Video · Untitled".
  */
 export function assetTitle(
-  asset: Pick<AssetView, "prompt" | "filename"> & Partial<Pick<AssetView, "kind" | "origin" | "producer" | "workflowName" | "workflow">>,
+  asset: Pick<AssetView, "prompt" | "filename" | "name"> & Partial<Pick<AssetView, "kind" | "origin" | "producer" | "workflowName" | "workflow">>,
 ): string {
+  if (asset.name) return asset.name;
   const line = asset.prompt?.split(/\r?\n/).find((l) => l.trim())?.trim();
   if (line) return line.length > 120 ? `${line.slice(0, 117).trimEnd()}…` : line;
   if (!asset.kind) return asset.filename;
@@ -190,9 +192,14 @@ export function assetTitle(
   return [made, cell, workflow].filter(Boolean).join(" · ");
 }
 
-/** Eyebrow over the detail title: "Image · Generated · 27 Sep 2026". */
+/** Eyebrow over the detail title: "Image · Generated · 27 Sep 2026", "Video · Uploaded · 20 Oct 2026". */
 export function assetEyebrow(asset: Pick<AssetView, "kind" | "origin" | "createdAt" | "producer">): string {
-  const origin = asset.origin === "edited" ? operationLabel(asset.producer.operation) ?? ORIGIN_LABELS.edited : ORIGIN_LABELS.generated;
+  const origin =
+    asset.origin === "edited"
+      ? operationLabel(asset.producer.operation) ?? ORIGIN_LABELS.edited
+      : asset.origin === "uploaded"
+        ? ORIGIN_LABELS.uploaded
+        : ORIGIN_LABELS.generated;
   const d = new Date(asset.createdAt);
   return [KIND_LABELS[asset.kind], origin, `${d.getDate()} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`].join(" · ");
 }

@@ -10,12 +10,15 @@ import { errnoCode } from "./errors";
 
 export const GENERATIONS_DIR = "Generations";
 export const DATA_DIR = ".nodebanana";
+/** The Edit video view's edit files (`<name>.nbedit`), outside any workflow project. */
+export const EDITS_DIR = "Edits";
 /** In the data folder: one file per process with writes in flight. Not library data — see {@link LibraryLayout.writers}. */
 export const WRITERS_DIR = "writers";
 
 export interface LibraryLayout {
   root: string;
   generations: string;
+  edits: string;
   data: string;
   assets: string;
   runs: string;
@@ -44,6 +47,7 @@ export function libraryLayout(root: string): LibraryLayout {
   return {
     root,
     generations: path.join(root, GENERATIONS_DIR),
+    edits: path.join(root, EDITS_DIR),
     data,
     assets: path.join(data, "assets"),
     runs: path.join(data, "runs"),

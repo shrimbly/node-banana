@@ -92,11 +92,11 @@ describe("/api/models route", () => {
       const { response, data } = await get();
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
-      // 2 fal models + 10 gemini models (always included)
-      expect(data.models).toHaveLength(12);
+      // 2 fal models + 11 gemini models (always included)
+      expect(data.models).toHaveLength(13);
       expect(data.providers.fal).toMatchObject({ success: true, count: 2, cached: false, stale: false, refreshing: false });
       expect(data.providers.fal.fetchedAt).toEqual(expect.any(Number));
-      expect(data.providers.gemini).toEqual({ success: true, count: 10, cached: true });
+      expect(data.providers.gemini).toEqual({ success: true, count: 11, cached: true });
     });
 
     it("GET: should return models from both providers when both keys present", async () => {
@@ -111,7 +111,7 @@ describe("/api/models route", () => {
 
       const { response, data } = await get();
       expect(response.status).toBe(200);
-      expect(data.models).toHaveLength(12);
+      expect(data.models).toHaveLength(13);
       expect(data.providers.replicate.success).toBe(true);
       expect(data.providers.fal.success).toBe(true);
       expect(data.providers.gemini.success).toBe(true);
@@ -235,7 +235,7 @@ describe("/api/models route", () => {
       const { response, data } = await get();
       expect(response.status).toBe(200);
       expect(data.success).toBe(true);
-      expect(data.models).toHaveLength(11);
+      expect(data.models).toHaveLength(12);
       expect(data.providers.replicate).toEqual({ success: false, count: 0, error: "Replicate API error: 401" });
       expect(data.providers.fal.success).toBe(true);
       expect(data.errors).toContain("replicate: Replicate API error: 401");
@@ -326,7 +326,7 @@ describe("/api/models route", () => {
       );
 
       const { data } = await get();
-      expect(data.models).toHaveLength(14);
+      expect(data.models).toHaveLength(15);
       const caps = Object.fromEntries(data.models.map((m: { id: string; capabilities: string[] }) => [m.id, m.capabilities]));
       expect(caps["fal-ai/flux"]).toEqual(["text-to-image"]);
       expect(caps["fal-ai/img2img"]).toEqual(["image-to-image"]);
@@ -347,7 +347,7 @@ describe("/api/models route", () => {
       );
 
       const { data } = await get();
-      expect(data.models).toHaveLength(12);
+      expect(data.models).toHaveLength(13);
       expect(data.models.find((m: { id: string }) => m.id === "fal-ai/flux")).toBeDefined();
       expect(data.models.find((m: { id: string }) => m.id === "fal-ai/tts")?.capabilities).toEqual(["text-to-audio"]);
     });
@@ -369,7 +369,7 @@ describe("/api/models route", () => {
       const geminiModels = data.models.filter((m: { provider: string }) => m.provider === "gemini");
       expect(geminiModels.map((m: { name: string }) => m.name)).toEqual([
         "Gemini Omni 1.1 Flash", "Gemini Omni Flash Preview", "Nano Banana", "Nano Banana 2",
-        "Nano Banana 2 Lite", "Nano Banana Pro", "Veo 3.1", "Veo 3.1 Fast", "Veo 3.1 Fast I2V", "Veo 3.1 I2V",
+        "Nano Banana 2 Lite", "Nano Banana 2.1", "Nano Banana Pro", "Veo 3.1", "Veo 3.1 Fast", "Veo 3.1 Fast I2V", "Veo 3.1 I2V",
       ]);
       expect(data.models.slice(-3).map((m: { provider: string; name: string }) => [m.provider, m.name]))
         .toEqual([["replicate", "mighty"], ["replicate", "alpha"], ["replicate", "zebra"]]);

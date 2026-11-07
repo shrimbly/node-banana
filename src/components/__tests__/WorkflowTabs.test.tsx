@@ -120,8 +120,12 @@ describe("WorkflowTabs", () => {
     render(<WorkflowTabs />);
     fireEvent.click(screen.getByText("Product shots"));
     expect(mockSwitchTab).not.toHaveBeenCalled();
+    mockSetCanvasViewport.mockClear();
     fireEvent.click(screen.getByText("Summer campaign"));
     expect(mockSwitchTab).toHaveBeenCalledWith("tab-1");
+    // The view as it is now parks with the outgoing tab, before the switch.
+    expect(mockSetCanvasViewport).toHaveBeenCalledWith({ x: 1, y: 2, zoom: 3 });
+    expect(mockSetCanvasViewport.mock.invocationCallOrder[0]).toBeLessThan(mockSwitchTab.mock.invocationCallOrder[0]);
   });
 
   it("closes a clean tab straight away", () => {
@@ -203,9 +207,8 @@ describe("WorkflowTabs", () => {
     expect(screen.getByRole("button", { name: "New tab" })).toBeDisabled();
   });
 
-  it("mirrors viewport moves into the store and restores the tab's viewport on a switch", () => {
+  it("parks the current viewport with the tab on a switch and restores the incoming tab's", () => {
     const { rerender } = render(<WorkflowTabs />);
-    expect(mockUseOnViewportChange).toHaveBeenCalledWith({ onEnd: mockSetCanvasViewport });
     // First showing of a tab with no viewport of its own: it adopts the current one
     expect(mockSetViewport).not.toHaveBeenCalled();
     expect(mockSetCanvasViewport).toHaveBeenCalledWith({ x: 1, y: 2, zoom: 3 });
@@ -215,17 +218,9 @@ describe("WorkflowTabs", () => {
     expect(mockSetViewport).toHaveBeenCalledWith({ x: 10, y: 20, zoom: 1.5 });
   });
 
-  it("captures the incoming viewport before navigation effects can update the store", () => {
-    const incoming = { x: 120, y: -50, zoom: 0.7 };
-    const state = useState({ canvasViewport: incoming });
-    mockUseOnViewportChange.mockImplementationOnce(() => {
-      useLayoutEffect(() => {
-        // An outgoing navigation event can arrive during the same commit.
-        Object.assign(state, { canvasViewport: { x: 999, y: 999, zoom: 1 } });
-      }, []);
-    });
+  it("does not write the store as the view moves", () => {
     render(<WorkflowTabs />);
-    expect(mockSetViewport).toHaveBeenCalledWith(incoming);
+    expect(mockUseOnViewportChange).not.toHaveBeenCalled();
   });
 
   describe("Assets entry", () => {
@@ -311,6 +306,44 @@ describe("WorkflowTabs", () => {
       render(<WorkflowTabs />);
       expect(screen.getByText("Product shots")).not.toBeDisabled();
       expect(screen.getByText("Summer campaign")).toBeDisabled();
+      fireEvent.click(screen.getByText("Product shots"));
+      expect(useAssetStore.getState().appView).toBe("canvas");
+    });
+  });
+
+  describe("Edit video entry", () => {
+    beforeEach(() => useAssetStore.setState({ appView: "canvas" }));
+    afterEach(() => useAssetStore.setState({ appView: "canvas" }));
+
+    const edit = () => screen.getByRole("button", { name: "Edit video" });
+
+    it("follows Assets, before the workflow tabs, as a toggle button titled with its key", () => {
+      render(<WorkflowTabs />);
+      expect(edit()).toHaveAttribute("aria-pressed", "false");
+      expect(edit()).not.toHaveAttribute("role", "tab");
+      expect(edit()).toHaveAttribute("title", "Edit video (E)");
+      expect(edit()).not.toHaveTextContent("Edit video");
+      expect(screen.getByRole("button", { name: "Assets" }).nextElementSibling).toBe(edit());
+      expect(edit().compareDocumentPosition(screen.getAllByRole("tab")[0]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("shows the view, pressed and labelled, and a second click goes back to the canvas", () => {
+      const { rerender } = render(<WorkflowTabs />);
+      fireEvent.click(edit());
+      expect(useAssetStore.getState().appView).toBe("edit");
+      rerender(<WorkflowTabs />);
+      expect(edit()).toHaveAttribute("aria-pressed", "true");
+      expect(edit()).toHaveTextContent("Edit video");
+      expect(edit()).toHaveAttribute("title", "Back to the canvas (E)");
+      expect(edit().className).toContain("bg-pane");
+      expect(screen.getByRole("button", { name: "Assets" })).toHaveAttribute("aria-pressed", "false");
+      fireEvent.click(edit());
+      expect(useAssetStore.getState().appView).toBe("canvas");
+    });
+
+    it("goes back to the canvas from a workflow tab", () => {
+      useAssetStore.setState({ appView: "edit" });
+      render(<WorkflowTabs />);
       fireEvent.click(screen.getByText("Product shots"));
       expect(useAssetStore.getState().appView).toBe("canvas");
     });

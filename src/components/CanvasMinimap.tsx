@@ -3,7 +3,6 @@
 import { Fullscreen, Lock, LockOpen, Map, Minus, Plus } from "lucide-react";
 import { useState, type ReactNode } from "react";
 import {
-  MiniMap,
   Panel,
   useReactFlow,
   useViewport,
@@ -123,17 +122,15 @@ interface CanvasMinimapProps {
    * from the prop alone, so a lock written to its store left them draggable.
    */
   onLockedChange?: (locked: boolean) => void;
-  /** On the GPU canvas: React Flow holds only the live nodes, so the minimap and Fit view read the scene. */
-  gpu?: boolean;
 }
 
 /**
  * The navigator: minimap on top, one row of canvas controls beneath. Hiding
  * the minimap leaves the row on its own, so zoom, fit and lock never move.
  */
-export function CanvasMinimap({ disabled = false, onMinimapVisibleChange, locked = false, onLockedChange, gpu = false }: CanvasMinimapProps) {
+export function CanvasMinimap({ disabled = false, onMinimapVisibleChange, locked = false, onLockedChange }: CanvasMinimapProps) {
   const [isMinimapVisible, setIsMinimapVisible] = useState(true);
-  const { zoomIn, zoomOut, fitView, setCenter, getZoom } = useReactFlow();
+  const { zoomIn, zoomOut, fitView } = useReactFlow();
   const bridge = useGpuCanvasBridge();
 
   return (
@@ -147,39 +144,15 @@ export function CanvasMinimap({ disabled = false, onMinimapVisibleChange, locked
     >
       {isMinimapVisible && (
         <div style={{ padding: `${MINIMAP_GEOMETRY.padding}px ${MINIMAP_GEOMETRY.padding}px 0` }}>
-          {gpu ? (
-            <GpuMinimap
-              disabled={disabled}
-              className="overflow-hidden rounded-md squircle bg-well shadow-well"
-              width={MINIMAP_GEOMETRY.width}
-              height={MINIMAP_GEOMETRY.height}
-              bgColor="#1a1a1a"
-              maskColor="rgba(0, 0, 0, 0.6)"
-              maskStrokeColor="rgba(255, 255, 255, 0.35)"
-            />
-          ) : (
-          <MiniMap
-            // 6px radius = the card's 12px minus the 6px inset, so the corners run concentric.
+          <GpuMinimap
+            disabled={disabled}
             className="overflow-hidden rounded-md squircle bg-well shadow-well"
-            style={{
-              position: "static",
-              margin: 0,
-              width: MINIMAP_GEOMETRY.width,
-              height: MINIMAP_GEOMETRY.height,
-            }}
+            width={MINIMAP_GEOMETRY.width}
+            height={MINIMAP_GEOMETRY.height}
             bgColor="#1a1a1a"
             maskColor="rgba(0, 0, 0, 0.6)"
             maskStrokeColor="rgba(255, 255, 255, 0.35)"
-            maskStrokeWidth={1}
-            pannable
-            zoomable
-            // A click (not a drag, which pans) brings that spot to the middle of the view at the current zoom.
-            onClick={(_, position) => {
-              void setCenter(position.x, position.y, { zoom: getZoom(), duration: 250 });
-            }}
-            nodeColor={getMiniMapNodeColor}
           />
-          )}
         </div>
       )}
       <div className="flex h-10 items-center gap-0.5 px-1">
@@ -191,7 +164,7 @@ export function CanvasMinimap({ disabled = false, onMinimapVisibleChange, locked
           <Plus size={18} strokeWidth={1.75} />
         </ControlButton>
         <div className={CHROME_DIVIDER} />
-        <ControlButton label="Fit view" disabled={disabled} onClick={() => (gpu && bridge ? bridge.fit() : fitView())}>
+        <ControlButton label="Fit view" disabled={disabled} onClick={() => (bridge ? bridge.fit() : fitView())}>
           <Fullscreen size={18} strokeWidth={1.75} />
         </ControlButton>
         <ControlButton

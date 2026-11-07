@@ -15,7 +15,6 @@ vi.mock("@/store/workflowStore", () => ({
 
 vi.mock("@/components/WorkflowCanvas", () => ({
   isPanningRef: { current: false },
-  isDraggingNodeRef: { current: false },
 }));
 
 const mockGetNodes = vi.fn(() => [] as unknown[]);

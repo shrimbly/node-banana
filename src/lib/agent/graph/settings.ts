@@ -22,6 +22,7 @@ import {
   getVideoModel,
   IMAGE_MODEL_ALIASES,
   IMAGE_MODELS,
+  imageModelsWith,
   LEGACY_LLM_MODEL_IDS,
   LLM_PROVIDERS,
   LLM_TEMPERATURE_MAX,
@@ -434,7 +435,7 @@ function handleGenerateImage(run: FieldRun): void {
   if (aspect.present) {
     const normalized = normalizeAspectRatio(aspect.value);
     if (!normalized || !spec.aspectRatios.includes(normalized as never)) {
-      const extra = normalized && ["1:4", "1:8", "4:1", "8:1"].includes(normalized) ? " (1:4, 1:8, 4:1 and 8:1 need nano-banana-2)" : "";
+      const extra = normalized && ["1:4", "1:8", "4:1", "8:1"].includes(normalized) ? ` (1:4, 1:8, 4:1 and 8:1 need ${imageModelsWith((m) => m.aspectRatios.includes("8:1"), "or")})` : "";
       out.errors.push(`${label}: aspectRatio ${formatValue(aspect.value)} is not available on ${spec.id}${extra}. Use one of: ${spec.aspectRatios.join(", ")}.`);
     } else {
       set(out, "aspectRatio", normalized);
@@ -451,7 +452,7 @@ function handleGenerateImage(run: FieldRun): void {
   if (resolution.present) {
     const normalized = normalizeResolution(resolution.value);
     if (spec.resolutions.length === 0) {
-      out.errors.push(`${label}: ${spec.id} has no resolution setting (only nano-banana-pro and nano-banana-2 do). Change model too, or leave resolution out.`);
+      out.errors.push(`${label}: ${spec.id} has no resolution setting (only ${imageModelsWith((m) => m.resolutions.length > 0)} do). Change model too, or leave resolution out.`);
     } else if (!normalized || !spec.resolutions.includes(normalized as never)) {
       out.errors.push(`${label}: resolution ${formatValue(resolution.value)} is not available on ${spec.id}. Use one of: ${spec.resolutions.join(", ")}.`);
     } else {
@@ -480,8 +481,8 @@ function handleGenerateImage(run: FieldRun): void {
       out.warnings.push(`${node.id}: turned ${field} off; ${spec!.id} does not support it.`);
     }
   };
-  searchFlag(googleSearch, "useGoogleSearch", spec.googleSearch, "nano-banana-pro and nano-banana-2");
-  searchFlag(imageSearch, "useImageSearch", spec.imageSearch, "nano-banana-2");
+  searchFlag(googleSearch, "useGoogleSearch", spec.googleSearch, imageModelsWith((m) => m.googleSearch));
+  searchFlag(imageSearch, "useImageSearch", spec.imageSearch, imageModelsWith((m) => m.imageSearch));
 }
 
 // --- Generate Video -------------------------------------------------------

@@ -1,6 +1,6 @@
 "use client";
 
-import { DialogButton } from "@/components/ui/Dialog";
+import { Dialog, DialogButton } from "@/components/ui/Dialog";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Stage, Layer, Image as KonvaImage, Rect, Ellipse, Arrow, Line, Text, Transformer } from "react-konva";
 import { useAnnotationStore } from "@/store/annotationStore";
@@ -435,8 +435,22 @@ export function AnnotationModal() {
   ];
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Annotate image" className="fixed inset-0 z-100 bg-canvas-bg flex flex-col">
-      {/* Top Bar — the dialog header, laid flat across the screen */}
+    // A near-full-screen dialog rather than a layer over the whole window: on
+    // the desktop the top band is the tab strip's window-drag region, and a
+    // header laid across it handed Cancel and Done's clicks to the window.
+    // The dialog's backdrop is no-drag and its panel sits below that band.
+    // Escape and Delete are the modal's own (capture handler above); the
+    // stage's wheel zoom needs the event to reach Konva.
+    <Dialog
+      open
+      onClose={closeModal}
+      closeOnBackdrop={false}
+      closeOnEscape={false}
+      stopWheel={false}
+      label="Annotate image"
+      className="w-[calc(100vw-48px)] max-w-none h-[calc(100vh-48px)] max-h-none"
+    >
+      {/* Top Bar — the dialog header */}
       <div className="h-12 bg-card flex items-center justify-between px-3 border-b border-chrome-border shrink-0">
         <div className="flex items-center gap-1">
           {tools.map((tool) => (
@@ -649,6 +663,6 @@ export function AnnotationModal() {
           }}
         />
       )}
-    </div>
+    </Dialog>
   );
 }

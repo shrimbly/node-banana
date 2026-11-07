@@ -1,4 +1,4 @@
-export type CredentialName = `provider.${"gemini" | "openai" | "anthropic" | "replicate" | "fal" | "kie" | "wavespeed"}` | `comfy.${"cloudApiKey" | "remoteApiKey" | "comfyOrgApiKey" | "cloudUrl" | "localUrl" | "remoteUrl"}`;
+export type CredentialName = `provider.${"gemini" | "openai" | "anthropic" | "replicate" | "fal" | "kie" | "wavespeed" | "comfy"}` | `comfy.${"cloudApiKey" | "remoteApiKey" | "comfyOrgApiKey" | "cloudUrl" | "localUrl" | "remoteUrl"}`;
 export type DesktopCredentials = Partial<Record<CredentialName, string | null>>;
 export type EnvironmentImport = { cancelled: true } | {
   cancelled: false;
@@ -38,13 +38,6 @@ declare global {
         onStatus: (callback: (online: boolean) => void) => () => void;
       };
       openLogs: () => Promise<void>;
-      /** The GPU canvas's Chromium feature (electron/lib/gpu-canvas.cjs). Older desktop builds lack it. */
-      gpuCanvas?: {
-        /** Whether this launch has the feature on. */
-        active: () => Promise<boolean>;
-        /** Keeps the setting for the next launch; false when it could not be saved. */
-        set: (enabled: boolean) => Promise<boolean>;
-      };
       /** File › Save in the app menu (Cmd/Ctrl+S); the page saves the current workflow. */
       onSaveRequest: (callback: () => void) => () => void;
       updates: {

@@ -12,7 +12,9 @@
  * are new since the last sync and need a family, or an exclusion reason.
  *
  * With COMFY_API_KEY set, the model list comes from the Router itself
- * (GET /v2/models); otherwise from the docs index.
+ * (GET /v2/models); otherwise from the docs index. The key also fetches a
+ * schema the docs have not published yet from the Router
+ * (GET /v2/models/{id}/openapi.json), as the app does at run time.
  */
 import { mkdirSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
@@ -53,7 +55,10 @@ await Promise.all(
     while (queue.length) {
       const id = queue.shift();
       try {
-        const res = await fetch(`${DOCS}/router-schemas/${id}.json`);
+        let res = await fetch(`${DOCS}/router-schemas/${id}.json`);
+        if (res.status === 404 && key) {
+          res = await fetch(`https://api.comfy.org/v2/models/${id}/openapi.json`, { headers: { "X-API-Key": key } });
+        }
         if (!res.ok) throw new Error(String(res.status));
         writeFileSync(join(OUT, `${id.replace("/", "__")}.json`), await res.text());
       } catch (error) {

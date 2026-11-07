@@ -5400,6 +5400,40 @@
      ]
     },
     {
+     "id": "vertexai/gemini-nano-banana-2.1",
+     "name": "Nano Banana 2.1",
+     "description": "Google's update to Nano Banana 2, with better realism, prompt adherence and text rendering at Flash speed and output up to 4K.",
+     "capabilities": [
+      "text-to-image",
+      "image-to-image"
+     ],
+     "paramOverrides": {
+      "aspectRatio": {
+       "enum": [
+        "1:1",
+        "2:3",
+        "3:2",
+        "3:4",
+        "4:3",
+        "4:5",
+        "5:4",
+        "9:16",
+        "16:9",
+        "21:9"
+       ],
+       "default": "1:1"
+      },
+      "imageSize": {
+       "enum": [
+        "1K",
+        "2K",
+        "4K"
+       ],
+       "default": "1K"
+      }
+     }
+    },
+    {
      "id": "vertexai/gemini-3.1-flash-lite-image",
      "name": "Gemini 3.1 Flash-Lite Image",
      "description": "The low-cost Flash-Lite tier of Gemini 3.1 image generation and editing.",
@@ -5464,83 +5498,7 @@
      }
     }
    ],
-   "notes": "Same Vertex generateContent wire format as the hand-verified geminiImage family. aspectRatio and imageSize are free strings in the schema (no enum): the UI should offer 1:1 2:3 3:2 3:4 4:3 4:5 5:4 9:16 16:9 21:9 and 1K/2K/4K (3-pro-image, 3.1-flash-image); 2.5-flash-image is 1K only so imageSize is excluded there; 3.1-flash-lite-image sizes unverified. Inline images: raw base64 + inlineData.mimeType, which must be in the GeminiMimeType enum (png/jpeg/webp/heic/heif OK; gif is not). Image count max (14 / 3) comes from Google's docs, not the schema. uploadImagesToStorage is left unset so images come back as inlineData base64; fileData.fileUri path is only a fallback. A response may contain a text part before the image part, hence parts[*]. If thinking output were ever returned with includeThoughts, a thought image could match first; we never set thinkingConfig."
-  },
-  {
-   "family": "imagen",
-   "provider": "vertexai",
-   "output": "image",
-   "inputs": [
-    {
-     "name": "prompt",
-     "type": "text",
-     "required": true,
-     "label": "Prompt"
-    }
-   ],
-   "params": {
-    "at": "/parameters",
-    "exclude": [
-     "sampleCount",
-     "storageUri",
-     "addWatermark",
-     "includeRaiReason",
-     "includeSafetyAttributes",
-     "outputOptions"
-    ],
-    "extra": []
-   },
-   "body": {
-    "instances": [
-     {
-      "prompt": "{{prompt}}"
-     }
-    ],
-    "parameters": {
-     "$params": true,
-     "sampleCount": 1,
-     "addWatermark": false,
-     "includeRaiReason": true
-    }
-   },
-   "result": {
-    "media": [
-     "predictions[*].bytesBase64Encoded|base64:@predictions[0].mimeType"
-    ],
-    "errors": [
-     {
-      "path": "predictions[0].raiFilteredReason",
-      "message": "Imagen filtered the output: {value}"
-     }
-    ]
-   },
-   "models": [
-    {
-     "id": "vertexai/imagen-3.0-generate-002",
-     "name": "Imagen 3",
-     "description": "Google's Imagen 3 text-to-image model (002 release).",
-     "capabilities": [
-      "text-to-image"
-     ]
-    },
-    {
-     "id": "vertexai/imagen-3.0-generate-001",
-     "name": "Imagen 3 (001)",
-     "description": "The original release of Google's Imagen 3 text-to-image model.",
-     "capabilities": [
-      "text-to-image"
-     ]
-    },
-    {
-     "id": "vertexai/imagen-3.0-fast-generate-001",
-     "name": "Imagen 3 Fast",
-     "description": "The lower-latency tier of Google's Imagen 3 text-to-image model.",
-     "capabilities": [
-      "text-to-image"
-     ]
-    }
-   ],
-   "notes": "Direct-return :predict. sampleCount defaults to 4 in the schema, so it is fixed to 1. addWatermark=false is fixed because Vertex rejects a seed while the watermark is on. includeRaiReason=true makes Vertex put raiFilteredReason on a filtered prediction; that field is not in the published response schema, so the error rule is best-effort. A fully filtered request can come back as {} (no predictions) and will surface as 'no output'. Exposed params: aspectRatio, enhancePrompt, personGeneration, safetySetting, seed. storageUri is excluded (the route documents it as unsupported). Imagen 3 image editing/customization is not on this route."
+   "notes": "Same Vertex generateContent wire format as the hand-verified geminiImage family. aspectRatio and imageSize are free strings in the schema (no enum): the UI should offer 1:1 2:3 3:2 3:4 4:3 4:5 5:4 9:16 16:9 21:9 and 1K/2K/4K (3-pro-image, 3.1-flash-image, nano-banana-2.1); 2.5-flash-image is 1K only so imageSize is excluded there; 3.1-flash-lite-image sizes unverified. Inline images: raw base64 + inlineData.mimeType, which must be in the GeminiMimeType enum (png/jpeg/webp/heic/heif OK; gif is not). Image count max (14 / 3) comes from Google's docs, not the schema. uploadImagesToStorage is left unset so images come back as inlineData base64; fileData.fileUri path is only a fallback. A response may contain a text part before the image part, hence parts[*]. If thinking output were ever returned with includeThoughts, a thought image could match first; we never set thinkingConfig."
   },
   {
    "family": "veo",
@@ -5703,99 +5661,9 @@
        "default": 8
       }
      }
-    },
-    {
-     "id": "veo/veo-3.0-generate-001",
-     "name": "Veo 3",
-     "description": "Google's Veo 3 video model with native audio.",
-     "capabilities": [
-      "text-to-video",
-      "image-to-video"
-     ],
-     "inputs": [
-      {
-       "name": "prompt",
-       "type": "text",
-       "required": true,
-       "label": "Prompt"
-      },
-      {
-       "name": "image",
-       "type": "image",
-       "required": false,
-       "label": "First frame",
-       "max": 1,
-       "encoding": "base64"
-      }
-     ],
-     "paramOverrides": {
-      "aspectRatio": {
-       "default": "16:9"
-      },
-      "durationSeconds": {
-       "enum": [
-        4,
-        6,
-        8
-       ],
-       "default": 8
-      },
-      "resolution": {
-       "default": "720p",
-       "enum": [
-        "720p",
-        "1080p"
-       ]
-      },
-      "generateAudio": {
-       "default": true
-      }
-     }
-    },
-    {
-     "id": "veo/veo-3.0-fast-generate-001",
-     "name": "Veo 3 Fast",
-     "description": "The faster, lower-cost tier of Google's Veo 3 video model with native audio.",
-     "capabilities": [
-      "text-to-video",
-      "image-to-video"
-     ],
-     "inputs": [
-      {
-       "name": "prompt",
-       "type": "text",
-       "required": true,
-       "label": "Prompt"
-      },
-      {
-       "name": "image",
-       "type": "image",
-       "required": false,
-       "label": "First frame",
-       "max": 1,
-       "encoding": "base64"
-      }
-     ],
-     "paramOverrides": {
-      "resolution": {
-       "enum": [
-        "720p",
-        "1080p"
-       ],
-       "default": "720p"
-      },
-      "durationSeconds": {
-       "enum": [
-        4,
-        6,
-        8
-       ],
-       "default": 8
-      }
-     }
     }
    ],
-   "notes": "Matches the hand-verified veo family. All five Veo 3.x schemas are byte-identical; per-model limits are NOT in the schema: durationSeconds is a free number (Veo 3/3.1 accept 4, 6, 8), resolution enum lists 4k but only veo-3.1-generate-001 is known to do 4k (fast/lite/3.0: 720p/1080p). The schema description claims lastFrame works on 'Veo 3.0+', but the hand-verified catalog omits it for 3.0/3.0-fast, so those models override inputs to drop last_frame. Image mimeType enum is image/jpeg|image/png only: a webp/gif first or last frame will be rejected unless the interpreter transcodes. enhancePrompt excluded (Veo 3 does not allow disabling it), fps excluded (fixed 24), task excluded (Vertex infers it). Not exposed: referenceImages (up to 3 asset refs on 3.1, mutually exclusive with a first frame), video extend/edit via instances[].video and mask, and instances[].cameraControl (lives inside the instances array, which params.at cannot address). gcsUri is normally a signed https URL; it is a gs:// URI only on BYOK or custom storageUri, which the app never sets - the interpreter should still reject a gs:// value as 'no output'. Only veo-2.0 uses the legacy route; its schema lacks lastFrame/resolution/generateAudio and allows personGeneration ALLOW/BLOCK."
+   "notes": "Matches the hand-verified veo family. The three Veo 3.1 ids share one schema; per-model limits are NOT in the schema: durationSeconds is a free number (Veo 3.1 accepts 4, 6, 8), resolution enum lists 4k but only veo-3.1-generate-001 is known to do 4k (fast/lite: 720p/1080p). Image mimeType enum is image/jpeg|image/png only: a webp/gif first or last frame will be rejected unless the interpreter transcodes. enhancePrompt excluded (Veo 3 does not allow disabling it), fps excluded (fixed 24), task excluded (Vertex infers it). Not exposed: referenceImages (up to 3 asset refs on 3.1, mutually exclusive with a first frame), video extend/edit via instances[].video and mask, and instances[].cameraControl (lives inside the instances array, which params.at cannot address). gcsUri is normally a signed https URL; it is a gs:// URI only on BYOK or custom storageUri, which the app never sets - the interpreter should still reject a gs:// value as 'no output'."
   },
   {
    "family": "grokImage",
@@ -7618,6 +7486,324 @@
     }
    ],
    "notes": "Higgsfield requires AT LEAST ONE reference (image, video, audio, file_url or link_url) - not expressible in the schema, so a prompt-only run fails at the provider; the app should require one media input. Not text-to-video for that reason. Prompts reference assets as \"Image 1\", \"Video 1\", \"Audio 1\" in array order. Schema allows up to 5 videos/5 audio (combined <=30s) but the app handles carry one each. `file_url`/`link_url` (document/web page context, mutually exclusive) are excluded; they could be exposed as plain string params. Input video duration + output `duration` must be <= 30s."
+  },
+  {
+   "family": "pikaImage",
+   "provider": "pika",
+   "output": "image",
+   "inputs": [
+    {
+     "name": "prompt",
+     "type": "text",
+     "required": true,
+     "label": "Prompt"
+    }
+   ],
+   "params": {
+    "at": "",
+    "exclude": [
+     "prompt",
+     "num_images"
+    ],
+    "extra": []
+   },
+   "body": {
+    "prompt": "{{prompt}}",
+    "$params": true
+   },
+   "result": {
+    "media": [
+     "output.images[0].url"
+    ],
+    "errors": [
+     {
+      "path": "error.message",
+      "message": "Pika: {value}"
+     },
+     {
+      "path": "status",
+      "notIn": [
+       "completed"
+      ],
+      "message": "Pika: job {value}"
+     }
+    ]
+   },
+   "models": [
+    {
+     "id": "pika/pika-nano-banana-pro",
+     "name": "Nano Banana Pro (Pika)",
+     "description": "Gemini 3 Pro Image text-to-image served by Pika, at 1K, 2K or 4K.",
+     "capabilities": [
+      "text-to-image"
+     ]
+    },
+    {
+     "id": "pika/pika-nano-banana-2",
+     "name": "Nano Banana 2 (Pika)",
+     "description": "Gemini 3.1 Flash Image text-to-image served by Pika, from 512 px to 4K, with a choice of how much it reasons first.",
+     "capabilities": [
+      "text-to-image"
+     ]
+    },
+    {
+     "id": "pika/pika-gpt-image-2",
+     "name": "GPT Image 2 (Pika)",
+     "description": "OpenAI's GPT Image 2 text-to-image served by Pika, with quality and transparent-background control.",
+     "capabilities": [
+      "text-to-image"
+     ],
+     "paramOverrides": {
+      "size": {
+       "hidden": true
+      }
+     }
+    }
+   ],
+   "notes": "Pika's own text-to-image routes: a flat body (prompt plus settings), no input image. The same models through `vertexai/…?model_provider=pika` or `openai/gpt-image-2?model_provider=pika` take the partner's native body instead; the two are not interchangeable. num_images is left at its default of 1 (the node shows one output; Nano Banana takes only 1). GPT Image 2's `size` (WxH or auto) overrides aspect_ratio and resolution, so it is hidden and those two enums are the control. Router returns only a completed job document (`status: completed`, media at output.images[].url) and answers a failed job with its own error, so the error rules are a fallback."
+  },
+  {
+   "family": "pikaVideo",
+   "provider": "pika",
+   "output": "video",
+   "inputs": [
+    {
+     "name": "prompt",
+     "type": "text",
+     "required": true,
+     "label": "Prompt"
+    },
+    {
+     "name": "negative_prompt",
+     "type": "text",
+     "required": false,
+     "label": "Negative prompt"
+    }
+   ],
+   "params": {
+    "at": "",
+    "exclude": [
+     "prompt",
+     "negative_prompt",
+     "image"
+    ],
+    "extra": []
+   },
+   "body": {
+    "prompt": "{{prompt}}",
+    "negative_prompt": "{{negative_prompt}}",
+    "image": "{{input.image[0]}}",
+    "$params": true
+   },
+   "result": {
+    "media": [
+     "output.video.url",
+     "output.videos[0].url"
+    ],
+    "errors": [
+     {
+      "path": "error.message",
+      "message": "Pika: {value}"
+     },
+     {
+      "path": "status",
+      "notIn": [
+       "completed"
+      ],
+      "message": "Pika: job {value}"
+     }
+    ]
+   },
+   "models": [
+    {
+     "id": "pika/pika-2.5-text-to-video",
+     "name": "Pika 2.5 Text to Video",
+     "description": "Pika 2.5 generating a five-second clip at 720p or 1080p from a text prompt.",
+     "capabilities": [
+      "text-to-video"
+     ]
+    },
+    {
+     "id": "pika/pika-2.5-image-to-video",
+     "name": "Pika 2.5 Image to Video",
+     "description": "Pika 2.5 animating an image into a 5 or 10 second clip at 720p or 1080p, with an optional prompt for the motion.",
+     "capabilities": [
+      "image-to-video"
+     ],
+     "uploads": true,
+     "inputs": [
+      {
+       "name": "prompt",
+       "type": "text",
+       "required": false,
+       "label": "Prompt"
+      },
+      {
+       "name": "negative_prompt",
+       "type": "text",
+       "required": false,
+       "label": "Negative prompt"
+      },
+      {
+       "name": "image",
+       "type": "image",
+       "required": true,
+       "label": "Image",
+       "max": 1,
+       "encoding": "url"
+      }
+     ]
+    }
+   ],
+   "notes": "Pika 2.5's flat body. Image-to-video takes the source image as a public https URL only (`^https://`), so it goes up to Comfy storage first; its prompt is optional. Text-to-video makes 5 s clips only (duration_s enum [5]). The finished job carries the clip at output.video.url, or output.videos[].url when Pika delivers it as a list (media_type: videos)."
+  },
+  {
+   "family": "pikaSeedance",
+   "provider": "pika",
+   "output": "video",
+   "inputs": [
+    {
+     "name": "prompt",
+     "type": "text",
+     "required": true,
+     "label": "Prompt"
+    }
+   ],
+   "params": {
+    "at": "",
+    "exclude": [
+     "prompt",
+     "watermark"
+    ],
+    "extra": []
+   },
+   "paramOverrides": {
+    "duration": {
+     "default": 5
+    },
+    "resolution": {
+     "default": "720p"
+    }
+   },
+   "body": {
+    "prompt": "{{prompt}}",
+    "watermark": false,
+    "$params": true
+   },
+   "result": {
+    "media": [
+     "output.video.url",
+     "output.videos[0].url"
+    ],
+    "errors": [
+     {
+      "path": "error.message",
+      "message": "Pika: {value}"
+     },
+     {
+      "path": "status",
+      "notIn": [
+       "completed"
+      ],
+      "message": "Pika: job {value}"
+     }
+    ]
+   },
+   "models": [
+    {
+     "id": "pika/pika-seedance-2.0",
+     "name": "Seedance 2.0 (Pika)",
+     "description": "ByteDance's Seedance 2.0 text-to-video with generated audio, served by Pika: 4 to 15 seconds from 480p to 4K.",
+     "capabilities": [
+      "text-to-video"
+     ]
+    }
+   ],
+   "notes": "Pika's text-to-video route for Seedance 2.0: a flat body, unlike byteplus/dreamina-seedance-2-0-260128 (content[] with frames), which Pika also serves through ?model_provider=pika. duration and resolution are REQUIRED with no default: 5 and 720p. duration is oneOf 4-15 or \"auto\"; the range is offered, auto is not. watermark pinned false. No image, video or audio reference on this route."
+  },
+  {
+   "family": "higgsfieldGenjutsu",
+   "provider": "higgsfield",
+   "output": "video",
+   "inputs": [
+    {
+     "name": "prompt",
+     "type": "text",
+     "required": false,
+     "label": "Prompt"
+    },
+    {
+     "name": "video",
+     "type": "video",
+     "required": true,
+     "label": "Source video",
+     "max": 1,
+     "encoding": "url"
+    },
+    {
+     "name": "image",
+     "type": "image",
+     "required": true,
+     "label": "Reference images",
+     "max": 8,
+     "encoding": "url"
+    }
+   ],
+   "params": {
+    "at": "",
+    "exclude": [
+     "prompt",
+     "video_url",
+     "image_urls"
+    ],
+    "extra": []
+   },
+   "paramOverrides": {
+    "resolution": {
+     "enum": [
+      "480p",
+      "720p",
+      "1080p"
+     ],
+     "default": "720p"
+    }
+   },
+   "body": {
+    "prompt": "{{prompt}}",
+    "video_url": "{{input.video[0]}}",
+    "image_urls": "{{input.image}}",
+    "$params": true
+   },
+   "result": {
+    "media": [
+     "video.url"
+    ],
+    "errors": [
+     {
+      "path": "error",
+      "message": "Higgsfield: {value}"
+     },
+     {
+      "path": "status",
+      "notIn": [
+       "completed"
+      ],
+      "message": "Higgsfield: generation {value}"
+     }
+    ]
+   },
+   "models": [
+    {
+     "id": "higgsfield/higgsfield-genjutsu-motion-transfer-v1.0",
+     "name": "Genjutsu Motion Transfer",
+     "description": "Higgsfield's motion transfer: recasts a source video with the people, place and style of up to 8 reference images, keeping its motion, camera and timing.",
+     "capabilities": [
+      "video-to-video"
+     ],
+     "uploads": true
+    }
+   ],
+   "notes": "Source video and 1-8 reference images, both by URL (uploaded to Comfy storage first). The video must be at least 4 s; a longer one is trimmed to 30 s. resolution is a free string in the schema; its description lists 480p, 720p and 1080p (default 720p). The prompt is optional guidance. Same Higgsfield status envelope as higgsfieldKling3: completed with video.url, or nsfw/failed/canceled. The public docs copy of this schema 404s; the Router's own GET /v2/models/{id}/openapi.json answers with the key."
   }
  ],
  "excluded": {
@@ -7638,6 +7824,7 @@
   "byteplus/seed-2-0-lite-260228": "text model; out of scope",
   "byteplus/seed-2-0-mini-260215": "text model; out of scope",
   "byteplus/seed-2-0-pro-260328": "text model; out of scope",
+  "fal/crystal-upscaler": "Comfy Router refuses POST /v2/models/fal/crystal-upscaler with 403 not_enabled, and the schema states it does not run this model today (no result classification). The binding is simple once it is enabled: one image by URL (`image_url`), output at `images[0].url`.",
   "fal/fal-gpt-image-2": "Router has not authored this alias's input or output schema (x-comfy-input-schema-authored: false); it forwards fal's own native request body and returns an undescribed */* result, so there is no source of truth to bind. Use the canonical openai/gpt-image-2 instead (Router documents a `?model_provider=` alternate-provider leg for some models; unverified for this one).",
   "fal/fal-gpt-image-2.5-flare": "Router has not authored this alias's input or output schema (x-comfy-input-schema-authored: false); it forwards fal's own native request body and returns an undescribed */* result, so there is no source of truth to bind. Use the canonical openai/gpt-image-2.5-flare instead (Router documents a `?model_provider=` alternate-provider leg for some models; unverified for this one).",
   "fal/fal-gpt-image-2.5-sunburst": "Router has not authored this alias's input or output schema (x-comfy-input-schema-authored: false); it forwards fal's own native request body and returns an undescribed */* result, so there is no source of truth to bind. Use the canonical openai/gpt-image-2.5-sunburst instead (Router documents a `?model_provider=` alternate-provider leg for some models; unverified for this one).",
@@ -7690,7 +7877,6 @@
   "tencent/hunyuan-3d-smart-topology": "Needs an OBJ or GLB 3D file URL as input; the app has no 3D input handle.",
   "tencent/hunyuan-3d-texture-edit": "Needs an FBX 3D file URL as input; the app has no 3D input handle.",
   "tencent/hunyuan-3d-uv": "Needs a 3D file URL as input; the app has no 3D input handle.",
-  "veo/veo-2.0-generate-001": "The schema states Router refuses this id before dispatch (no return-mode classification for the legacy /proxy/veo/generate operation) until enablement lands.",
   "vertexai/gemini-2.5-flash": "text model; out of scope",
   "vertexai/gemini-2.5-pro": "text model; out of scope",
   "vertexai/gemini-3.1-flash-lite": "text model; out of scope",

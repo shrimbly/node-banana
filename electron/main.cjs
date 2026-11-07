@@ -18,7 +18,7 @@ const { createServerMessageHandler } = require('./lib/bridge-main.cjs');
 const { UNLOAD_PROMPT } = require('./lib/unload-prompt.cjs');
 const { createUpdates, createUnsupportedUpdates, createPreviewUpdater, readReleasesUrl } = require('./lib/updates.cjs');
 const { createSessionTrace } = require('./lib/perf-trace.cjs');
-const { applyGpuCanvasSwitch, writeGpuCanvasPreference } = require('./lib/gpu-canvas.cjs');
+const { applyGpuCanvasSwitches } = require('./lib/gpu-canvas.cjs');
 let root = path.resolve(__dirname, '..');
 let runtime, backend, window, credentialStore, recoveryStore, diagnostics, updates;
 let quitting = false, rendererCrashed = false, starting, sessionTrace;
@@ -33,8 +33,8 @@ app.setName('Node Banana');
 app.setPath('userData', process.env.NODE_BANANA_ELECTRON_USER_DATA || path.join(app.getPath('appData'), 'Node Banana'));
 // Test profiles must not pollute the normal application's diagnostics.
 app.setAppLogsPath(process.env.NODE_BANANA_ELECTRON_USER_DATA ? path.join(app.getPath('userData'), 'logs') : undefined);
-// The GPU canvas's Chromium feature: on unless Settings › Canvas chose the classic canvas (applies from the next launch).
-const gpuCanvasActive = applyGpuCanvasSwitch(app.commandLine, { userData: app.getPath('userData') });
+// The GPU canvas's Chromium switches: HTML-in-Canvas, and software WebGL where there is no usable GPU.
+applyGpuCanvasSwitches(app.commandLine);
 function validCaller(event) {
   if (!window || event.sender !== window.webContents || event.senderFrame !== window.webContents.mainFrame) return false;
   try { return new URL(event.senderFrame.url).origin === origin; } catch { return false; }
@@ -251,11 +251,6 @@ function registerBridge() {
   ipcMain.handle('desktop:backend-state', event => { if (!validCaller(event)) throw new Error('Unauthorized desktop request'); return backend.online(); });
   ipcMain.handle('desktop:restart-backend', event => { if (!validCaller(event)) throw new Error('Unauthorized desktop request'); return startWithRetry(); });
   ipcMain.handle('desktop:open-logs', event => { if (!validCaller(event)) throw new Error('Unauthorized desktop request'); return openLogs(); });
-  ipcMain.handle('desktop:gpu-canvas:active', event => { if (!validCaller(event)) throw new Error('Unauthorized desktop request'); return gpuCanvasActive; });
-  ipcMain.handle('desktop:gpu-canvas:set', (event, enabled) => {
-    if (!validCaller(event)) throw new Error('Unauthorized desktop request');
-    try { writeGpuCanvasPreference(app.getPath('userData'), enabled === true); return true; } catch (error) { log(error); return false; }
-  });
   for (const operation of ['state', 'check', 'download', 'install', 'skip', 'dismiss']) ipcMain.handle(`desktop:updates:${operation}`, event => {
     if (!validCaller(event)) throw new Error('Unauthorized desktop request');
     return operation === 'check' ? updates.check({ manual: true }) : updates[operation]();

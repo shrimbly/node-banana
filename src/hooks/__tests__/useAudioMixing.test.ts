@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
-import { applyFades, prepareAudioAsync } from "../useAudioMixing";
+import { applyFades, decodeAudioPieces, fullLengthSamples, prepareAudioAsync } from "../useAudioMixing";
 
 // ---- AudioBuffer polyfill for jsdom ----
 class MockAudioBuffer implements AudioBuffer {
@@ -276,5 +276,57 @@ describe("useAudioMixing", () => {
 
       await expect(prepareAudioAsync(new Blob(["audio"]), 1.0)).rejects.toThrow("Failed to process audio");
     });
+  });
+
+  describe("decodeAudioPieces", () => {
+    it("hands each MediaBunny piece over in order, keeping none", async () => {
+      const first = createTestAudioBuffer(10, 1, 10);
+      const second = createTestAudioBuffer(5, 1, 10);
+      mockGetPrimaryAudioTrack.mockResolvedValue({ canDecode: mockCanDecode.mockResolvedValue(true) });
+      mockComputeDuration.mockResolvedValue(1.5);
+      mockBuffers.mockReturnValue({
+        [Symbol.asyncIterator]: async function* () {
+          yield { buffer: first };
+          yield { buffer: second };
+        },
+      });
+      const got: AudioBuffer[] = [];
+      const restart = vi.fn();
+      await decodeAudioPieces(new Blob(["audio"]), { piece: (b) => got.push(b), restart });
+      expect(got).toEqual([first, second]);
+      expect(restart).not.toHaveBeenCalled();
+    });
+
+    it("restarts before the Web Audio fallback's one buffer when MediaBunny fails part-way", async () => {
+      const first = createTestAudioBuffer(10, 1, 10);
+      const whole = createTestAudioBuffer(20, 1, 10);
+      mockGetPrimaryAudioTrack.mockResolvedValue({ canDecode: mockCanDecode.mockResolvedValue(true) });
+      mockComputeDuration.mockResolvedValue(2);
+      mockBuffers.mockReturnValue({
+        [Symbol.asyncIterator]: async function* () {
+          yield { buffer: first };
+          throw new Error("corrupt packet");
+        },
+      });
+      const ctx = { decodeAudioData: vi.fn().mockResolvedValue(whole), close: vi.fn().mockResolvedValue(undefined) };
+      vi.stubGlobal("AudioContext", function MockAudioContext() {
+        return ctx;
+      });
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      const blob = Object.assign(new Blob(["audio"]), { arrayBuffer: async () => new ArrayBuffer(4) });
+      const order: string[] = [];
+      await decodeAudioPieces(blob, {
+        piece: (b) => order.push(b === first ? "first" : "whole"),
+        restart: () => order.push("restart"),
+      });
+      expect(order).toEqual(["first", "restart", "whole"]);
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+  });
+
+  it("fullLengthSamples matches prepareAudioAsync's length for a file, never under its minimum", () => {
+    expect(fullLengthSamples(44101, 44100)).toBe(Math.max(1, Math.floor(Math.max(0.1, 44101 / 44100) * 44100)));
+    expect(fullLengthSamples(5, 100)).toBe(10);
   });
 });

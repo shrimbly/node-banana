@@ -7,6 +7,8 @@
 
 const MAX_SAMPLES = 4096;
 const LONG_FRAME_MS = 250;
+/** Long animation frames over this are kept (the 50 longest): a missed vsync at 120 Hz is far below LONG_FRAME_MS. */
+const LOAF_MS = 50;
 
 export interface Percentiles {
   count: number;
@@ -30,7 +32,8 @@ export interface LongAnimationFrame {
   renderMs: number;
   layoutMs: number;
   phase: string;
-  scripts: { ms: number; invoker: string; fn: string; at: string }[];
+  /** The slowest scripts; `layoutMs` is style and layout they forced, `pauseMs` time they waited synchronously. */
+  scripts: { ms: number; invoker: string; fn: string; at: string; layoutMs: number; pauseMs: number }[];
 }
 
 /** PerformanceLongAnimationFrameTiming, which the DOM types do not have yet. */
@@ -40,7 +43,7 @@ interface LoafEntry {
   blockingDuration?: number;
   renderStart?: number;
   styleAndLayoutStart?: number;
-  scripts?: { duration: number; invoker: string; sourceFunctionName: string; sourceURL: string; sourceCharPosition: number }[];
+  scripts?: { duration: number; invoker: string; sourceFunctionName: string; sourceURL: string; sourceCharPosition: number; forcedStyleAndLayoutDuration?: number; pauseDuration?: number }[];
 }
 
 export class GpuCanvasStats {
@@ -52,8 +55,10 @@ export class GpuCanvasStats {
   phase = "idle";
   /** Frames over LONG_FRAME_MS: how long, when, and the phase they ended in. */
   longFrames: { ms: number; at: number; phase: string }[] = [];
-  /** The browser's long-animation-frame entries over LONG_FRAME_MS: where the time went, and the slowest scripts. */
+  /** The browser's 50 longest long-animation-frame entries over LOAF_MS: where the time went, and the slowest scripts. */
   loafs: LongAnimationFrame[] = [];
+  /** Workflow store writes by the keys they changed (and node writes by node count), so a gesture that writes shows. */
+  storeWrites: Record<string, number> = {};
   private observer?: PerformanceObserver;
 
   /** Starts recording long animation frames, where the browser reports them. */
@@ -61,7 +66,7 @@ export class GpuCanvasStats {
     if (typeof PerformanceObserver === "undefined" || !PerformanceObserver.supportedEntryTypes?.includes("long-animation-frame")) return;
     this.observer = new PerformanceObserver((list) => {
       for (const entry of list.getEntries() as unknown as LoafEntry[]) {
-        if (entry.duration < LONG_FRAME_MS || this.loafs.length >= 50) continue;
+        if (entry.duration < LOAF_MS || (this.loafs.length >= 50 && entry.duration <= this.loafs[this.loafs.length - 1].ms)) continue;
         this.loafs.push({
           at: Math.round(entry.startTime), ms: Math.round(entry.duration), blockingMs: Math.round(entry.blockingDuration ?? 0),
           renderMs: entry.renderStart ? Math.round(entry.startTime + entry.duration - entry.renderStart) : 0,
@@ -69,8 +74,11 @@ export class GpuCanvasStats {
           phase: this.phase,
           scripts: [...(entry.scripts ?? [])].sort((a, b) => b.duration - a.duration).slice(0, 3).map((s) => ({
             ms: Math.round(s.duration), invoker: s.invoker, fn: s.sourceFunctionName, at: `${s.sourceURL}:${s.sourceCharPosition}`,
+            layoutMs: Math.round(s.forcedStyleAndLayoutDuration ?? 0), pauseMs: Math.round(s.pauseDuration ?? 0),
           })),
         });
+        this.loafs.sort((a, b) => b.ms - a.ms);
+        this.loafs.length = Math.min(this.loafs.length, 50);
       }
     });
     this.observer.observe({ type: "long-animation-frame", buffered: false });
@@ -106,6 +114,12 @@ export class GpuCanvasStats {
     this.jsMs = [];
     this.longFrames = [];
     this.loafs = [];
+    this.storeWrites = {};
+  }
+
+  /** Counts a store write under its name. */
+  storeWrite(name: string) {
+    this.storeWrites[name] = (this.storeWrites[name] ?? 0) + 1;
   }
 
   summary() {
@@ -117,6 +131,7 @@ export class GpuCanvasStats {
       jsMs: percentiles(this.jsMs),
       longFrames: this.longFrames,
       loafs: this.loafs,
+      storeWrites: this.storeWrites,
       samples: Object.fromEntries(Object.entries(this.samples).map(([name, values]) => [name, percentiles(values)])),
     };
   }

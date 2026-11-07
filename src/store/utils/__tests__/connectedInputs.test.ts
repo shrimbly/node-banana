@@ -194,6 +194,42 @@ describe("getConnectedInputsPure", () => {
     expect(result.text).toBe("b");
   });
 
+  it("sends every item of a batching array, the first as the text", () => {
+    const nodes = [
+      makeNode("arr", "array", { outputItems: ["one", "two", "three"], batchMode: true }),
+      makeNode("gen", "nanoBanana"),
+    ];
+    const edges = [{ ...makeEdge("arr", "gen", "text"), sourceHandle: "text", data: { arrayItemIndex: 1 } }] as WorkflowEdge[];
+
+    const result = getConnectedInputsPure("gen", nodes, edges);
+
+    expect(result.textItems).toEqual(["one", "two", "three"]);
+    expect(result.text).toBe("one");
+    expect(result.textItemsInput).toBeUndefined();
+    expect(result.dynamicInputs).toEqual({});
+  });
+
+  it("puts a batching array's first item in the slot its edge feeds, and names the slot", () => {
+    const nodes = [
+      makeNode("arr", "array", { outputItems: ["one", "two"], batchMode: true }),
+      makeNode("neg", "prompt", { prompt: "blurry" }),
+      makeNode("gen", "generateVideo", {
+        inputSchema: [{ name: "prompt", type: "text" }, { name: "negative_prompt", type: "text" }],
+      }),
+    ];
+    const edges = [
+      { ...makeEdge("arr", "gen", "text-0"), sourceHandle: "text" },
+      { ...makeEdge("neg", "gen", "text-1"), sourceHandle: "text" },
+    ] as WorkflowEdge[];
+
+    const result = getConnectedInputsPure("gen", nodes, edges);
+
+    expect(result.textItems).toEqual(["one", "two"]);
+    expect(result.textItemsInput).toBe("prompt");
+    expect(result.dynamicInputs).toEqual({ prompt: "one", negative_prompt: "blurry" });
+    expect(result.text).toBe("one");
+  });
+
   it("should extract text from promptConstructor outputText", () => {
     const nodes = [
       makeNode("pc", "promptConstructor", { outputText: "constructed", template: "tmpl" }),

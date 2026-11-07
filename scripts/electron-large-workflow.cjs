@@ -7,6 +7,7 @@ const os = require('node:os');
 const net = require('node:net');
 const { createHash } = require('node:crypto');
 const { _electron } = require('playwright-core');
+const { CANVAS, canvasNodeIds } = require('./electron-smoke.cjs');
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
 const option = name => { const index = process.argv.indexOf(name); return index < 0 ? null : process.argv[index + 1]; };
 async function until(check, message, timeout = 90000) {
@@ -37,9 +38,7 @@ async function main() {
   };
   const attach = async () => {
     app = await _electron.launch({ executablePath: executable, cwd: os.tmpdir(), timeout: 120000,
-      env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: os.homedir(), TMPDIR: os.tmpdir(), NODE_BANANA_ELECTRON_USER_DATA: profile, NODE_BANANA_ELECTRON_PORT: String(port),
-        // Recovery is checked through the classic canvas's nodes; NODE_BANANA_GPU_CANVAS=1 runs it on the GPU canvas.
-        NODE_BANANA_GPU_CANVAS: process.env.NODE_BANANA_GPU_CANVAS ?? '0' } });
+      env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', HOME: os.homedir(), TMPDIR: os.tmpdir(), NODE_BANANA_ELECTRON_USER_DATA: profile, NODE_BANANA_ELECTRON_PORT: String(port) } });
     child = app.process();
     child.stderr.on('data', data => { if (/OOM|FATAL|heap out of memory/i.test(String(data))) process.stderr.write(data); });
     await app.evaluate(({ dialog }) => { dialog.showMessageBoxSync = () => 0; });
@@ -67,7 +66,7 @@ async function main() {
     const fixture = path.join(profile, 'workflow-fixture.json');
     await fs.writeFile(fixture, JSON.stringify(workflow));
     await attach();
-    await page.locator('.react-flow').waitFor();
+    await page.locator(CANVAS).waitFor();
     await page.getByRole('button', { name: 'Close', exact: true }).last().click();
     await page.getByRole('button', { name: 'Skip', exact: true }).click();
     await page.keyboard.press('Escape');
@@ -83,7 +82,7 @@ async function main() {
       const input = document.querySelector('#large-workflow-fixture');
       const transfer = new DataTransfer();
       transfer.items.add(input.files[0]);
-      document.querySelector('.react-flow').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer, clientX: 400, clientY: 300 }));
+      document.querySelector('[data-gpu-canvas]').dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: transfer, clientX: 400, clientY: 300 }));
       input.remove();
     });
     try {
@@ -91,7 +90,7 @@ async function main() {
     } catch (error) {
       console.error('Load diagnostics:', {
         expectedNodes,
-        renderedNodes: await page.locator('.react-flow__node').count(),
+        canvasNodes: (await canvasNodeIds(page)).length,
         checkpointNodes: (await read())?.tabs.map(tab => tab.snapshot.nodes.length),
         recoveryNotice: await page.locator('[role="status"]').allTextContents(),
       });
@@ -104,17 +103,20 @@ async function main() {
     const mediaSizes = await Promise.all(media.filter(name => !name.endsWith('.tmp')).map(async name => (await fs.stat(path.join(profile, 'recovery/assets', name))).size));
     const checkpointBytes = (await fs.stat(path.join(profile, 'recovery/checkpoint-v1.json'))).size;
     console.log(`PASS: ${expectedNodes} nodes loaded; checkpoint ${checkpointBytes} bytes; ${mediaSizes.length} assets, ${mediaSizes.reduce((a, b) => a + b, 0)} bytes`);
-    const prompt = page.getByPlaceholder('Describe what to generate...').first();
-    await prompt.fill('Large workflow recovery regression');
+    // The canvas holds as React Flow nodes only those being worked in: make the first Prompt node one of them.
+    const promptId = await page.evaluate(() => window.__gpuCanvas.nodeIds().find(id => window.__gpuCanvas.nodeRect(id)?.type === 'prompt'));
+    assert.ok(promptId, 'Fixture must contain a Prompt node');
+    await page.evaluate(id => window.__gpuCanvas.setLive([id]), promptId);
+    await page.locator(`[data-gpu-canvas-live] .react-flow__node[data-id="${promptId}"]`).getByPlaceholder('Describe what to generate...').fill('Large workflow recovery regression');
     await until(async () => JSON.stringify(await read()).includes('Large workflow recovery regression'), 'Edit did not checkpoint');
     await delay(10000);
-    assert.equal(await page.locator('.react-flow__node').count(), expectedNodes);
+    assert.equal((await canvasNodeIds(page)).length, expectedNodes);
     console.log('PASS: editor stays responsive through subsequent checkpoints');
     await crash();
     await attach();
     await page.getByRole('button', { name: 'Restore Session', exact: true }).click();
-    await until(async () => await page.locator('.react-flow__node').count() === expectedNodes, 'Recovery did not restore all nodes');
-    assert.equal(await page.getByPlaceholder('Describe what to generate...').first().inputValue(), 'Large workflow recovery regression');
+    await until(async () => (await page.evaluate(() => window.__gpuCanvas?.nodeIds().length ?? 0)) === expectedNodes, 'Recovery did not restore all nodes');
+    assert.equal(await page.evaluate(id => window.__gpuCanvas.data(id)?.prompt, promptId), 'Large workflow recovery regression');
     await until(async () => (await read())?.savedAt > checkpoint.savedAt, 'Restored workflow did not checkpoint again');
     assert.equal(submissions.length, 0);
     assert.equal(digest(await fs.readFile(workflowFile)), before);

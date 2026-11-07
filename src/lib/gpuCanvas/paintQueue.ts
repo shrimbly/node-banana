@@ -56,9 +56,9 @@ export class PaintQueue {
     return this.queued.size;
   }
 
-  /** Whether a change is waiting to be painted. */
-  hasUrgent() {
-    for (const request of this.queued.values()) if (request.priority === URGENT) return true;
+  /** Whether a change is waiting to be painted (of a node `of` takes, when given). */
+  hasUrgent(of?: (id: string) => boolean) {
+    for (const request of this.queued.values()) if (request.priority === URGENT && (!of || of(request.id))) return true;
     return false;
   }
 

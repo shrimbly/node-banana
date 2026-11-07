@@ -331,6 +331,9 @@ export function pickLiveEdges(candidates: { id: string; distance: number; onScre
   return ids;
 }
 
+/** How far (flow units) round a hidden connection's handle its strokes reach (EditableEdge's 8 px stub, its width). */
+const HIDDEN_STUB_REACH = 12;
+
 /** A floating header's height above its node (FloatingNodeHeader's top offset); the scene paints it for painted nodes. */
 export const PAINTED_HEADER_HEIGHT = 26;
 
@@ -347,9 +350,34 @@ export function paintedCover(
   isLive: (id: string) => boolean,
 ): { edgeIds: string[]; boxes: { x: number; y: number; w: number; h: number }[] } {
   const edgeIds: string[] = [], boxes: { x: number; y: number; w: number; h: number }[] = [], taken = new Set<number>();
+  const cover = (i: number) => {
+    if (taken.has(i)) return;
+    taken.add(i);
+    const n = graph.nodes[i];
+    // The node and its painted header strip: classic's floating headers sit above every edge (z-index 1500).
+    boxes.push({ x: n.x, y: n.y - PAINTED_HEADER_HEIGHT, w: n.w, h: n.h + PAINTED_HEADER_HEIGHT });
+  };
   for (const e of edges) {
     const route = routeOf(e);
     if (!route || route.unresolved) continue;
+    const edge = graph.edges[e];
+    // A hidden connection unselected draws only the short strokes at its handles (its pills are HTML, and its ghost
+    // shows on hover): it is masked only where another painted node lies over those. A mask on every hidden
+    // connection on screen made each frame of a pan redraw them all.
+    if (route.hidden && !edge.edge.selected) {
+      let covered = false;
+      for (const [x, y] of [[route.ends[0], route.ends[1]], [route.ends[2], route.ends[3]]]) {
+        for (const i of nodesWithin(x - HIDDEN_STUB_REACH, y - HIDDEN_STUB_REACH, x + HIDDEN_STUB_REACH, y + HIDDEN_STUB_REACH)) {
+          const n = graph.nodes[i];
+          if (!n || i === edge.source || i === edge.target || isLive(n.id)) continue;
+          if (n.x >= x + HIDDEN_STUB_REACH || n.x + n.w <= x - HIDDEN_STUB_REACH || n.y - PAINTED_HEADER_HEIGHT >= y + HIDDEN_STUB_REACH || n.y + n.h <= y - HIDDEN_STUB_REACH) continue;
+          covered = true;
+          cover(i);
+        }
+      }
+      if (covered) edgeIds.push(edge.id);
+      continue;
+    }
     let [x0, y0, x1, y1] = route.ends;
     [x0, x1] = [Math.min(x0, x1), Math.max(x0, x1)];
     [y0, y1] = [Math.min(y0, y1), Math.max(y0, y1)];
@@ -362,12 +390,9 @@ export function paintedCover(
       const n = graph.nodes[i];
       if (!n || isLive(n.id)) continue;
       covered = true;
-      if (taken.has(i)) continue;
-      taken.add(i);
-      // The node and its painted header strip: classic's floating headers sit above every edge (z-index 1500).
-      boxes.push({ x: n.x, y: n.y - PAINTED_HEADER_HEIGHT, w: n.w, h: n.h + PAINTED_HEADER_HEIGHT });
+      cover(i);
     }
-    if (covered) edgeIds.push(graph.edges[e].id);
+    if (covered) edgeIds.push(edge.id);
   }
   return { edgeIds, boxes };
 }

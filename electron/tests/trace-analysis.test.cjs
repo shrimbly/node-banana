@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { analyzeTrace, keepAnalyzed } = require('../../scripts/lib/trace-analysis.cjs');
+const { analyzeTrace, analyzeGestures, keepAnalyzed } = require('../../scripts/lib/trace-analysis.cjs');
 
 // A hand-built trace on a 10 ms vsync (times in µs). Renderer pid 1, browser
 // pid 2, GPU pid 3. Input every 5 ms; frame k begins at 1000 + 10000k, commits
@@ -148,4 +148,15 @@ test('the filtered trace gives the same report, and a trace without input says w
   const events = trace();
   assert.deepEqual(analyzeTrace(events.filter(keepAnalyzed)), analyzeTrace(events));
   assert.throws(() => analyzeTrace(metadata()), /no input latency events/);
+});
+
+test('gestures traced one each take their own label, and one with no inputs is reported', () => {
+  // Each trace carries the other's mark, as a gesture that spills into the next recording would.
+  const first = [...trace(), mark(950, 'banana:gesture zoom')];
+  const second = metadata().concat(...[0, 1, 2].map(k => frame(k)));
+  const report = analyzeGestures([{ label: 'pan', events: first }, { label: 'pan', events: trace() }, { label: 'zoom', events: second }]);
+  assert.deepEqual(Object.keys(report.summary), ['pan']);
+  assert.equal(report.summary.pan.gestures, 2);
+  assert.deepEqual(report.summary.pan.droppedPct, analyzeTrace(trace()).summary.drag.droppedPct);
+  assert.ok(report.untraced.zoom[0]);
 });

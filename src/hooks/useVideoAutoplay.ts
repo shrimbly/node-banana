@@ -25,6 +25,19 @@ export const VIDEO_PIN_EVENT = "nodebanana:pin";
 export type VideoPlaybackIntent = "hover" | "playing" | "paused";
 
 /**
+ * Where each node's video was left, by node id. On the GPU canvas a node
+ * stops being live once the pointer leaves it, so its card unmounts; the next
+ * one to mount picks up the paused frame and what the user asked, instead of
+ * starting again from 0:00 on hover.
+ */
+const leftAt = new Map<string, { src: string | null | undefined; intent: VideoPlaybackIntent; time: number }>();
+const LEFT_AT_LIMIT = 500;
+
+export function __resetVideoPlaybackMemoryForTests() {
+  leftAt.clear();
+}
+
+/**
  * Drives a node's video from hover and the user's own play, pause and scrub
  * actions, so the two never fight.
  *
@@ -51,6 +64,8 @@ export function useVideoAutoplay(nodeId: string, src?: string | null): React.Ref
   /** A transition this hook started, so its event is not read as the user's. */
   const expected = useRef<"play" | "pause" | null>(null);
   const bound = useRef<HTMLVideoElement | null>(null);
+  /** The element where it was left has been put back on, for this source. */
+  const restored = useRef<HTMLVideoElement | null>(null);
 
   /** Mutes a preview, and a pinned video unless the user wants sound. */
   const applySound = (video: HTMLVideoElement) => {
@@ -64,6 +79,7 @@ export function useVideoAutoplay(nodeId: string, src?: string | null): React.Ref
   useEffect(() => {
     intent.current = "hover";
     expected.current = null;
+    restored.current = null;
   }, [src]);
 
   // The sound setting changed while this video is up: a pinned one hears it at once.
@@ -105,8 +121,30 @@ export function useVideoAutoplay(nodeId: string, src?: string | null): React.Ref
     video.addEventListener("pause", onPause);
     video.addEventListener("ended", onEnded);
     video.addEventListener(VIDEO_PIN_EVENT, onPin);
+    if (!painted && restored.current !== video) {
+      restored.current = video;
+      const left = leftAt.get(nodeId);
+      if (left && left.src === src) {
+        // A video stopped by the unmount holds its frame like a user's pause.
+        intent.current = left.intent === "hover" ? "hover" : "paused";
+        if (left.time > 0) {
+          const seek = () => {
+            if (video.currentTime === 0) video.currentTime = left.time;
+          };
+          if (video.readyState >= 1) seek();
+          else video.addEventListener("loadedmetadata", seek, { once: true });
+        }
+      }
+    }
     applySound(video);
     return () => {
+      if (!painted) {
+        leftAt.delete(nodeId);
+        if (intent.current !== "hover" || video.currentTime > 0) {
+          leftAt.set(nodeId, { src, intent: intent.current, time: video.currentTime });
+          if (leftAt.size > LEFT_AT_LIMIT) leftAt.delete(leftAt.keys().next().value!);
+        }
+      }
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
       video.removeEventListener("ended", onEnded);

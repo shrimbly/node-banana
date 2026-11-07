@@ -202,6 +202,45 @@ describe("executeGenerateVideo", () => {
     expect((completeCall![1] as Record<string, unknown>).outputVideo).toBe("data:image/png;base64,preview");
   });
 
+  it("lists the video in recent generations, with its recording", async () => {
+    const node = makeNode({ parameters: { aspect_ratio: "9:16" } });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ success: true, videoUrl: "https://cdn.fal.media/video.mp4" }),
+    });
+    const handle = { assetId: "a000000000001", done: Promise.resolve(null) };
+    const ctx = makeCtx(node, { recordAsset: vi.fn().mockReturnValue(handle) });
+    await executeGenerateVideo(ctx);
+
+    expect(ctx.addToGlobalHistory).toHaveBeenCalledOnce();
+    expect(ctx.addToGlobalHistory).toHaveBeenCalledWith(
+      {
+        kind: "video",
+        image: "https://cdn.fal.media/video.mp4",
+        timestamp: expect.any(Number),
+        prompt: "video prompt",
+        aspectRatio: "9:16",
+        model: "Fal Video",
+      },
+      handle
+    );
+  });
+
+  it("lists a still some models answer with as an image, and without the library no recording", async () => {
+    const node = makeNode();
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ success: true, image: "data:image/png;base64,preview" }),
+    });
+    const ctx = makeCtx(node);
+    await executeGenerateVideo(ctx);
+
+    expect(ctx.addToGlobalHistory).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "image", image: "data:image/png;base64,preview" }),
+      null
+    );
+  });
+
   it("should track cost for fal provider", async () => {
     const node = makeNode({
       selectedModel: { provider: "fal", modelId: "fal-vid", displayName: "Fal", pricing: { amount: 0.25 } },

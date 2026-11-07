@@ -118,15 +118,20 @@ interface RouterError {
   error_type?: string;
 }
 
-async function routerErrorMessage(response: Response): Promise<string> {
+/**
+ * A Router error answer as text: its `detail` in the partner's own words
+ * where it has one, then the error code (`errorType` when the body names none).
+ */
+async function routerErrorMessage(response: Response, errorType?: string): Promise<string> {
   let body: RouterError | null = null;
   try {
     body = (await response.json()) as RouterError;
   } catch {
     body = null;
   }
+  const code = body?.error_type ?? response.headers.get("x-comfy-error-type") ?? errorType;
   const detail = body?.detail;
-  if (typeof detail === "string" && detail) return `${detail} (${body?.error_type ?? response.status})`;
+  if (typeof detail === "string" && detail) return `${detail} (${code ?? response.status})`;
   if (Array.isArray(detail)) {
     const first = detail[0] as { loc?: unknown[]; msg?: string } | undefined;
     if (first?.msg) return `${(first.loc ?? []).slice(1).join(".") || "input"}: ${first.msg}`;
@@ -134,6 +139,7 @@ async function routerErrorMessage(response: Response): Promise<string> {
   if (response.status === 401) return "Comfy API key was rejected";
   if (response.status === 402) return "Comfy workspace has no credits";
   if (response.status === 429) return "Comfy Router rate limit reached, try again shortly";
+  if (code) return `Comfy Router: ${code}`;
   return `Comfy Router error ${response.status}`;
 }
 
@@ -257,8 +263,28 @@ export function parseRetryAfter(header: string | null, now: number = Date.now())
 
 export type ComfyTaskStatus =
   | { status: "processing"; retryAfterMs?: number }
-  | { status: "failed"; error: string }
+  /** `statusCode`: the Router's own answer, when it refused the status check rather than reported the run. */
+  | { status: "failed"; error: string; statusCode?: number }
   | { status: "completed" };
+
+/**
+ * Why the Router failed a run. Its status names only the code
+ * (`content_policy_violation`); the explanation, in the partner's own words,
+ * is the 4xx the request's result URL answers with.
+ */
+async function failureReason(apiKey: string, modelId: string, taskId: string, errorType: string): Promise<string> {
+  try {
+    const response = await fetch(`${modelPath(modelId)}/requests/${encodeURIComponent(taskId)}`, {
+      headers: { "X-API-Key": apiKey },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!response.ok) return await routerErrorMessage(response, errorType);
+    await response.body?.cancel().catch(() => undefined);
+  } catch {
+    // The code alone, below
+  }
+  return `Comfy Router: ${errorType}`;
+}
 
 /** One look at the queue: is the run still going, done, or failed? */
 export async function checkComfyTaskOnce(
@@ -279,11 +305,11 @@ export async function checkComfyTaskOnce(
     console.log(`[API:${requestId}] Comfy Router ${taskId}: status check ${response.status}, will retry`);
     return { status: "processing", retryAfterMs: parseRetryAfter(response.headers.get("Retry-After")) };
   }
-  if (!response.ok) return { status: "failed", error: await routerErrorMessage(response) };
+  if (!response.ok) return { status: "failed", error: await routerErrorMessage(response), statusCode: response.status };
 
   const status = (await response.json()) as { status?: string; error_type?: string; queue_position?: number };
   if (status.status === "COMPLETED") {
-    if (status.error_type) return { status: "failed", error: `Comfy Router: ${status.error_type}` };
+    if (status.error_type) return { status: "failed", error: await failureReason(apiKey, modelId, taskId, status.error_type) };
     return { status: "completed" };
   }
   console.log(`[API:${requestId}] Comfy Router ${taskId}: ${status.status ?? "?"}${status.queue_position ? ` (queue ${status.queue_position})` : ""}`);
@@ -373,7 +399,18 @@ export function readRouterResult(binding: RouterBinding, result: Json): FoundMed
   throw new Error(`No ${binding.output === "3d" ? "3D model" : binding.output} in the ${binding.name} result`);
 }
 
-/** Collect a completed run and turn it into the app's output. */
+/** A network failure or a timeout, which a later attempt may get past. */
+function isNetworkError(error: unknown): boolean {
+  return error instanceof TypeError || (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError"));
+}
+
+/**
+ * Collect a completed run and turn it into the app's output. A failure's
+ * `statusCode` is the one to answer the client with: the Router's own for
+ * its answers (a refusal's 400 is final, a 429 or 5xx passes), 503 while the
+ * result is not ready, 422 for a result that holds no usable output, and
+ * none for a network failure, which may pass.
+ */
 export async function fetchComfyMediaResult(
   requestId: string,
   apiKey: string,
@@ -382,20 +419,24 @@ export async function fetchComfyMediaResult(
   _mediaType?: string
 ): Promise<GenerationOutput> {
   const binding = routerBinding(modelId);
-  if (!binding) return { success: false, error: `${modelId} is not a Comfy Router model this app can run` };
+  if (!binding) return { success: false, statusCode: 400, error: `${modelId} is not a Comfy Router model this app can run` };
 
   try {
     const response = await fetch(`${modelPath(modelId)}/requests/${encodeURIComponent(taskId)}`, {
       headers: { "X-API-Key": apiKey },
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
-    if (response.status === 202) return { success: false, error: "Comfy Router result is not ready yet" };
-    if (response.status === 410) return { success: false, error: "Comfy Router result expired" };
-    if (!response.ok) return { success: false, error: await routerErrorMessage(response) };
+    if (response.status === 202) return { success: false, statusCode: 503, error: `${binding.name}: Comfy Router result is not ready yet` };
+    if (response.status === 410) return { success: false, statusCode: 410, error: `${binding.name}: Comfy Router result expired` };
+    if (!response.ok) return { success: false, statusCode: response.status, error: `${binding.name}: ${await routerErrorMessage(response)}` };
 
     return await outputOf(requestId, binding, response);
   } catch (error) {
-    return { success: false, error: error instanceof Error ? error.message : "Comfy Router result failed" };
+    return {
+      success: false,
+      ...(isNetworkError(error) ? {} : { statusCode: 422 }),
+      error: error instanceof Error ? error.message : "Comfy Router result failed",
+    };
   }
 }
 
@@ -409,7 +450,7 @@ async function outputOf(requestId: string, binding: RouterBinding, response: Res
   // Binary partners (ElevenLabs, …) answer with the asset's own bytes.
   if (binding.result.binary || (contentType && !contentType.includes("json"))) {
     const buffer = await readBounded(response, MAX_MEDIA_SIZE);
-    if (!buffer) return { success: false, error: `Media too large: over the ${MAX_MEDIA_SIZE / 1048576}MB limit` };
+    if (!buffer) return { success: false, statusCode: 422, error: `Media too large: over the ${MAX_MEDIA_SIZE / 1048576}MB limit` };
     const mime = binding.result.mime || (contentType && contentType !== "application/octet-stream" ? contentType : FALLBACK_MIME[type]);
     console.log(`[API:${requestId}] Comfy Router output ${mime}, ${(buffer.byteLength / 1048576).toFixed(2)}MB`);
     const data = `data:${mime};base64,${buffer.toString("base64")}`;

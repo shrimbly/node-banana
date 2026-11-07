@@ -225,6 +225,19 @@ describe("FloatingMenu", () => {
       expect(useSaveRequestStore.getState().request).toBeNull();
     });
 
+    it("still saves the workflow on the agent's menu request while the Edit video view shows", () => {
+      useState(configuredState());
+      useAssetStore.setState({ appView: "edit" });
+      try {
+        render(<FloatingMenu />);
+        act(() => useSaveRequestStore.getState().requestSave("menu", "Product shots"));
+        expect(mockSaveToFile).toHaveBeenCalledExactlyOnceWith({ reason: "manual" });
+        expect(useSaveRequestStore.getState().request).toBeNull();
+      } finally {
+        useAssetStore.setState({ appView: "canvas" });
+      }
+    });
+
     it("a requested save on an unsaved workflow opens the new-project dialog", () => {
       render(<FloatingMenu />);
       act(() => useSaveRequestStore.getState().requestSave("desktop"));
@@ -258,6 +271,7 @@ describe("FloatingMenu", () => {
         "Templates",
         "Chat",
         "Assets",
+        "Edit video",
         "Open project folder",
         "New tab",
         "Close tab",
@@ -364,6 +378,19 @@ describe("FloatingMenu", () => {
       expect(row).toHaveTextContent("C");
       fireEvent.click(row);
       expect(useAssetStore.getState().appView).toBe("chat");
+      expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+      useAssetStore.setState({ appView: "canvas" });
+    });
+
+    it("opens the Edit video view from its row, which names its key, and closes the menu", () => {
+      useAssetStore.setState({ appView: "canvas" });
+      render(<FloatingMenu />);
+      openMenu();
+      const row = menuItem(/^Edit video/);
+      expect(row).toHaveTextContent("E");
+      expect(row).toHaveAttribute("title", "Edit videos from any project");
+      fireEvent.click(row);
+      expect(useAssetStore.getState().appView).toBe("edit");
       expect(screen.queryByRole("menu")).not.toBeInTheDocument();
       useAssetStore.setState({ appView: "canvas" });
     });

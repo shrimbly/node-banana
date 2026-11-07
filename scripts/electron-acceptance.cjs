@@ -10,7 +10,7 @@ const { createHash } = require('node:crypto');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
 const { _electron: electron } = require('playwright-core');
-const { checkWindowControls, checkStartupWindowControls, checkLibraryRoot } = require('./electron-smoke.cjs');
+const { checkWindowControls, checkStartupWindowControls, checkLibraryRoot, CANVAS, canvasPane, canvasNodeIds } = require('./electron-smoke.cjs');
 const run = promisify(execFile);
 const root = path.resolve(__dirname, '..');
 const supplied = process.argv.indexOf('--executable');
@@ -55,8 +55,6 @@ async function main() {
   const port = occupied.address().port;
   const env = Object.fromEntries(['HOME', 'TMPDIR', 'LANG'].filter(key => process.env[key]).map(key => [key, process.env[key]]));
   env.PATH = '/usr/bin:/bin:/usr/sbin:/sbin';
-  // Recovery is checked through the classic canvas's text fields; the smoke test covers the GPU canvas.
-  env.NODE_BANANA_GPU_CANVAS = process.env.NODE_BANANA_GPU_CANVAS ?? '0';
   const launch = async () => {
     const instance = await electron.launch({ executablePath: path.join(installed, 'Contents/MacOS/Node Banana'), args: [], cwd: temp,
       env: { ...env, NODE_BANANA_ELECTRON_PORT: String(port), NODE_BANANA_ELECTRON_USER_DATA: profile }, timeout: 120000 });
@@ -103,7 +101,7 @@ async function main() {
     await new Promise(resolve => occupied.close(resolve));
     await desktop.evaluate(() => global.__acceptanceRetry({ response: 0 }));
     page = await attach(desktop);
-    await page.locator('.react-flow').waitFor();
+    await page.locator(CANVAS).waitFor();
     console.log('PASS: copied installation starts independently; occupied port offers Retry/Open Logs/Quit and retries on the same origin');
     await page.getByRole('button', { name: 'Close', exact: true }).last().click();
     await page.getByRole('button', { name: 'Skip', exact: true }).click();
@@ -127,7 +125,7 @@ async function main() {
     }, secret);
     await page.reload();
     await page.getByRole('button', { name: 'Restore Session', exact: true }).click();
-    await page.locator('.react-flow').waitFor();
+    await page.locator(CANVAS).waitFor();
     const migrated = await page.evaluate(async secret => ({ credentials: await window.nodeBananaDesktop.credentials.read(), plaintext: Object.values(localStorage).some(value => value.includes(secret)) }), secret);
     assert.equal(migrated.credentials.value['provider.gemini'], secret);
     assert.equal(migrated.plaintext, false);
@@ -161,11 +159,11 @@ async function main() {
     assert.match(provider.body.error, /API_KEY_INVALID|API key not valid|invalid api key/i, 'Expected an actual provider authentication rejection, not a local or network failure');
     console.log('PASS: credentials migrate, encrypt, update/delete and preserve ciphertext on encryption failure; provider error path responds');
 
-    await page.locator('.react-flow__pane').click({ position: { x: 100, y: 100 } });
+    await canvasPane(page).click({ position: { x: 100, y: 100 } });
     await page.keyboard.press('Shift+P');
     await page.getByPlaceholder('Describe what to generate...').fill('Recovery first tab');
     await page.getByRole('button', { name: 'New tab', exact: true }).click();
-    await page.locator('.react-flow__pane').click({ position: { x: 100, y: 100 } });
+    await canvasPane(page).click({ position: { x: 100, y: 100 } });
     await page.keyboard.press('Shift+P');
     await page.getByPlaceholder('Describe what to generate...').fill('Recovery second tab');
     await until(async () => (await checkpoint())?.tabs.length === 2 && JSON.stringify(await checkpoint()).includes('Recovery second tab'), 'Two edited tabs were not checkpointed');
@@ -213,7 +211,7 @@ async function main() {
     const submissions = [];
     page.on('request', request => { if (request.method() === 'POST' && /\/api\/(generate|llm)/.test(request.url())) submissions.push(request.url()); });
     await page.getByRole('button', { name: 'Restore Session', exact: true }).click();
-    await page.locator('.react-flow').waitFor();
+    await page.locator(CANVAS).waitFor();
     assert.equal(await page.locator('.desktop-startup-drag-region').count(), 0);
     await page.evaluate(() => window.dispatchEvent(new CustomEvent('desktop-credential-error', { detail: 'Acceptance credential write failure' })));
     await page.getByRole('dialog', { name: 'Credential storage' }).waitFor();
@@ -261,7 +259,7 @@ async function main() {
     console.log('PASS: renderer crash offers recovery and restores checkpointed edits');
     await crash(); desktop = await launch(); page = await attach(desktop);
     await page.getByRole('button', { name: 'Restore Session', exact: true }).click();
-    await page.locator('.react-flow').waitFor();
+    await page.locator(CANVAS).waitFor();
 
     // A discarded tab must not return even if the next checkpoint has not landed.
     await page.getByRole('tab').first().hover();
@@ -269,13 +267,13 @@ async function main() {
     await until(async () => await page.getByRole('tab').count() === 1, 'Tab did not close');
     await crash(); desktop = await launch(); page = await attach(desktop);
     await page.getByRole('button', { name: 'Restore Session', exact: true }).click();
-    await page.locator('.react-flow').waitFor();
+    await page.locator(CANVAS).waitFor();
     assert.equal(await page.getByRole('tab').count(), 1);
-    assert.equal(await page.getByPlaceholder('Describe what to generate...').inputValue(), 'Recovery second tab');
+    assert.equal(await page.evaluate(() => window.__gpuCanvas.data(window.__gpuCanvas.nodeIds()[0])?.prompt), 'Recovery second tab');
     await desktop.close(); desktop = undefined;
-    desktop = await launch(); page = await attach(desktop); await page.locator('.react-flow').waitFor();
+    desktop = await launch(); page = await attach(desktop); await page.locator(CANVAS).waitFor();
     assert.equal(await page.getByRole('tab').count(), 1);
-    assert.equal(await page.locator('.react-flow__node').count(), 0);
+    assert.equal((await canvasNodeIds(page)).length, 0);
     await desktop.close(); desktop = undefined;
     console.log('PASS: discarded tabs and explicitly discarded window edits never return');
     const after = await digestTree(installed);

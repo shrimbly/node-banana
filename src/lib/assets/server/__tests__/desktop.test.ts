@@ -264,6 +264,18 @@ describe("trashFile", () => {
     expect(fs.existsSync(file)).toBe(false);
   });
 
+  it("keeps a file no route moved when unlinkFallback is false", async () => {
+    const file = path.join(dir, "x.nbedit");
+    fs.writeFileSync(file, "x");
+    const { exec } = recorder(); // "succeeds" but moves nothing
+    const results = await trashFiles([file], { platform: "linux", exec, bridge: null, unlinkFallback: false });
+    expect(results.has(file)).toBe(false);
+    expect(fs.existsSync(file)).toBe(true);
+    await expect(trashFile(file, { platform: "linux", exec, bridge: null, unlinkFallback: false })).rejects.toMatchObject({
+      code: "trash_failed",
+    });
+  });
+
   it("prefers the desktop bridge", async () => {
     const bridge: DesktopServerBridge = { request: vi.fn(async () => ({ ok: true as const })) };
     const { calls, exec } = recorder();

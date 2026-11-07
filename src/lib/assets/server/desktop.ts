@@ -211,6 +211,12 @@ export interface TrashOptions extends DesktopDeps {
    * take is unlinked.
    */
   interactive?: boolean;
+  /**
+   * False when the OS Trash is the file's only way back (an edit file has no
+   * trash of its own in the app): a file no route could move is kept, not
+   * unlinked, and left out of the result.
+   */
+  unlinkFallback?: boolean;
 }
 
 /**
@@ -285,7 +291,7 @@ export async function trashFiles(files: readonly string[], options: TrashOptions
     }
     pending = left;
   }
-  for (const file of pending) {
+  for (const file of options.unlinkFallback === false ? [] : pending) {
     try {
       await unlinkWithRetry(file);
       results.set(file, "unlink");

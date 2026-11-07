@@ -37,10 +37,33 @@ export interface SummaryRowProps {
   className?: string;
 }
 
-/** Right-aligned summary values, separated by middle dots. */
-export function SummaryValues({ items }: { items: ReadonlyArray<ReactNode> }) {
+/**
+ * Right-aligned summary values, separated by middle dots. `truncate`: the values give way first, cut at the end with
+ * an ellipsis (their whole text on hover), for a summary whose title must stay whole; pair it with a title column
+ * that keeps its width (`summary.className`).
+ */
+export function SummaryValues({ items, truncate = false }: { items: ReadonlyArray<ReactNode>; truncate?: boolean }) {
   const shown = items.filter((v) => v !== undefined && v !== null && v !== "");
   if (shown.length === 0) return null;
+  if (truncate) {
+    const text = shown.every((v) => typeof v === "string" || typeof v === "number") ? shown.join(" · ") : undefined;
+    return (
+      <span className="ml-auto block min-w-0 truncate text-node text-neutral-500 tabular-nums" title={text}>
+        {/* The dots sit between real spaces: the copied and the spoken text keep their word breaks */}
+        {shown.map((v, i) => (
+          <React.Fragment key={i}>
+            {i > 0 && (
+              <>
+                {" "}
+                <span aria-hidden>·</span>{" "}
+              </>
+            )}
+            <span>{v}</span>
+          </React.Fragment>
+        ))}
+      </span>
+    );
+  }
   return (
     <span className="flex items-center gap-1 text-node text-neutral-500 tabular-nums whitespace-nowrap">
       {shown.map((v, i) => (

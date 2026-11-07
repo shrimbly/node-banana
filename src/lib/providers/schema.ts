@@ -13,7 +13,7 @@
  * Server only.
  */
 
-import { ProviderType } from "@/types";
+import { GEMINI_IMAGE_OPTIONS, ModelType, ProviderType } from "@/types";
 import { isOpenAIImage25, OPENAI_IMAGE_25_PARAMETERS } from "./openaiImages";
 import { isGeminiOmni, GEMINI_OMNI_PARAMETERS, GEMINI_OMNI_INPUTS } from "./geminiOmni";
 import { ModelParameter, ModelInput } from "./types";
@@ -1229,47 +1229,29 @@ function getOpenAiSchema(modelId: string): ExtractedSchema {
  * Returns null if the model is not a Gemini image model.
  */
 function getGeminiImageSchema(modelId: string): ExtractedSchema | null {
-  const baseAspectRatios = ["1:1", "2:3", "3:2", "3:4", "4:3", "4:5", "5:4", "9:16", "16:9", "21:9"];
-  const extendedAspectRatios = ["1:1", "1:4", "1:8", "2:3", "3:2", "3:4", "4:1", "4:3", "4:5", "5:4", "8:1", "9:16", "16:9", "21:9"];
+  if (!Object.prototype.hasOwnProperty.call(GEMINI_IMAGE_OPTIONS, modelId)) return null;
+  const options = GEMINI_IMAGE_OPTIONS[modelId as ModelType];
 
-  const commonInputs: ModelInput[] = [
-    { name: "prompt", type: "text", required: true, label: "Prompt" },
-    { name: "image", type: "image", required: false, label: "Image", isArray: true },
+  const parameters: ModelParameter[] = [
+    { name: "aspectRatio", type: "string", description: "Output aspect ratio", enum: [...options.aspectRatios], default: "1:1" },
   ];
+  if (options.resolutions.length > 0) {
+    parameters.push({ name: "resolution", type: "string", description: "Output resolution", enum: [...options.resolutions], default: "2K" });
+  }
+  if (options.googleSearch) {
+    parameters.push({ name: "useGoogleSearch", type: "boolean", description: "Enable Google Search grounding", default: false });
+  }
+  if (options.imageSearch) {
+    parameters.push({ name: "useImageSearch", type: "boolean", description: "Enable Image Search grounding", default: false });
+  }
 
-  const schemas: Record<string, ExtractedSchema> = {
-    "nano-banana": {
-      parameters: [
-        { name: "aspectRatio", type: "string", description: "Output aspect ratio", enum: baseAspectRatios, default: "1:1" },
-      ],
-      inputs: commonInputs,
-    },
-    "nano-banana-pro": {
-      parameters: [
-        { name: "aspectRatio", type: "string", description: "Output aspect ratio", enum: baseAspectRatios, default: "1:1" },
-        { name: "resolution", type: "string", description: "Output resolution", enum: ["1K", "2K", "4K"], default: "2K" },
-        { name: "useGoogleSearch", type: "boolean", description: "Enable Google Search grounding", default: false },
-      ],
-      inputs: commonInputs,
-    },
-    "nano-banana-2": {
-      parameters: [
-        { name: "aspectRatio", type: "string", description: "Output aspect ratio", enum: extendedAspectRatios, default: "1:1" },
-        { name: "resolution", type: "string", description: "Output resolution", enum: ["512", "1K", "2K", "4K"], default: "2K" },
-        { name: "useGoogleSearch", type: "boolean", description: "Enable Google Search grounding", default: false },
-        { name: "useImageSearch", type: "boolean", description: "Enable Image Search grounding", default: false },
-      ],
-      inputs: commonInputs,
-    },
-    "nano-banana-2-lite": {
-      parameters: [
-        { name: "aspectRatio", type: "string", description: "Output aspect ratio", enum: baseAspectRatios, default: "1:1" },
-      ],
-      inputs: commonInputs,
-    },
+  return {
+    parameters,
+    inputs: [
+      { name: "prompt", type: "text", required: true, label: "Prompt" },
+      { name: "image", type: "image", required: false, label: "Image", isArray: true },
+    ],
   };
-
-  return schemas[modelId] ?? null;
 }
 
 /**

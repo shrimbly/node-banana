@@ -435,6 +435,38 @@ describe("GenerateImageNode", () => {
     });
   });
 
+  describe("Gemini settings", () => {
+    it("offers Nano Banana 2.1's resolution and both search options", () => {
+      render(
+        <TestWrapper>
+          <GenerateImageNode {...createNodeProps({
+            model: "nano-banana-2.1",
+            selectedModel: { provider: "gemini", modelId: "nano-banana-2.1", displayName: "Nano Banana 2.1" },
+          })} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByText("Resolution")).toBeInTheDocument();
+      expect(screen.getByText("Google Search")).toBeInTheDocument();
+      expect(screen.getByText("Image Search")).toBeInTheDocument();
+    });
+
+    it("shows no resolution or search options on Nano Banana 2 Lite", () => {
+      render(
+        <TestWrapper>
+          <GenerateImageNode {...createNodeProps({
+            model: "nano-banana-2-lite",
+            selectedModel: { provider: "gemini", modelId: "nano-banana-2-lite", displayName: "Nano Banana 2 Lite" },
+          })} />
+        </TestWrapper>
+      );
+
+      expect(screen.queryByText("Resolution")).not.toBeInTheDocument();
+      expect(screen.queryByText("Google Search")).not.toBeInTheDocument();
+      expect(screen.queryByText("Image Search")).not.toBeInTheDocument();
+    });
+  });
+
   describe("Dynamic Input Handles (External Providers)", () => {
     it("should render dynamic handles when inputSchema is provided", () => {
       const { container } = render(

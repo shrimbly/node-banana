@@ -215,7 +215,7 @@ The `/examples` directory contains example workflow files. To try them:
 | **LLM** | AI text generation (Gemini, OpenAI, Anthropic) |
 | **Annotation** | Draw on images with full-screen editor |
 | **Split Grid** | Split image into grid cells |
-| **Video Stitch** | Combine video clips into a single output |
+| **Edit Video** | Edit clips on a timeline (trim, split, stack, audio clips with volume curves) and render them into one video. Bare E opens the Edit video view, for edits saved on their own that use videos and audio from any project |
 | **Video Trim** | Trim video clips to a specific range |
 | **Video Frame Grab** | Extract frames from video |
 | **Image Compare** | Side-by-side image comparison |

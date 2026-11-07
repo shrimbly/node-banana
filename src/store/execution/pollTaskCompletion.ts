@@ -4,6 +4,13 @@
  * Shared utility for polling /api/generate/poll until a long-running
  * task completes. Each poll is a short-lived HTTP request (~1s),
  * making the system resilient to connection idle timeouts.
+ *
+ * It waits for as long as the provider says the run is going: a video can
+ * take well over ten minutes, and the provider keeps working whether or not
+ * anyone is asking. The safety net only stops a poller that would otherwise
+ * never end. When the poller stops without the provider's answer, it throws
+ * GenerationStillRunningError carrying the request id, so the node can keep
+ * the request and pick it up again.
  */
 
 import type { GenerateResponse } from "@/types";
@@ -24,49 +31,111 @@ const MAX_INTERVAL = 8000; // 8s
 // real queue estimate, short enough that a bad header cannot park the poller.
 const MAX_SERVER_INTERVAL = 60 * 1000; // 60s
 const INTERVAL_STEP = 500; // grow by 500ms each poll
-const MAX_POLL_TIME = 10 * 60 * 1000; // 10 minutes
+// Longer than any real run (Comfy Cloud's own job cap is about 35 minutes).
+// Reaching it is not a failure: the run may still finish on the provider.
+export const POLL_SAFETY_NET_MS = 90 * 60 * 1000;
 const MAX_CONSECUTIVE_ERRORS = 10;
 
+/** The provider a polled request runs on, as the messages name it. */
+export function pollProviderName(provider: string): string {
+  if (provider === "comfy") return "Comfy Router";
+  if (provider === "kie") return "Kie.ai";
+  return provider;
+}
+
 /**
- * Poll /api/generate/poll until the task completes, fails, or times out.
- * Returns the final GenerateResponse with media data.
+ * The poller stopped waiting while the provider may still be running the
+ * request: the safety net was reached, or the app could not ask. The request
+ * is not lost; the node keeps it to pick up again.
+ */
+export class GenerationStillRunningError extends Error {
+  readonly taskId: string;
+  readonly provider: string;
+
+  constructor(message: string, taskId: string, provider: string) {
+    super(message);
+    this.name = "GenerationStillRunningError";
+    this.taskId = taskId;
+    this.provider = provider;
+  }
+}
+
+function abortError(): DOMException {
+  return new DOMException("The operation was aborted.", "AbortError");
+}
+
+function wait(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(abortError());
+    };
+    const timer = setTimeout(() => {
+      if (signal) signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    if (signal) {
+      signal.addEventListener("abort", onAbort, { once: true });
+    }
+  });
+}
+
+/** The `error` of a JSON error body, or the body itself, shortened. */
+function errorDetail(status: number, text: string): string {
+  try {
+    const parsed = JSON.parse(text) as { error?: unknown } | null;
+    return typeof parsed?.error === "string" && parsed.error ? parsed.error : `HTTP ${status}`;
+  } catch {
+    return text ? `HTTP ${status} - ${text.substring(0, 200)}` : `HTTP ${status}`;
+  }
+}
+
+/**
+ * Poll /api/generate/poll until the provider answers: the media, or its
+ * reason for failing the run. Throws an AbortError when `signal` aborts, and
+ * GenerationStillRunningError when it stops waiting without an answer.
  */
 export async function pollGenerateTask(
   options: PollGenerateTaskOptions
 ): Promise<GenerateResponse> {
   const { taskId, provider, modelId, modelName, mediaType, headers, signal } = options;
+  const providerName = pollProviderName(provider);
 
-  const startTime = Date.now();
+  const deadline = Date.now() + POLL_SAFETY_NET_MS;
   let interval = INITIAL_INTERVAL;
   let consecutiveErrors = 0;
 
+  const stoppedWaiting = (what: string) =>
+    new GenerationStillRunningError(
+      `${modelName}: ${what} (request ${taskId}). The node keeps the request; pick it up again from the node.`,
+      taskId,
+      provider
+    );
+  const atTheNet = () =>
+    stoppedWaiting(`still running on ${providerName} after ${POLL_SAFETY_NET_MS / 60_000} minutes`);
+
+  // A poll that went wrong in a way a later one may not: count it, and stop
+  // waiting after too many in a row, or once this was the last look.
+  const transientError = (lastLook: boolean, detail: string) => {
+    consecutiveErrors++;
+    console.warn(`[poll] ${detail} (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS})`);
+    if (lastLook) throw atTheNet();
+    if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
+      throw stoppedWaiting(
+        `stopped checking after ${MAX_CONSECUTIVE_ERRORS} failed tries (${detail}), and the run may still be going on ${providerName}`
+      );
+    }
+    interval = Math.min(interval + INTERVAL_STEP, MAX_INTERVAL);
+  };
+
   while (true) {
-    // Check client-side timeout
-    if (Date.now() - startTime > MAX_POLL_TIME) {
-      return { success: false, error: `${modelName}: Generation timed out after 10 minutes` };
-    }
+    if (signal?.aborted) throw abortError();
 
-    // Check abort signal
-    if (signal?.aborted) {
-      throw new DOMException("The operation was aborted.", "AbortError");
-    }
+    // Never wait past the net: the poll made there is the last look, so a run
+    // that finished or failed meanwhile still reports its real outcome.
+    await wait(Math.min(interval, Math.max(0, deadline - Date.now())), signal);
+    const lastLook = Date.now() >= deadline;
 
-    // Wait before polling
-    await new Promise<void>((resolve, reject) => {
-      const onAbort = () => {
-        clearTimeout(timer);
-        reject(new DOMException("The operation was aborted.", "AbortError"));
-      };
-      const timer = setTimeout(() => {
-        if (signal) signal.removeEventListener("abort", onAbort);
-        resolve();
-      }, interval);
-      if (signal) {
-        signal.addEventListener("abort", onAbort, { once: true });
-      }
-    });
-
-    // Make poll request
     let response: Response;
     try {
       response = await fetch("/api/generate/poll", {
@@ -76,66 +145,50 @@ export async function pollGenerateTask(
         ...(signal ? { signal } : {}),
       });
     } catch (error) {
-      // Network errors during individual polls are recoverable
       if (error instanceof DOMException && error.name === "AbortError") {
         throw error;
       }
-      consecutiveErrors++;
-      console.warn(`[poll] Network error (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS}):`, error);
-      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-        return { success: false, error: `${modelName}: Polling failed after ${MAX_CONSECUTIVE_ERRORS} consecutive network errors` };
-      }
-      interval = Math.min(interval + INTERVAL_STEP, MAX_INTERVAL);
+      transientError(lastLook, error instanceof Error ? error.message : "network error");
       continue;
     }
 
     if (!response.ok) {
       // Server errors and transient HTTP statuses may be retried
       if (response.status >= 500 || response.status === 429 || response.status === 408) {
-        consecutiveErrors++;
-        console.warn(`[poll] Transient error ${response.status} (${consecutiveErrors}/${MAX_CONSECUTIVE_ERRORS})`);
-        if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-          const errorText = await response.text().catch(() => "");
-          return { success: false, error: `${modelName}: Polling failed - ${errorText || `HTTP ${response.status}`}` };
-        }
-        interval = Math.min(interval + INTERVAL_STEP, MAX_INTERVAL);
+        const errorText = await response.text().catch(() => "");
+        transientError(lastLook, errorDetail(response.status, errorText));
         continue;
       }
 
-      // Other 4xx errors are not recoverable
       const errorText = await response.text().catch(() => "");
-      let errorMessage = `HTTP ${response.status}`;
-      try {
-        const errorJson = JSON.parse(errorText);
-        errorMessage = errorJson.error || errorMessage;
-      } catch {
-        if (errorText) errorMessage += ` - ${errorText.substring(0, 200)}`;
+      const detail = errorDetail(response.status, errorText);
+      // The provider refused the check (no key, or a rejected one), which says
+      // nothing about the run itself
+      if (response.status === 401 || response.status === 402 || response.status === 403) {
+        throw stoppedWaiting(`could not check on the run (${detail}), and it may still be going on ${providerName}`);
       }
-      return { success: false, error: errorMessage };
+      // Any other 4xx is final: the provider's reason for failing the run
+      return { success: false, error: detail };
     }
 
     let result: GenerateResponse;
     try {
       result = await response.json();
     } catch {
-      consecutiveErrors++;
-      if (consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) {
-        return { success: false, error: `${modelName}: Polling failed - invalid response` };
-      }
+      transientError(lastLook, "invalid response");
       continue;
     }
 
     // Reset on successful response
     consecutiveErrors = 0;
 
-    // Still polling — task not done yet. A server-suggested wait (Retry-After)
-    // wins over the local ramp, capped at MAX_SERVER_INTERVAL and by the time
-    // left before the overall timeout.
+    // Still running. A server-suggested wait (Retry-After) wins over the local
+    // ramp, capped at MAX_SERVER_INTERVAL (and by the net, above).
     if (result.polling) {
+      if (lastLook) throw atTheNet();
       const suggested = result.retryAfterMs;
       if (typeof suggested === "number" && suggested > 0) {
-        const remaining = Math.max(0, MAX_POLL_TIME - (Date.now() - startTime));
-        interval = Math.min(suggested, MAX_SERVER_INTERVAL, remaining);
+        interval = Math.min(suggested, MAX_SERVER_INTERVAL);
       } else {
         interval = Math.min(interval + INTERVAL_STEP, MAX_INTERVAL);
       }

@@ -39,6 +39,16 @@ async function record(buffer: Buffer, overrides: Partial<RecordAssetMeta> = {}, 
   return completeUpload(started.ticket.uploadId, streamOf(buffer), contentType);
 }
 
+/** What `recordUpload` sends, less the id, run and kind. */
+const UPLOAD = {
+  origin: "uploaded" as const,
+  prompt: undefined,
+  model: undefined,
+  producer: { nodeId: "upload", nodeType: "upload", operation: "upload" },
+  workflowId: "uploads",
+  workflowName: "Uploads",
+};
+
 function listFiles(dir: string): string[] {
   try {
     return fs.readdirSync(dir).sort();
@@ -136,6 +146,50 @@ describe("recording into the library", () => {
     const audio = await record(makeWav(0.25), { kind: "audio", prompt: "hum" }, "audio/wav");
     expect(audio.asset).toMatchObject({ kind: "audio", ext: "wav", mime: "audio/wav" });
     expect(audio.asset.durationSec).toBeCloseTo(0.25, 2);
+  });
+
+  it("records an upload under the name it came with, the file named by the library, and the same file twice as two records", async () => {
+    const upload = {
+      kind: "video" as const,
+      origin: "uploaded" as const,
+      name: "sunset.mp4",
+      prompt: undefined,
+      model: undefined,
+      producer: { nodeId: "upload", nodeType: "upload", operation: "upload" },
+      workflowId: "uploads",
+      workflowName: "Uploads",
+    };
+    const first = await record(TINY_MP4, upload, "video/mp4");
+    expect(first.asset).toMatchObject({ kind: "video", origin: "uploaded", name: "sunset.mp4", workflowName: "Uploads" });
+    expect(first.asset.filename).toMatch(/^\d{6}_upload_[0-9a-f]{8}\.mp4$/);
+    const sidecar = JSON.parse(fs.readFileSync(path.join(root, ".nodebanana", "assets", `${first.asset.id}.json`), "utf8"));
+    expect(sidecar).toMatchObject({ origin: "uploaded", name: "sunset.mp4" });
+
+    const again = await record(TINY_MP4, upload, "video/mp4");
+    expect(again.asset.id).not.toBe(first.asset.id);
+    expect(again).toMatchObject({ reusedFile: true, filename: first.asset.filename, asset: { name: "sunset.mp4" } });
+  });
+
+  it("refuses an upload in a format the library doesn't store, rather than keep it under the kind's default", async () => {
+    const avi = Buffer.concat([Buffer.from("RIFF"), Buffer.alloc(4, 1), Buffer.from("AVI LIST"), Buffer.alloc(64, 2)]);
+    const m = meta({ ...UPLOAD, kind: "video" });
+    const started = await beginRecord({ meta: m, source: { type: "upload" } });
+    if (!("ticket" in started)) throw new Error("expected a ticket");
+    await expect(completeUpload(started.ticket.uploadId, streamOf(avi), "video/x-msvideo")).rejects.toMatchObject({
+      status: 415,
+      code: "unsupported",
+      message: "The file isn't in a video or audio format the library can keep",
+    });
+    expect(listFiles(path.join(root, "Generations", localDay(m.createdAt)))).toEqual([]);
+    expect(fs.existsSync(path.join(root, ".nodebanana", "assets", `${m.id}.json`))).toBe(false);
+
+    // Bytes no sniffer knows are kept when their type is one the library stores (an old QuickTime movie)
+    const oldMovie = Buffer.concat([Buffer.from([0, 0, 0, 8]), Buffer.from("wide"), Buffer.alloc(64, 3)]);
+    const movie = await record(oldMovie, { ...UPLOAD, kind: "video", mime: "video/quicktime" }, "video/quicktime");
+    expect(movie.asset).toMatchObject({ ext: "mov", mime: "video/quicktime" });
+    // Anything else keeps the kind's default, as before
+    const generated = await record(avi, { kind: "video" }, "video/x-msvideo");
+    expect(generated.asset).toMatchObject({ ext: "mp4", origin: "generated" });
   });
 
   it("keeps the client's dimensions when the file can't be measured", async () => {
@@ -236,6 +290,51 @@ describe("byte dedupe", () => {
 
     const library = await __assetLibraryForTests();
     expect(library.recordsWithHash(sha256(png))).toHaveLength(5);
+  });
+
+  it("never shares a file between an upload and any other asset, which a build that can't read uploads would release", async () => {
+    const generated = await record(TINY_MP4, { kind: "video", prompt: "clip" }, "video/mp4");
+    const uploaded = await record(TINY_MP4, { ...UPLOAD, kind: "video" }, "video/mp4");
+    expect(uploaded.reusedFile).toBe(false);
+    expect(uploaded.asset.file).not.toEqual(generated.asset.file);
+    // Uploads share with uploads, and other assets with their own kind
+    const again = await record(TINY_MP4, { ...UPLOAD, kind: "video" }, "video/mp4");
+    expect(again).toMatchObject({ reusedFile: true, filename: uploaded.filename });
+    const edited = await record(
+      TINY_MP4,
+      { kind: "video", origin: "edited", prompt: undefined, producer: { nodeId: "trim-1", nodeType: "videoTrim", operation: "trim" } },
+      "video/mp4",
+    );
+    expect(edited).toMatchObject({ reusedFile: true, filename: generated.filename });
+
+    // The other way round: a generation never takes an upload's file
+    const wav = makeWav(0.3);
+    const firstUpload = await record(wav, { ...UPLOAD, kind: "audio" }, "audio/wav");
+    const sound = await record(wav, { kind: "audio", prompt: "hum" }, "audio/wav");
+    expect(sound.reusedFile).toBe(false);
+    expect(sound.asset.file).not.toEqual(firstUpload.asset.file);
+    for (const result of [generated, uploaded, firstUpload, sound]) {
+      expect(fs.existsSync(result.asset.displayPath)).toBe(true);
+    }
+  });
+
+  it("keeps uploads apart in a project folder too, by record and by the _<md5> name", async () => {
+    const project = path.join(base, "P");
+    fs.mkdirSync(project);
+    const wav = makeWav(0.2);
+    const uploaded = await record(wav, { ...UPLOAD, kind: "audio", projectDir: project }, "audio/wav");
+    expect(uploaded.asset.file.root).toBe("external");
+    const generated = await record(wav, { kind: "audio", projectDir: project }, "audio/wav");
+    expect(generated.reusedFile).toBe(false);
+    expect(generated.filename).not.toBe(uploaded.filename);
+
+    // A file no record holds is one an older build may import as its own: an upload makes its own copy
+    const other = makeWav(0.25);
+    const loose = path.join(project, "generations", `old_prompt_${md5(other)}.wav`);
+    fs.writeFileSync(loose, other);
+    const fromLoose = await record(other, { ...UPLOAD, kind: "audio", projectDir: project }, "audio/wav");
+    expect(fromLoose.reusedFile).toBe(false);
+    expect(fromLoose.asset.displayPath).not.toBe(loose);
   });
 
   it("reuses a legacy project file by its _<md5> suffix, but never a truncated one", async () => {

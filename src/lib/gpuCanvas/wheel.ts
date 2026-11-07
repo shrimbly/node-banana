@@ -83,3 +83,25 @@ export function holdOverScrollArea(action: SceneWheel, area: { nowheel: boolean 
   if (action.type === "zoom" && action.about === "pointer" && !area.nowheel) return action;
   return { type: "block" };
 }
+
+/**
+ * How long wheels over one painted scroll area are held. The node normally turns live in a few frames; past this
+ * the wheel moves the view, so nothing can leave the canvas refusing to pan under a still pointer.
+ */
+export const WHEEL_HOLD_MAX_MS = 500;
+
+/**
+ * Whether a wheel over a node's scroll area may still be held (holdOverScrollArea). A run of wheels over one node
+ * is held up to `maxMs`; a new node, or a pause of `gapMs`, starts a new run.
+ */
+export function wheelHold(gapMs: number, maxMs = WHEEL_HOLD_MAX_MS) {
+  let id: string | null = null, since = 0, last = 0;
+  return (nodeId: string, now: number) => {
+    if (nodeId !== id || now - last > gapMs) {
+      id = nodeId;
+      since = now;
+    }
+    last = now;
+    return now - since < maxMs;
+  };
+}

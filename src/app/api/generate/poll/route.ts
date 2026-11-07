@@ -8,6 +8,15 @@
  * Headers:
  *   - X-Kie-Key: Kie.ai API key (provider "kie")
  *   - X-Comfy-Router-Key: Comfy API key (provider "comfy")
+ *
+ * Answers (pollGenerateTask reads them this way):
+ *   - 200 with `polling: true`: still running; with the media: done
+ *   - 422: the provider failed the run; `error` is its reason, and final
+ *   - 401, 402, 403: the provider refused this check (a missing or rejected
+ *     key), which says nothing about the run: the client stops waiting and
+ *     keeps the request to pick up again
+ *   - 408, 429, 5xx: no answer this time; the client polls again
+ *   - any other 4xx: the request cannot be answered (expired, unknown)
  */
 import { NextRequest, NextResponse } from "next/server";
 import type { GenerateResponse } from "@/types";
@@ -22,6 +31,9 @@ import { buildMediaResponse } from "../shared";
 
 export const maxDuration = 120; // 2 min — enough for media fetch, not for polling
 export const dynamic = 'force-dynamic';
+
+// Router answers about the key or the workspace, not about the run
+const ACCESS_REFUSED = new Set([401, 402, 403]);
 
 interface PollRequest {
   taskId: string;
@@ -71,9 +83,15 @@ export async function POST(request: NextRequest) {
       }
 
       if (pollResult.status === "failed") {
+        if (pollResult.statusCode && ACCESS_REFUSED.has(pollResult.statusCode)) {
+          return NextResponse.json<GenerateResponse>(
+            { success: false, error: pollResult.error },
+            { status: pollResult.statusCode }
+          );
+        }
         return NextResponse.json<GenerateResponse>(
           { success: false, error: `${modelName}: ${pollResult.error}` },
-          { status: 500 }
+          { status: 422 }
         );
       }
 
@@ -83,7 +101,7 @@ export async function POST(request: NextRequest) {
       if (!result.success) {
         return NextResponse.json<GenerateResponse>(
           { success: false, error: result.error || "Failed to fetch result" },
-          { status: 500 }
+          { status: result.statusCode ?? 500 }
         );
       }
 
@@ -132,7 +150,7 @@ export async function POST(request: NextRequest) {
     if (pollResult.status === "failed") {
       return NextResponse.json<GenerateResponse>(
         { success: false, error: `${modelName}: ${pollResult.error}` },
-        { status: 500 }
+        { status: 422 }
       );
     }
 

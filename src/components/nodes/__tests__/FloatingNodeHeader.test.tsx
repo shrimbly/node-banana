@@ -151,6 +151,34 @@ describe("FloatingNodeHeader", () => {
     expect(expand.textContent).toBe("");
   });
 
+  it("gives a Stitch node Expand and Run", () => {
+    const { onExpandNode, onRunNode, rerender } = renderHeader({
+      type: "videoStitch",
+      onBrowse: undefined,
+      canFallback: false,
+      title: "Edit Video",
+    });
+    expect(screen.getByRole("button", { name: "Expand editor" }).closest(".opacity-0")).not.toBeNull();
+    hoveredNodeId = "n1";
+    rerender(
+      <ReactFlowProvider>
+        <FloatingNodeHeader
+          {...base}
+          type="videoStitch"
+          title="Edit Video"
+          onExpandNode={onExpandNode}
+          onRunNode={onRunNode}
+        />
+      </ReactFlowProvider>
+    );
+    const expand = screen.getByRole("button", { name: "Expand editor" });
+    expect(expand.closest(".opacity-0")).toBeNull();
+    fireEvent.click(expand);
+    expect(onExpandNode).toHaveBeenCalledWith("n1", "videoStitch");
+    fireEvent.click(screen.getByRole("button", { name: "Run node" }));
+    expect(onRunNode).toHaveBeenCalledWith("n1");
+  });
+
   it("fades Run and the kebab in on hover, and Run's label never changes", () => {
     const { rerender, onRunNode } = renderHeader();
     const run = screen.getByRole("button", { name: "Run node" });

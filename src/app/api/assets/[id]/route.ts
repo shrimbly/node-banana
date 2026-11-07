@@ -2,7 +2,7 @@
  * One asset.
  *
  * GET               → AssetView (404 when the library has no such asset)
- * PATCH AssetPatch  → AssetView: tags, favorite, trashed
+ * PATCH AssetPatch  → AssetView: tags, favorite, trashed, name (the display name; "" clears it)
  */
 
 import { getAsset, patchAsset } from "@/lib/assets/server";

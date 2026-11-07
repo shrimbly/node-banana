@@ -1,7 +1,10 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import type { NodeChange, Position } from "@xyflow/react";
 import type { WorkflowNode } from "@/types";
-import { resizeChanges, sameHandleBounds } from "../LiveLayer";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { GhostNode, ghostNode, resizeChanges, sameHandleBounds } from "../LiveLayer";
 
 const store = [
   { id: "a", type: "prompt", position: { x: 0, y: 0 }, data: {}, width: 300, style: { width: 300 } },
@@ -42,5 +45,19 @@ describe("sameHandleBounds", () => {
     expect(sameHandleBounds(a, { source: [handle("r1", 40)], target: null })).toBe(false);
     expect(sameHandleBounds(a, { source: [handle("r1", 40), handle("r2", 80)], target: [] })).toBe(false);
     expect(sameHandleBounds(undefined, a)).toBe(false);
+  });
+});
+
+describe("GhostNode", () => {
+  it("holds elements where the node's handles are, which React Flow finds when it measures a live node turned stand-in", () => {
+    const handles = new Map([["source:text", { x: 320, y: 40, position: "right" }], ["target:", { x: 0, y: 60, position: "left" }]]);
+    const node = ghostNode({ id: "n", x: 0, y: 0, w: 320, h: 200, handles } as never);
+    const host = document.createElement("div");
+    host.innerHTML = renderToStaticMarkup(createElement(GhostNode, { data: node.data as never }));
+    const source = host.querySelector<HTMLElement>(".source")!, target = host.querySelector<HTMLElement>(".target")!;
+    expect(source.dataset).toMatchObject({ handleid: "text", handlepos: "right" });
+    expect(source.style).toMatchObject({ left: "320px", top: "40px" });
+    expect(target.dataset.handlepos).toBe("left");
+    expect(target.style).toMatchObject({ left: "0px", top: "60px" });
   });
 });

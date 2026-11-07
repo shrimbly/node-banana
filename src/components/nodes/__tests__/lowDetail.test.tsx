@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, act } from "@testing-library/react";
 
 /** A fresh copy of the module, which reads localStorage when it loads. */
 async function load() {
@@ -34,22 +33,5 @@ describe("low detail", () => {
     expect(getLowDetailSettings()).toEqual({ enabled: false, zoom: 0.35 });
     setLowDetailZoom(5);
     expect(getLowDetailSettings().zoom).toBe(0.25);
-  });
-
-  it("is in effect only while switched on and zoomed out", async () => {
-    const { setZoomedOut, setLowDetailEnabled, useLowDetail } = await load();
-    function Probe() {
-      return <span data-testid="state">{useLowDetail() ? "low" : "full"}</span>;
-    }
-    render(<Probe />);
-    expect(screen.getByTestId("state")).toHaveTextContent("full");
-    act(() => setZoomedOut(true));
-    expect(screen.getByTestId("state")).toHaveTextContent("low");
-    act(() => setLowDetailEnabled(false));
-    expect(screen.getByTestId("state")).toHaveTextContent("full");
-    act(() => setLowDetailEnabled(true));
-    expect(screen.getByTestId("state")).toHaveTextContent("low");
-    act(() => setZoomedOut(false));
-    expect(screen.getByTestId("state")).toHaveTextContent("full");
   });
 });

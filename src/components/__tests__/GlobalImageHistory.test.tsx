@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, act } from "@testing-library/react";
+import { render, screen, fireEvent, act, within } from "@testing-library/react";
 import { ReactFlowProvider } from "@xyflow/react";
-import { GlobalImageHistory, groupRecentByBatch } from "@/components/GlobalImageHistory";
+import { GlobalImageHistory, groupRecentByBatch, historyViewerItem } from "@/components/GlobalImageHistory";
+import { downloadMedia } from "@/utils/downloadMedia";
 import { ImageHistoryItem } from "@/types";
 
 // Mock createPortal for sidebar rendering
@@ -38,6 +39,8 @@ const libraryStatus = vi.hoisted(() => ({ current: null as { available: boolean 
 vi.mock("@/lib/assets/client/recorder", () => ({
   getRecorderLibraryStatus: () => libraryStatus.current,
 }));
+
+vi.mock("@/utils/downloadMedia", () => ({ downloadMedia: vi.fn(async () => undefined) }));
 
 import { useAssetStore } from "@/store/assetStore";
 
@@ -235,7 +238,7 @@ describe("GlobalImageHistory", () => {
 
       render(<GlobalImageHistory />, { wrapper });
 
-      const button = screen.getByTitle("1 image in history");
+      const button = screen.getByTitle("1 item in history");
       expect(button).toBeInTheDocument();
     });
 
@@ -247,7 +250,7 @@ describe("GlobalImageHistory", () => {
 
       render(<GlobalImageHistory />, { wrapper });
 
-      const button = screen.getByTitle("2 images in history");
+      const button = screen.getByTitle("2 items in history");
       expect(button).toBeInTheDocument();
     });
   });
@@ -822,6 +825,109 @@ describe("GlobalImageHistory", () => {
       const images = screen.getAllByRole("img");
       // 15 items in sidebar
       expect(images.length).toBe(15);
+    });
+  });
+
+  describe("Videos", () => {
+    const POSTER = `/api/assets/thumb/${"f".repeat(64)}?w=320`;
+    const clip = (overrides: Partial<ImageHistoryItem> = {}) =>
+      createHistoryItem({
+        id: "v-1",
+        kind: "video",
+        image: "https://cdn.example/clip.mp4",
+        prompt: "A fox in the snow",
+        model: "Fal Video",
+        assetId: "a1",
+        ...overrides,
+      });
+    const show = (history: ImageHistoryItem[]) => {
+      mockUseWorkflowStore.mockImplementation((selector) => selector(createDefaultState({ globalImageHistory: history })));
+      render(<GlobalImageHistory />, { wrapper });
+      fireEvent.click(screen.getByRole("button"));
+    };
+
+    it("counts videos with the images", () => {
+      mockUseWorkflowStore.mockImplementation((selector) =>
+        selector(createDefaultState({ globalImageHistory: [clip(), createHistoryItem()] }))
+      );
+      render(<GlobalImageHistory />, { wrapper });
+      expect(screen.getByTitle("2 items in history")).toBeInTheDocument();
+      expect(screen.getByText("2")).toBeInTheDocument();
+    });
+
+    it("shows the poster with a play mark and the length", () => {
+      show([clip({ poster: POSTER, durationSec: 5 })]);
+      const tile = screen.getByRole("button", { name: "View A fox in the snow" });
+      expect(within(tile).getByRole("img")).toHaveAttribute("src", POSTER);
+      expect(tile.querySelector("video")).toBeNull();
+      expect(tile).toHaveTextContent("0:05");
+    });
+
+    it("shows the first frame until the library has a poster, and the length once it has loaded", () => {
+      show([clip()]);
+      const tile = screen.getByRole("button", { name: "View A fox in the snow" });
+      const video = tile.querySelector("video")!;
+      expect(video).toHaveAttribute("src", "https://cdn.example/clip.mp4");
+      expect(video).toHaveAttribute("preload", "metadata");
+      expect(video.muted).toBe(true);
+      expect(tile).toHaveTextContent("Video");
+      Object.defineProperty(video, "duration", { value: 8.4 });
+      fireEvent.loadedMetadata(video);
+      expect(tile).toHaveTextContent("0:08");
+    });
+
+    it("falls back to the first frame when the poster cannot be loaded", () => {
+      show([clip({ poster: POSTER })]);
+      const tile = screen.getByRole("button", { name: "View A fox in the snow" });
+      fireEvent.error(within(tile).getByRole("img"));
+      expect(tile.querySelector("video")).toHaveAttribute("src", "https://cdn.example/clip.mp4");
+    });
+
+    it("sits in its batch's group beside the images", () => {
+      const batch = (index: number) => ({ id: "b-1", index, count: 2 });
+      show([clip({ batch: batch(2) }), createHistoryItem({ id: "i-1", prompt: "A still", batch: batch(1) })]);
+      expect(screen.getByText("Batch · 2 runs")).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "View A fox in the snow" })).toHaveTextContent("2");
+    });
+
+    it("opens in the viewer as a video, with its poster in the strip", () => {
+      show([clip({ poster: POSTER, durationSec: 5 })]);
+      fireEvent.click(screen.getByRole("button", { name: "View A fox in the snow" }));
+      expect(screen.getByTestId("media-viewer-current").querySelector("video")).toHaveAttribute("src", "https://cdn.example/clip.mp4");
+      expect(screen.getByTestId("media-viewer-strip").querySelector("img")).toHaveAttribute("src", POSTER);
+      expect(screen.getByTestId("media-viewer-rail")).toHaveTextContent("Length0:05");
+    });
+
+    it("is added to the graph as a Video Input node, and downloaded as a video", () => {
+      show([clip()]);
+      fireEvent.click(screen.getByRole("button", { name: "View A fox in the snow" }));
+      fireEvent.click(screen.getByRole("button", { name: "Add to graph" }));
+      expect(mockAddNode).toHaveBeenCalledWith("videoInput", expect.objectContaining({ x: expect.any(Number), y: expect.any(Number) }), {
+        video: "https://cdn.example/clip.mp4",
+        filename: expect.stringMatching(/^history-\d+\.mp4$/),
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Download" }));
+      expect(downloadMedia).toHaveBeenCalledWith("https://cdn.example/clip.mp4", "video");
+    });
+
+    it("drags as a video, so the canvas makes a video node", () => {
+      show([clip()]);
+      const dataTransfer = { setData: vi.fn(), effectAllowed: "" };
+      fireEvent.dragStart(screen.getByRole("button", { name: "View A fox in the snow" }), { dataTransfer });
+      expect(dataTransfer.setData).toHaveBeenCalledWith("application/history-video", "");
+      const payload = dataTransfer.setData.mock.calls.find(([type]) => type === "application/history-image")![1];
+      expect(JSON.parse(payload)).toMatchObject({ kind: "video", image: "https://cdn.example/clip.mp4", prompt: "A fox in the snow" });
+    });
+
+    it("an entry saved before videos were listed is an image", () => {
+      const item = createHistoryItem();
+      expect(historyViewerItem(item)).toMatchObject({ kind: "image", src: item.image });
+      expect(historyViewerItem(item).thumb).toBeUndefined();
+      const dataTransfer = { setData: vi.fn(), effectAllowed: "" };
+      show([item]);
+      fireEvent.dragStart(screen.getByRole("button", { name: "View A test prompt" }), { dataTransfer });
+      expect(dataTransfer.setData).toHaveBeenCalledTimes(1);
+      expect(JSON.parse(dataTransfer.setData.mock.calls[0][1])).toMatchObject({ kind: "image" });
     });
   });
 

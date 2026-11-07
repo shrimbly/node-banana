@@ -21,7 +21,7 @@ const facets = (overrides: Partial<AssetFacets> = {}): AssetFacets => ({
   trash: 0,
   missing: 0,
   kinds: { image: 316, video: 37, audio: 2, "3d": 0 },
-  origins: { generated: 355, edited: 0 },
+  origins: { generated: 355, edited: 0, uploaded: 0 },
   models: [
     { modelId: "nano-banana-2", label: "Nano Banana 2", provider: "gemini", count: 3 },
     { modelId: "gpt-image", label: "GPT Image 2.5 Flare", provider: "openai", count: 6 },

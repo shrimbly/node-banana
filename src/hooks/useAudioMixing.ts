@@ -37,11 +37,13 @@ interface UseAudioMixingReturn {
 
 /**
  * Decode audio blob using MediaBunny. Supports MP3, WAV, OGG and container formats.
- * Returns an array of decoded AudioBuffers.
+ * Returns an array of decoded AudioBuffers, or, with `onPiece`, hands each one
+ * over as it is decoded and keeps none (returns []).
  */
 async function decodeWithMediaBunny(
   audioBlob: Blob,
   onProgress?: (progress: AudioMixProgress) => void,
+  onPiece?: (buffer: AudioBuffer) => void,
 ): Promise<AudioBuffer[]> {
   onProgress?.({ message: 'Reading audio tracks...', progress: 20 });
 
@@ -68,13 +70,16 @@ async function decodeWithMediaBunny(
 
     onProgress?.({ message: 'Decoding audio...', progress: 30 });
     const decodedBuffers: AudioBuffer[] = [];
+    let pieces = 0;
     for await (const wrappedBuffer of sink.buffers(0, audioDuration)) {
       if (wrappedBuffer?.buffer) {
-        decodedBuffers.push(wrappedBuffer.buffer);
+        pieces++;
+        if (onPiece) onPiece(wrappedBuffer.buffer);
+        else decodedBuffers.push(wrappedBuffer.buffer);
       }
     }
 
-    if (decodedBuffers.length === 0) {
+    if (pieces === 0) {
       throw new Error('Failed to decode audio');
     }
 
@@ -114,6 +119,46 @@ async function decodeWithWebAudio(
 }
 
 /**
+ * The file's decoded pieces in order: MediaBunny's, or the Web Audio API's one
+ * buffer when MediaBunny cannot read it.
+ */
+export async function decodeAudioBuffers(
+  audioBlob: Blob,
+  onProgress?: (progress: AudioMixProgress) => void,
+): Promise<AudioBuffer[]> {
+  try {
+    return await decodeWithMediaBunny(audioBlob, onProgress);
+  } catch (mediaBunnyError) {
+    console.warn('MediaBunny audio decode failed, falling back to Web Audio API:', mediaBunnyError);
+    return decodeWithWebAudio(audioBlob, onProgress);
+  }
+}
+
+/**
+ * decodeAudioBuffers, each piece handed to `piece` as it is decoded and none
+ * kept. `restart` is called before the Web Audio fallback hands its one
+ * buffer, so pieces MediaBunny gave before it failed can be dropped.
+ */
+export async function decodeAudioPieces(
+  audioBlob: Blob,
+  each: { piece: (buffer: AudioBuffer) => void; restart: () => void },
+): Promise<void> {
+  try {
+    await decodeWithMediaBunny(audioBlob, undefined, each.piece);
+  } catch (mediaBunnyError) {
+    console.warn('MediaBunny audio decode failed, falling back to Web Audio API:', mediaBunnyError);
+    const [buffer] = await decodeWithWebAudio(audioBlob);
+    each.restart();
+    each.piece(buffer);
+  }
+}
+
+/** The samples prepareAudioAsync(…, 0) gives a file `decodedSamples` long: at least MINIMUM_AUDIO_DURATION. */
+export function fullLengthSamples(decodedSamples: number, sampleRate: number): number {
+  return Math.max(1, Math.floor(Math.max(MINIMUM_AUDIO_DURATION, decodedSamples / sampleRate) * sampleRate));
+}
+
+/**
  * Standalone async function to prepare audio for mixing with video.
  * Uses MediaBunny for decoding, with Web Audio API as fallback.
  */
@@ -126,13 +171,7 @@ export async function prepareAudioAsync(
   try {
     onProgress?.({ message: 'Loading audio file...', progress: 10 });
 
-    let decodedBuffers: AudioBuffer[];
-    try {
-      decodedBuffers = await decodeWithMediaBunny(audioBlob, onProgress);
-    } catch (mediaBunnyError) {
-      console.warn('MediaBunny audio decode failed, falling back to Web Audio API:', mediaBunnyError);
-      decodedBuffers = await decodeWithWebAudio(audioBlob, onProgress);
-    }
+    const decodedBuffers = await decodeAudioBuffers(audioBlob, onProgress);
 
     const sampleRate = decodedBuffers[0].sampleRate;
     const channels = decodedBuffers[0].numberOfChannels;

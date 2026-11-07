@@ -29,7 +29,7 @@ import {
 import { Ingestor } from "../ingest";
 import { runCleanup, type JobContext } from "../jobs";
 import { AssetLibrary } from "../library";
-import { fakeRecord, installBridge, makePng, meta, runId, sha256, streamOf, tempDir } from "./helpers";
+import { fakeRecord, installBridge, makePng, makeWav, meta, runId, sha256, streamOf, tempDir } from "./helpers";
 
 let base: string;
 let root: string;
@@ -167,6 +167,30 @@ describe("queries", () => {
     expect(second.assets.map((x) => x.id)).toEqual([d.asset.id]);
   });
 
+  it("lists an upload with everything else, finds it by its name, and counts it by origin", async () => {
+    const upload = await record(
+      {
+        createdAt: T0 + 4 * HOUR,
+        kind: "audio",
+        origin: "uploaded",
+        name: "Morning hum.wav",
+        prompt: undefined,
+        model: undefined,
+        producer: { nodeId: "upload", nodeType: "upload", operation: "upload" },
+        workflowId: "uploads",
+        workflowName: "Uploads",
+      },
+      makeWav(0.1),
+    );
+    expect(await ids()).toEqual([upload, d, c, b, a].map((r) => r.asset.id));
+    expect(await ids({ kinds: ["audio"] })).toEqual([upload.asset.id]);
+    expect(await ids({ origins: ["uploaded"] })).toEqual([upload.asset.id]);
+    expect(await ids({ q: "morning hum" })).toEqual([upload.asset.id]);
+    const facets = await getFacets();
+    expect(facets.origins).toEqual({ generated: 3, edited: 1, uploaded: 1 });
+    expect(facets.workflows.find((w) => w.id === "uploads")).toMatchObject({ name: "Uploads", count: 1 });
+  });
+
   it("rejects a forged cursor", async () => {
     await expect(listAssets({ cursor: "zz.../../x" })).rejects.toMatchObject({ status: 400 });
   });
@@ -179,7 +203,7 @@ describe("queries", () => {
     expect(facets.trash).toBe(1);
     expect(facets.favorites).toBe(1);
     expect(facets.kinds.image).toBe(3);
-    expect(facets.origins).toEqual({ generated: 3, edited: 0 });
+    expect(facets.origins).toEqual({ generated: 3, edited: 0, uploaded: 0 });
     expect(facets.models.find((m) => m.modelId === "nano-banana")?.count).toBe(3);
     expect(facets.tags).toEqual([
       { tag: "cover", count: 1 },
@@ -233,6 +257,33 @@ describe("mutations", () => {
     const sidecar = JSON.parse(fs.readFileSync(path.join(root, ".nodebanana", "assets", `${r.asset.id}.json`), "utf8"));
     expect(sidecar).toMatchObject({ tags: ["hero", "final"], favorite: true });
     expect(sidecar.trashedAt).toBeUndefined();
+  });
+
+  it("names an asset, finds it by that name, and clears the name with an empty one", async () => {
+    const r = await record({ prompt: "A cat in a hat" });
+    const sidecarPath = path.join(root, ".nodebanana", "assets", `${r.asset.id}.json`);
+    const renamed = await patchAsset(r.asset.id, { name: "  Sunset over the bay " });
+    expect(renamed).toMatchObject({ name: "Sunset over the bay", filename: r.asset.filename });
+    expect((await getAsset(r.asset.id))?.name).toBe("Sunset over the bay");
+    expect(JSON.parse(fs.readFileSync(sidecarPath, "utf8")).name).toBe("Sunset over the bay");
+    expect(await ids({ q: "sunset BAY" })).toEqual([r.asset.id]);
+    expect(await ids({ q: "cat" })).toEqual([r.asset.id]);
+
+    // Another process reads it from the sidecar, and its rename reaches this one through the journal.
+    const other = new AssetLibrary(root);
+    await other.ready();
+    expect((await other.query({ q: "sunset" })).assets.map((x) => x.id)).toEqual([r.asset.id]);
+    await other.patch(r.asset.id, { name: "Dusk" });
+    expect((await getAsset(r.asset.id))?.name).toBe("Dusk");
+    await other.drain();
+
+    const cleared = await patchAsset(r.asset.id, { name: "" });
+    expect(cleared?.name).toBeUndefined();
+    expect(cleared?.filename).toBe(r.asset.filename);
+    expect("name" in JSON.parse(fs.readFileSync(sidecarPath, "utf8"))).toBe(false);
+    expect(await ids({ q: "dusk" })).toEqual([]);
+    await expect(patchAsset(r.asset.id, { name: "Sun\nset" })).rejects.toMatchObject({ status: 400 });
+    await expect(patchAsset(r.asset.id, { name: "x".repeat(121) })).rejects.toMatchObject({ status: 400 });
   });
 
   it("applies bulk ops to ids and to query selections", async () => {
@@ -978,6 +1029,27 @@ describe("loading sidecars", () => {
     // A write after the torn line still reaches other processes.
     await fresh.patch(r.asset.id, { tags: ["after-crash"] });
     expect((await getAsset(r.asset.id))?.tags).toEqual(["after-crash"]);
+    await fresh.drain();
+  });
+});
+
+describe("loading a display name", () => {
+  it("keeps one a rename could have set, trimmed, and drops any other without dropping the record", async () => {
+    const assets = path.join(root, ".nodebanana", "assets");
+    const names: unknown[] = ["  Sunset ", "Sun\nset", "x".repeat(121), "", 7];
+    const recorded: RecordAssetResult[] = [];
+    for (let i = 0; i < names.length; i++) recorded.push(await record());
+    recorded.forEach((r, i) => {
+      const file = path.join(assets, `${r.asset.id}.json`);
+      fs.writeFileSync(file, JSON.stringify({ ...JSON.parse(fs.readFileSync(file, "utf8")), name: names[i] }));
+    });
+
+    const fresh = new AssetLibrary(root);
+    await fresh.ready();
+    const loaded = recorded.map((r) => fresh.allRecords().find((x) => x.id === r.asset.id));
+    expect(loaded.every(Boolean)).toBe(true);
+    expect(loaded[0]?.name).toBe("Sunset");
+    for (const record of loaded.slice(1)) expect(record && "name" in record).toBe(false);
     await fresh.drain();
   });
 });

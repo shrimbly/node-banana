@@ -110,6 +110,13 @@ describe("asset api", () => {
     await expect(fetchAsset("a1")).resolves.toMatchObject({ id: assetView().id });
   });
 
+  it("sends a rename as a PATCH of the display name and answers the asset", async () => {
+    const { calls } = stubFetch(() => jsonResponse(assetView({ name: "Sunset" })));
+    await expect(patchAsset("a1", { name: "Sunset" })).resolves.toMatchObject({ name: "Sunset" });
+    expect(calls[0]).toMatchObject({ url: "/api/assets/a1", method: "PATCH" });
+    expect(jsonBody(calls[0])).toEqual({ name: "Sunset" });
+  });
+
   it("answers null for an asset with no workflow snapshot", async () => {
     stubFetch(() => jsonResponse({ error: "No snapshot" }, { status: 404 }));
     await expect(fetchAssetWorkflow("a1")).resolves.toBeNull();

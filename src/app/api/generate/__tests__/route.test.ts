@@ -715,6 +715,36 @@ describe("/api/generate route", () => {
       );
     });
 
+    it("should send nano-banana-2.1 to gemini-nano-banana-2.1 with its size and both search types", async () => {
+      process.env.GEMINI_API_KEY = "test-gemini-key";
+
+      mockGenerateContent.mockResolvedValueOnce(createGeminiImageResponse());
+
+      const request = createMockPostRequest({
+        prompt: "A panoramic harbour banner",
+        model: "nano-banana-2.1",
+        aspectRatio: "8:1",
+        resolution: "4K",
+        useGoogleSearch: true,
+        useImageSearch: true,
+      });
+
+      const response = await POST(request);
+      const data = await response.json();
+
+      expect(response.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(mockGenerateContent).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: "gemini-nano-banana-2.1",
+          config: expect.objectContaining({
+            imageConfig: { aspectRatio: "8:1", imageSize: "4K" },
+            tools: [{ googleSearch: { searchTypes: { webSearch: {}, imageSearch: {} } } }],
+          }),
+        })
+      );
+    });
+
     it("should extract MIME type from data URL correctly", async () => {
       process.env.GEMINI_API_KEY = "test-gemini-key";
 

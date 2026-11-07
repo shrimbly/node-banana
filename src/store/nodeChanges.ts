@@ -67,6 +67,14 @@ export function replaceNodesAt(nodes: readonly WorkflowNode[], replacements: Rea
 
 /** Compares two node arrays by id and object identity. */
 export function diffNodes(previous: readonly WorkflowNode[], nodes: readonly WorkflowNode[]): NodeChanges {
+  // Every listener of one store change asks about the same pair; compare once
+  if (lastDiff && lastDiff.previous === previous && lastDiff.nodes === nodes) return lastDiff;
+  return (lastDiff = compareNodes(previous, nodes));
+}
+
+let lastDiff: NodeChanges | null = null;
+
+function compareNodes(previous: readonly WorkflowNode[], nodes: readonly WorkflowNode[]): NodeChanges {
   const updated = new Set<string>();
   const added = new Set<string>();
   const removed = new Set<string>();

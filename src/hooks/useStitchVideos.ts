@@ -15,7 +15,7 @@ import {
   getFirstEncodableAudioCodec,
   canEncodeVideo,
 } from 'mediabunny';
-import type { Rotation } from 'mediabunny';
+import type { AudioCodec, InputAudioTrack, Rotation, VideoSample } from 'mediabunny';
 import { createAvcEncodingConfig, AVC_LEVEL_4_0, AVC_LEVEL_5_1 } from '@/lib/video-encoding';
 import {
   DEFAULT_BITRATE,
@@ -24,36 +24,71 @@ import {
   FALLBACK_HEIGHT,
   BASELINE_PIXEL_LIMIT,
   ensureEvenDimension,
-  probeVideoMetadata,
 } from '@/lib/video-probing';
+import {
+  normalizeAudioClips,
+  normalizeLoopCount,
+  normalizeStack,
+  normalizeStitchArgs,
+  type StitchAudioData,
+  type StitchClipInput,
+  type StitchMusicInput,
+  type StitchOptions,
+} from '@/lib/stitch/engineTypes';
+import { FrameSlotter, secToSlot, type PlannedClip } from '@/lib/stitch/sequencePlan';
+import { clipFadeSamples, dissolveFrames, sharedCadence, soloPass, type Dissolve } from '@/lib/stitch/stack';
+import { createFrameBlender, encodeDissolve, type FrameBlender } from '@/lib/stitch/crossfadeFrames';
+import { encodePlacedLoop, openClipReader, type ClipReaderWindow, type PlacedEncodeState } from '@/lib/stitch/clipReader';
+import { gainPieces, LAYER_WARNING, SLOT_SEC, TIME_EPS } from '@/lib/stitch/placement';
+import { maxVisibleLayers, pictureSegments, segmentsInLoop } from '@/lib/stitch/placedSchedule';
+import { planPicture } from '@/lib/stitch/picturePlan';
+import { probeClip, type ClipProbe } from '@/lib/stitch/clipProbe';
+import {
+  applyCrossfades,
+  applyGainPieces,
+  audioClipLayers,
+  audioLayersOverlap,
+  chooseLayerMasterFormat,
+  chooseMasterFormat,
+  mixLoop,
+  pcmFromAudioBuffer,
+  pcmHead,
+  sliceChunksToRange,
+  toMasterFormat,
+  type LoopMix,
+  type MasterFormat,
+  type Pcm,
+  type PcmChunk,
+} from '@/lib/stitch/audioMix';
 
-const determineEncodeParameters = async (
-  blobs: Blob[]
-): Promise<{ width: number; height: number; rotation: Rotation; maxSourceBitrate: number; totalDuration: number; probeSuccessCount: number }> => {
+const AUDIO_BITRATE = 128000;
+
+/** One clip of the sequence that has frames to give. */
+interface StitchUnit {
+  plan: PlannedClip;
+  clip: StitchClipInput;
+  probe: ClipProbe;
+}
+
+const determineEncodeParameters = (
+  probes: ClipProbe[]
+): { width: number; height: number; rotation: Rotation; maxSourceBitrate: number } => {
   let maxWidth = 0;
   let maxHeight = 0;
   let maxSourceBitrate = 0;
-  let totalDuration = 0;
-  let probeSuccessCount = 0;
   let rotation: Rotation | null = null;
 
-  for (let i = 0; i < blobs.length; i++) {
-    try {
-      const { width, height, rotation: trackRotation, bitrate, duration } = await probeVideoMetadata(blobs[i]);
-      maxWidth = Math.max(maxWidth, width);
-      maxHeight = Math.max(maxHeight, height);
-      maxSourceBitrate = Math.max(maxSourceBitrate, bitrate);
-      totalDuration += duration;
-      probeSuccessCount++;
-      if (rotation === null) {
-        rotation = trackRotation;
-      } else if (trackRotation !== rotation) {
-        console.warn(
-          `Rotation mismatch detected for video ${i + 1} (got ${trackRotation}, expected ${rotation}). Using the first rotation value.`
-        );
-      }
-    } catch (error) {
-      console.warn(`Failed to probe metadata for video ${i + 1}`, error);
+  for (let i = 0; i < probes.length; i++) {
+    const probe = probes[i];
+    maxWidth = Math.max(maxWidth, probe.width);
+    maxHeight = Math.max(maxHeight, probe.height);
+    maxSourceBitrate = Math.max(maxSourceBitrate, probe.bitrate);
+    if (rotation === null) {
+      rotation = probe.rotation;
+    } else if (probe.rotation !== rotation) {
+      console.warn(
+        `Rotation mismatch detected for video ${i + 1} (got ${probe.rotation}, expected ${rotation}). Using the first rotation value.`
+      );
     }
   }
 
@@ -63,8 +98,6 @@ const determineEncodeParameters = async (
       height: FALLBACK_HEIGHT,
       rotation: rotation ?? (0 as Rotation),
       maxSourceBitrate,
-      totalDuration,
-      probeSuccessCount,
     };
   }
 
@@ -73,10 +106,58 @@ const determineEncodeParameters = async (
     height: ensureEvenDimension(maxHeight),
     rotation: rotation ?? (0 as Rotation),
     maxSourceBitrate,
-    totalDuration,
-    probeSuccessCount,
   };
 };
+
+/**
+ * The first encodable codec for the master format, else for the two formats
+ * every AAC encoder takes. Null when there is none.
+ */
+async function pickAudioCodec(preferred: MasterFormat): Promise<{ codec: AudioCodec; format: MasterFormat } | null> {
+  const candidates: MasterFormat[] = [preferred, { sampleRate: 48000, channels: 2 }, { sampleRate: 44100, channels: 2 }];
+  const tried = new Set<string>();
+  for (const format of candidates) {
+    const key = `${format.sampleRate}/${format.channels}`;
+    if (tried.has(key)) continue;
+    tried.add(key);
+    // No opus: Twitter doesn't support it
+    const codec = await getFirstEncodableAudioCodec(['aac', 'mp3'], {
+      numberOfChannels: format.channels,
+      sampleRate: format.sampleRate,
+      bitrate: AUDIO_BITRATE,
+    });
+    if (codec) return { codec, format };
+  }
+  return null;
+}
+
+/**
+ * A clip's sound over [from, to) of its source, sample-exact, and silent from
+ * `audibleUntil` (its Out) on: when the video starts after In, the window runs
+ * past Out, and the picture there holds its last frame. Null when it yields nothing.
+ */
+async function decodeClipSound(
+  track: InputAudioTrack,
+  from: number,
+  to: number,
+  audibleUntil: number,
+  signal?: AbortSignal
+): Promise<Pcm | null> {
+  const until = Math.min(to, audibleUntil);
+  if (!(until > from)) return null;
+  const chunks: PcmChunk[] = [];
+  // The first buffer is the one in effect at `from`, so it can start earlier; the slice goes by timestamps
+  for await (const wrapped of new AudioBufferSink(track).buffers(from, until)) {
+    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+    chunks.push(pcmFromAudioBuffer(wrapped.buffer, wrapped.timestamp));
+  }
+  const pcm = sliceChunksToRange(chunks, from, to);
+  if (!pcm) return null;
+  // The last buffer can run past Out
+  const cut = Math.max(0, Math.round((until - from) * pcm.sampleRate));
+  for (const channel of pcm.channels) channel.fill(0, cut);
+  return pcm;
+}
 
 export interface StitchProgress {
   status: 'idle' | 'processing' | 'complete' | 'error';
@@ -87,10 +168,8 @@ export interface StitchProgress {
   error?: string;
 }
 
-export interface AudioData {
-  buffer: AudioBuffer;
-  duration: number;
-}
+/** The old name of the music input; kept for existing imports. */
+export type AudioData = StitchAudioData;
 
 /**
  * Check if the device encoder supports AVC encoding
@@ -108,415 +187,632 @@ export async function checkEncoderSupport(): Promise<boolean> {
 }
 
 /**
- * Trim an AudioBuffer to a target duration in seconds.
- * If the buffer is shorter than the target, returns it unchanged.
- */
-function trimAudioBuffer(buffer: AudioBuffer, targetDuration: number): AudioBuffer {
-  const targetSamples = Math.floor(targetDuration * buffer.sampleRate);
-
-  if (targetSamples >= buffer.length) {
-    return buffer;
-  }
-
-  const trimmed = new AudioBuffer({
-    length: Math.max(1, targetSamples),
-    numberOfChannels: buffer.numberOfChannels,
-    sampleRate: buffer.sampleRate,
-  });
-
-  for (let ch = 0; ch < buffer.numberOfChannels; ch++) {
-    trimmed.getChannelData(ch).set(
-      buffer.getChannelData(ch).subarray(0, targetSamples)
-    );
-  }
-
-  return trimmed;
-}
-
-/**
- * Standalone async function to stitch multiple video blobs together sequentially
+ * Stitches clips into one H.264 video. Each clip plays from In to Out (its
+ * whole video track by default), butted against the one before, or, stacked
+ * (`overlapSec`), starting that much before it ends: the picture dissolves
+ * and the sound crossfades across the overlap, or with `crossfade: false` the
+ * earlier clip stays in front while both are heard. Placed (`placed`), each
+ * clip starts at its own startSec and the higher row is in front: where clips
+ * overlap it fades in or out over the rows below (placement.ts), and a gap is
+ * black. The sequence repeats
+ * `loopCount` times, with a cut at each restart. Each clip's own sound plays
+ * at its volume unless muted, and the music is mixed over it with its volume
+ * curve, which repeats each loop while the music itself runs on. With
+ * `audioClips` the music argument is ignored: each audio clip plays from its
+ * start in every loop, with its curve, cut at the loop's end.
+ *
+ * Bare Blobs and a bare music buffer keep their old meaning: whole clips, and
+ * the music replacing their sound (see normalizeStitchArgs).
  */
 export async function stitchVideosAsync(
-  videoBlobs: Blob[],
-  audioData?: AudioData | null,
+  videoClips: ReadonlyArray<Blob | StitchClipInput>,
+  audio?: StitchAudioData | StitchMusicInput | null,
   onProgress?: (progress: StitchProgress) => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: StitchOptions
 ): Promise<Blob> {
+  const { clips, music } = normalizeStitchArgs(videoClips, audio);
+  const audioClips = normalizeAudioClips(options);
+  const loopCount = normalizeLoopCount(options);
+  const stack = normalizeStack(options);
+  let totalVideos = clips.length * loopCount;
+
+  const updateProgress = (
+    status: StitchProgress['status'],
+    message: string,
+    progressValue: number,
+    currentVideo?: number
+  ) => {
+    onProgress?.({ status, message, progress: progressValue, currentVideo, totalVideos });
+  };
+  const throwIfAborted = () => {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  };
+
+  const inputs: Input[] = [];
+  let videoSource: VideoSampleSource | null = null;
+  let audioSource: AudioBufferSource | null = null;
+  let output: Output | null = null;
+  let outputStarted = false;
+
   try {
-    // Initialize progress
-    const initialProgress: StitchProgress = {
-      status: 'processing',
-      message: 'Initializing stitching...',
-      progress: 0,
-      totalVideos: videoBlobs.length,
-    };
-    onProgress?.(initialProgress);
+    updateProgress('processing', 'Starting the render...', 0);
 
-    if (videoBlobs.length === 0) {
-      throw new Error('No videos to stitch');
+    if (clips.length === 0) {
+      throw new Error('No videos to render');
     }
-
-    // Helper to update progress
-    const updateProgress = (
-      status: StitchProgress['status'],
-      message: string,
-      progressValue: number,
-      currentVideo?: number
-    ) => {
-      const p: StitchProgress = {
-        status,
-        message,
-        progress: progressValue,
-        currentVideo,
-        totalVideos: videoBlobs.length,
-      };
-      onProgress?.(p);
-    };
-
-    updateProgress('processing', 'Analyzing video metadata...', 5);
-    const {
-      width: probedWidth,
-      height: probedHeight,
-      rotation: aggregateRotation,
-      maxSourceBitrate,
-      totalDuration: probedVideoDuration,
-      probeSuccessCount,
-    } = await determineEncodeParameters(videoBlobs);
-
-    const safeWidth = probedWidth > 0 ? probedWidth : FALLBACK_WIDTH;
-    const safeHeight = probedHeight > 0 ? probedHeight : FALLBACK_HEIGHT;
-
-    const codecProfile =
-      safeWidth * safeHeight > BASELINE_PIXEL_LIMIT ? AVC_LEVEL_5_1 : AVC_LEVEL_4_0;
-
-    // Use highest of default/source bitrate
-    const candidateBitrate = Math.max(
-      DEFAULT_BITRATE,
-      Number.isFinite(maxSourceBitrate) && maxSourceBitrate > 0 ? maxSourceBitrate : 0
-    );
-    const resolvedBitrate = Math.max(1, Math.floor(candidateBitrate));
-
-    const supportsConfig = await canEncodeVideo('avc', {
-      width: safeWidth,
-      height: safeHeight,
-      bitrate: resolvedBitrate,
-      fullCodecString: codecProfile,
-    });
-
-    if (!supportsConfig) {
-      throw new Error(
-        `Device encoder cannot output ${safeWidth}x${safeHeight} using profile ${codecProfile}. Reduce the resolution or bitrate and try again.`
-      );
-    }
-
-    console.log('Stitch encoder configuration', {
-      width: safeWidth,
-      height: safeHeight,
-      codecProfile,
-      bitrate: resolvedBitrate,
-      maxSourceBitrate,
-      rotation: aggregateRotation,
-    });
-
-    // Extract embedded audio from source videos when no external audio override is provided
-    let effectiveAudioData = audioData ?? null;
-    if (!effectiveAudioData) {
-      updateProgress('processing', 'Extracting audio from source videos...', 8);
-      // Per-clip audio: each entry is either extracted buffers or a pending
-      // duration (seconds) for clips before the reference format is known.
-      const perClipAudio: Array<{ buffers: AudioBuffer[] } | { silentDuration: number }> = [];
-      let referenceSampleRate: number | null = null;
-      let referenceChannels: number | null = null;
-
-      for (let i = 0; i < videoBlobs.length; i++) {
-        // Checked before the per-clip try so a Stop isn't swallowed by its catch.
-        if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-        try {
-          const blobSource = new BlobSource(videoBlobs[i]);
-          const input = new Input({ source: blobSource, formats: ALL_FORMATS });
-          let extractedAudio = false;
-          try {
-            const clipDuration = await input.computeDuration();
-            const audioTracks = await input.getAudioTracks();
-            if (audioTracks.length > 0) {
-              const audioTrack = audioTracks[0];
-              const sink = new AudioBufferSink(audioTrack);
-              const clipBuffers: AudioBuffer[] = [];
-              for await (const wrapped of sink.buffers(0, clipDuration)) {
-                if (referenceSampleRate === null) {
-                  referenceSampleRate = wrapped.buffer.sampleRate;
-                  referenceChannels = wrapped.buffer.numberOfChannels;
-                }
-                if (
-                  wrapped.buffer.sampleRate === referenceSampleRate &&
-                  wrapped.buffer.numberOfChannels === referenceChannels
-                ) {
-                  clipBuffers.push(wrapped.buffer);
-                  extractedAudio = true;
-                }
-              }
-              if (extractedAudio) {
-                perClipAudio.push({ buffers: clipBuffers });
-              }
-            }
-            // If no audio was extracted, record the clip's duration so we can
-            // insert silence later (even before the reference format is known).
-            if (!extractedAudio && clipDuration > 0) {
-              perClipAudio.push({ silentDuration: clipDuration });
-            }
-          } finally {
-            input.dispose();
-          }
-        } catch (err) {
-          console.warn(`Failed to extract audio from video ${i + 1}:`, err);
-        }
-      }
-
-      // Build the final concatenated buffer, resolving deferred silent entries
-      // now that the reference format is established.
-      if (referenceSampleRate && referenceChannels) {
-        const allAudioBuffers: AudioBuffer[] = [];
-        for (const entry of perClipAudio) {
-          if ('buffers' in entry) {
-            allAudioBuffers.push(...entry.buffers);
-          } else {
-            // Deferred silent clip — create a silent buffer with the reference format
-            const silentSamples = Math.max(1, Math.floor(entry.silentDuration * referenceSampleRate));
-            const silentBuffer = new AudioBuffer({
-              length: silentSamples,
-              numberOfChannels: referenceChannels,
-              sampleRate: referenceSampleRate,
-            });
-            allAudioBuffers.push(silentBuffer);
-          }
-        }
-
-        if (allAudioBuffers.length > 0) {
-          const totalSamples = allAudioBuffers.reduce((sum, b) => sum + b.length, 0);
-          const concatenated = new AudioBuffer({
-            length: Math.max(1, totalSamples),
-            numberOfChannels: referenceChannels,
-            sampleRate: referenceSampleRate,
-          });
-
-          let offset = 0;
-          for (const buffer of allAudioBuffers) {
-            for (let ch = 0; ch < referenceChannels; ch++) {
-              concatenated.getChannelData(ch).set(buffer.getChannelData(ch), offset);
-            }
-            offset += buffer.length;
-          }
-
-          effectiveAudioData = {
-            buffer: concatenated,
-            duration: totalSamples / referenceSampleRate,
-          };
-        }
-      }
-    }
-
-    // Create output
-    updateProgress('processing', 'Creating output container...', 10);
-
-    let videoSource: VideoSampleSource | null = new VideoSampleSource(
-      createAvcEncodingConfig(resolvedBitrate, safeWidth, safeHeight, codecProfile)
-    );
-
-    const bufferTarget = new BufferTarget();
-    let output: Output | null = new Output({
-      format: new Mp4OutputFormat({ fastStart: 'in-memory' }),
-      target: bufferTarget,
-    });
-
-    output.addVideoTrack(videoSource, { rotation: aggregateRotation, frameRate: MAX_OUTPUT_FPS });
-
-    // Add audio track if provided (external audio input or extracted from source videos)
-    let audioSource: AudioBufferSource | null = null;
-    let pendingAudioBuffer: AudioBuffer | null = null;
-    let outputStarted = false;
-
-    if (effectiveAudioData) {
-      updateProgress('processing', 'Detecting supported audio codec...', 11);
-
-      // Detect the best supported audio codec for MP4
-      // Try common codecs in order of preference: aac, mp3 (no opus - Twitter doesn't support it)
-      const audioCodec = await getFirstEncodableAudioCodec(['aac', 'mp3'], {
-        numberOfChannels: effectiveAudioData.buffer.numberOfChannels,
-        sampleRate: effectiveAudioData.buffer.sampleRate,
-        bitrate: 128000,
-      });
-
-      if (!audioCodec) {
-        console.warn('[VideoStitch] No supported audio codec found, continuing without audio');
-        updateProgress('processing', 'Warning: no supported audio codec — audio skipped', 10);
-      } else {
-        updateProgress('processing', `Adding audio track (${audioCodec})...`, 10);
-
-        // Create audio source from the decoded audio buffer
-        audioSource = new AudioBufferSource({
-          codec: audioCodec,
-          bitrate: 128000,
-        });
-
-        output.addAudioTrack(audioSource);
-        pendingAudioBuffer = effectiveAudioData.buffer;
-      }
-    }
-
-    await output.start();
-    outputStarted = true;
 
     try {
-    // Feed audio early so the muxer can interleave audio packets with video frames.
-    // Writing audio after all video causes broken interleaving (Discord won't play audio).
-    if (audioSource && pendingAudioBuffer) {
-      updateProgress('processing', 'Encoding audio track...', 12);
-      // Only trust probedVideoDuration when all blobs were successfully probed;
-      // a partial sum would prematurely trim the audio track.
-      const allProbed = probeSuccessCount === videoBlobs.length;
-      const trimTarget = allProbed && probedVideoDuration > 0 ? probedVideoDuration : effectiveAudioData!.duration;
-      const trimmedBuffer = trimAudioBuffer(pendingAudioBuffer, trimTarget);
-      await audioSource.add(trimmedBuffer);
-      await audioSource.close();
-      audioSource = null;
-      pendingAudioBuffer = null;
-    }
+      updateProgress('processing', 'Analyzing video metadata...', 1);
 
-    // Track the highest timestamp we've written to ensure monotonicity
-    // Start at -frameInterval so first frame can be at timestamp 0
-    const frameInterval = 1 / MAX_OUTPUT_FPS;
-    let highestWrittenTimestamp = -frameInterval;
+      // Each source once, however many clips (split pieces, loops) play it
+      const probes = new Map<Blob, ClipProbe | null>();
+      for (let i = 0; i < clips.length; i++) {
+        throwIfAborted();
+        const { blob } = clips[i];
+        if (probes.has(blob)) continue;
+        const input = new Input({ source: new BlobSource(blob), formats: ALL_FORMATS });
+        inputs.push(input);
+        let probe: ClipProbe | null;
+        try {
+          probe = await probeClip(input);
+        } catch (probeError) {
+          console.error(`Error processing video ${i + 1}:`, probeError);
+          throw new Error(probeError instanceof Error ? probeError.message : `Failed to process video ${i + 1}`);
+        }
+        if (!probe) console.warn(`No video tracks in video ${i + 1}`);
+        probes.set(blob, probe);
+      }
 
-    // Process each video blob
-    for (let videoIndex = 0; videoIndex < videoBlobs.length; videoIndex++) {
-      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-      const videoBlob = videoBlobs[videoIndex];
-      const videoNumber = videoIndex + 1;
-
-      updateProgress(
-        'processing',
-        `Processing video ${videoNumber}/${videoBlobs.length}...`,
-        5 + (videoIndex / videoBlobs.length) * 90,
-        videoNumber
+      // A source without a video track counts 0 s, and planSequence drops it
+      const picture = planPicture(
+        clips.map((clip) => {
+          const probe = probes.get(clip.blob);
+          return {
+            inSec: clip.inSec,
+            outSec: clip.outSec,
+            sourceDuration: probe?.videoDuration ?? 0,
+            firstTimestamp: probe?.firstTimestamp,
+            source: clip.source,
+            startSec: clip.startSec,
+          };
+        }),
+        options
       );
+      const units: StitchUnit[] = [];
+      for (const planned of picture.planned) {
+        const probe = probes.get(clips[planned.index].blob);
+        if (probe) units.push({ plan: planned, clip: clips[planned.index], probe });
+      }
+      const { sp, env, loopLength } = picture;
+      if (units.length === 0 || loopLength <= 0) {
+        throw new Error('Nothing to render: every clip is empty');
+      }
+      totalVideos = units.length * loopCount;
 
-      // Create input for this video
-      const blobSource = new BlobSource(videoBlob);
-      const input = new Input({
-        source: blobSource,
-        formats: ALL_FORMATS,
+      const {
+        width: probedWidth,
+        height: probedHeight,
+        rotation: aggregateRotation,
+        maxSourceBitrate,
+      } = determineEncodeParameters(units.map((unit) => unit.probe));
+      updateProgress('processing', 'Checking the encoder...', 3);
+
+      const safeWidth = probedWidth > 0 ? probedWidth : FALLBACK_WIDTH;
+      const safeHeight = probedHeight > 0 ? probedHeight : FALLBACK_HEIGHT;
+
+      const codecProfile =
+        safeWidth * safeHeight > BASELINE_PIXEL_LIMIT ? AVC_LEVEL_5_1 : AVC_LEVEL_4_0;
+
+      // Use highest of default/source bitrate
+      const candidateBitrate = Math.max(
+        DEFAULT_BITRATE,
+        Number.isFinite(maxSourceBitrate) && maxSourceBitrate > 0 ? maxSourceBitrate : 0
+      );
+      const resolvedBitrate = Math.max(1, Math.floor(candidateBitrate));
+
+      const supportsConfig = await canEncodeVideo('avc', {
+        width: safeWidth,
+        height: safeHeight,
+        bitrate: resolvedBitrate,
+        fullCodecString: codecProfile,
       });
 
-      try {
-        const videoTracks = await input.getVideoTracks();
-        if (videoTracks.length === 0) {
-          console.warn(`No video tracks in video ${videoNumber}`);
-          continue;
+      if (!supportsConfig) {
+        throw new Error(
+          `Device encoder cannot output ${safeWidth}x${safeHeight} using profile ${codecProfile}. Reduce the resolution or bitrate and try again.`
+        );
+      }
+
+      console.log('Stitch encoder configuration', {
+        width: safeWidth,
+        height: safeHeight,
+        codecProfile,
+        bitrate: resolvedBitrate,
+        maxSourceBitrate,
+        rotation: aggregateRotation,
+      });
+
+      // The sound: every audible clip and the music, in one master format
+      // Each keeps its unit's index: muted and soundless clips are left out, so a position here is not one in the sequence
+      const audible = units.flatMap((unit, unitIndex) =>
+        unit.probe.audioTrack && !unit.clip.muted && unit.clip.volume > 0
+          ? [{ ...unit, unitIndex, audioTrack: unit.probe.audioTrack }]
+          : []
+      );
+      const audibleMusic = audioClips ? null : music && !music.muted ? music : null;
+      // Each audio clip heard in a loop: from its start, for its trimmed length, until the loop ends
+      const soundingAudio = (audioClips ?? []).filter(
+        (clip) => Math.min(Math.min(clip.outSec ?? clip.audio.duration, clip.audio.duration) - clip.inSec, loopLength - clip.startSec) > 0
+      );
+      let mix: LoopMix | null = null;
+      let audioCodec: AudioCodec | null = null;
+
+      if (audible.length > 0 || audibleMusic || soundingAudio.length > 0) {
+        // Decoded first, so the master format comes from the sound itself
+        // (an HE-AAC track's container says half its rate and mono)
+        const decoded: Array<{ pcm: Pcm; unitIndex: number; gain: number }> = [];
+        for (let k = 0; k < audible.length; k++) {
+          throwIfAborted();
+          const { plan: planned, clip, audioTrack, unitIndex } = audible[k];
+          updateProgress('processing', 'Extracting audio from source videos...', 5 + (k / audible.length) * 5);
+          try {
+            // From the same origin as the clip's frames, so picture and sound stay in the source's sync
+            const pcm = await decodeClipSound(
+              audioTrack,
+              planned.origin,
+              planned.origin + planned.length,
+              planned.outSec,
+              signal
+            );
+            if (pcm) decoded.push({ pcm, unitIndex, gain: clip.volume });
+          } catch (err) {
+            if (err instanceof DOMException && err.name === "AbortError") throw err;
+            // Silence for this clip; the others keep their place
+            console.warn(`Failed to extract audio from video ${planned.index + 1}:`, err);
+          }
         }
 
-        const videoTrack = videoTracks[0];
-        const sink = new VideoSampleSink(videoTrack);
+        updateProgress('processing', 'Detecting supported audio codec...', 10);
+        const preferred = audioClips
+          ? chooseLayerMasterFormat(
+              [...new Set(soundingAudio.map((clip) => clip.audio.buffer))].map((buffer) => ({
+                sampleRate: buffer.sampleRate,
+                channels: buffer.numberOfChannels,
+              })),
+              decoded.map(({ pcm }) => ({ sampleRate: pcm.sampleRate, channels: pcm.channels.length }))
+            )
+          : chooseMasterFormat(
+              audibleMusic
+                ? { sampleRate: audibleMusic.audio.buffer.sampleRate, channels: audibleMusic.audio.buffer.numberOfChannels }
+                : null,
+              decoded.map(({ pcm }) => ({ sampleRate: pcm.sampleRate, channels: pcm.channels.length }))
+            );
+        const chosen = preferred ? await pickAudioCodec(preferred) : null;
 
-        // Get duration of this video
-        const videoDuration = await input.computeDuration();
+        if (!preferred) {
+          console.warn('[VideoStitch] No clip sound could be decoded, continuing without audio');
+        } else if (!chosen) {
+          console.warn('[VideoStitch] No supported audio codec found, continuing without audio');
+          updateProgress('processing', 'Warning: no supported audio codec — audio skipped', 10);
+        } else {
+          audioCodec = chosen.codec;
+          // mixLoop plays loopCount loops of the music, in the master's samples: only that much of the song is
+          // converted (+1 for the resampler's last neighbour), however long it is
+          const musicPcm = (buffer: AudioBuffer) => {
+            const played = loopCount * Math.max(0, Math.round(loopLength * chosen.format.sampleRate));
+            return pcmHead(buffer, (played * buffer.sampleRate) / chosen.format.sampleRate + 1);
+          };
+          mix = {
+            format: chosen.format,
+            loopLength,
+            clips: decoded.map(({ pcm, unitIndex, gain }) => {
+              const master = toMasterFormat(pcm, chosen.format);
+              if (env) {
+                // Placed: at its own start; with Crossfade on its sound follows its share of the picture
+                const start = env.units[unitIndex].start;
+                const sampleRate = chosen.format.sampleRate;
+                if (env.crossfade) {
+                  applyGainPieces(master.channels, sampleRate, Math.round(start * sampleRate), gainPieces(env, unitIndex), signal);
+                }
+                return { pcm: master, seqStart: start, gain };
+              }
+              if (!sp) return { pcm: master, seqStart: units[unitIndex].plan.seqStart, gain };
+              const placed = sp.clips[unitIndex];
+              if (stack?.crossfade) {
+                // Faded against the next planned clip, sounding or not: a silent partner still fades this side
+                const next = sp.clips[unitIndex + 1];
+                applyCrossfades(
+                  master.channels,
+                  clipFadeSamples(placed, next ? next.seqStart : null, chosen.format.sampleRate)
+                );
+              }
+              return { pcm: master, seqStart: placed.seqStart, gain };
+            }),
+            music: audibleMusic
+              ? { pcm: toMasterFormat(musicPcm(audibleMusic.audio.buffer), chosen.format), curve: audibleMusic.curve }
+              : null,
+          };
+          if (env) {
+            // Said from the layout, never the sample ranges: a rounding-level touch between butted clips is not an overlap
+            const spans = decoded.map(({ unitIndex }) => env.units[unitIndex]);
+            mix.clipsOverlap = spans.some((u, i) =>
+              spans.some(
+                (v, j) =>
+                  j > i &&
+                  Math.min(u.start + u.length, v.start + v.length) - Math.max(u.start, v.start) >= SLOT_SEC - TIME_EPS
+              )
+            );
+          }
+          if (sp) {
+            const stacked = sp;
+            const sounding = new Set(decoded.map(({ unitIndex }) => unitIndex));
+            mix.clipsOverlap = decoded.some(
+              ({ unitIndex }) => sounding.has(unitIndex + 1) && stacked.clips[unitIndex + 1].overlapIn > 0
+            );
+          }
+          if (audioClips) {
+            const count = soundingAudio.length;
+            updateProgress('processing', `Mixing ${count} audio clip${count === 1 ? '' : 's'}...`, 10);
+            const layers = audioClipLayers(
+              soundingAudio.map((clip) => ({ ...clip, buffer: clip.audio.buffer })),
+              chosen.format,
+              loopLength
+            );
+            mix.audio = layers;
+            mix.audioSums = audioLayersOverlap(layers, mix.clips, chosen.format.sampleRate);
+          }
+        }
+      }
 
-        // Track the base offset for this video segment
-        const segmentBaseTime = highestWrittenTimestamp + frameInterval;
-        // Track minimum timestamp in this segment to normalize
-        let segmentMinTimestamp: number | null = null;
+      // Create output
+      updateProgress('processing', 'Creating output container...', 11);
 
-        // Read and write samples from this video
+      const encoderSource = new VideoSampleSource(
+        createAvcEncodingConfig(resolvedBitrate, safeWidth, safeHeight, codecProfile)
+      );
+      videoSource = encoderSource;
+
+      const bufferTarget = new BufferTarget();
+      const muxer = new Output({
+        format: new Mp4OutputFormat({ fastStart: 'in-memory' }),
+        target: bufferTarget,
+      });
+      output = muxer;
+
+      muxer.addVideoTrack(encoderSource, { rotation: aggregateRotation, frameRate: MAX_OUTPUT_FPS });
+
+      if (mix && audioCodec) {
+        updateProgress('processing', `Adding audio track (${audioCodec})...`, 11);
+        audioSource = new AudioBufferSource({
+          codec: audioCodec,
+          bitrate: AUDIO_BITRATE,
+        });
+        muxer.addAudioTrack(audioSource);
+      }
+
+      await muxer.start();
+      outputStarted = true;
+
+      // Feed audio early so the muxer can interleave audio packets with video frames.
+      // Writing audio after all video causes broken interleaving (Discord won't play audio).
+      // One loop at a time: added buffers play back to back.
+      if (audioSource && mix) {
+        updateProgress('processing', 'Encoding audio track...', 12);
+        for (let loop = 0; loop < loopCount; loop++) {
+          throwIfAborted();
+          const channels = mixLoop(mix, loop);
+          const length = channels[0]?.length ?? 0;
+          if (length === 0) continue;
+          const loopBuffer = new AudioBuffer({
+            length,
+            numberOfChannels: channels.length,
+            sampleRate: mix.format.sampleRate,
+          });
+          channels.forEach((data, c) => loopBuffer.getChannelData(c).set(data));
+          await audioSource.add(loopBuffer);
+        }
+        await audioSource.close();
+        audioSource = null;
+      }
+
+      // Every frame lands on the 60 fps grid at its own offset into its clip;
+      // each clip starts exactly where the one before ends, so nothing drifts.
+      const slotter = new FrameSlotter(MAX_OUTPUT_FPS);
+      const frameInterval = 1 / MAX_OUTPUT_FPS;
+      // Stacked: mediabunny's reference size (the first frame added), which every blended frame is made at
+      let ref: { width: number; height: number } | null = null;
+      const addToEncoder = async (sample: VideoSample) => {
+        if (sp && !ref) ref = { width: sample.codedWidth, height: sample.codedHeight };
+        await encoderSource.add(sample);
+      };
+
+      /**
+       * One clip's frames from `from` to `to` (source seconds), straight through to the encoder at the slots
+       * startSlotAt opens; the frame before `holdBefore` is held back for the first slot.
+       */
+      const encodeRun = async (run: {
+        unit: StitchUnit;
+        unitIndex: number;
+        startSlotAt: () => void;
+        from: number;
+        to: number;
+        holdBefore: number;
+        /** Where the run lands in the output, for the progress. */
+        window: { startSec: number; length: number };
+      }) => {
+        throwIfAborted();
+        const { probe } = run.unit;
+        const videoNumber = run.unitIndex + 1;
+
+        updateProgress(
+          'processing',
+          `Processing video ${videoNumber}/${totalVideos}...`,
+          12 + (run.unitIndex / totalVideos) * 85,
+          videoNumber
+        );
+
+        run.startSlotAt();
+
         let samplesFromThisVideo = 0;
-        for await (const sample of sink.samples(0, videoDuration)) {
-          if (signal?.aborted) {
+        const encodeFrame = async (sample: VideoSample) => {
+          const timestamp = slotter.place(sample.timestamp ?? 0);
+          if (timestamp === null) {
             sample.close();
-            throw new DOMException("Aborted", "AbortError");
-          }
-          const originalTimestamp = sample.timestamp ?? 0;
-
-          // On first sample, record the minimum timestamp to normalize from
-          if (segmentMinTimestamp === null) {
-            segmentMinTimestamp = originalTimestamp;
+            return;
           }
 
-          // Normalize timestamp relative to segment start, then offset by base time
-          const normalizedTimestamp = originalTimestamp - segmentMinTimestamp;
-          const adjustedTimestamp = segmentBaseTime + normalizedTimestamp;
-
-          // Snap to 60fps grid for consistent framerate
-          const snappedTimestamp = Math.round(adjustedTimestamp / frameInterval) * frameInterval;
-
-          // Skip duplicate frames that land on the same timestamp slot
-          // This ensures strict 60fps without exceeding the target rate
-          if (snappedTimestamp < highestWrittenTimestamp) {
-            sample.close();
-            continue;
-          }
-
-          sample.setTimestamp(snappedTimestamp);
+          sample.setTimestamp(timestamp);
           sample.setDuration(frameInterval);
-          await videoSource!.add(sample);
-
-          // Update highest written timestamp
-          highestWrittenTimestamp = snappedTimestamp;
-
-          sample.close();
+          try {
+            await addToEncoder(sample);
+          } finally {
+            sample.close();
+          }
           samplesFromThisVideo++;
 
-          // Update progress
           if (samplesFromThisVideo % 10 === 0) {
-            const videoProgress = samplesFromThisVideo / 300; // Rough estimate
-            const overallProgress =
-              5 + ((videoIndex + videoProgress) / videoBlobs.length) * 90;
+            // By where the frame landed, so a 24 fps clip fills its share as a 60 fps one does
+            const withinClip = Math.min(1, Math.max(0, (timestamp - run.window.startSec) / run.window.length));
             updateProgress(
               'processing',
-              `Processing video ${videoNumber}/${videoBlobs.length}: ${samplesFromThisVideo} frames...`,
-              overallProgress,
+              `Processing video ${videoNumber}/${totalVideos}: ${samplesFromThisVideo} frames...`,
+              12 + ((run.unitIndex + withinClip) / totalVideos) * 85,
               videoNumber
             );
           }
+        };
+
+        // The frame in effect at In starts before it. It is held back and
+        // takes the join only when no frame at or after In lands there: a
+        // frame the trim cut away must not push out the first one it kept.
+        let heldBeforeIn: VideoSample | null = null;
+        try {
+          // Decodes only the clip's range, from the key frame before In
+          const sink = new VideoSampleSink(probe.videoTrack);
+          for await (const sample of sink.samples(run.from, run.to)) {
+            if (signal?.aborted) {
+              sample.close();
+              throw new DOMException("Aborted", "AbortError");
+            }
+            const sourceTimestamp = sample.timestamp ?? 0;
+            if (sourceTimestamp < run.holdBefore) {
+              heldBeforeIn?.close();
+              heldBeforeIn = sample;
+              continue;
+            }
+            if (heldBeforeIn) {
+              const before = heldBeforeIn;
+              heldBeforeIn = null;
+              if (slotter.takesFirstSlot(sourceTimestamp)) before.close();
+              else await encodeFrame(before);
+            }
+            await encodeFrame(sample);
+          }
+          if (heldBeforeIn) {
+            const before = heldBeforeIn;
+            heldBeforeIn = null;
+            await encodeFrame(before);
+          }
+        } catch (videoError) {
+          // A user Stop must propagate as an AbortError, not a per-video failure.
+          if (videoError instanceof DOMException && videoError.name === "AbortError") throw videoError;
+          const errorMsg =
+            videoError instanceof Error
+              ? videoError.message
+              : `Failed to process video ${videoNumber}`;
+          console.error(`Error processing video ${videoNumber}:`, videoError);
+          throw new Error(errorMsg);
+        } finally {
+          heldBeforeIn?.close();
         }
-      } catch (videoError) {
-        // A user Stop must propagate as an AbortError, not a per-video failure.
-        if (videoError instanceof DOMException && videoError.name === "AbortError") throw videoError;
-        const errorMsg =
-          videoError instanceof Error
-            ? videoError.message
-            : `Failed to process video ${videoNumber}`;
-        console.error(`Error processing video ${videoNumber}:`, videoError);
-        throw new Error(errorMsg);
-      } finally {
-        input.dispose();
+      };
+
+      if (env) {
+        const segments = pictureSegments(env);
+        const most = maxVisibleLayers(segments);
+        if (most > LAYER_WARNING) {
+          console.warn(`[VideoStitch] ${most} clips blend at once; this takes about ${most * 50} MB at 1080p`);
+        }
+        const totalSlots = Math.max(1, secToSlot(loopCount * loopLength));
+        // One blender and one reference for the whole encode, as the other branches keep theirs
+        const state: PlacedEncodeState = { ref: null, blender: null };
+        const sources = units.map((unit) => ({
+          inSec: unit.plan.inSec,
+          outSec: unit.plan.outSec,
+          origin: unit.plan.origin,
+          frameRate: unit.probe.frameRate,
+          open: (range: { from: number; to: number }, window: ClipReaderWindow) =>
+            openClipReader(unit.probe.videoTrack, range, window, unit.plan.inSec),
+        }));
+        for (let loop = 0; loop < loopCount; loop++) {
+          const videoNumber = (unit: number) => loop * units.length + unit + 1;
+          await encodePlacedLoop({
+            env,
+            segments: segmentsInLoop(segments, loop),
+            loop,
+            sources,
+            state,
+            fallbackRef: { width: safeWidth, height: safeHeight },
+            makeBlender: (size) => createFrameBlender(size),
+            claim: (slot) => slotter.claim(slot),
+            add: (sample) => encoderSource.add(sample),
+            report: (segment, slot) => {
+              if (segment.kind === 'black') return;
+              const share = 12 + Math.min(1, slot / totalSlots) * 85;
+              if (segment.kind === 'solo') {
+                const n = videoNumber(segment.unit);
+                updateProgress('processing', `Processing video ${n}/${totalVideos}...`, share, n);
+              } else if (segment.units.length === 2) {
+                const [bottom, top] = segment.units.map(videoNumber);
+                updateProgress('processing', `Blending video ${bottom} into ${top}...`, share, bottom);
+              } else {
+                updateProgress('processing', `Blending ${segment.units.length} videos...`, share, videoNumber(segment.units[0]));
+              }
+            },
+            failure: (unit, error) => {
+              const n = videoNumber(unit);
+              console.error(`Error processing video ${n}:`, error);
+              return new Error(error instanceof Error ? error.message : `Failed to process video ${n}`);
+            },
+            signal,
+            fps: MAX_OUTPUT_FPS,
+          });
+        }
+      } else if (!sp) {
+        for (let loop = 0; loop < loopCount; loop++) {
+          for (let k = 0; k < units.length; k++) {
+            const unit = units[k];
+            const { plan: planned } = unit;
+            const windowStart = loop * loopLength + planned.seqStart;
+            await encodeRun({
+              unit,
+              unitIndex: loop * units.length + k,
+              startSlotAt: () => slotter.begin({ origin: planned.origin, startSec: windowStart, length: planned.length }),
+              from: planned.inSec,
+              to: planned.outSec,
+              holdBefore: planned.origin,
+              window: { startSec: windowStart, length: planned.length },
+            });
+          }
+        }
+      } else {
+        const stacked = sp;
+        let blender: FrameBlender | null = null;
+        const blenderFor = (firstOutgoing: VideoSample | null): FrameBlender => {
+          if (!blender) {
+            const size = ref ?? {
+              width: firstOutgoing?.codedWidth || safeWidth,
+              height: firstOutgoing?.codedHeight || safeHeight,
+            };
+            ref ??= size;
+            blender = createFrameBlender(size);
+          }
+          return blender;
+        };
+        const dissolveFrom = new Map<number, Dissolve>(stacked.dissolves.map((d) => [d.outgoing, d]));
+
+        // A dissolve's slots, claimed after the outgoing clip's solo frames and before the incoming clip's
+        const blendJoin = async (d: Dissolve, loopOffset: number, unitIndex: number) => {
+          throwIfAborted();
+          const videoNumber = unitIndex + 1;
+          updateProgress(
+            'processing',
+            `Blending video ${videoNumber} into ${videoNumber + 1}...`,
+            12 + ((unitIndex + 1) / totalVideos) * 85,
+            videoNumber
+          );
+          const outgoing = units[d.outgoing].probe;
+          const incoming = units[d.incoming].probe;
+          const frames = dissolveFrames(stacked, d, loopOffset, {
+            fps: MAX_OUTPUT_FPS,
+            cadence: sharedCadence(outgoing, incoming),
+          });
+          const timestamps: number[] = [];
+          const outgoingTimes: number[] = [];
+          const incomingTimes: number[] = [];
+          const alphas: number[] = [];
+          frames.slots.forEach((slot, i) => {
+            const timestamp = slotter.claim(slot);
+            if (timestamp === null) return;
+            timestamps.push(timestamp);
+            outgoingTimes.push(frames.outgoingTimes[i]);
+            incomingTimes.push(frames.incomingTimes[i]);
+            alphas.push(frames.alphas[i]);
+          });
+          try {
+            await encodeDissolve(
+              {
+                outgoing: outgoing.videoTrack,
+                incoming: incoming.videoTrack,
+                timestamps,
+                outgoingTimes,
+                incomingTimes,
+                alphas,
+                frameDuration: frameInterval,
+                signal,
+              },
+              blenderFor,
+              addToEncoder
+            );
+          } catch (blendError) {
+            if (blendError instanceof DOMException && blendError.name === "AbortError") throw blendError;
+            console.error(`Error processing video ${videoNumber}:`, blendError);
+            throw new Error(blendError instanceof Error ? blendError.message : `Failed to process video ${videoNumber}`);
+          }
+        };
+
+        for (let loop = 0; loop < loopCount; loop++) {
+          const loopOffset = loop * loopLength;
+          for (let k = 0; k < units.length; k++) {
+            const unit = units[k];
+            const placed = stacked.clips[k];
+            const unitIndex = loop * units.length + k;
+            const solo = soloPass(placed, loopOffset, MAX_OUTPUT_FPS);
+            if (solo) {
+              await encodeRun({
+                unit,
+                unitIndex,
+                startSlotAt: () => slotter.beginRange({ origin: placed.soloOrigin, fromSec: solo.fromSec, toSec: solo.toSec }),
+                // A head the clip before covers or dissolves over is not decoded again here
+                from: solo.decodeFrom,
+                to: solo.decodeTo,
+                holdBefore: placed.soloOrigin,
+                window: { startSec: solo.fromSec, length: solo.toSec - solo.fromSec },
+              });
+            }
+            const join = dissolveFrom.get(k);
+            if (join) await blendJoin(join, loopOffset, unitIndex);
+          }
+        }
       }
-    }
 
-    // Flush encoder before finalizing container
-    await videoSource!.close();
-    videoSource = null; // Already closed, prevent double-close in finally
-    updateProgress('processing', 'Finalizing stitched video...', 97);
+      // Flush encoder before finalizing container
+      await encoderSource.close();
+      videoSource = null; // Already closed, prevent double-close in finally
+      updateProgress('processing', 'Finishing the video...', 97);
 
-    // Finalize output
-    await output!.finalize();
-    outputStarted = false; // Successfully finalized
-    output = null;
-    const buffer = bufferTarget.buffer;
+      // Finalize output
+      await muxer.finalize();
+      outputStarted = false; // Successfully finalized
+      output = null;
+      const buffer = bufferTarget.buffer;
 
-    if (!buffer) {
-      throw new Error('Failed to generate output buffer');
-    }
+      if (!buffer) {
+        throw new Error('Failed to generate output buffer');
+      }
 
-    const outputBlob = new Blob([buffer], { type: 'video/mp4' });
+      const outputBlob = new Blob([buffer], { type: 'video/mp4' });
 
-    updateProgress(
-      'complete',
-      `Successfully stitched ${videoBlobs.length} videos into ${(outputBlob.size / 1024 / 1024).toFixed(2)}MB file`,
-      100
-    );
+      updateProgress(
+        'complete',
+        `Rendered ${totalVideos} videos into ${(outputBlob.size / 1024 / 1024).toFixed(2)}MB file`,
+        100
+      );
 
-    return outputBlob;
+      return outputBlob;
     } finally {
-      // Clean up encoding resources on error
-      pendingAudioBuffer = null;
+      // Close whatever an error left open; the probed Inputs are released either way
       if (audioSource) {
         try {
           await audioSource.close();
@@ -538,6 +834,7 @@ export async function stitchVideosAsync(
           console.warn('Failed to cancel output:', e);
         }
       }
+      for (const input of inputs) input.dispose();
     }
   } catch (error) {
     // Preserve cancellation as an AbortError so the executor treats Stop as idle.
@@ -600,7 +897,7 @@ export const useStitchVideos = (): UseStitchVideosReturn => {
 
         return result;
       } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Video stitching failed';
+        const errorMessage = error instanceof Error ? error.message : 'Render failed';
         setProgress({
           status: 'error',
           message: errorMessage,

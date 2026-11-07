@@ -77,7 +77,7 @@ const ALL_NODES_CATEGORIES: { label: string; nodes: { type: NodeType; label: str
     nodes: [
       { type: "annotation", label: "Annotate" },
       { type: "splitGrid", label: "Split Grid" },
-      { type: "videoStitch", label: "Video Stitch" },
+      { type: "videoStitch", label: "Edit Video" },
       { type: "videoTrim", label: "Video Trim" },
       { type: "easeCurve", label: "Ease Curve" },
       { type: "videoFrameGrab", label: "Frame Grab" },

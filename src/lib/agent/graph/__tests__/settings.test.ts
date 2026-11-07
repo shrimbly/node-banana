@@ -60,9 +60,18 @@ describe("resolveSettings", () => {
 
       const lite = resolveSettings(nodeOf("nanoBanana"), { model: "nano-banana-2-lite", resolution: "2K", useGoogleSearch: true }, context);
       expect(lite.errors).toEqual([
-        "nanoBanana-1 (Generate Image): nano-banana-2-lite has no resolution setting (only nano-banana-pro and nano-banana-2 do). Change model too, or leave resolution out.",
-        "nanoBanana-1 (Generate Image): useGoogleSearch is not available on nano-banana-2-lite (nano-banana-pro and nano-banana-2 only).",
+        "nanoBanana-1 (Generate Image): nano-banana-2-lite has no resolution setting (only nano-banana-2, nano-banana-2.1 and nano-banana-pro do). Change model too, or leave resolution out.",
+        "nanoBanana-1 (Generate Image): useGoogleSearch is not available on nano-banana-2-lite (nano-banana-2, nano-banana-2.1 and nano-banana-pro only).",
       ]);
+    });
+
+    it("takes Nano Banana 2.1 by its Gemini id, with the extreme ratios and image search but no 512", () => {
+      const out = resolveSettings(nodeOf("nanoBanana"), { model: "gemini-nano-banana-2.1", aspectRatio: "1:8", resolution: "4K", useImageSearch: true }, context);
+      expect(out.errors).toEqual([]);
+      expect(out.patch).toMatchObject({ model: "nano-banana-2.1", selectedModel: { provider: "gemini", modelId: "nano-banana-2.1", displayName: "Nano Banana 2.1" }, aspectRatio: "1:8", resolution: "4K", useImageSearch: true });
+
+      const small = resolveSettings(nodeOf("nanoBanana"), { model: "nano-banana-2.1", resolution: "512" }, context);
+      expect(small.errors).toEqual(["nanoBanana-1 (Generate Image): resolution \"512\" is not available on nano-banana-2.1. Use one of: 1K, 2K, 4K."]);
     });
 
     it("refuses Gemini options on another provider's model and lists the models on a bad id", () => {
@@ -73,7 +82,7 @@ describe("resolveSettings", () => {
       expect(switched.patch).toMatchObject({ parameters: {}, inputSchema: [], aspectRatio: "16:9" });
       // Generate Image's sockets do not depend on the model.
       expect(switched.handlesMayChange).toBe(false);
-      expect(resolveSettings(fal, { model: "flux-pro" }, context).errors[0]).toContain("Use one of: nano-banana, nano-banana-2, nano-banana-2-lite, nano-banana-pro");
+      expect(resolveSettings(fal, { model: "flux-pro" }, context).errors[0]).toContain("Use one of: nano-banana, nano-banana-2, nano-banana-2.1, nano-banana-2-lite, nano-banana-pro");
     });
   });
 

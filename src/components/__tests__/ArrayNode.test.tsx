@@ -147,7 +147,7 @@ describe("ArrayNode", () => {
   it("explains batch mode and drops the Prompt action", () => {
     setup(nodeData({ inputText: ITEMS.join("*"), outputItems: ITEMS, batchMode: true }), [incoming, outgoing(0)]);
     expect(screen.getByRole("switch")).toBeChecked();
-    expect(screen.getByText("Each connected Generate or LLM node runs 7 times, once per item.")).toBeInTheDocument();
+    expect(screen.getByText("Each connected Generate, LLM or ComfyUI app node runs 7 times, once per item.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Make/ })).toBeNull();
     expect(screen.queryByTestId("array-item-wired")).toBeNull();
   });

@@ -58,6 +58,40 @@
   --font-mono: var(--font-jetbrains-mono), "SF Mono", Menlo, Consolas, monospace;
   --tracking-eyebrow: 0.08em;
   --tracking-display: -0.03em;
+
+  /* Stitch editor (src/components/stitch): a darker chrome than a normal
+     dialog, by request. Chrome = the dialog's panel (the stage, its control
+     row, the rail and the timeline sit on the pane colour); well = an empty
+     frame (the editor's stage with no clips, the home's preview). Stacked
+     dialogs keep bg-card. */
+  --color-editor-chrome: #1a1a1a;
+  --color-editor-well: #0f0f0f;
+
+  /* Edit video's quiet look (the view and the node's dialog): the hairline
+     between regions (and the render's progress track), a field's ground,
+     the fill of a control that is open or pressed, and a switch's track
+     while it is off; its menus' shadow (the headers' ⋯, the home's row
+     menu), deeper than shadow-menu. */
+  --color-edit-line: #1a1a1a;
+  --color-edit-field: #141414;
+  --color-edit-pressed: #1f1f1f;
+  --color-edit-switch-off: #333333;
+  --shadow-edit-menu: 0 16px 40px rgb(0 0 0 / 0.5);
+
+  /* Its timeline: an audio clip's body, its waveform (lighter while the
+     clip is selected), the ruler's major ticks, and the slots that add
+     clips (the empty lane, the + after the last clip). A video clip's
+     ground is edit-field; selection is a neutral-100 ring. */
+  --color-edit-clip: #161616;
+  --color-edit-wave: #5c5c5c;
+  --color-edit-wave-active: #a3a3a3;
+  --color-edit-tick: #333333;
+  --color-edit-slot: #121212;
+}
+
+/* The Stitch editor's trim ghost: the part of a clip a trim cuts away. */
+@utility editor-ghost-hatch {
+  background-image: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.07) 0 2px, transparent 2px 10px);
 }
 
 /* Ink range slider for the split dialogs: a 4px track filled to --p. */
@@ -86,6 +120,41 @@
   }
   &:focus-visible {
     box-shadow: 0 0 0 2px #171717, 0 0 0 4px #3b82f6;
+  }
+}
+
+/* Edit video's rail slider (a clip's Volume): a quieter range-ink, a 4px
+   neutral-800 track filled neutral-300 to --p and a plain 12px thumb. */
+@utility range-edit {
+  appearance: none;
+  height: 4px;
+  border-radius: 2px;
+  background: linear-gradient(
+    to right,
+    var(--color-neutral-300) var(--p, 50%),
+    var(--color-neutral-800) var(--p, 50%)
+  );
+  outline: none;
+  &::-webkit-slider-thumb {
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--color-neutral-100);
+    border: 0;
+  }
+  &::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--color-neutral-100);
+    border: 0;
+  }
+  &:focus-visible {
+    box-shadow: 0 0 0 2px var(--color-pane), 0 0 0 4px rgb(255 255 255 / 0.4);
+  }
+  &:disabled {
+    opacity: 0.4;
   }
 }
 
@@ -662,35 +731,6 @@ html {
 
   .edge-running-head {
     opacity: 0.85;
-  }
-}
-
-/* A running node drawn at low detail (NodeLowDetail): a tint over the card
-   and a halo around it that pulse, so it shows at any zoom and reads apart
-   from a blue thumbnail. Held while the canvas pans or a node drags, like the
-   comet; static under reduced motion. */
-.node-low-detail-running {
-  background: color-mix(in srgb, var(--color-running) 40%, transparent);
-  box-shadow: 0 0 0 12px color-mix(in srgb, var(--color-running) 60%, transparent);
-  pointer-events: none;
-  animation: node-low-detail-running 0.9s cubic-bezier(0.45, 0, 0.25, 1) infinite alternate;
-}
-
-@keyframes node-low-detail-running {
-  from { opacity: 0.35; }
-  to { opacity: 1; }
-}
-
-.canvas-interacting .node-low-detail-running,
-.canvas-native-navigation-active .node-low-detail-running,
-.canvas-wheel-navigation-active .node-low-detail-running {
-  animation-play-state: paused;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .node-low-detail-running {
-    animation: none;
-    opacity: 0.8;
   }
 }
 

@@ -5,11 +5,12 @@
  * Used by both executeWorkflow and regenerateNode.
  */
 
-import type { GenerateAudioNodeData, SelectedModel } from "@/types";
+import type { GenerateAudioNodeData, GenerateResponse, SelectedModel } from "@/types";
 import { buildGenerateHeaders } from "@/store/utils/buildApiHeaders";
-import { pollGenerateTask } from "./pollTaskCompletion";
+import { GenerationStillRunningError } from "./pollTaskCompletion";
+import { pendingTaskFrom, waitForPendingTask } from "./pendingTask";
 import { runWithFallback } from "./runWithFallback";
-import type { NodeExecutionContext } from "./types";
+import type { GenerationRequest, NodeExecutionContext } from "./types";
 import { MissingInputError } from "./missingInput";
 import {
   assetCost,
@@ -38,10 +39,6 @@ export async function executeGenerateAudio(
     getFreshNode,
     signal,
     providerSettings,
-    addIncurredCost,
-    generationsPath,
-    getNodes,
-    trackSaveGeneration,
   } = ctx;
 
   const { useStoredFallback = false } = options;
@@ -89,6 +86,8 @@ export async function executeGenerateAudio(
     inputPrompt: text ?? nodeData.inputPrompt,
     status: "loading",
     error: null,
+    // A new run lets go of any request an earlier one left to pick up
+    pendingTask: undefined,
   });
 
   const runOnce = async (modelToUse: SelectedModel, parametersOverride?: Record<string, unknown>): Promise<void> => {
@@ -135,17 +134,9 @@ export async function executeGenerateAudio(
 
       let result = await response.json();
 
-      // Handle polling response (long-running Kie tasks)
+      // A long-running request (Kie, Comfy Router): poll it, kept on the node meanwhile
       if (result.polling) {
-        result = await pollGenerateTask({
-          taskId: result.taskId,
-          provider: result.pollProvider,
-          modelId: result.pollModelId,
-          modelName: result.pollModelName,
-          mediaType: result.pollMediaType,
-          headers,
-          signal,
-        });
+        result = await waitForPendingTask(ctx, pendingTaskFrom(result), headers);
 
         if (!result.success) {
           updateNodeData(node.id, {
@@ -157,99 +148,7 @@ export async function executeGenerateAudio(
         }
       }
 
-      // Handle audio response (audio or audioUrl field)
-      const audioData = result.audio || result.audioUrl;
-      if (result.success && audioData) {
-        const timestamp = Date.now();
-        const audioId = `${timestamp}`;
-
-        // fal bills a flat amount per run
-        const runCost = modelToUse.provider === "fal" && modelToUse.pricing ? modelToUse.pricing.amount : null;
-        const recorded = recordOutput(ctx, {
-          kind: "audio",
-          origin: "generated",
-          media: audioData,
-          prompt: resolvedPrompt(text, dynamicInputs),
-          model: assetModel(modelToUse),
-          parameters: assetParameters(requestPayload.parameters),
-          cost: assetCost(runCost),
-          producer: assetProducer(ctx),
-        });
-
-        // The carousel reloads its entries from the asset library, or from the
-        // generations folder, so only a generation saved to one gets an entry.
-        const newHistoryItem = {
-          id: audioId,
-          ...(recorded ? { assetId: recorded.assetId } : {}),
-          timestamp,
-          prompt: text || "",
-          model: modelToUse.modelId || "",
-          ...(ctx.batch ? { batch: ctx.batch } : {}),
-        };
-        const updatedHistory = [newHistoryItem, ...(nodeData.audioHistory || [])].slice(0, 50);
-
-        updateNodeData(node.id, {
-          outputAudio: audioData,
-          status: "complete",
-          error: null,
-          ...(generationsPath || recorded ? { audioHistory: updatedHistory, selectedAudioHistoryIndex: 0 } : {}),
-        });
-
-        // Track cost
-        if (runCost !== null) {
-          addIncurredCost(runCost);
-        }
-
-        // The save to the generations folder: a project's only save without
-        // the asset library, and its fallback when a recording fails
-        const saveToFolder = generationsPath
-          ? () =>
-              fetch("/api/save-generation", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  directoryPath: generationsPath,
-                  audio: audioData,
-                  prompt: text,
-                  imageId: audioId,
-                }),
-              })
-                .then((res) => res.json())
-                .then((saveResult) => {
-                  if (saveResult.success && saveResult.imageId && saveResult.imageId !== audioId) {
-                    const currentNode = getNodes().find((n) => n.id === node.id);
-                    if (currentNode) {
-                      const currentData = currentNode.data as GenerateAudioNodeData;
-                      const histCopy = [...(currentData.audioHistory || [])];
-                      const entryIndex = histCopy.findIndex((h) => h.id === audioId);
-                      if (entryIndex !== -1) {
-                        histCopy[entryIndex] = { ...histCopy[entryIndex], id: saveResult.imageId };
-                        updateNodeData(node.id, { audioHistory: histCopy });
-                      }
-                    }
-                  }
-                })
-                .catch((err) => {
-                  console.error("Failed to save audio generation:", err);
-                })
-          : null;
-
-        if (recorded) {
-          // The recorder writes a project's generations into its folder; the
-          // carousel entry then takes the file's name, as a save there always did.
-          followRecording(ctx, "audioHistory", audioId, recorded, saveToFolder);
-        } else if (saveToFolder) {
-          // No asset library: auto-save to the generations folder
-          trackSaveGeneration(audioId, saveToFolder());
-        }
-      } else {
-        updateNodeData(node.id, {
-          status: "error",
-          error: result.error || "Audio generation failed",
-        });
-        errorHandled = true;
-        throw new Error(result.error || "Audio generation failed");
-      }
+      finishGenerateAudio(ctx, result, requestPayload);
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") {
         throw error;
@@ -270,7 +169,8 @@ export async function executeGenerateAudio(
           error: errorMessage,
         });
       }
-      throw new Error(errorMessage);
+      // Still running on the provider: no fallback, and the node keeps the request
+      throw error instanceof GenerationStillRunningError ? error : new Error(errorMessage);
     }
   };
 
@@ -283,4 +183,107 @@ export async function executeGenerateAudio(
     runOnce,
     clearOutput: { outputAudio: null },
   });
+}
+
+/**
+ * Put a finished run's audio on the node: the asset library, the carousel,
+ * the cost and the generations folder. Throws when the answer holds none. A
+ * run ends here, and so does a request picked up again (resumeGeneration).
+ */
+export function finishGenerateAudio(ctx: NodeExecutionContext, result: GenerateResponse, request: GenerationRequest): void {
+  const { node, updateNodeData, getFreshNode, getNodes, addIncurredCost, generationsPath, trackSaveGeneration } = ctx;
+  const { selectedModel: modelToUse, prompt: text, parameters, dynamicInputs } = request;
+  const nodeData = (getFreshNode(node.id)?.data || node.data) as GenerateAudioNodeData;
+
+  const audioData = result.audio || result.audioUrl;
+  if (!result.success || !audioData) {
+    updateNodeData(node.id, {
+      status: "error",
+      error: result.error || "Audio generation failed",
+    });
+    throw new Error(result.error || "Audio generation failed");
+  }
+
+  const timestamp = Date.now();
+  const audioId = `${timestamp}`;
+
+  // fal bills a flat amount per run
+  const runCost = modelToUse.provider === "fal" && modelToUse.pricing ? modelToUse.pricing.amount : null;
+  const recorded = recordOutput(ctx, {
+    kind: "audio",
+    origin: "generated",
+    media: audioData,
+    prompt: resolvedPrompt(text, dynamicInputs),
+    model: assetModel(modelToUse),
+    parameters: assetParameters(parameters),
+    cost: assetCost(runCost),
+    producer: assetProducer(ctx),
+  });
+
+  // The carousel reloads its entries from the asset library, or from the
+  // generations folder, so only a generation saved to one gets an entry.
+  const newHistoryItem = {
+    id: audioId,
+    ...(recorded ? { assetId: recorded.assetId } : {}),
+    timestamp,
+    prompt: text || "",
+    model: modelToUse.modelId || "",
+    ...(ctx.batch ? { batch: ctx.batch } : {}),
+  };
+  const updatedHistory = [newHistoryItem, ...(nodeData.audioHistory || [])].slice(0, 50);
+
+  updateNodeData(node.id, {
+    outputAudio: audioData,
+    status: "complete",
+    error: null,
+    ...(generationsPath || recorded ? { audioHistory: updatedHistory, selectedAudioHistoryIndex: 0 } : {}),
+  });
+
+  // Track cost
+  if (runCost !== null) {
+    addIncurredCost(runCost);
+  }
+
+  // The save to the generations folder: a project's only save without
+  // the asset library, and its fallback when a recording fails
+  const saveToFolder = generationsPath
+    ? () =>
+        fetch("/api/save-generation", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            directoryPath: generationsPath,
+            audio: audioData,
+            prompt: text,
+            imageId: audioId,
+          }),
+        })
+          .then((res) => res.json())
+          .then((saveResult) => {
+            if (saveResult.success && saveResult.imageId && saveResult.imageId !== audioId) {
+              const currentNode = getNodes().find((n) => n.id === node.id);
+              if (currentNode) {
+                const currentData = currentNode.data as GenerateAudioNodeData;
+                const histCopy = [...(currentData.audioHistory || [])];
+                const entryIndex = histCopy.findIndex((h) => h.id === audioId);
+                if (entryIndex !== -1) {
+                  histCopy[entryIndex] = { ...histCopy[entryIndex], id: saveResult.imageId };
+                  updateNodeData(node.id, { audioHistory: histCopy });
+                }
+              }
+            }
+          })
+          .catch((err) => {
+            console.error("Failed to save audio generation:", err);
+          })
+    : null;
+
+  if (recorded) {
+    // The recorder writes a project's generations into its folder; the
+    // carousel entry then takes the file's name, as a save there always did.
+    followRecording(ctx, "audioHistory", audioId, recorded, saveToFolder);
+  } else if (saveToFolder) {
+    // No asset library: auto-save to the generations folder
+    trackSaveGeneration(audioId, saveToFolder());
+  }
 }

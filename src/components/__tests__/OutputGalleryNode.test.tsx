@@ -25,7 +25,7 @@ vi.mock("@/store/workflowStore", () => ({
     })
   ), { getState: () => ({ nodes: [], onNodesChange: vi.fn() }) }),
 }));
-vi.mock("@/components/WorkflowCanvas", () => ({ isPanningRef: { current: false }, isDraggingNodeRef: { current: false } }));
+vi.mock("@/components/WorkflowCanvas", () => ({ isPanningRef: { current: false } }));
 
 const IMG = "data:image/png;base64,iVBORw0KGgo=";
 const props = {
@@ -89,6 +89,29 @@ describe("OutputGalleryNode", () => {
       expect(rail).toHaveTextContent("5m ago");
       expect(rail).toHaveTextContent("1024x1024");
       expect(rail).toHaveTextContent("PNG");
+    } finally {
+      storeState.globalImageHistory = [];
+    }
+  });
+
+  it("tells a video the history knows from an image at the same place, and describes it", () => {
+    const CLIP = "https://cdn.example/clip.mp4";
+    const POSTER = `/api/assets/thumb/${"f".repeat(64)}?w=320`;
+    storeState.globalImageHistory = [
+      { id: "h2", kind: "video", image: CLIP, timestamp: Date.now(), prompt: "A fox in the snow", aspectRatio: "16:9", model: "Fal Video", durationSec: 5, poster: POSTER },
+      { id: "h1", image: IMG, timestamp: Date.now(), prompt: "A red shoe", aspectRatio: "1:1", model: "nano-banana-pro" },
+    ];
+    try {
+      renderGallery({ images: [IMG], imageRefs: ["ref-1"], videos: [CLIP], videoRefs: ["ref-2"] });
+      fireEvent.click(screen.getByRole("button", { name: "Open image 1" }));
+      const rail = screen.getByTestId("media-viewer-rail");
+      expect(rail).toHaveTextContent("A red shoe");
+      fireEvent.keyDown(document, { key: "ArrowRight" });
+      expect(rail).toHaveTextContent("A fox in the snow");
+      expect(rail).toHaveTextContent("Fal Video");
+      expect(rail).toHaveTextContent("Length0:05");
+      expect(screen.getByTestId("media-viewer-current").querySelector("video")).toHaveAttribute("src", CLIP);
+      expect(screen.getByTestId("media-viewer-strip").querySelector(`img[src="${POSTER}"]`)).not.toBeNull();
     } finally {
       storeState.globalImageHistory = [];
     }

@@ -64,6 +64,28 @@ describe("GenerationToaster", () => {
     expect(document.querySelector("img")).toHaveAttribute("src", "data:image/png;base64,a");
   });
 
+  it("shows a video's first frame, and drags it as a video", () => {
+    render(<GenerationToaster />);
+    act(() => {
+      pushGenerationToast({ kind: "video", image: "https://cdn.example/clip.mp4", model: "Fal Video", aspectRatio: "16:9" });
+      vi.advanceTimersByTime(0);
+    });
+
+    expect(screen.getByText("Video generated")).toBeInTheDocument();
+    // Its aspect ratio may be a stand-in, so only what made it is named
+    expect(screen.getByText("Fal Video")).toBeInTheDocument();
+    const frame = document.querySelector("video")!;
+    expect(frame).toHaveAttribute("src", "https://cdn.example/clip.mp4");
+    expect(frame).toHaveAttribute("preload", "metadata");
+    expect(document.querySelector("img")).toBeNull();
+
+    const dataTransfer = { setData: vi.fn(), effectAllowed: "" };
+    fireEvent.dragStart(screen.getByTestId("generation-toast"), { dataTransfer });
+    expect(dataTransfer.setData).toHaveBeenCalledWith("application/history-video", "");
+    const payload = dataTransfer.setData.mock.calls.find(([type]) => type === "application/history-image")![1];
+    expect(JSON.parse(payload)).toMatchObject({ kind: "video", image: "https://cdn.example/clip.mp4" });
+  });
+
   it.each(["assets", "chat"] as const)("stays quiet while the %s view shows (it shows arrivals itself)", (view) => {
     useAssetStore.setState({ appView: view });
     render(<GenerationToaster />);

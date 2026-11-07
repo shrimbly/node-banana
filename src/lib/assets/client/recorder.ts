@@ -21,7 +21,9 @@
  *   back within seconds): the write backs off and tries again, and only a
  *   library that is off for good (hosted, guard) fails it at once. The
  *   handle's `held` says when the library holds a recording up (a move, an
- *   outage), so a project run can save to its own folder rather than wait.
+ *   outage), so a project run can save to its own folder rather than wait,
+ *   and its `failed` says why a recording failed, for a caller that tells
+ *   the user itself (`quiet`, which keeps the recorder's own notice back).
  * - `beginRun()` / `endRun()` bracket a run. The start graph is held by
  *   reference and only encoded/uploaded when the run records its first
  *   asset. `endRun(id, graph)` writes the final snapshot if the run recorded
@@ -318,15 +320,27 @@ function retry<T>(task: (attempt: number) => Promise<T>, onHeld?: () => void): P
 
 const lastReported = new Map<string, number>();
 
-function reportError(error: unknown): void {
+/** A failure's reason as a sentence of its own: "The file is empty." */
+function reasonSentence(reason: string): string {
+  const text = reason.trim() || "The asset could not be saved";
+  const capitalised = text.charAt(0).toUpperCase() + text.slice(1);
+  return /[.!?]$/.test(capitalised) ? capitalised : `${capitalised}.`;
+}
+
+/** Logs a failed recording and, unless the caller tells the user itself (`quiet`), notifies once a minute. Returns the reason. */
+function reportError(error: unknown, quiet = false): string {
   const reason = error instanceof Error ? error.message : String(error);
   const message = `Couldn't save an asset to the library: ${reason}`;
   console.error(message);
-  const now = Date.now();
-  for (const [text, at] of lastReported) if (now - at >= ERROR_REPEAT_MS) lastReported.delete(text);
-  if (lastReported.has(message)) return;
-  lastReported.set(message, now);
-  errorListeners.emit(message);
+  if (!quiet) {
+    const now = Date.now();
+    for (const [text, at] of lastReported) if (now - at >= ERROR_REPEAT_MS) lastReported.delete(text);
+    if (!lastReported.has(message)) {
+      lastReported.set(message, now);
+      errorListeners.emit(message);
+    }
+  }
+  return reasonSentence(reason);
 }
 
 /* Media --------------------------------------------------------------- */
@@ -389,6 +403,7 @@ function buildMeta(assetId: string, input: RecordAssetInput, run: AssetRunContex
   };
   if (run.batch) meta.batch = run.batch;
   if (mime) meta.mime = mime;
+  if (input.name) meta.name = input.name;
   if (input.prompt) meta.prompt = input.prompt;
   if (input.model) meta.model = input.model;
   if (input.parameters) meta.parameters = scrubParameters(input.parameters) as Record<string, unknown>;
@@ -596,7 +611,7 @@ export function holdRun(runId: string): () => void {
 
 /* Recording ----------------------------------------------------------- */
 
-/** What `recordAsset` hands back: the contract's handle, and word of the library holding it up. */
+/** What `recordAsset` hands back: the contract's handle, word of the library holding it up, and why it failed. */
 export interface RecordingHandle extends RecordedAssetHandle {
   /**
    * Resolves once the library makes this recording wait: a move pauses its
@@ -605,22 +620,39 @@ export interface RecordingHandle extends RecordedAssetHandle {
    * with it. Never rejects; stays pending for a recording that goes through.
    */
   held: Promise<void>;
+  /**
+   * Resolves with the reason, as a sentence, when this recording fails (the
+   * library is off for good, the media can't be read, the library refused
+   * it), before `done` resolves null. Never rejects; stays pending for a
+   * recording that goes through.
+   */
+  failed: Promise<string>;
+}
+
+export interface RecordAssetOptions {
+  /** The caller tells the user about a failure itself, so the recorder's own library notice stays quiet for this one. */
+  quiet?: boolean;
 }
 
 /** For a recording that settled at once: nothing will hold it up. */
 const NOT_HELD = new Promise<void>(() => {});
 
-export function recordAsset(input: RecordAssetInput, run: AssetRunContext): RecordingHandle {
+export function recordAsset(input: RecordAssetInput, run: AssetRunContext, options: RecordAssetOptions = {}): RecordingHandle {
   const assetId = newAssetId();
+  let fail!: (reason: string) => void;
+  const failed = new Promise<string>((resolve) => (fail = resolve));
   // Known to be off for now is not off for good: the write tries, and backs off
-  if (offForGood()) return { assetId, done: Promise.resolve(null), held: NOT_HELD };
+  if (offForGood()) {
+    fail(reasonSentence(libraryOff().message));
+    return { assetId, done: Promise.resolve(null), held: NOT_HELD, failed };
+  }
 
   let media: TakenMedia;
   try {
     media = takeMedia(input);
   } catch (error) {
-    reportError(error);
-    return { assetId, done: Promise.resolve(null), held: NOT_HELD };
+    fail(reportError(error, options.quiet));
+    return { assetId, done: Promise.resolve(null), held: NOT_HELD, failed };
   }
 
   const meta = buildMeta(assetId, input, run, media.mime);
@@ -638,7 +670,7 @@ export function recordAsset(input: RecordAssetInput, run: AssetRunContext): Reco
       try {
         result = await upload(meta, media, hold);
       } catch (error) {
-        reportError(error);
+        fail(reportError(error, options.quiet));
       }
       if (result) {
         if (media.kind === "bytes" && media.key) {
@@ -652,7 +684,7 @@ export function recordAsset(input: RecordAssetInput, run: AssetRunContext): Reco
     });
     pump();
   });
-  return { assetId, done, held };
+  return { assetId, done, held, failed };
 }
 
 /** Recordings queued or uploading, plus snapshot writes (for beforeunload). */

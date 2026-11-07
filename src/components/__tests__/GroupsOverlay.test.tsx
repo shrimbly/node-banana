@@ -1,9 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import {
-  GroupBackgroundsPortal,
   GroupControlsOverlay,
-  GroupsOverlay,
   selectViewportZoom,
 } from "@/components/GroupsOverlay";
 import { Group } from "@/types";
@@ -72,122 +70,6 @@ const createDefaultState = (overrides: { groups?: Record<string, Group> } = {}) 
   runBatch: mockRunBatch,
   isRunning: false,
   ...overrides,
-});
-
-describe("GroupBackgroundsPortal", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockViewport.zoom = 1;
-    mockUseWorkflowStore.mockImplementation((selector) => {
-      return selector(createDefaultState());
-    });
-  });
-
-  describe("Empty State", () => {
-    it("should not render when no groups exist", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({ groups: {} }));
-      });
-
-      const { container } = render(<GroupBackgroundsPortal />);
-      expect(container.firstChild).toBeNull();
-    });
-  });
-
-  describe("Group Background Rendering", () => {
-    it("should render group backgrounds inside ViewportPortal", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({
-          groups: { "group-1": createMockGroup() },
-        }));
-      });
-
-      render(<GroupBackgroundsPortal />);
-      expect(screen.getByTestId("viewport-portal")).toBeInTheDocument();
-    });
-
-    it("should render background for each group", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({
-          groups: {
-            "group-1": createMockGroup({ name: "Group 1" }),
-            "group-2": createMockGroup({ name: "Group 2", position: { x: 200, y: 200 } }),
-          },
-        }));
-      });
-
-      const { container } = render(<GroupBackgroundsPortal />);
-      // Each group renders a rounded-xl div for background
-      const backgrounds = container.querySelectorAll(".rounded-xl");
-      expect(backgrounds.length).toBe(2);
-    });
-
-    it("should apply group position and size to background", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({
-          groups: {
-            "group-1": createMockGroup({
-              position: { x: 150, y: 200 },
-              size: { width: 500, height: 400 },
-            }),
-          },
-        }));
-      });
-
-      const { container } = render(<GroupBackgroundsPortal />);
-      const background = container.querySelector(".rounded-xl");
-      expect(background).toHaveStyle({
-        left: "150px",
-        top: "200px",
-        width: "500px",
-        height: "400px",
-      });
-    });
-
-    it("should apply group color to background", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({
-          groups: {
-            "group-1": createMockGroup({ color: "blue" }),
-          },
-        }));
-      });
-
-      const { container } = render(<GroupBackgroundsPortal />);
-      const background = container.querySelector(".rounded-xl") as HTMLElement;
-      // A faint wash of the hue (teal #4f9d93 = rgb(79, 157, 147)) and no outline
-      const style = background.getAttribute("style") || "";
-      expect(style).toContain("79, 157, 147");
-      expect(style).toContain("background-color");
-      expect(style).not.toContain("border");
-    });
-
-    it("falls back to the neutral hue for a colour key it does not know", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({
-          groups: {
-            "group-1": createMockGroup({ color: "teal" as Group["color"] }),
-          },
-        }));
-      });
-
-      const { container } = render(<GroupBackgroundsPortal />);
-      const background = container.querySelector(".rounded-xl") as HTMLElement;
-      expect(background.getAttribute("style")).toContain("138, 146, 156");
-    });
-
-    it("should set pointerEvents to none on backgrounds", () => {
-      mockUseWorkflowStore.mockImplementation((selector) => {
-        return selector(createDefaultState({
-          groups: { "group-1": createMockGroup() },
-        }));
-      });
-
-      const { container } = render(<GroupBackgroundsPortal />);
-      const background = container.querySelector(".rounded-xl");
-      expect(background).toHaveStyle({ pointerEvents: "none" });
-    });
-  });
 });
 
 describe("GroupControlsOverlay", () => {
@@ -579,25 +461,5 @@ describe("GroupControlsOverlay", () => {
       expect(screen.getByText("Blue Group")).toBeInTheDocument();
       expect(screen.getByText("Red Group")).toBeInTheDocument();
     });
-  });
-});
-
-describe("GroupsOverlay", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockUseWorkflowStore.mockImplementation((selector) => {
-      return selector(createDefaultState());
-    });
-  });
-
-  it("should render GroupControlsOverlay (legacy compatibility)", () => {
-    mockUseWorkflowStore.mockImplementation((selector) => {
-      return selector(createDefaultState({
-        groups: { "group-1": createMockGroup({ name: "Legacy Group" }) },
-      }));
-    });
-
-    render(<GroupsOverlay />);
-    expect(screen.getByText("Legacy Group")).toBeInTheDocument();
   });
 });

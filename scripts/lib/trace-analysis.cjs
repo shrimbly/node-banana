@@ -84,7 +84,7 @@ function taskIntervals(events, wanted) {
   return byThread;
 }
 
-function analyzeTrace(events, { gapMs = 250, minInputs = 8 } = {}) {
+function analyzeTrace(events, { gapMs = 250, minInputs = 8, label: forced, raw = false } = {}) {
   const { processes, threads } = threadIds(events);
   const latencyCount = new Map();
   for (const event of events) if (event.name === 'EventLatency' && event.ph === 'b') latencyCount.set(event.pid, (latencyCount.get(event.pid) || 0) + 1);
@@ -149,9 +149,10 @@ function analyzeTrace(events, { gapMs = 250, minInputs = 8 } = {}) {
     const end = last + vsyncMs * 2000;
     const named = marks.filter(mark => mark.ts > previousEnd && mark.ts <= start + 50_000);
     previousEnd = last;
-    const label = (named.filter(mark => mark.explicit).at(-1) || named.at(-1))?.label || gesture.inputs[0].type.toLowerCase();
+    const label = forced ?? ((named.filter(mark => mark.explicit).at(-1) || named.at(-1))?.label || gesture.inputs[0].type.toLowerCase());
     measured.push(measureWindow({ label, start, end, last, inputs: gesture.inputs, canvasFrames, updates, committed, vsyncMs, tasks, threadKeys, longFrames }));
   }
+  if (raw) return { vsyncMs, measured };
   const byLabel = {};
   for (const gesture of measured) (byLabel[gesture.label] ||= []).push(gesture);
   return {
@@ -306,4 +307,32 @@ function formatReport(report) {
   return lines.join('\n');
 }
 
-module.exports = { readTrace, analyzeTrace, keepAnalyzed, selfTime, formatReport };
+// Traces recorded one gesture each ({ label, events }): each is measured on its own and named by its label,
+// so a gesture whose inputs the trace split or missed cannot take another's name.
+function analyzeGestures(list, options) {
+  const measured = [], vsyncs = [];
+  for (const { label, events } of list) {
+    try {
+      const result = analyzeTrace(events, { ...options, label, raw: true });
+      if (!result.measured.length) measured.push({ label, error: 'no drag or wheel inputs in its trace' });
+      measured.push(...result.measured);
+      vsyncs.push(result.vsyncMs);
+    } catch (error) {
+      measured.push({ label, error: error.message });
+    }
+  }
+  const vsyncMs = median(vsyncs.filter(Number.isFinite));
+  const byLabel = {}, failed = {};
+  for (const gesture of measured) {
+    if (gesture.error) (failed[gesture.label] ||= []).push(gesture.error);
+    else (byLabel[gesture.label] ||= []).push(gesture);
+  }
+  return {
+    vsyncMs: round(vsyncMs), refreshHz: round(1000 / vsyncMs, 1),
+    gestures: measured.filter(g => !g.error).map(strip),
+    summary: Object.fromEntries(Object.entries(byLabel).map(([label, list]) => [label, strip(combine(label, list, vsyncMs))])),
+    ...(Object.keys(failed).length ? { untraced: failed } : {}),
+  };
+}
+
+module.exports = { readTrace, analyzeTrace, analyzeGestures, keepAnalyzed, selfTime, formatReport };

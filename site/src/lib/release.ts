@@ -22,9 +22,9 @@ if (rootPackage.name !== "node-banana" || !rootPackage.version) {
   );
 }
 
-/** "2.1.0" */
+/** "2.2.0" */
 export const version: string = rootPackage.version;
-/** "v2.1.0", as shown beside the download buttons. */
+/** "v2.2.0", as shown beside the download buttons. */
 export const versionLabel = `v${version}`;
 export const minMac = "macOS 13";
 export const minWindows = "Windows 10";

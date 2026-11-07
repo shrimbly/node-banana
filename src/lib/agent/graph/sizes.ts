@@ -23,6 +23,7 @@ const GEMINI_IMAGE_ROWS: Record<string, number> = {
   "nano-banana-2-lite": 2,
   "nano-banana-pro": 4,
   "nano-banana-2": 5,
+  "nano-banana-2.1": 5,
 };
 
 /** Rows ModelParameters shows for a Gemini video model: Veo's four (getGeminiVideoSchema), Omni's schema (arrays are skipped). */

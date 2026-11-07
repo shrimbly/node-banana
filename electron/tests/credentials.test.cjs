@@ -47,3 +47,20 @@ test('encrypted updates, deletion tombstones and failures preserve credentials',
     assert.deepEqual(createCredentialStore(temp, secure).reset(), {});
   } finally { fs.rmSync(temp, { recursive: true, force: true }); }
 });
+
+test('accepts the one Comfy key from the Providers page, and refuses a name it does not know', () => {
+  const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'banana-keys-comfy-'));
+  const key = randomBytes(32), iv = randomBytes(16);
+  const secure = {
+    isEncryptionAvailable: () => true,
+    encryptString: s => { const c = createCipheriv('aes-256-cbc', key, iv); return Buffer.concat([c.update(s), c.final()]); },
+    decryptString: b => { const c = createDecipheriv('aes-256-cbc', key, iv); return Buffer.concat([c.update(b), c.final()]).toString(); },
+  };
+  try {
+    const store = createCredentialStore(temp, secure);
+    // The 2.1.0 desktop refused this with "Invalid credential field", and with it every key saved in the same patch.
+    store.write({ 'provider.comfy': 'comfyui-key', 'provider.gemini': 'gemini-key' });
+    assert.deepEqual(store.read(), { 'provider.comfy': 'comfyui-key', 'provider.gemini': 'gemini-key' });
+    assert.throws(() => store.write({ 'provider.nonsense': 'x' }), /Invalid credential field/);
+  } finally { fs.rmSync(temp, { recursive: true, force: true }); }
+});

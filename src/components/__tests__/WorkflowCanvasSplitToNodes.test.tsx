@@ -10,7 +10,7 @@ import { WorkflowCanvas } from "@/components/WorkflowCanvas";
 
 const mocks = vi.hoisted(() => ({
   useWorkflowStore: vi.fn(),
-  reactFlowProps: { current: null as Record<string, unknown> | null },
+  gpuEditing: { current: null as Record<string, unknown> | null },
   dropMenuProps: { current: null as Record<string, unknown> | null },
   detectAndSplitGrid: vi.fn(),
 }));
@@ -25,13 +25,8 @@ vi.mock("@/store/workflowStore", () => {
 
 vi.mock("@xyflow/react", async () => {
   const actual = await vi.importActual<typeof import("@xyflow/react")>("@xyflow/react");
-  const React = await vi.importActual<typeof import("react")>("react");
   return {
     ...actual,
-    ReactFlow: (props: Record<string, unknown>) => {
-      mocks.reactFlowProps.current = props;
-      return React.createElement(actual.ReactFlow, props);
-    },
     useStore: (selector: (state: { transform: [number, number, number]; nodeLookup: Map<string, unknown> }) => unknown) =>
       selector({ transform: [0, 0, 1], nodeLookup: new Map() }),
     useUpdateNodeInternals: () => vi.fn(),
@@ -45,6 +40,14 @@ vi.mock("@xyflow/react", async () => {
   };
 });
 
+// The GPU canvas needs WebGL2, which jsdom lacks; keep what WorkflowCanvas hands its editor.
+vi.mock("@/components/gpuCanvas/GpuCanvas", () => ({
+  GpuCanvas: (props: { editing: Record<string, unknown> }) => {
+    mocks.gpuEditing.current = props.editing;
+    return null;
+  },
+}));
+
 vi.mock("@/components/ConnectionDropMenu", () => ({
   ConnectionDropMenu: (props: Record<string, unknown>) => {
     mocks.dropMenuProps.current = props;
@@ -57,7 +60,7 @@ vi.mock("@/components/GlobalImageHistory", () => ({ GlobalImageHistory: () => nu
 vi.mock("@/components/agent/AgentSession", () => ({
   useAgentPresence: () => ({ busy: false, presence: { harness: "claude", harnessChosen: false, attention: false } }),
 }));
-vi.mock("@/components/GroupsOverlay", () => ({ GroupBackgroundsPortal: () => null, GroupControlsOverlay: () => null }));
+vi.mock("@/components/GroupsOverlay", () => ({ GroupControlsOverlay: () => null }));
 vi.mock("@/components/quickstart", () => ({ WelcomeModal: () => null }));
 vi.mock("@/utils/gridSplitter", () => ({ detectAndSplitGrid: mocks.detectAndSplitGrid }));
 vi.mock("@/utils/logger", () => ({ logger: { log: vi.fn(), error: vi.fn() } }));
@@ -166,8 +169,9 @@ describe("Split Grid Now", () => {
     );
 
     // Drag from the generator's output onto empty canvas, then pick "Split Grid Now"
+    await waitFor(() => expect(mocks.gpuEditing.current).not.toBeNull());
     act(() => {
-      (mocks.reactFlowProps.current!.onConnectEnd as (event: unknown, state: unknown) => void)(
+      (mocks.gpuEditing.current!.onConnectEnd as (event: unknown, state: unknown) => void)(
         { clientX: 400, clientY: 300 },
         { isValid: false, fromNode: source, fromHandle: { id: "image", type: "source" } }
       );

@@ -27,6 +27,8 @@ export { sniffFamily };
 export interface DecidedType extends MediaType {
   /** The bytes proved the format (as opposed to trusting a hint). */
   sniffed: boolean;
+  /** Neither the bytes nor a hint named the format: it is the kind's default. */
+  assumed?: true;
 }
 
 /**
@@ -54,7 +56,7 @@ export function decideMediaType(input: {
     }
   }
   if (hinted) return { ...hinted, sniffed: false };
-  return { ...defaultMediaType(input.kind), sniffed: false };
+  return { ...defaultMediaType(input.kind), sniffed: false, assumed: true };
 }
 
 /* ------------------------------------------------------------------ */

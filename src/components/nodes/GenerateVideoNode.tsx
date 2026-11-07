@@ -27,6 +27,7 @@ import {
   EmptyState,
   ErrorMessage,
   ErrorOverlay,
+  PendingTaskNotice,
   LoadingOverlay,
   ScrubRow,
   Spinner,
@@ -148,6 +149,9 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
   const schemaDerived = useSchemaDerived(id, nodeData);
 
   const isRunning = useWorkflowStore((state) => state.isRunning);
+  const resumeGeneration = useWorkflowStore((state) => state.resumeGeneration);
+  // A provider request the node stopped waiting on, offered to pick up again
+  const pendingTask = nodeData.status === "loading" ? undefined : nodeData.pendingTask;
 
   // Load video by ID from generations folder
   const loadVideoById = useLoadGenerationById("video", "Video");
@@ -255,7 +259,7 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
       id={id}
       selected={selected}
       isExecuting={isRunning}
-      hasError={nodeData.status === "error"}
+      hasError={nodeData.status === "error" && !pendingTask}
       media={{ kind: "aspect", aspect: mediaAspect }}
       inputs={inputSockets}
       outputs={OUTPUT_SOCKETS}
@@ -282,7 +286,6 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
         <>
           <video
             ref={videoAutoplayRef}
-            key={nodeData.videoHistory?.[nodeData.selectedVideoHistoryIndex || 0]?.id}
             src={videoBlobUrl ?? undefined}
             loop
             muted
@@ -304,12 +307,13 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
             </div>
           )}
           {nodeData.status === "loading" && <LoadingOverlay />}
-          {nodeData.status === "error" && <ErrorOverlay />}
+          {nodeData.status === "error" && !pendingTask && <ErrorOverlay />}
           {isLoadingCarouselVideo && <LoadingOverlay size={16} dim="light" />}
           <RunBatchChip
             batch={nodeData.videoHistory?.[nodeData.selectedVideoHistoryIndex || 0]?.batch}
             timestamp={nodeData.videoHistory?.[nodeData.selectedVideoHistoryIndex || 0]?.timestamp}
           />
+          {pendingTask && <PendingTaskNotice task={pendingTask} onPickUp={() => resumeGeneration(id)} disabled={isRunning} />}
           <div className="absolute top-1 right-1 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
             <button
               onClick={() => downloadMedia(nodeData.outputVideo!, "video").catch(() => {})}
@@ -327,6 +331,8 @@ export function GenerateVideoNode({ id, data, selected }: NodeProps<GenerateVide
             </button>
           </div>
         </>
+      ) : pendingTask ? (
+        <PendingTaskNotice task={pendingTask} onPickUp={() => resumeGeneration(id)} disabled={isRunning} />
       ) : nodeData.status === "loading" ? (
         <div className="absolute inset-0 flex items-center justify-center bg-neutral-900/40">
           <Spinner className="text-neutral-400" />

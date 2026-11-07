@@ -28,6 +28,7 @@ const isMac = typeof navigator !== "undefined" && navigator.userAgent.includes("
 
 export function GpuMinimap({ width, height, className, bgColor, maskColor, maskStrokeColor, disabled = false }: GpuMinimapProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const nodesRef = useRef<HTMLCanvasElement>(null);
   const disabledRef = useRef(disabled);
   useEffect(() => {
     disabledRef.current = disabled;
@@ -35,42 +36,79 @@ export function GpuMinimap({ width, height, className, bgColor, maskColor, maskS
   const bridge = useGpuCanvasBridge();
 
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !bridge) return;
-    const context = canvas.getContext("2d");
-    if (!context) return;
+    const canvas = canvasRef.current, nodesCanvas = nodesRef.current;
+    if (!canvas || !nodesCanvas || !bridge) return;
+    const context = canvas.getContext("2d"), nodesContext = nodesCanvas.getContext("2d");
+    if (!context || !nodesContext) return;
     let frame = 0;
     // Flow → minimap: the transform the last draw used, for the gestures.
     let fit = { scale: 1, x: 0, y: 0 };
-    const draw = () => {
-      frame = 0;
-      const dpr = devicePixelRatio || 1;
-      if (canvas.width !== Math.round(width * dpr)) canvas.width = Math.round(width * dpr);
-      if (canvas.height !== Math.round(height * dpr)) canvas.height = Math.round(height * dpr);
-      const graph = bridge.graph(), view = bridge.view(), size = bridge.size();
-      const viewRect = { x: -view.x / view.zoom, y: -view.y / view.zoom, w: size.width / view.zoom, h: size.height / view.zoom };
-      const bounds = graph.bounds();
-      let minX = viewRect.x, minY = viewRect.y, maxX = viewRect.x + viewRect.w, maxY = viewRect.y + viewRect.h;
-      if (bounds) {
-        minX = Math.min(minX, bounds.minX); minY = Math.min(minY, bounds.minY);
-        maxX = Math.max(maxX, bounds.maxX); maxY = Math.max(maxY, bounds.maxY);
-      }
+    // The nodes sit on a canvas of their own, drawn again only when they or the fit move: a pan within the
+    // graph moves only the mask, and redrawing thousands of nodes a frame kept the GPU from the scene.
+    // A view reaching past the graph (zoomed out, or the fit view's spare width) moves the fit every frame:
+    // the nodes are drawn once at the graph's own fit (`graphCanvas`) and that picture is scaled down into place.
+    const graphCanvas = document.createElement("canvas"), graphContext = graphCanvas.getContext("2d");
+    let graphKey = "", graphStale = true, layoutChanged = true, nodesKey = "";
+    const fitTo = (minX: number, minY: number, maxX: number, maxY: number) => {
       const pad = OFFSET_SCALE * (Math.max((maxX - minX) / width, (maxY - minY) / height) || 1);
       minX -= pad; minY -= pad; maxX += pad; maxY += pad;
       const scale = Math.max((maxX - minX) / width, (maxY - minY) / height) || 1;
-      const x0 = minX - (width * scale - (maxX - minX)) / 2, y0 = minY - (height * scale - (maxY - minY)) / 2;
-      const s = 1 / scale;
-      fit = { scale: s, x: x0, y: y0 };
-      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      return { scale: 1 / scale, x: minX - (width * scale - (maxX - minX)) / 2, y: minY - (height * scale - (maxY - minY)) / 2 };
+    };
+    const drawNodes = (target: CanvasRenderingContext2D, at: { scale: number; x: number; y: number }, dpr: number) => {
+      const graph = bridge.graph(), s = at.scale;
+      target.setTransform(dpr, 0, 0, dpr, 0, 0);
       // Transparent, as classic's svg: the well's background and inset shadow show through from the wrapper.
-      context.clearRect(0, 0, width, height);
+      target.clearRect(0, 0, width, height);
+      // One fill per colour.
+      const paths = new Map<string, Path2D>();
       for (const n of graph.nodes) {
-        context.fillStyle = `rgb(${n.color[0] * 255},${n.color[1] * 255},${n.color[2] * 255})`;
-        const w = Math.max(1, n.w * s), h = Math.max(1, n.h * s);
-        context.beginPath();
-        context.roundRect((n.x - x0) * s, (n.y - y0) * s, w, h, Math.min(5 * s, w / 2, h / 2));
-        context.fill();
+        const color = `rgb(${n.color[0] * 255},${n.color[1] * 255},${n.color[2] * 255})`;
+        let path = paths.get(color);
+        if (!path) paths.set(color, path = new Path2D());
+        const w = Math.max(1, n.w * s), h = Math.max(1, n.h * s), x = (n.x - at.x) * s, y = (n.y - at.y) * s;
+        path.roundRect(x, y, w, h, Math.min(5 * s, w / 2, h / 2));
       }
+      for (const [color, path] of paths) {
+        target.fillStyle = color;
+        target.fill(path);
+      }
+    };
+    const draw = () => {
+      frame = 0;
+      const dpr = devicePixelRatio || 1;
+      for (const c of [canvas, nodesCanvas, graphCanvas]) {
+        if (c.width !== Math.round(width * dpr)) c.width = Math.round(width * dpr);
+        if (c.height !== Math.round(height * dpr)) c.height = Math.round(height * dpr);
+      }
+      const graph = bridge.graph(), view = bridge.view(), size = bridge.size();
+      const viewRect = { x: -view.x / view.zoom, y: -view.y / view.zoom, w: size.width / view.zoom, h: size.height / view.zoom };
+      const bounds = graph.bounds();
+      fit = bounds
+        ? fitTo(Math.min(viewRect.x, bounds.minX), Math.min(viewRect.y, bounds.minY), Math.max(viewRect.x + viewRect.w, bounds.maxX), Math.max(viewRect.y + viewRect.h, bounds.maxY))
+        : fitTo(viewRect.x, viewRect.y, viewRect.x + viewRect.w, viewRect.y + viewRect.h);
+      const s = fit.scale, x0 = fit.x, y0 = fit.y;
+      const key = `${s} ${x0} ${y0} ${nodesCanvas.width} ${nodesCanvas.height}`;
+      if (layoutChanged || key !== nodesKey) {
+        nodesKey = key;
+        const own = bounds ? fitTo(bounds.minX, bounds.minY, bounds.maxX, bounds.maxY) : fit;
+        const ownKey = `${own.scale} ${own.x} ${own.y} ${graphCanvas.width} ${graphCanvas.height}`;
+        if (!graphContext || own.scale === s && own.x === x0 && own.y === y0) drawNodes(nodesContext, fit, dpr);
+        else {
+          if (graphStale || ownKey !== graphKey) drawNodes(graphContext, own, dpr);
+          graphKey = ownKey;
+          graphStale = false;
+          // The graph's picture at the wider fit: never larger than drawn, since this fit holds the graph's.
+          const k = s / own.scale;
+          nodesContext.setTransform(1, 0, 0, 1, 0, 0);
+          nodesContext.clearRect(0, 0, nodesCanvas.width, nodesCanvas.height);
+          nodesContext.imageSmoothingQuality = "medium";
+          nodesContext.drawImage(graphCanvas, (own.x - x0) * s * dpr, (own.y - y0) * s * dpr, graphCanvas.width * k, graphCanvas.height * k);
+        }
+        layoutChanged = false;
+      }
+      context.setTransform(dpr, 0, 0, dpr, 0, 0);
+      context.clearRect(0, 0, width, height);
       // The mask: everything but the view darkened, and the view outlined.
       const vx = (viewRect.x - x0) * s, vy = (viewRect.y - y0) * s, vw = viewRect.w * s, vh = viewRect.h * s;
       context.fillStyle = maskColor;
@@ -82,7 +120,10 @@ export function GpuMinimap({ width, height, className, bgColor, maskColor, maskS
       context.lineWidth = 1;
       context.strokeRect(vx + 0.5, vy + 0.5, vw - 1, vh - 1);
     };
-    const schedule = () => { if (!frame) frame = requestAnimationFrame(draw); };
+    const schedule = (layout = false) => {
+      if (layout) layoutChanged = graphStale = true;
+      if (!frame) frame = requestAnimationFrame(draw);
+    };
     const unsubscribe = bridge.subscribe(schedule);
     schedule();
 
@@ -154,8 +195,9 @@ export function GpuMinimap({ width, height, className, bgColor, maskColor, maskS
 
   // The wrapper is React Flow's minimap panel: the classes, the background and the label go on it.
   return (
-    <div className={className} style={{ width, height, background: bgColor }} role="img" aria-label="Mini Map">
-      <canvas ref={canvasRef} style={{ width, height, display: "block" }} data-testid="gpu-minimap" />
+    <div className={className} style={{ width, height, background: bgColor, position: "relative" }} role="img" aria-label="Mini Map">
+      <canvas ref={nodesRef} style={{ width, height, display: "block", position: "absolute", inset: 0 }} />
+      <canvas ref={canvasRef} style={{ width, height, display: "block", position: "relative" }} data-testid="gpu-minimap" />
     </div>
   );
 }

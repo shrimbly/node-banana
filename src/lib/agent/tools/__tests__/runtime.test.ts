@@ -298,7 +298,7 @@ describe("create_workflow", () => {
     expect(result.ok).toBe(false);
     expect(result.ops).toEqual([]);
     expect(result.text).toMatch(/^No changes were made/);
-    expect(result.text).toContain("aspectRatio \"4:1\" is not available on nano-banana-pro (1:4, 1:8, 4:1 and 8:1 need nano-banana-2)");
+    expect(result.text).toContain("aspectRatio \"4:1\" is not available on nano-banana-pro (1:4, 1:8, 4:1 and 8:1 need nano-banana-2 or nano-banana-2.1)");
     expect(result.text).toContain('has no "prompt" setting: its prompt comes from the node connected to its text input');
     expect(result.text).toContain('unknown node type "notAType"');
     expect(result.text).toContain("has no input that takes text");

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
-import { useVideoAutoplay, VIDEO_HOVER_DELAY_MS, VIDEO_PIN_EVENT } from "../useVideoAutoplay";
+import { useVideoAutoplay, VIDEO_HOVER_DELAY_MS, VIDEO_PIN_EVENT, __resetVideoPlaybackMemoryForTests } from "../useVideoAutoplay";
 import { useVideoSoundStore } from "@/store/videoSoundStore";
 
 let hoveredNodeId: string | null = null;
@@ -18,6 +18,8 @@ function fakeVideo() {
   const fire = (type: string) => listeners.get(type)?.forEach((fn) => fn());
   const video = {
     paused: true,
+    currentTime: 0,
+    readyState: 1,
     muted: true,
     volume: 1,
     dispatchEvent: (event: { type: string }) => { fire(event.type); return true; },
@@ -64,6 +66,7 @@ describe("useVideoAutoplay", () => {
     useVideoSoundStore.setState({ on: false, volume: 1 });
     vi.useFakeTimers();
     hoveredNodeId = null;
+    __resetVideoPlaybackMemoryForTests();
   });
   afterEach(() => vi.useRealTimers());
 
@@ -123,6 +126,44 @@ describe("useVideoAutoplay", () => {
     hover(hook, true);
     hover(hook, false);
     expect(video.paused).toBe(false);
+  });
+
+  it("a card mounted again holds the frame the user paused on", () => {
+    const first = mount();
+    userPlay(first.video);
+    first.video.currentTime = 3;
+    userPause(first.video);
+    first.hook.unmount();
+
+    const { video, hook } = mount();
+    expect(video.currentTime).toBe(3);
+    hover(hook, true);
+    vi.advanceTimersByTime(VIDEO_HOVER_DELAY_MS);
+    expect(video.play).not.toHaveBeenCalled();
+  });
+
+  it("a card mounted again carries on a hover preview from where it stopped", () => {
+    const first = mount();
+    hover(first.hook, true);
+    vi.advanceTimersByTime(VIDEO_HOVER_DELAY_MS);
+    first.video.currentTime = 2;
+    hover(first.hook, false);
+    first.hook.unmount();
+
+    const { video, hook } = mount();
+    expect(video.currentTime).toBe(2);
+    hover(hook, true);
+    vi.advanceTimersByTime(VIDEO_HOVER_DELAY_MS);
+    expect(video.play).toHaveBeenCalledTimes(1);
+  });
+
+  it("a card for another source starts from the beginning", () => {
+    const first = mount();
+    first.video.currentTime = 3;
+    userPause(first.video);
+    first.hook.unmount();
+    const { video } = mount("blob:b");
+    expect(video.currentTime).toBe(0);
   });
 
   it("forgets the user's intent when the source changes", () => {

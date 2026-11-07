@@ -20,7 +20,7 @@ const facets = (overrides: Partial<AssetFacets> = {}): AssetFacets => ({
   trash: 4,
   missing: 0,
   kinds: { image: 344, video: 37, audio: 2, "3d": 0 },
-  origins: { generated: 383, edited: 0 },
+  origins: { generated: 383, edited: 0, uploaded: 0 },
   models: [],
   tags: [],
   workflows: [],

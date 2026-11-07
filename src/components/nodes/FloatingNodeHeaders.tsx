@@ -5,7 +5,6 @@ import { useStore, type Node } from "@xyflow/react";
 import { ViewportPortal } from "@/components/flowPortals";
 import { FloatingNodeHeader } from "./FloatingNodeHeader";
 import { selectMountedArea } from "./nodeCulling";
-import { useLowDetail } from "./lowDetail";
 import { ComfyWordmark } from "../icons/ComfyWordmark";
 import { defaultNodeDimensions } from "@/store/utils/nodeDefaults";
 import type { NodeType } from "@/types";
@@ -39,16 +38,13 @@ const INPUT_TYPES = new Set(["imageInput", "audioInput", "prompt"]);
 /**
  * The floating headers for every node on the canvas. Each one is its own
  * memoised element, so a drag frame re-renders the dragged node's header and
- * compares the rest, and headers outside the mounted area (the same area
- * that keeps nodes rendered, see nodeCulling.ts) are not mounted at all. A
+ * compares the rest, and headers outside the mounted area (the view and a
+ * viewport around it, see nodeCulling.ts) are not mounted at all. A
  * selected node keeps its header wherever it is.
  */
 export const FloatingNodeHeaders = memo(function FloatingNodeHeaders({ nodes, hints, ...actions }: FloatingNodeHeadersProps) {
   const area = useStore(selectMountedArea);
   const [minX, minY, maxX, maxY] = useMemo(() => area.split(" ").map(Number), [area]);
-  // Zoomed out, nodes draw at low detail and carry no headers (see lowDetail.ts)
-  const lowDetail = useLowDetail();
-  if (lowDetail) return null;
 
   return (
     <ViewportPortal>

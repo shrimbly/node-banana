@@ -14,8 +14,10 @@ import type {
   RecordAssetResult,
   RecordedAssetHandle,
 } from "@/lib/assets/types";
+import { assetThumbUrl } from "@/lib/assets/client/api";
+import { ensurePoster } from "@/lib/assets/client/poster";
 import { holdRun, type RecordingHandle } from "@/lib/assets/client/recorder";
-import type { SelectedModel, WorkflowNodeData } from "@/types";
+import type { ImageHistoryItem, SelectedModel, WorkflowNodeData } from "@/types";
 import type { NodeExecutionContext } from "./types";
 
 /**
@@ -221,6 +223,24 @@ export function recordingResult(handle: RecordedAssetHandle): Promise<RecordAsse
   return handle.done.catch((error) => {
     console.error("Failed to record asset:", error);
     return null;
+  });
+}
+
+/**
+ * What a recorded video's recent-generations entry learns from the library:
+ * its length, then its poster frame, which the recorder captures once the
+ * video has landed. Nothing when the recording fails or no poster can be made.
+ */
+export function followHistoryVideo(
+  handle: RecordedAssetHandle,
+  update: (fields: Pick<ImageHistoryItem, "durationSec" | "poster">) => void
+): void {
+  void recordingResult(handle).then(async (result) => {
+    if (!result || result.asset.kind !== "video") return;
+    const { asset } = result;
+    if (asset.durationSec) update({ durationSec: asset.durationSec });
+    // Waits on the capture the recorder started rather than starting another
+    if (asset.hasPoster || (await ensurePoster(asset))) update({ poster: assetThumbUrl(asset.sha256, 320) });
   });
 }
 

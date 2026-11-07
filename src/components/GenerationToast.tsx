@@ -10,6 +10,9 @@ import { useAssetStore } from "@/store/assetStore";
 /** One finished generation. */
 export interface GenerationToastItem {
   id: string;
+  /** Absent: an image. */
+  kind?: "image" | "video";
+  /** The media's data URL or URL. */
   image: string;
   /** Producer, as recorded in the history item (a Gemini model id or an app name). */
   model: string;
@@ -31,10 +34,12 @@ const forget = (t: { id: string | number }) => {
 
 /** Announce a finished generation under the history button: one card each, stacked by sonner. */
 export function pushGenerationToast({
+  kind,
   image,
   model,
   aspectRatio,
 }: {
+  kind?: "image" | "video";
   image: string;
   model: string;
   aspectRatio: string;
@@ -44,6 +49,7 @@ export function pushGenerationToast({
   const now = Date.now();
   const item: GenerationToastItem = {
     id: `${now}-${Math.random().toString(36).slice(2, 9)}`,
+    ...(kind ? { kind } : {}),
     image,
     model,
     aspectRatio,
@@ -68,27 +74,36 @@ const THUMB = "h-10 w-10 shrink-0 rounded-lg squircle object-cover shadow-[inset
 
 export function GenerationToastCard({ toast: item }: { toast: GenerationToastItem }) {
   const dismiss = () => toast.dismiss(item.id);
+  const video = item.kind === "video";
 
   return (
     <div
       role="status"
       draggable
-      // The card drags natively as a history image; keep sonner's swipe gesture
+      // The card drags natively as a history item; keep sonner's swipe gesture
       // from claiming the pointer first.
       onPointerDown={(e) => e.stopPropagation()}
       onDragStart={(e) => {
-        setHistoryDragData(e, { image: item.image, prompt: "", timestamp: item.shownAt });
+        setHistoryDragData(e, { kind: item.kind, image: item.image, prompt: "", timestamp: item.shownAt });
         dismiss();
       }}
       className={`${CHROME_SURFACE} relative flex cursor-grab items-center gap-2.5 overflow-hidden rounded-xl p-1.5 active:cursor-grabbing`}
       style={{ width: CARD_WIDTH }}
       data-testid="generation-toast"
     >
-      <img src={item.image} alt="" className={THUMB} draggable={false} />
+      {/* The library makes a video's poster after the card has gone, so the card shows its first frame */}
+      {video ? (
+        <video src={item.image} preload="metadata" muted playsInline className={THUMB} draggable={false} />
+      ) : (
+        <img src={item.image} alt="" className={THUMB} draggable={false} />
+      )}
       <div className="flex min-w-0 flex-1 flex-col gap-px">
-        <span className="truncate text-[11px] font-medium leading-[14px] text-neutral-200">Image generated</span>
+        <span className="truncate text-[11px] font-medium leading-[14px] text-neutral-200">
+          {video ? "Video generated" : "Image generated"}
+        </span>
         <span className="truncate text-[10px] leading-[13px] text-neutral-500">
-          {producerName(item.model)} · {item.aspectRatio}
+          {/* A video's aspect ratio may be a stand-in, so its line names only what made it */}
+          {video ? producerName(item.model) : `${producerName(item.model)} · ${item.aspectRatio}`}
         </span>
       </div>
       <button

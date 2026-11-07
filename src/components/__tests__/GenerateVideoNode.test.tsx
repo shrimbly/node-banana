@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
 import { GenerateVideoNode } from "@/components/nodes/GenerateVideoNode";
 import { ReactFlowProvider } from "@xyflow/react";
 import { GenerateVideoNodeData, ProviderSettings } from "@/types";
+import { makePlayable } from "@/test/playableVideo";
 
 // Mock deduplicatedFetch to pass through to global fetch (avoids caching issues in tests)
 vi.mock("@/utils/deduplicatedFetch", () => ({
@@ -13,6 +14,7 @@ vi.mock("@/utils/deduplicatedFetch", () => ({
 // Mock the workflow store
 const mockUpdateNodeData = vi.fn();
 const mockRegenerateNode = vi.fn();
+const mockResumeGeneration = vi.fn();
 const mockAddNode = vi.fn();
 const mockIncrementModalCount = vi.fn();
 const mockDecrementModalCount = vi.fn();
@@ -104,6 +106,7 @@ describe("GenerateVideoNode", () => {
       const state = {
         updateNodeData: mockUpdateNodeData,
         regenerateNode: mockRegenerateNode,
+        resumeGeneration: mockResumeGeneration,
         addNode: mockAddNode,
         incrementModalCount: mockIncrementModalCount,
         decrementModalCount: mockDecrementModalCount,
@@ -261,6 +264,58 @@ describe("GenerateVideoNode", () => {
       // Should still show the video element
       const video = container.querySelector("video");
       expect(video).toBeInTheDocument();
+    });
+  });
+
+  describe("Kept request", () => {
+    const pendingTask = {
+      provider: "comfy",
+      taskId: "3544457f-fe6b-4156-8176-7221ec9149a3",
+      modelId: "byteplus/dreamina-seedance-2-5-260628",
+      modelName: "Seedance 2.5",
+      mediaType: "video",
+      submittedAt: Date.now() - 12 * 60_000,
+    };
+    const stillRunning = "Seedance 2.5: still running on Comfy Router after 90 minutes (request 3544457f-fe6b-4156-8176-7221ec9149a3).";
+
+    it("offers to pick the request up instead of showing a failure", () => {
+      render(
+        <TestWrapper>
+          <GenerateVideoNode {...createNodeProps({ status: "error", error: stillRunning, pendingTask })} />
+        </TestWrapper>
+      );
+
+      expect(screen.getByText("May still be running on Comfy Router")).toBeInTheDocument();
+      expect(screen.getByText("Sent 12 min ago")).toBeInTheDocument();
+      expect(screen.getByText(pendingTask.taskId)).toBeInTheDocument();
+      expect(screen.queryByText(stillRunning)).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Pick up" }));
+      expect(mockResumeGeneration).toHaveBeenCalledWith("test-node-1");
+    });
+
+    it("covers an earlier video, and copies the request id", async () => {
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, { clipboard: { writeText } });
+      render(
+        <TestWrapper>
+          <GenerateVideoNode {...createNodeProps({ status: "idle", outputVideo: "data:video/mp4;base64,abc123", pendingTask })} />
+        </TestWrapper>
+      );
+
+      expect(screen.queryByText("See toast for details")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Copy request id" }));
+      await waitFor(() => expect(writeText).toHaveBeenCalledWith(pendingTask.taskId));
+    });
+
+    it("shows the run, not the request, while it is being picked up", () => {
+      render(
+        <TestWrapper>
+          <GenerateVideoNode {...createNodeProps({ status: "loading", pendingTask })} />
+        </TestWrapper>
+      );
+
+      expect(screen.queryByText("May still be running on Comfy Router")).not.toBeInTheDocument();
     });
   });
 
@@ -447,6 +502,45 @@ describe("GenerateVideoNode", () => {
       );
 
       expect(screen.getByText("2 / 3")).toBeInTheDocument();
+    });
+  });
+
+  describe("After a run", () => {
+    const entry = { timestamp: 1, prompt: "a fox", model: "kling-video/v1" };
+    const card = (outputVideo: string, id: string) => (
+      <TestWrapper>
+        <GenerateVideoNode
+          {...createNodeProps({ outputVideo, videoHistory: [{ id, ...entry }], selectedVideoHistoryIndex: 0 })}
+        />
+      </TestWrapper>
+    );
+
+    // A project's recording renames the run's carousel entry to its file's
+    // name once the file is written. The video and its URL stay.
+    it("keeps the video playing in its player when the entry is renamed", () => {
+      const { container, rerender } = render(card("https://cdn.example.com/run.mp4", "1700000000000"));
+      const video = makePlayable(container.querySelector("video")!);
+      fireEvent.click(screen.getByRole("button", { name: "Play" }));
+      expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+
+      rerender(card("https://cdn.example.com/run.mp4", "gen_ab12cd"));
+      expect(container.querySelector("video")).toBe(video);
+      expect(screen.getByRole("button", { name: "Pause" })).toBeInTheDocument();
+      act(() => {
+        video.dispatchEvent(new Event("loadedmetadata"));
+        video.currentTime = 3;
+      });
+      expect(screen.getByText("0:03 / 0:08")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Pause" }));
+      expect(screen.getByRole("button", { name: "Play" })).toBeInTheDocument();
+    });
+
+    it("shows the next run's video on the same element", () => {
+      const { container, rerender } = render(card("https://cdn.example.com/run.mp4", "gen_ab12cd"));
+      const video = container.querySelector("video");
+      rerender(card("https://cdn.example.com/next.mp4", "1700000000001"));
+      expect(container.querySelector("video")).toBe(video);
+      expect(video).toHaveAttribute("src", "https://cdn.example.com/next.mp4");
     });
   });
 
