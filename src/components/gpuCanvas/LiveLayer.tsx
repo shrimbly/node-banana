@@ -64,13 +64,19 @@ export const LIVE_STYLE = `
   [data-gpu-canvas-live] .react-flow__node.${ENTERING} { visibility: hidden; }
 `;
 
+type GhostHandle = { id: string | null; type: "source" | "target"; position: Position; x: number; y: number };
+
 /**
  * A painted node a live connection ends at: React Flow draws an edge only
  * between nodes it holds, so the ends that are not live are stood in for by
  * an invisible node of the same box and handles (as painting measured them).
  */
-function GhostNode() {
-  return null;
+export function GhostNode({ data }: { data: { handles?: GhostHandle[] } }) {
+  // A live node turning stand-in changes type, so React Flow measures it again from its element: these are what it
+  // finds, where the node's handles are, or it would lose them and the connections and labels they carry.
+  return (data.handles ?? []).map((h) => (
+    <div key={`${h.type}:${h.id ?? ""}`} className={h.type} data-handleid={h.id} data-handlepos={h.position} style={{ position: "absolute", left: h.x, top: h.y, width: 0, height: 0 }} />
+  ));
 }
 
 /** Painted nodes over live connections (paintedCover): the connections they cover, and their boxes. */
@@ -1017,11 +1023,11 @@ function liveNodeId(target: EventTarget | null): string | null {
 }
 
 /** A stand-in for a painted node at a live connection's end: its box, and its handles where painting measured them. */
-function ghostNode(n: SceneNode): Node {
+export function ghostNode(n: SceneNode): Node {
   const handles = [...(n.handles ?? [])].map(([key, anchor]) => {
     const colon = key.indexOf(":");
     const position = (anchor.position ?? (key.startsWith("source") ? "right" : "left")) as Position;
     return { id: key.slice(colon + 1) || null, type: key.slice(0, colon) as "source" | "target", position, x: anchor.x, y: anchor.y, width: 0, height: 0 };
   });
-  return { id: n.id, type: "gpuGhost", position: { x: n.x, y: n.y }, width: n.w, height: n.h, data: {}, handles, selectable: false, draggable: false, connectable: false, focusable: false } as Node;
+  return { id: n.id, type: "gpuGhost", position: { x: n.x, y: n.y }, width: n.w, height: n.h, data: { handles }, handles, selectable: false, draggable: false, connectable: false, focusable: false } as Node;
 }

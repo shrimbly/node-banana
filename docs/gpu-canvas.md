@@ -609,6 +609,9 @@ handles. That happens near the view (a quarter screen round it, checked
 every frame while the view moves) from 15% zoom, where classic stops
 drawing connections: every one on screen, however many, and those in the
 margin while fewer than 250 are live, the nearest the view's centre first.
+A stand-in holds empty elements where its handles are: a live node turning
+stand-in changes type, which makes React Flow measure it from its element,
+and without them it would lose its handles and connections.
 The live layer draws over the scene, so a live connection's SVG
 decorations (the comet, pause badge, hidden stubs and ghost) are masked
 where a painted node lies over them (`paintedCover`, `EdgeMask`), as
