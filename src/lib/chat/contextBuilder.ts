@@ -15,7 +15,7 @@ import type {
  * Binary fields by node type - fields containing base64 data URLs
  */
 const BINARY_FIELDS_BY_TYPE: Record<string, string[]> = {
-  imageInput: ["image"],
+  imageInput: ["image", "batchImages"],
   annotation: ["sourceImage", "outputImage"],
   nanoBanana: ["inputImages", "outputImage"],
   generateVideo: ["inputImages", "outputVideo"],
@@ -40,6 +40,7 @@ const HISTORY_FIELDS = [
  */
 const REF_FIELDS = [
   "imageRef",
+  "batchImageRefs",
   "outputImageRef",
   "sourceImageRef",
   "inputImageRefs",

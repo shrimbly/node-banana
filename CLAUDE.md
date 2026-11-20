@@ -80,6 +80,15 @@ press lets the current run finish, the second stops now (`stopWorkflow`).
 `batch` (`id`, `index`, `count`) rides on each run's outputs: carousel
 entries, recent generations and asset records.
 
+**Image batches** (`src/lib/imageBatch.ts`): an Image Input node can hold up
+to 200 images (pick several, choose a folder, or drop files on it; `batchImages`
+with `batchImageRefs`, `batchFilenames`, `batchDimensions`, `batchIndex`). It
+shows one as its ordinary `image`, so readers see the current item. `runBatch`
+runs the flow once per image (times the Runs count, at most 500 runs) and moves
+every batch node in scope to the run's image before each run; it carries on
+past a failed run and stops after three failures in a row. Saved workflows
+write each image into `inputs/` like any other input (`mediaStorage.ts`).
+
 ## AI Models
 
 Image generation models (these exist and are recently released):

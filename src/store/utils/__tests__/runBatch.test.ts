@@ -72,6 +72,20 @@ describe("runBatchLoop", () => {
     expect(completed).toBe(2);
   });
 
+  it("goes on past failed runs it tolerates, and stops after too many in a row", async () => {
+    const outcomes = [true, false, true, true, false, true, true, true, false];
+    let runs = 0;
+    const completed = await runBatchLoop({
+      count: outcomes.length,
+      setIndex: () => {},
+      runOnce: async () => ({ started: true, failed: outcomes[runs++]! }),
+      keepGoing: () => true,
+      toleratedFailures: 2,
+    });
+    // Runs 1, 3, 4 fail with successes between; 6, 7, 8 are three in a row
+    expect(completed).toBe(8);
+  });
+
   it("stops when a run never started, without counting it", async () => {
     const completed = await runBatchLoop({
       count: 5,

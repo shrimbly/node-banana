@@ -70,6 +70,17 @@ export interface ImageInputNodeData extends BaseNodeData {
   filename: string | null;
   dimensions: { width: number; height: number } | null;
   isOptional?: boolean;
+  /**
+   * Batch mode: the images a run goes through, one run of the flow per image
+   * (src/lib/imageBatch.ts). Parallel arrays; present only with two or more
+   * images. `image`, `filename` and `dimensions` mirror item `batchIndex`.
+   */
+  batchImages?: string[];
+  /** Saved files for `batchImages`, index for index ("" where none yet). */
+  batchImageRefs?: string[];
+  batchFilenames?: (string | null)[];
+  batchDimensions?: ({ width: number; height: number } | null)[];
+  batchIndex?: number;
 }
 
 /**

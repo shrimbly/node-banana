@@ -107,6 +107,7 @@ import {
   stripDeadBlobUrls,
   wouldCreateCycle,
 } from "./utils/executionUtils";
+import { MAX_IMAGE_BATCH_RUNS, batchLength, batchNodesFor, showBatchItem } from "@/lib/imageBatch";
 import { getConnectedInputsPure, validateWorkflowPure, nodeReadinessPure, type ConnectedInputs, type NodeReadiness } from "./utils/connectedInputs";
 import { isMissingInputError } from "./execution/missingInput";
 import { followHistoryVideo } from "./execution/assetRecording";
@@ -121,7 +122,7 @@ import {
   getSplitGridTemplate,
   needsMaterialization,
 } from "./utils/splitGridTemplate";
-import type { ArrayNodeData, SplitGridTemplate, VideoStitchNodeData } from "@/types";
+import type { ArrayNodeData, ImageInputNodeData, SplitGridTemplate, VideoStitchNodeData } from "@/types";
 import { dropRemovedStitchEdges, dropStitchMusicClips, remapStitchEdgeIds } from "@/lib/stitch/migrate";
 import { appendConnectedStitchClips } from "@/lib/stitch/sources";
 import { evaluateRule } from "./utils/ruleEvaluation";
@@ -131,6 +132,7 @@ import {
   clampRunCount,
   newBatchId,
   runBatchLoop,
+  IMAGE_BATCH_TOLERATED_FAILURES,
   type RunBatch,
   type RunOutcome,
   type RunScope,
@@ -2947,11 +2949,24 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
       else await get().executeSelectedNodes(scope.nodeIds);
       return { started: lastRun.serial !== serial, failed: lastRun.failed };
     };
-    const count = clampRunCount(countOverride ?? get().runCount);
+    const runsPerImage = clampRunCount(countOverride ?? get().runCount);
+    // Image Input nodes in batch mode: the flow runs once per image, each
+    // image as many times as the Runs count says
+    const imageNodes = batchNodesFor(get().nodes, get().edges, scope).map((node) => node.id);
+    const images = Math.max(1, ...imageNodes.map((nodeId) => batchLength(get().nodes.find((node) => node.id === nodeId)?.data as ImageInputNodeData)));
+    const count = images > 1 ? Math.min(runsPerImage * images, MAX_IMAGE_BATCH_RUNS) : runsPerImage;
     if (count === 1) {
       await runOnce();
       return;
     }
+    const showImage = (index: number) => {
+      const item = Math.floor((index - 1) / runsPerImage);
+      for (const nodeId of imageNodes) {
+        const node = get().nodes.find((candidate) => candidate.id === nodeId);
+        const shown = node ? showBatchItem(node.data as ImageInputNodeData, item) : null;
+        if (shown && (node!.data as ImageInputNodeData).batchIndex !== shown.batchIndex) get().updateNodeData(nodeId, shown);
+      }
+    };
     const id = newBatchId();
     const canvasGeneration = get().canvasGeneration;
     const ours = () => get().batch?.id === id;
@@ -2962,8 +2977,10 @@ const workflowStoreImpl: StateCreator<WorkflowStore> = (set, get) => ({
         setIndex: (index) => {
           const batch = get().batch;
           if (batch?.id === id && batch.index !== index) set({ batch: { ...batch, index } });
+          if (images > 1) showImage(index);
         },
         runOnce,
+        toleratedFailures: images > 1 ? IMAGE_BATCH_TOLERATED_FAILURES : 0,
         // A hard Stop clears the batch; a pause edge, or a canvas replaced
         // under the batch, ends it too. Selected nodes never pause: a pause
         // the canvas holds is an earlier run's resume point.
