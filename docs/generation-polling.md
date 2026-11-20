@@ -1,6 +1,6 @@
 # Polled generations and picking them up again
 
-Kie and Comfy Router runs are long. `/api/generate` submits the request and
+Kie, Comfy Router and Magnific runs are long. `/api/generate` submits the request and
 answers at once with a polling envelope (`polling: true`, `taskId`,
 `pollProvider`, `pollModelId`, `pollModelName`, `pollMediaType`). The browser
 then polls `/api/generate/poll` until the provider answers
@@ -100,3 +100,8 @@ the safety net again keeps it. Stop lets it go.
 
 Comfy Router keeps a request's output for 24 hours. After that the poll
 answers that the result expired, and Pick up clears the request.
+
+Magnific answers a finished task with URLs that are short-lived, so the poll
+downloads the output in the same request that sees the task done. A run picked
+up long after it finished may find its URLs expired; the poll then answers
+that the output could not be downloaded, and Pick up clears the request.
