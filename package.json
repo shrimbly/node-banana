@@ -18,6 +18,7 @@
     "comfy:record": "node scripts/comfy-smoke.mjs record",
     "comfy:router-sync": "node scripts/comfy-router-sync.mjs",
     "comfy:smoke": "node scripts/comfy-smoke.mjs run",
+    "magnific:sync": "node scripts/magnific-sync.mjs",
     "electron:package": "node scripts/package-electron.cjs",
     "electron:test": "node --test electron/tests/*.test.cjs",
     "electron:acceptance": "node scripts/electron-acceptance.cjs",
