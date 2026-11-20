@@ -110,6 +110,41 @@ describe("executeNanoBanana", () => {
     });
   });
 
+  describe("a model that takes no prompt (an upscaler)", () => {
+    const upscaler = {
+      selectedModel: { provider: "magnific", modelId: "image-upscaler-precision-v2", displayName: "Magnific Upscaler Precision V2" },
+      inputSchema: [{ name: "image", type: "image", required: true, label: "Image" }],
+    };
+    const inputs = (dynamicInputs: Record<string, string | string[]>) =>
+      vi.fn().mockReturnValue({ images: [], videos: [], audio: [], text: null, dynamicInputs, easeCurve: null });
+
+    it("runs on its image alone, sending an empty prompt", async () => {
+      const ctx = makeCtx(makeNode(upscaler), { getConnectedInputs: inputs({ image: "data:image/png;base64,img1" }) });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ success: true, image: "data:image/png;base64,result" }),
+      });
+
+      await executeNanoBanana(ctx);
+
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.prompt).toBe("");
+      expect(body.dynamicInputs.image).toBe("data:image/png;base64,img1");
+    });
+
+    it("still needs an image", async () => {
+      const ctx = makeCtx(makeNode(upscaler), { getConnectedInputs: inputs({}) });
+      await expect(executeNanoBanana(ctx)).rejects.toThrow("Missing image input");
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it("keeps the prompt required where the schema requires it", async () => {
+      const node = makeNode({ inputSchema: [{ name: "prompt", type: "text", required: true, label: "Prompt" }, ...upscaler.inputSchema] });
+      const ctx = makeCtx(node, { getConnectedInputs: inputs({ image: "data:image/png;base64,img1" }) });
+      await expect(executeNanoBanana(ctx)).rejects.toThrow("Missing text input");
+    });
+  });
+
   it("should set loading status before API call", async () => {
     const node = makeNode();
     mockFetch.mockResolvedValueOnce({

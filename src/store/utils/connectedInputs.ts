@@ -488,6 +488,16 @@ export interface NodeReadiness {
 }
 
 /**
+ * Whether a Generate (image) node's selected model can run without a prompt:
+ * its input schema is known and names no required text input (an upscaler,
+ * a background remover). Such a node still needs some media wired in.
+ */
+export function promptIsOptional(data: { inputSchema?: { type: string; required: boolean }[] } | undefined): boolean {
+  const schema = data?.inputSchema;
+  return Boolean(schema?.length) && !schema!.some((input) => input.type === "text" && input.required);
+}
+
+/**
  * Which nodes cannot run as wired, and why. Advisory: a run never refuses to
  * start over this; the executor skips such a node (and what depends on it)
  * and finishes the rest. Loop edges are excluded because they carry no data
@@ -502,9 +512,13 @@ export function nodeReadinessPure(nodes: Pick<WorkflowNode, "id" | "type" | "dat
   for (const node of nodes) {
     switch (node.type) {
       case "nanoBanana":
-        // Text required, image optional
-        if (!connected(node.id, (h) => isType(h, "text")))
+        // Text required, image optional; unless the model takes no prompt,
+        // when it needs an image instead
+        if (connected(node.id, (h) => isType(h, "text"))) break;
+        if (!promptIsOptional(node.data as NanoBananaNodeData))
           readiness[node.id] = { hint: "needs a prompt", message: `Generate node "${node.id}" missing text input` };
+        else if (!connected(node.id, (h) => ["image", "video", "audio"].some((t) => isType(h, t))))
+          readiness[node.id] = { hint: "needs an image", message: `Generate node "${node.id}" missing image input` };
         break;
       case "generateVideo":
         // A prompt is not always required: video-to-video models need only a
