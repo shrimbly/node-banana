@@ -25,6 +25,8 @@ export function getModelPageUrl(
       return `https://platform.openai.com/docs/guides/images`;
     case "comfy":
       return "https://docs.comfy.org/development/comfy-router/models";
+    case "magnific":
+      return "https://docs.magnific.com";
     default:
       return null;
   }
@@ -49,6 +51,8 @@ export function getProviderDisplayName(provider: ProviderType): string {
       return "OpenAI";
     case "comfy":
       return "ComfyUI";
+    case "magnific":
+      return "Magnific";
     default:
       return provider;
   }

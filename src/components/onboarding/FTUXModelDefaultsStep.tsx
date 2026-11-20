@@ -8,6 +8,7 @@ import { ProviderModel } from "@/lib/providers/types";
 import { loadNodeDefaults, saveNodeDefaults } from "@/store/utils/localStorage";
 import { DialogButton, DialogRow, DialogTextButton } from "@/components/ui/Dialog";
 import { ComfyMark } from "@/components/icons/ComfyMark";
+import { MagnificMark } from "@/components/icons/MagnificMark";
 
 // Provider glyphs: 14px, in the row's muted ink.
 const GeminiIcon = () => (
@@ -50,6 +51,8 @@ const getProviderIcon = (provider: string) => {
       return <WaveSpeedIcon />;
     case "comfy":
       return <ComfyMark />;
+    case "magnific":
+      return <MagnificMark />;
     default:
       return null;
   }

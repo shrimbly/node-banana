@@ -61,6 +61,7 @@ export const defaultProviderSettings: ProviderSettings = {
     kie: { id: "kie", name: "Kie.ai", enabled: false, apiKey: null, apiKeyEnvVar: "KIE_API_KEY" },
     wavespeed: { id: "wavespeed", name: "WaveSpeed", enabled: false, apiKey: null, apiKeyEnvVar: "WAVESPEED_API_KEY" },
     comfy: { id: "comfy", name: "ComfyUI", enabled: true, apiKey: null, apiKeyEnvVar: "COMFY_API_KEY" },
+    magnific: { id: "magnific", name: "Magnific", enabled: false, apiKey: null, apiKeyEnvVar: "MAGNIFIC_API_KEY" },
   }
 };
 

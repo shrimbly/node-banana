@@ -25,6 +25,7 @@ function ProviderIcon({ provider }: { provider: ProviderType }) {
     kie: { bg: "bg-orange-500/20", text: "text-orange-300" },
     wavespeed: { bg: "bg-purple-500/20", text: "text-purple-300" },
     comfy: { bg: "bg-neutral-500/20", text: "text-neutral-300" },
+    magnific: { bg: "bg-pink-500/20", text: "text-pink-300" },
   };
 
   const labels: Record<ProviderType, string> = {
@@ -36,6 +37,7 @@ function ProviderIcon({ provider }: { provider: ProviderType }) {
     kie: "K",
     wavespeed: "W",
     comfy: "C",
+    magnific: "M",
   };
 
   const color = colors[provider] || colors.gemini;
@@ -60,6 +62,7 @@ function getProviderDisplayName(provider: ProviderType): string {
     kie: "Kie.ai",
     wavespeed: "WaveSpeed",
     comfy: "ComfyUI",
+    magnific: "Magnific",
   };
   return names[provider] || provider;
 }
@@ -83,6 +86,9 @@ function getModelUrl(provider: ProviderType, modelId: string): string | null {
   }
   if (provider === "comfy") {
     return "https://docs.comfy.org/development/comfy-router/models";
+  }
+  if (provider === "magnific") {
+    return "https://docs.magnific.com";
   }
   return null;
 }

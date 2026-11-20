@@ -4631,6 +4631,7 @@ export function useProviderApiKeys() {
       kieApiKey: state.providerSettings.providers.kie?.apiKey ?? null,
       wavespeedApiKey: state.providerSettings.providers.wavespeed?.apiKey ?? null,
       openaiApiKey: state.providerSettings.providers.openai?.apiKey ?? null,
+      magnificApiKey: state.providerSettings.providers.magnific?.apiKey ?? null,
       // The Providers entry is the Comfy key; the mirror only still matters for
       // a Cloud key an older build stored on the ComfyUI tab.
       comfyApiKey: state.providerSettings.providers.comfy?.apiKey || state.comfyCloudApiKey || null,

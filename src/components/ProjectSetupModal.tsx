@@ -43,6 +43,7 @@ import { cn } from "@/components/nodes/ui/cn";
 import { getLowDetailSettings, setLowDetailEnabled, setLowDetailZoom } from "@/components/nodes/lowDetail";
 import { getPerfOverlayVisible, setPerfOverlayVisible } from "@/components/PerfOverlay";
 import { ComfyMark } from "@/components/icons/ComfyMark";
+import { MagnificMark } from "@/components/icons/MagnificMark";
 
 import { DEFAULT_LLM_MODEL, LLM_PROVIDER_OPTIONS, defaultLLMModel, llmModelLabel, llmModelOptions } from "@/lib/llm/catalog";
 
@@ -88,6 +89,8 @@ const getProviderIcon = (provider: ProviderType) => {
       return <WaveSpeedIcon />;
     case "comfy":
       return <ComfyMark />;
+    case "magnific":
+      return <MagnificMark />;
     default:
       return null;
   }
@@ -117,6 +120,7 @@ const PROVIDER_ROWS: { id: ProviderType; name: string; placeholder: string; desc
   { id: "fal", name: "fal.ai", placeholder: "..." },
   { id: "kie", name: "Kie.ai", placeholder: "..." },
   { id: "wavespeed", name: "WaveSpeed", placeholder: "..." },
+  { id: "magnific", name: "Magnific", placeholder: "..." },
 ];
 
 const PAN_MODES: SegmentedOption<PanMode>[] = [
@@ -249,6 +253,7 @@ export function ProjectSetupModal({
     kie: false,
     wavespeed: false,
     comfy: false,
+    magnific: false,
   });
   const [overrideActive, setOverrideActive] = useState<Record<ProviderType, boolean>>({
     gemini: false,
@@ -259,6 +264,7 @@ export function ProjectSetupModal({
     kie: false,
     wavespeed: false,
     comfy: false,
+    magnific: false,
   });
   const [envStatus, setEnvStatus] = useState<EnvStatusResponse | null>(null);
 
@@ -308,7 +314,7 @@ export function ProjectSetupModal({
       // Sync local providers state
       editedProviderKeys.current.clear();
       setLocalProviders(providerSettings);
-      setShowApiKey({ gemini: false, openai: false, anthropic: false, replicate: false, fal: false, kie: false, wavespeed: false, comfy: false });
+      setShowApiKey({ gemini: false, openai: false, anthropic: false, replicate: false, fal: false, kie: false, wavespeed: false, comfy: false, magnific: false });
       // Initialize override as active if user already has a key set
       setOverrideActive({
         gemini: !!providerSettings.providers.gemini?.apiKey,
@@ -319,6 +325,7 @@ export function ProjectSetupModal({
         kie: !!providerSettings.providers.kie?.apiKey,
         wavespeed: !!providerSettings.providers.wavespeed?.apiKey,
         comfy: !!providerSettings.providers.comfy?.apiKey,
+        magnific: !!providerSettings.providers.magnific?.apiKey,
       });
       setError(null);
       setFolderConflict(null);
@@ -529,7 +536,7 @@ export function ProjectSetupModal({
 
   const handleSaveProviders = () => {
     // Save each provider's settings
-    const providerIds: ProviderType[] = ["gemini", "openai", "anthropic", "replicate", "fal", "kie", "wavespeed", "comfy"];
+    const providerIds: ProviderType[] = ["gemini", "openai", "anthropic", "replicate", "fal", "kie", "wavespeed", "comfy", "magnific"];
     for (const providerId of providerIds) {
       const local = localProviders.providers[providerId];
       const current = providerSettings.providers[providerId];
