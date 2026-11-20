@@ -271,6 +271,7 @@ Magnific (`https://api.magnific.com/v1/ai/…`, header `x-magnific-api-key`, pro
 - **No idempotency key:** a submit is tried again only after a 429. A 5xx or a dropped connection leaves the outcome unknown and is reported as such, never repeated, since a second request could be a second paid run.
 - **Media:** a field that takes only a URL gets one from Magnific's own upload step (`POST /v1/ai/uploads/request-url`, then a PUT to the pre-signed URL with every header it names; `media.ts`). A field that takes either gets images up to 8MB inline as raw base64, and anything larger, any video or audio, and anything already at a URL, by URL.
 - **Pricing:** Magnific publishes no prices through its API, so its models carry none and show as unpriced.
+- **Live checks:** `MAGNIFIC_API_KEY=… npm run magnific:smoke -- check` costs no credits: it puts a file through the upload step and reads it back, and asks each family status route about a made-up task. `npm run magnific:smoke -- run --model <id> --prompt …` (or `--image file`) runs one real generation through a dev server's own routes, and costs credits.
 
 ## ComfyUI Integration
 

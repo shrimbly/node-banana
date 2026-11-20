@@ -30,7 +30,7 @@ const providers: ProviderInfo[] = [
   { id: "kie", name: "Kie.ai", apiKeyUrl: "https://kie.ai/api-key" },
   { id: "wavespeed", name: "WaveSpeed", apiKeyUrl: "https://wavespeed.ai/accesskey" },
   { id: "comfy", name: "ComfyUI", apiKeyUrl: "https://platform.comfy.org/profile/api-keys?onboarding=router" },
-  { id: "magnific", name: "Magnific", apiKeyUrl: "https://www.magnific.com/user/organization/api-keys" },
+  { id: "magnific", name: "Magnific", apiKeyUrl: "https://www.magnific.com/developers/dashboard/api-key" },
 ];
 
 /**
