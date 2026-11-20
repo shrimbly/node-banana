@@ -1,13 +1,14 @@
 /**
  * Poll API Route
  *
- * Handles status polling for long-running Kie.ai and Comfy Router tasks.
+ * Handles status polling for long-running Kie.ai, Comfy Router and Magnific tasks.
  * The client calls this endpoint repeatedly with short-lived requests
  * instead of holding a single connection open for minutes.
  *
  * Headers:
  *   - X-Kie-Key: Kie.ai API key (provider "kie")
  *   - X-Comfy-Router-Key: Comfy API key (provider "comfy")
+ *   - X-Magnific-Key: Magnific API key (provider "magnific")
  *
  * Answers (pollGenerateTask reads them this way):
  *   - 200 with `polling: true`: still running; with the media: done
@@ -27,6 +28,12 @@ import {
   fetchComfyMediaResult,
   resolveComfyRouterKey,
 } from "../providers/comfy";
+import {
+  MAGNIFIC_HEADER,
+  checkMagnificTaskOnce,
+  fetchMagnificMediaResult,
+  resolveMagnificKey,
+} from "../providers/magnific";
 import { buildMediaResponse } from "../shared";
 
 export const maxDuration = 120; // 2 min — enough for media fetch, not for polling
@@ -97,6 +104,73 @@ export async function POST(request: NextRequest) {
 
       // completed — collect the native result and return the media
       const result = await fetchComfyMediaResult(requestId, apiKey, modelId, taskId, mediaType);
+
+      if (!result.success) {
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: result.error || "Failed to fetch result" },
+          { status: result.statusCode ?? 500 }
+        );
+      }
+
+      const output = result.outputs?.[0];
+      if (!output?.data && !output?.url) {
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: "No output in generation result" },
+          { status: 500 }
+        );
+      }
+
+      return buildMediaResponse(output);
+    }
+
+    if (provider === 'magnific') {
+      const apiKey = resolveMagnificKey(request.headers.get(MAGNIFIC_HEADER));
+      if (!apiKey) {
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: "Magnific API key not configured" },
+          { status: 401 }
+        );
+      }
+
+      const pollResult = await checkMagnificTaskOnce(requestId, apiKey, modelId, taskId);
+
+      if (pollResult.status === "processing") {
+        return NextResponse.json<GenerateResponse>({
+          success: true,
+          polling: true,
+          taskId,
+          pollProvider: provider,
+          pollModelId: modelId,
+          pollModelName: modelName,
+          pollMediaType: mediaType,
+          ...(pollResult.retryAfterMs ? { retryAfterMs: pollResult.retryAfterMs } : {}),
+        });
+      }
+
+      if (pollResult.status === "failed") {
+        if (pollResult.statusCode && ACCESS_REFUSED.has(pollResult.statusCode)) {
+          return NextResponse.json<GenerateResponse>(
+            { success: false, error: pollResult.error },
+            { status: pollResult.statusCode }
+          );
+        }
+        // A task Magnific does not know may be one it has not listed yet. That
+        // is no answer this time: the client asks again, and stops waiting
+        // (keeping the request) if it stays unknown.
+        if (pollResult.statusCode === 404) {
+          return NextResponse.json<GenerateResponse>(
+            { success: false, error: `${modelName}: Magnific does not know this task (${pollResult.error})` },
+            { status: 503 }
+          );
+        }
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: `${modelName}: ${pollResult.error}` },
+          { status: 422 }
+        );
+      }
+
+      // completed — download the output while its URL is still good
+      const result = await fetchMagnificMediaResult(requestId, modelId, pollResult.url);
 
       if (!result.success) {
         return NextResponse.json<GenerateResponse>(

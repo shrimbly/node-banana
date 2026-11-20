@@ -70,12 +70,14 @@ export function GenerateImageNode({ id, data, selected }: NodeProps<NanoBananaNo
   // The clip follows the generated image's real proportions once it has
   // loaded; until then (and with no image) it follows the configured ratio.
   const [loadedAspect, setLoadedAspect] = useState<{ src: string; aspect: number } | null>(null);
-  // Comfy Router models can declare several image inputs (a mask, a garment);
-  // the first uses the fixed "image" socket and the rest get their own
-  // (`image-N` maps to the Nth image input in connectedInputs). Other
-  // providers keep the node's static image and prompt sockets.
+  // Comfy Router and Magnific models can declare several image inputs (a
+  // mask, a garment, a style reference); the first uses the fixed "image"
+  // socket and the rest get their own (`image-N` maps to the Nth image input
+  // in connectedInputs). Other providers keep the node's static image and
+  // prompt sockets.
   const inputSockets = useMemo<SocketSpec[]>(() => {
-    if (nodeData.selectedModel?.provider !== "comfy") return INPUT_SOCKETS;
+    const provider = nodeData.selectedModel?.provider;
+    if (provider !== "comfy" && provider !== "magnific") return INPUT_SOCKETS;
     const images = (nodeData.inputSchema ?? []).filter((input) => input.type === "image");
     if (images.length === 0) return INPUT_SOCKETS;
     return [

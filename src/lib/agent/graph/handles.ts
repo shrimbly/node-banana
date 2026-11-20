@@ -306,11 +306,12 @@ export function getInputHandles(node: GraphNodeLike, edges: readonly GraphEdgeLi
     case "promptConstructor":
       return [h("text", "text", "Text", true)];
     case "nanoBanana": {
-      // A Comfy Router model's further image inputs (a mask, a garment) get
-      // their own `image-N` sockets after the fixed "image" one, as the node
-      // renders them. Otherwise static sockets: every connected image is collected.
+      // A Comfy Router or Magnific model's further image inputs (a mask, a
+      // garment, a style reference) get their own `image-N` sockets after the
+      // fixed "image" one, as the node renders them. Otherwise static sockets:
+      // every connected image is collected.
       const provider = (node.data.selectedModel as { provider?: unknown } | null | undefined)?.provider;
-      const images = provider === "comfy" ? schemaOf(node).filter((input) => input.type === "image") : [];
+      const images = provider === "comfy" || provider === "magnific" ? schemaOf(node).filter((input) => input.type === "image") : [];
       if (images.length > 0) {
         return [
           ...images.map((input, index) => h(index === 0 ? "image" : `image-${index}`, "image", input.label ?? input.name, !!input.isArray)),

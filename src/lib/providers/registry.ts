@@ -2,12 +2,13 @@
  * Model Registry
  *
  * Lists models across every configured provider (Replicate, fal.ai, Gemini,
- * WaveSpeed, Kie.ai, OpenAI, Comfy Router). This is the body of
+ * WaveSpeed, Kie.ai, OpenAI, Comfy Router, Magnific). This is the body of
  * GET /api/models, kept here so other server code (the in-app agent) can list
  * models with the same keys, caching, filtering and sorting as the route.
  *
  * Gemini, Kie.ai and OpenAI are static catalogs; Comfy Router offers its
- * bound models the Router currently serves (./comfyRouter/catalog); Replicate,
+ * bound models the Router currently serves (./comfyRouter/catalog); Magnific
+ * offers the models read from its recorded API description (./magnific); Replicate,
  * fal.ai and WaveSpeed come from the model catalog (./catalog): their lists
  * are fetched at once, each under its own deadline, kept on disk, served
  * straight away and refreshed behind the request when they age. Replicate's
@@ -26,6 +27,7 @@ import { setCachedWaveSpeedSchemas, WaveSpeedApiSchema } from "./cache";
 import { getProviderCatalog, type CatalogFetcher, type CatalogStatus } from "./catalog";
 import { startDeadline } from "./deadline";
 import { comfyRouterBoundModels, comfyRouterProviderModels } from "./comfyRouter/catalog";
+import { magnificProviderModels } from "./magnific/bindings";
 import { isValidReplicateModelId } from "./ids";
 import { awaitFalCooldown, noteFalRateLimit } from "./falSchema";
 import type { ProviderKeys } from "./keys";
@@ -1298,7 +1300,7 @@ async function fetchFalModels(
 // ============ Fixed catalogs ============
 
 /** Providers whose model list is fixed in this file (no discovery request). */
-export const STATIC_CATALOG_PROVIDERS = ["gemini", "kie", "openai", "comfy"] as const;
+export const STATIC_CATALOG_PROVIDERS = ["gemini", "kie", "openai", "comfy", "magnific"] as const;
 export type StaticCatalogProvider = (typeof STATIC_CATALOG_PROVIDERS)[number];
 
 /**
@@ -1317,6 +1319,8 @@ export function staticCatalogModels(provider: StaticCatalogProvider): ProviderMo
       return [...OPENAI_IMAGE_MODELS];
     case "comfy":
       return comfyRouterBoundModels();
+    case "magnific":
+      return magnificProviderModels();
   }
 }
 
@@ -1386,7 +1390,7 @@ export interface ProviderListResult {
 }
 
 export interface ListModelsQuery {
-  /** One provider only ("replicate" | "fal" | "gemini" | "wavespeed" | "kie" | "openai" | "comfy"). */
+  /** One provider only ("replicate" | "fal" | "gemini" | "wavespeed" | "kie" | "openai" | "comfy" | "magnific"). */
   provider?: ProviderType | string | null;
   /** Matched against name, description and id, in the stored lists. */
   search?: string | null;
@@ -1457,6 +1461,7 @@ export async function listModels(
   const wavespeedKey = keys.wavespeed || null;
   const openaiKey = keys.openai || null;
   const comfyKey = keys.comfy || null;
+  const magnificKey = keys.magnific || null;
 
   // Build list of all available providers (have keys from env or client headers)
   const availableProviders: string[] = ["gemini"]; // Gemini always available
@@ -1466,13 +1471,15 @@ export async function listModels(
   if (wavespeedKey) availableProviders.push("wavespeed");
   if (openaiKey) availableProviders.push("openai");
   if (comfyKey) availableProviders.push("comfy");
+  if (magnificKey) availableProviders.push("magnific");
 
-  // Determine which providers to fetch from (gemini/kie/openai/comfy handled separately as hardcoded)
+  // Determine which providers to fetch from (gemini/kie/openai/comfy/magnific handled separately as hardcoded)
   const providersToFetch: ProviderType[] = [];
   let includeGemini = false;
   let includeKie = false;
   let includeOpenai = false;
   let includeComfy = false;
+  let includeMagnific = false;
 
   if (providerFilter) {
     if (providerFilter === "gemini") {
@@ -1524,6 +1531,17 @@ export async function listModels(
           status: 400,
         };
       }
+    } else if (providerFilter === "magnific") {
+      // Only Magnific requested - no external API calls needed (models come from the recorded API description)
+      if (magnificKey) {
+        includeMagnific = true;
+      } else {
+        return {
+          ok: false,
+          error: "Magnific API key required. Add MAGNIFIC_API_KEY to .env.local or configure in Settings.",
+          status: 400,
+        };
+      }
     } else if (providerFilter === "replicate" && replicateKey) {
       providersToFetch.push("replicate");
     } else if (providerFilter === "fal" && falKey) {
@@ -1535,6 +1553,7 @@ export async function listModels(
     includeKie = kieKey ? true : false; // Kie only if API key is configured
     includeOpenai = openaiKey ? true : false; // OpenAI only if API key is configured
     includeComfy = comfyKey ? true : false; // Comfy Router only if API key is configured
+    includeMagnific = magnificKey ? true : false; // Magnific only if API key is configured
     if (wavespeedKey) {
       providersToFetch.push("wavespeed"); // WaveSpeed if key is configured
     }
@@ -1546,12 +1565,12 @@ export async function listModels(
     }
   }
 
-  // Gemini/Kie/OpenAI/Comfy are handled as hardcoded, so we don't fail if no external providers
-  if (providersToFetch.length === 0 && !includeGemini && !includeKie && !includeOpenai && !includeComfy) {
+  // Gemini/Kie/OpenAI/Comfy/Magnific are handled as hardcoded, so we don't fail if no external providers
+  if (providersToFetch.length === 0 && !includeGemini && !includeKie && !includeOpenai && !includeComfy && !includeMagnific) {
     return {
       ok: false,
       error:
-        "No providers available. Add REPLICATE_API_KEY, FAL_API_KEY, KIE_API_KEY, WAVESPEED_API_KEY, OPENAI_API_KEY, or COMFY_API_KEY to .env.local or configure in Settings.",
+        "No providers available. Add REPLICATE_API_KEY, FAL_API_KEY, KIE_API_KEY, WAVESPEED_API_KEY, OPENAI_API_KEY, COMFY_API_KEY, or MAGNIFIC_API_KEY to .env.local or configure in Settings.",
       status: 400,
     };
   }
@@ -1621,6 +1640,21 @@ export async function listModels(
     providerResults["comfy"] = {
       success: true,
       count: comfyModels.length,
+      cached: true, // Hardcoded models are effectively "cached"
+    };
+    anyFromCache = true;
+  }
+
+  // Add Magnific models if included (read from the recorded API description, no API call needed)
+  if (includeMagnific) {
+    let magnificModels = magnificProviderModels();
+    if (searchQuery) {
+      magnificModels = filterModelsBySearch(magnificModels, searchQuery);
+    }
+    allModels.push(...magnificModels);
+    providerResults["magnific"] = {
+      success: true,
+      count: magnificModels.length,
       cached: true, // Hardcoded models are effectively "cached"
     };
     anyFromCache = true;

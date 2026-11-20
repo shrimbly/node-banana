@@ -24,6 +24,7 @@ import {
   WaveSpeedApiSchema,
 } from "./cache";
 import { comfyRouterNodeSchema } from "./comfyRouter/catalog";
+import { magnificNodeSchema } from "./magnific/bindings";
 import { isValidReplicateModelId } from "./ids";
 import type { ProviderKeys } from "./keys";
 
@@ -1496,7 +1497,7 @@ function extractWaveSpeedSchema(
 // ============ Lookup ============
 
 /** Providers that serve model schemas. */
-export const SCHEMA_PROVIDERS = ["replicate", "fal", "kie", "wavespeed", "gemini", "openai", "comfy"] as const;
+export const SCHEMA_PROVIDERS = ["replicate", "fal", "kie", "wavespeed", "gemini", "openai", "comfy", "magnific"] as const;
 
 export type SchemaProvider = (typeof SCHEMA_PROVIDERS)[number];
 
@@ -1544,7 +1545,7 @@ export async function getModelSchema(
   if (!isSchemaProvider(provider)) {
     return {
       ok: false,
-      error: "Invalid or missing provider. Use ?provider=replicate, ?provider=fal, ?provider=kie, ?provider=wavespeed, ?provider=openai, ?provider=comfy, or ?provider=gemini",
+      error: "Invalid or missing provider. Use ?provider=replicate, ?provider=fal, ?provider=kie, ?provider=wavespeed, ?provider=openai, ?provider=comfy, ?provider=magnific, or ?provider=gemini",
       status: 400,
     };
   }
@@ -1609,6 +1610,13 @@ export async function getModelSchema(
         return { ok: false, error: "Unknown Comfy Router model", status: 404 };
       }
       result = comfySchema;
+    } else if (provider === "magnific") {
+      // Magnific: settings and handles from the recorded API description (no request)
+      const magnificSchema = magnificNodeSchema(modelId);
+      if (!magnificSchema) {
+        return { ok: false, error: "Unknown Magnific model", status: 404 };
+      }
+      result = magnificSchema;
     } else {
       const apiKey = keys.fal || null;
       if (!apiKey) {
