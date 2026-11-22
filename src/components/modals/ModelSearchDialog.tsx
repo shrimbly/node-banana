@@ -33,6 +33,7 @@ import { ProviderType, RecentModel } from "@/types";
 import { ProviderModel, ModelCapability } from "@/lib/providers/types";
 import type { ProviderListResult } from "@/lib/providers/registry";
 import { ComfyMark } from "@/components/icons/ComfyMark";
+import { MagnificMark } from "@/components/icons/MagnificMark";
 
 // localStorage cache: the whole list, one entry per set of configured
 // providers, so the dialog opens on it while the server answers. Filters and
@@ -138,6 +139,7 @@ function getProvidersHash(providers: {
   wavespeed: boolean;
   openai: boolean;
   comfy: boolean;
+  magnific: boolean;
 }): string {
   // Fixed order keeps the hash deterministic across renders.
   return [
@@ -147,6 +149,7 @@ function getProvidersHash(providers: {
     providers.wavespeed ? "w" : "",
     providers.openai ? "o" : "",
     providers.comfy ? "c" : "",
+    providers.magnific ? "m" : "",
   ].join("");
 }
 
@@ -192,6 +195,7 @@ const OpenAIIcon = () => (
 );
 
 const ComfyIcon = () => <ComfyMark className="w-3.5 h-3.5" />;
+const MagnificIcon = () => <MagnificMark className="w-3.5 h-3.5" />;
 
 /** Provider rail order, names and marks. Monochrome: the chrome keeps colour for status. */
 const PROVIDER_OPTIONS: { id: ProviderType; label: string; Icon: () => React.ReactElement }[] = [
@@ -202,6 +206,7 @@ const PROVIDER_OPTIONS: { id: ProviderType; label: string; Icon: () => React.Rea
   { id: "wavespeed", label: "WaveSpeed", Icon: WaveSpeedIcon },
   { id: "openai", label: "OpenAI", Icon: OpenAIIcon },
   { id: "comfy", label: "ComfyUI", Icon: ComfyIcon },
+  { id: "magnific", label: "Magnific", Icon: MagnificIcon },
 ];
 
 // Get the center of the React Flow pane in screen coordinates
@@ -322,7 +327,7 @@ export function ModelSearchDialog({
     trackModelUsage,
   } = useWorkflowStore();
   // Use stable selector for API keys to prevent unnecessary re-fetches
-  const { replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, openaiApiKey, comfyApiKey, comfyEnabled } = useProviderApiKeys();
+  const { replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, openaiApiKey, comfyApiKey, comfyEnabled, magnificApiKey } = useProviderApiKeys();
   const { screenToFlowPosition } = useReactFlow();
 
   // State
@@ -374,8 +379,9 @@ export function ModelSearchDialog({
     if (wavespeedApiKey) headers["X-WaveSpeed-Key"] = wavespeedApiKey;
     if (openaiApiKey) headers["X-OpenAI-API-Key"] = openaiApiKey;
     if (comfyApiKey) headers["X-Comfy-Router-Key"] = comfyApiKey;
+    if (magnificApiKey) headers["X-Magnific-Key"] = magnificApiKey;
     return headers;
-  }, [replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, openaiApiKey, comfyApiKey]);
+  }, [replicateApiKey, falApiKey, kieApiKey, wavespeedApiKey, openaiApiKey, comfyApiKey, magnificApiKey]);
 
   const providersHash = getProvidersHash({
     replicate: !!replicateApiKey,
@@ -384,6 +390,7 @@ export function ModelSearchDialog({
     wavespeed: !!wavespeedApiKey,
     openai: !!openaiApiKey,
     comfy: !!comfyApiKey,
+    magnific: !!magnificApiKey,
   });
 
   const stopPolling = useCallback(() => {
@@ -603,12 +610,13 @@ export function ModelSearchDialog({
     if (wavespeedApiKey) providers.add("wavespeed");
     if (openaiApiKey) providers.add("openai");
     if (comfyEnabled && comfyApiKey) providers.add("comfy");
+    if (magnificApiKey) providers.add("magnific");
     // Server-side keys (from env vars, reported by /api/models)
     for (const p of serverAvailableProviders) {
       providers.add(p as ProviderType);
     }
     return providers;
-  }, [replicateApiKey, kieApiKey, wavespeedApiKey, openaiApiKey, comfyApiKey, comfyEnabled, serverAvailableProviders]);
+  }, [replicateApiKey, kieApiKey, wavespeedApiKey, openaiApiKey, comfyApiKey, comfyEnabled, magnificApiKey, serverAvailableProviders]);
 
   // Reset provider filter if current selection becomes unavailable
   useEffect(() => {

@@ -20,6 +20,7 @@ const PROVIDER_HEADER_MAP: Record<ProviderType, string> = {
   openai: "X-OpenAI-API-Key",
   anthropic: "X-Anthropic-API-Key",
   comfy: "X-Comfy-Router-Key",
+  magnific: "X-Magnific-Key",
 };
 
 /**
@@ -49,7 +50,7 @@ export function buildGenerateHeaders(
 
 /** Provider keys for the models routes; null/undefined/empty means "not set". */
 export type ModelsApiKeys = Partial<
-  Record<"replicate" | "fal" | "kie" | "wavespeed" | "openai" | "gemini" | "comfy", string | null>
+  Record<"replicate" | "fal" | "kie" | "wavespeed" | "openai" | "gemini" | "comfy" | "magnific", string | null>
 >;
 
 /**
@@ -65,6 +66,7 @@ const MODELS_HEADER_MAP: Record<keyof ModelsApiKeys, string> = {
   openai: "X-OpenAI-API-Key",
   gemini: "X-Gemini-API-Key",
   comfy: "X-Comfy-Router-Key",
+  magnific: "X-Magnific-Key",
 };
 
 /**

@@ -577,4 +577,20 @@ describe("nodeReadinessPure", () => {
     expect(nodeReadinessPure(nodes, loop).gen).toBeDefined();
     expect(nodeReadinessPure(nodes, real)).toEqual({});
   });
+
+  it("asks a model that takes no prompt for an image instead", () => {
+    const imageOnly = [{ name: "image", type: "image", required: true, label: "Image" }];
+    const nodes = [
+      { id: "up", type: "nanoBanana", position: { x: 0, y: 0 }, data: { inputSchema: imageOnly } },
+      { id: "gen", type: "nanoBanana", position: { x: 0, y: 0 }, data: { inputSchema: [{ name: "prompt", type: "text", required: true, label: "Prompt" }, ...imageOnly] } },
+    ] as never[];
+    expect(nodeReadinessPure(nodes, []).up).toEqual({ hint: "needs an image", message: 'Generate node "up" missing image input' });
+    const wired = [
+      { id: "a", source: "i", target: "up", targetHandle: "image", data: {} },
+      { id: "b", source: "i", target: "gen", targetHandle: "image", data: {} },
+    ] as never[];
+    const readiness = nodeReadinessPure(nodes, wired);
+    expect(readiness.up).toBeUndefined();
+    expect(readiness.gen?.hint).toBe("needs a prompt");
+  });
 });

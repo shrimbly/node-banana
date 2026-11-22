@@ -22,6 +22,7 @@ GEMINI_API_KEY=your_gemini_api_key
 OPENAI_API_KEY=your_openai_api_key  # Optional, for OpenAI LLM provider
 KIE_API_KEY=your_kie_api_key        # Optional, for Kie.ai models (Sora, Veo, Kling, etc.)
 COMFY_API_KEY=your_comfy_api_key    # Optional, for ComfyUI-hosted models via Comfy Router (Flux, GPT Image, Nano Banana, Kling, Veo, etc.)
+MAGNIFIC_API_KEY=your_magnific_api_key  # Optional, for Magnific's upscalers, Mystic, relight and the models it hosts
 ```
 
 ## Architecture Overview
@@ -79,6 +80,15 @@ press lets the current run finish, the second stops now (`stopWorkflow`).
 `batch` (`id`, `index`, `count`) rides on each run's outputs: carousel
 entries, recent generations and asset records.
 
+**Image batches** (`src/lib/imageBatch.ts`): an Image Input node can hold up
+to 200 images (pick several, choose a folder, or drop files on it; `batchImages`
+with `batchImageRefs`, `batchFilenames`, `batchDimensions`, `batchIndex`). It
+shows one as its ordinary `image`, so readers see the current item. `runBatch`
+runs the flow once per image (times the Runs count, at most 500 runs) and moves
+every batch node in scope to the run's image before each run; it carries on
+past a failed run and stops after three failures in a row. Saved workflows
+write each image into `inputs/` like any other input (`mediaStorage.ts`).
+
 ## AI Models
 
 Image generation models (these exist and are recently released):
@@ -92,7 +102,8 @@ LLM models are defined once in `src/lib/llm/catalog.ts`: the current list per pr
 `GET /api/models` lists every provider with a key. Gemini, Kie and OpenAI
 are static catalogs in `src/lib/providers/registry.ts`; Comfy Router offers
 its bound models that the Router's own list says it serves (see "Adding
-Comfy Router Models"); Replicate, fal.ai and WaveSpeed come from the model catalog
+Comfy Router Models"); Magnific offers the models read from its recorded API
+description (see "Adding Magnific Models"); Replicate, fal.ai and WaveSpeed come from the model catalog
 (`src/lib/providers/catalog.ts`): each list is fetched in parallel under its
 own deadline, kept under `~/.node-banana/catalog/<provider>.json`
 (`NODE_BANANA_CATALOG_DIR` moves it; tests must set it), served straight away,
@@ -256,6 +267,20 @@ Discovery and settings are live; wire formats are data:
 - **Checks:** `npm run comfy:router-sync` downloads every schema into `.scratch/comfy-router-schemas` and lists Router models that are neither bound nor excluded. Then `npx vitest run src/lib/providers/comfyRouter/__tests__/routerSchemas.test.ts` validates the smallest and fullest request of every bound model against its schema (Ajv) and checks each result path exists in the response schema. `src/app/api/generate/providers/__tests__/comfy.test.ts` pins bodies and result readings for the main formats.
 - **Transport:** the queue (`POST …/requests` → poll `…/requests/{id}/status` respecting `Retry-After` → `GET …/requests/{id}`), with an `Idempotency-Key` per submit — synchronous partners (OpenAI, Qwen) work through it too. The generate route returns the polling envelope with `pollProvider: "comfy"` and `/api/generate/poll` finishes the run. A family whose answer is the asset's own bytes (ElevenLabs) carries `"transport": "sync"`: the queue cannot store them and refuses with `403 not_enabled`, so the generate route runs it on the model's own route (`POST …/v2/models/{id}`) in one request and returns the finished output. Binary answers become audio; 3D models return as their URL.
 - **Masks:** partners disagree. OpenAI edits where the mask is transparent; FLUX Fill and Bria edit where it is white; Ideogram 4.5 edits where it is black.
+
+## Adding Magnific Models
+
+Magnific (`https://api.magnific.com/v1/ai/…`, header `x-magnific-api-key`, provider id `magnific`) hosts its own tools (the upscalers, Mystic, relight, style transfer, expand, skin enhancer) and about 150 third-party image, video and audio models behind one key, billed in credits. It has no endpoint that lists models and no schema per model: it publishes one OpenAPI document for the whole API, and each POST under `/v1/ai` is a model.
+
+- **Which models exist:** `npm run magnific:sync` downloads that document (public, no key) and records every POST under `/v1/ai` in `src/lib/providers/magnific/spec.json`: its request schema with refs inlined, and the route its task is polled on. A new Magnific model reaches the app by running the sync and committing the file.
+- **Bindings are derived, not written:** `bindings.ts` turns each recorded endpoint into a model. The model id is the path after `/v1/ai/`. Media handles are the fields named for an image, video or audio; whether each takes base64, a URL or either is read from the field's description, since its types are unreliable. Everything else that is a plain value is a setting. `prompt` (or `text`, for voiceover and sound effects) and `negative_prompt` are the text handles. The request template is in the Comfy Router binding language (`comfyRouter/template.ts`) and settings are derived as the Router's are (`comfyRouter/schema.ts`).
+- **By hand (`overrides.ts`):** what each endpoint group produces (`GROUP_OUTPUT`), endpoints left out with the reason (`EXCLUDED`), names the summaries get wrong (`NAMES`), settings never shown (`HIDDEN_PARAMS`: the webhook, `num_images`, since only a task's first output is kept), and per-endpoint `PARAM_OVERRIDES`. An endpoint is also left out automatically when it is deprecated, has no status route, or requires a field no handle or setting can fill.
+- **Checks:** `npx vitest run src/lib/providers/magnific` is hermetic and runs in CI. It fails when an endpoint sits in a group `GROUP_OUTPUT` does not know, when two models share a name, when the pinned list of exclusions changes, or when the smallest or fullest request of a bound model does not validate against its recorded schema (Ajv). `src/app/api/generate/providers/__tests__/magnific.test.ts` pins the transport.
+- **Transport:** one shape for every model. `POST /v1/ai/{id}` answers `data.task_id`; `GET /v1/ai/{poll route}/{task id}` answers `status` (`CREATED`, `IN_PROGRESS`, `COMPLETED`, `FAILED`) and `generated[]`. The poll route is often not the create route (`video/kling-v3-pro` is read at `video/kling-v3`, `video-upscaler/turbo` at `video-upscaler`), which is why it is recorded. The generate route returns the polling envelope with `pollProvider: "magnific"` and `/api/generate/poll` finishes the run, downloading the output at once because its URLs are short-lived. A task can read `COMPLETED` a moment before its URLs are there, so the check looks again before calling it empty. A 404 on the status check is answered as "ask again" (503), not as a failed run.
+- **No idempotency key:** a submit is tried again only after a 429. A 5xx or a dropped connection leaves the outcome unknown and is reported as such, never repeated, since a second request could be a second paid run.
+- **Media:** a field that takes only a URL gets one from Magnific's own upload step (`POST /v1/ai/uploads/request-url`, then a PUT to the pre-signed URL with every header it names; `media.ts`). A field that takes either gets images up to 8MB inline as raw base64, and anything larger, any video or audio, and anything already at a URL, by URL.
+- **Pricing:** Magnific publishes no prices through its API, so its models carry none and show as unpriced.
+- **Live checks:** `MAGNIFIC_API_KEY=… npm run magnific:smoke -- check` costs no credits: it puts a file through the upload step and reads it back, and asks each family status route about a made-up task. `npm run magnific:smoke -- run --model <id> --prompt …` (or `--image file`) runs one real generation through a dev server's own routes, and costs credits.
 
 ## ComfyUI Integration
 
@@ -574,8 +599,8 @@ All routes in `src/app/api/`:
 
 | Route | Timeout | Purpose |
 |-------|---------|---------|
-| `/api/generate` | 10 min | Image/video generation, dispatched by `selectedModel.provider`; async providers (Kie, Comfy) return a polling envelope |
-| `/api/generate/poll` | 2 min | Finish an async run (Kie, Comfy Router) |
+| `/api/generate` | 10 min | Image/video generation, dispatched by `selectedModel.provider`; async providers (Kie, Comfy, Magnific) return a polling envelope |
+| `/api/generate/poll` | 2 min | Finish an async run (Kie, Comfy Router, Magnific) |
 | `/api/models` | default | Model registry across providers (`?provider=`, `?search=`) |
 | `/api/models/[modelId]` | default | Per-model parameters and inputs |
 | `/api/env-status` | default | Which provider keys the server has from `.env` |

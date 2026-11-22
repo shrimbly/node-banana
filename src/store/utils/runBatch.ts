@@ -50,21 +50,31 @@ export interface RunOutcome {
  * or failed, or when `keepGoing` says no (Stop pressed, a pause edge, the
  * canvas replaced). `setIndex` is called before each run so the run reads its
  * own index.
+ *
+ * `toleratedFailures`: a batch of images goes on past a failed run, since
+ * each image is its own job, and stops only after this many failures in a row
+ * (a missing key or an offline provider fails every run alike).
  */
 export async function runBatchLoop(options: {
   count: number;
   setIndex: (index: number) => void;
   runOnce: () => Promise<RunOutcome>;
   keepGoing: () => boolean;
+  toleratedFailures?: number;
 }): Promise<number> {
-  const { count, setIndex, runOnce, keepGoing } = options;
+  const { count, setIndex, runOnce, keepGoing, toleratedFailures = 0 } = options;
   let completed = 0;
+  let failedInARow = 0;
   for (let index = 1; index <= count; index++) {
     setIndex(index);
     const outcome = await runOnce();
     if (!outcome.started) break;
     completed = index;
-    if (outcome.failed || !keepGoing()) break;
+    failedInARow = outcome.failed ? failedInARow + 1 : 0;
+    if (failedInARow > toleratedFailures || !keepGoing()) break;
   }
   return completed;
 }
+
+/** Failed runs in a row after which a batch of images stops. */
+export const IMAGE_BATCH_TOLERATED_FAILURES = 2;

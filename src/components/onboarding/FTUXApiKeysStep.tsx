@@ -30,6 +30,7 @@ const providers: ProviderInfo[] = [
   { id: "kie", name: "Kie.ai", apiKeyUrl: "https://kie.ai/api-key" },
   { id: "wavespeed", name: "WaveSpeed", apiKeyUrl: "https://wavespeed.ai/accesskey" },
   { id: "comfy", name: "ComfyUI", apiKeyUrl: "https://platform.comfy.org/profile/api-keys?onboarding=router" },
+  { id: "magnific", name: "Magnific", apiKeyUrl: "https://www.magnific.com/developers/dashboard/api-key" },
 ];
 
 /**
@@ -49,6 +50,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
     kie: false,
     wavespeed: false,
     comfy: false,
+    magnific: false,
   });
   const [localKeys, setLocalKeys] = useState<Record<ProviderType, string>>(() => {
     const keys: Record<ProviderType, string> = {
@@ -60,6 +62,7 @@ export function FTUXApiKeysStep({}: FTUXStepProps) {
       kie: "",
       wavespeed: "",
       comfy: "",
+      magnific: "",
     };
     for (const id of Object.keys(keys) as ProviderType[]) {
       const saved = providerSettings.providers[id]?.apiKey;

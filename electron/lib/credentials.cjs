@@ -4,7 +4,7 @@ const { atomicWrite } = require('./files.cjs');
 const credentialNames = new Set([
   // Every provider on the Providers page, the one Comfy key included: a name
   // missing here refuses the whole save as "Invalid credential field".
-  ...['gemini', 'openai', 'anthropic', 'replicate', 'fal', 'kie', 'wavespeed', 'comfy'].map(id => `provider.${id}`),
+  ...['gemini', 'openai', 'anthropic', 'replicate', 'fal', 'kie', 'wavespeed', 'comfy', 'magnific'].map(id => `provider.${id}`),
   ...['cloudApiKey', 'remoteApiKey', 'comfyOrgApiKey', 'cloudUrl', 'localUrl', 'remoteUrl'].map(id => `comfy.${id}`),
 ]);
 function validateCredentials(value) {

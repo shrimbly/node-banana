@@ -152,7 +152,7 @@ describe("search_models", () => {
     expect(lines.find((l) => l.startsWith("- "))).toMatch(/^- openai gpt-image-2\.5-flare — "GPT Image 2\.5 Flare" \[text-to-image, image-to-image\] → nanoBanana/);
     expect(result.text).toContain('No model contains "gpt 2.5 flare" as written; these match its words.');
     expect(result.text).toContain("Searched: Gemini, OpenAI.");
-    expect(result.text).toMatch(/No API key \(not searched; the user adds keys in Settings → Providers\): Kie\.ai, fal\.ai, Replicate, WaveSpeed, ComfyUI \(would offer 1: openai\/gpt-image-2\.5-flare\)\./);
+    expect(result.text).toMatch(/No API key \(not searched; the user adds keys in Settings → Providers\): Kie\.ai, fal\.ai, Replicate, WaveSpeed, ComfyUI \(would offer 1: openai\/gpt-image-2\.5-flare\), Magnific\./);
     expect(result.text).toContain("settings.model");
     expect(result.summary).toBe('Found 1 model for "gpt 2.5 flare"');
     expect(result.text).not.toContain(OPENAI_KEY);

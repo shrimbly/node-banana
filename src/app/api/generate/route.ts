@@ -11,12 +11,12 @@
  * Images are uploaded to fal CDN before submission to avoid payload size issues.
  *
  * POLLING PROVIDERS:
- * Kie.ai and Comfy Router submit a task and return a polling envelope
- * (pollProvider: 'kie' | 'comfy'); the client then calls /api/generate/poll.
+ * Kie.ai, Comfy Router and Magnific submit a task and return a polling envelope
+ * (pollProvider: 'kie' | 'comfy' | 'magnific'); the client then calls /api/generate/poll.
  *
  * Headers:
  *   - X-Gemini-API-Key, X-Replicate-API-Key, X-Fal-API-Key, X-Kie-Key,
- *     X-WaveSpeed-Key, X-OpenAI-API-Key, X-Comfy-Router-Key
+ *     X-WaveSpeed-Key, X-OpenAI-API-Key, X-Comfy-Router-Key, X-Magnific-Key
  */
 import { NextRequest, NextResponse } from "next/server";
 import { GenerateRequest, GenerateResponse, ModelType, SelectedModel, ProviderType } from "@/types";
@@ -30,6 +30,7 @@ import { submitKieTask } from "./providers/kie";
 import { COMFY_ROUTER_HEADER, comfyRunsSynchronously, resolveComfyRouterKey, runComfySynchronously, submitComfyTask } from "./providers/comfy";
 import { generateWithWaveSpeed } from "./providers/wavespeed";
 import { generateWithOpenAI } from "./providers/openai";
+import { MAGNIFIC_HEADER, resolveMagnificKey, submitMagnificTask } from "./providers/magnific";
 import { buildMediaResponse } from "./shared";
 
 export const maxDuration = 600; // 10 minute timeout for video generation polling
@@ -423,6 +424,77 @@ export async function POST(request: NextRequest) {
           polling: true,
           taskId,
           pollProvider: 'comfy',
+          pollModelId: selectedModel.modelId,
+          pollModelName: selectedModel.displayName,
+          pollMediaType: mediaType || 'image',
+        });
+      } catch (error) {
+        return NextResponse.json<GenerateResponse>(
+          {
+            success: false,
+            error: error instanceof Error ? error.message : "Task submission failed",
+          },
+          { status: 500 }
+        );
+      }
+    }
+
+    if (provider === "magnific") {
+      if (!selectedModel?.modelId || !selectedModel?.displayName) {
+        return NextResponse.json<GenerateResponse>(
+          { success: false, error: "selectedModel with modelId and displayName is required for Magnific" },
+          { status: 400 }
+        );
+      }
+
+      // User-provided key takes precedence over env variable
+      const magnificApiKey = resolveMagnificKey(request.headers.get(MAGNIFIC_HEADER));
+      if (!magnificApiKey) {
+        return NextResponse.json<GenerateResponse>(
+          {
+            success: false,
+            error: "Magnific API key not configured. Add MAGNIFIC_API_KEY to .env.local or configure in Settings.",
+          },
+          { status: 401 }
+        );
+      }
+
+      // Process dynamicInputs: filter empty values. Media stay as they are; the
+      // provider inlines or uploads each one the way its field takes it.
+      let processedDynamicInputs: Record<string, string | string[]> | undefined = undefined;
+      if (dynamicInputs) {
+        processedDynamicInputs = {};
+        for (const key of Object.keys(dynamicInputs)) {
+          const value = dynamicInputs[key];
+          if (value === null || value === undefined || value === '') {
+            continue;
+          }
+          processedDynamicInputs[key] = value;
+        }
+      }
+
+      const genInput: GenerationInput = {
+        model: {
+          id: selectedModel.modelId,
+          name: selectedModel.displayName,
+          provider: "magnific",
+          capabilities: capabilitiesForMediaType(mediaType),
+          description: null,
+        },
+        prompt: prompt || "",
+        images: images ? [...images] : [],
+        parameters,
+        dynamicInputs: processedDynamicInputs,
+      };
+
+      // Submit task and return immediately — client polls for completion
+      try {
+        const { taskId } = await submitMagnificTask(requestId, magnificApiKey, genInput);
+        return NextResponse.json<GenerateResponse>({
+          success: true,
+          polling: true,
+          taskId,
+          pollProvider: 'magnific',
           pollModelId: selectedModel.modelId,
           pollModelName: selectedModel.displayName,
           pollMediaType: mediaType || 'image',

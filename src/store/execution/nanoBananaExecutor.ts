@@ -21,6 +21,7 @@ import { pendingTaskFrom, waitForPendingTask } from "./pendingTask";
 import { runWithFallback } from "./runWithFallback";
 import type { GenerationRequest, NodeExecutionContext } from "./types";
 import { MissingInputError } from "./missingInput";
+import { promptIsOptional } from "@/store/utils/connectedInputs";
 import {
   assetCost,
   assetModel,
@@ -82,12 +83,21 @@ export async function executeNanoBanana(
     promptText = Array.isArray(raw) ? (raw as string[])[0] ?? null : null;
   }
 
-  if (!promptText) {
+  // A model whose schema takes no prompt (an upscaler) runs on its media alone.
+  const hasMedia =
+    images.length > 0 ||
+    Object.entries(dynamicInputs).some(
+      ([key, value]) => key !== "prompt" && key !== "negative_prompt" && (Array.isArray(value) ? value.length > 0 : Boolean(value))
+    );
+  if (!promptText && promptIsOptional(nodeData) && hasMedia) promptText = "";
+
+  if (promptText === null || (!promptText && !(promptIsOptional(nodeData) && hasMedia))) {
+    const missing = promptIsOptional(nodeData) ? "Missing image input" : "Missing text input";
     updateNodeData(node.id, {
       status: "skipped",
-      error: "Missing text input",
+      error: missing,
     });
-    throw new MissingInputError("Missing text input");
+    throw new MissingInputError(missing);
   }
 
   // Capture promptText as a definitely-non-null string for use inside the closure.

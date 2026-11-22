@@ -3,7 +3,7 @@ const { parseEnv } = require('node:util');
 const { validateCredentials } = require('./credentials.cjs');
 const fields = {
   GEMINI_API_KEY: 'provider.gemini', OPENAI_API_KEY: 'provider.openai', ANTHROPIC_API_KEY: 'provider.anthropic',
-  REPLICATE_API_KEY: 'provider.replicate', FAL_API_KEY: 'provider.fal', KIE_API_KEY: 'provider.kie', WAVESPEED_API_KEY: 'provider.wavespeed',
+  REPLICATE_API_KEY: 'provider.replicate', FAL_API_KEY: 'provider.fal', KIE_API_KEY: 'provider.kie', WAVESPEED_API_KEY: 'provider.wavespeed', MAGNIFIC_API_KEY: 'provider.magnific',
   COMFY_CLOUD_API_KEY: 'comfy.cloudApiKey', COMFY_API_KEY: 'comfy.remoteApiKey', COMFY_ORG_API_KEY: 'comfy.comfyOrgApiKey',
   COMFY_CLOUD_URL: 'comfy.cloudUrl', COMFY_LOCAL_URL: 'comfy.localUrl', COMFY_REMOTE_URL: 'comfy.remoteUrl',
 };

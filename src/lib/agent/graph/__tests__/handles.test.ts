@@ -91,6 +91,8 @@ describe("rendered handles", () => {
     expect(ids(getInputHandles(node("g", "nanoBanana", { selectedModel: { provider: "fal" }, inputSchema: schema }), []))).toEqual(["image", "text"]);
     const comfy = getInputHandles(node("g", "nanoBanana", { selectedModel: { provider: "comfy" }, inputSchema: schema }), []);
     expect(comfy.map((h) => `${h.id}:${h.label}:${h.multi}`)).toEqual(["image:Garment:false", "image-1:Mask:false", "text:Prompt:false"]);
+    const magnific = getInputHandles(node("g", "nanoBanana", { selectedModel: { provider: "magnific" }, inputSchema: schema }), []);
+    expect(magnific.map((h) => h.id)).toEqual(["image", "image-1", "text"]);
   });
 
   it("labels handles as the node sockets do", () => {

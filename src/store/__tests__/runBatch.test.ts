@@ -193,3 +193,63 @@ describe("runBatch", () => {
     expect(starts).toHaveLength(2);
   });
 });
+
+describe("runBatch over a batch of images", () => {
+  const images = ["data:image/png;base64,QQ==", "data:image/png;base64,Qg==", "data:image/png;base64,Qw=="];
+
+  beforeEach(() => {
+    useWorkflowStore.setState({ ...initial, nodes: [], edges: [], groups: {}, isRunning: false, pausedAtNodeId: null, runCount: 1, batch: null });
+    useWorkflowStore.setState({
+      nodes: [
+        makeNode("i", "imageInput", {
+          image: images[1],
+          filename: "b.png",
+          dimensions: null,
+          batchImages: images,
+          batchFilenames: ["a.png", "b.png", "c.png"],
+          batchDimensions: [null, null, null],
+          batchIndex: 1,
+        } as Partial<WorkflowNodeData>),
+        makeNode("o", "output"),
+      ],
+      edges: [{ ...makeEdge("i", "o"), sourceHandle: "image", targetHandle: "image" } as WorkflowEdge],
+    });
+  });
+
+  afterEach(() => {
+    useWorkflowStore.setState({ isRunning: false, batch: null });
+  });
+
+  const shownImage = () => (useWorkflowStore.getState().nodes.find((node) => node.id === "i")!.data as { image: string }).image;
+
+  it("runs the flow once per image, from the first, each run reading its own image", async () => {
+    const seen: string[] = [];
+    const { starts, unsubscribe } = watchRuns(() => seen.push(shownImage()));
+    await useWorkflowStore.getState().runBatch({ kind: "all" });
+    unsubscribe();
+    expect(starts.map((start) => start.count)).toEqual([3, 3, 3]);
+    expect(seen).toEqual(images);
+  });
+
+  it("runs each image the Runs count times", async () => {
+    useWorkflowStore.getState().setRunCount(2);
+    const seen: string[] = [];
+    const { unsubscribe } = watchRuns(() => seen.push(shownImage()));
+    await useWorkflowStore.getState().runBatch({ kind: "all" });
+    unsubscribe();
+    expect(seen).toEqual([images[0], images[0], images[1], images[1], images[2], images[2]]);
+  });
+
+  it("goes through the images feeding selected nodes, and not those that do not", async () => {
+    const fed = watchRuns();
+    await useWorkflowStore.getState().runBatch({ kind: "nodes", nodeIds: ["o"] });
+    fed.unsubscribe();
+    expect(fed.starts).toHaveLength(3);
+
+    useWorkflowStore.setState({ nodes: [...useWorkflowStore.getState().nodes, makeNode("p", "prompt", { prompt: "x" })] });
+    const unrelated = watchRuns();
+    await useWorkflowStore.getState().runBatch({ kind: "nodes", nodeIds: ["p"] });
+    unrelated.unsubscribe();
+    expect(unrelated.starts).toHaveLength(1);
+  });
+});

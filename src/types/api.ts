@@ -52,7 +52,7 @@ export interface GenerateResponse {
   // Client-side polling fields (for long-running Kie tasks)
   polling?: boolean; // true = task submitted, poll for completion
   taskId?: string; // Kie task ID to poll
-  pollProvider?: string; // 'kie' — tells poll endpoint which provider
+  pollProvider?: string; // 'kie' | 'comfy' | 'magnific' — tells poll endpoint which provider
   pollModelId?: string; // model ID for result handling
   pollModelName?: string; // display name for error messages
   pollMediaType?: string; // 'video' | 'image' | 'audio' — for result handling

@@ -181,6 +181,7 @@ export function agentProviderKeys({ providerSettings, comfyCloudApiKey }: AgentK
     kie: providers.kie?.apiKey || null,
     wavespeed: providers.wavespeed?.apiKey || null,
     comfy: providers.comfy?.apiKey || comfyCloudApiKey || null,
+    magnific: providers.magnific?.apiKey || null,
   };
 }
 

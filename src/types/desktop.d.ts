@@ -1,4 +1,4 @@
-export type CredentialName = `provider.${"gemini" | "openai" | "anthropic" | "replicate" | "fal" | "kie" | "wavespeed" | "comfy"}` | `comfy.${"cloudApiKey" | "remoteApiKey" | "comfyOrgApiKey" | "cloudUrl" | "localUrl" | "remoteUrl"}`;
+export type CredentialName = `provider.${"gemini" | "openai" | "anthropic" | "replicate" | "fal" | "kie" | "wavespeed" | "comfy" | "magnific"}` | `comfy.${"cloudApiKey" | "remoteApiKey" | "comfyOrgApiKey" | "cloudUrl" | "localUrl" | "remoteUrl"}`;
 export type DesktopCredentials = Partial<Record<CredentialName, string | null>>;
 export type EnvironmentImport = { cancelled: true } | {
   cancelled: false;

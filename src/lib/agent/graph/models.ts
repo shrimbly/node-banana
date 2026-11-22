@@ -39,7 +39,7 @@ export function fitsNodeType(model: Pick<ProviderModel, "capabilities">, type: G
 }
 
 /** Providers a model can come from, with the names Settings shows. */
-export const MODEL_PROVIDERS = ["gemini", "openai", "kie", "fal", "replicate", "wavespeed", "comfy"] as const;
+export const MODEL_PROVIDERS = ["gemini", "openai", "kie", "fal", "replicate", "wavespeed", "comfy", "magnific"] as const;
 export type ModelProvider = (typeof MODEL_PROVIDERS)[number];
 
 export const MODEL_PROVIDER_LABELS: Record<ModelProvider, string> = {
@@ -50,6 +50,7 @@ export const MODEL_PROVIDER_LABELS: Record<ModelProvider, string> = {
   replicate: "Replicate",
   wavespeed: "WaveSpeed",
   comfy: "ComfyUI",
+  magnific: "Magnific",
 };
 
 const PROVIDER_ALIASES: Record<string, ModelProvider> = {
@@ -69,6 +70,9 @@ const PROVIDER_ALIASES: Record<string, ModelProvider> = {
   comfyui: "comfy",
   comfyrouter: "comfy",
   comfyorg: "comfy",
+  magnific: "magnific",
+  magnificai: "magnific",
+  freepik: "magnific",
 };
 
 /** A provider name as people write it ("OpenAI", "fal.ai", "ComfyUI") → its id. */

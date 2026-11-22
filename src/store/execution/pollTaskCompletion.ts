@@ -40,6 +40,7 @@ const MAX_CONSECUTIVE_ERRORS = 10;
 export function pollProviderName(provider: string): string {
   if (provider === "comfy") return "Comfy Router";
   if (provider === "kie") return "Kie.ai";
+  if (provider === "magnific") return "Magnific";
   return provider;
 }
 

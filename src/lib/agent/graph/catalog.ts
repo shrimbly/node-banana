@@ -470,7 +470,7 @@ export const NODE_CATALOG: Record<NodeType, NodeCatalogEntry> = {
     ],
     outputs: [img("image", "Image")],
     settings: [
-      { field: "model", kind: "model", description: `Any image model search_models finds for a provider the user has a key for: a Gemini id (${IMAGE_MODEL_IDS.join(", ")}) or another provider's (OpenAI, fal, Replicate, Kie, WaveSpeed, ComfyUI) as its exact id or {"provider": "...", "modelId": "..."}.`, default: "omit to use the user's saved default (nano-banana-pro if none)" },
+      { field: "model", kind: "model", description: `Any image model search_models finds for a provider the user has a key for: a Gemini id (${IMAGE_MODEL_IDS.join(", ")}) or another provider's (OpenAI, fal, Replicate, Kie, WaveSpeed, ComfyUI, Magnific) as its exact id or {"provider": "...", "modelId": "..."}.`, default: "omit to use the user's saved default (nano-banana-pro if none)" },
       { field: "aspectRatio", kind: "enum", values: EXTENDED_ASPECT_RATIOS, description: `Output aspect ratio. 1:4, 1:8, 4:1 and 8:1 need ${imageModelsWith((m) => m.aspectRatios.includes("8:1"), "or")}.`, default: "omit to use the user's saved default (1:1 if none)" },
       { field: "resolution", kind: "enum", values: ALL_RESOLUTIONS, description: `${IMAGE_MODELS.filter((m) => m.resolutions.length > 0).map((m) => `${m.id}: ${m.resolutions.join("|")}`).join("; ")}; others have none.`, default: "omit to use the user's saved default (1K if none)" },
       { field: "useGoogleSearch", kind: "boolean", description: `Ground the image in Google Search (${imageModelsWith((m) => m.googleSearch)}).`, default: "false" },
@@ -538,7 +538,7 @@ export const NODE_CATALOG: Record<NodeType, NodeCatalogEntry> = {
     inputs: [txt("text", "Prompt", { note: "handles follow the chosen model's inputs once one is picked" })],
     outputs: [aud("audio", "Audio")],
     settings: [
-      { field: "model", kind: "model", description: "A speech, music or sound model from search_models (nodeType generateAudio; Kie, fal, Replicate, WaveSpeed or ComfyUI): its exact id or {\"provider\": \"...\", \"modelId\": \"...\"}.", default: "omit to use the user's saved default (none if they have not saved one)" },
+      { field: "model", kind: "model", description: "A speech, music or sound model from search_models (nodeType generateAudio; Kie, fal, Replicate, WaveSpeed, ComfyUI or Magnific): its exact id or {\"provider\": \"...\", \"modelId\": \"...\"}.", default: "omit to use the user's saved default (none if they have not saved one)" },
       modelParametersSetting,
     ],
     agentCreatable: true,

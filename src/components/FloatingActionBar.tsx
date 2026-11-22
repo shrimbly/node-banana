@@ -1,5 +1,7 @@
 "use client";
 
+import { batchLength } from "@/lib/imageBatch";
+import type { ImageInputNodeData } from "@/types";
 import { MenuDivider, MenuItem, MenuSectionLabel, MenuStepper, MenuSurface } from "@/components/ui/Menu";
 import { MAX_RUN_COUNT } from "@/store/utils/runBatch";
 import { groupLabelColor } from "@/utils/groupColors";
@@ -340,6 +342,7 @@ export function FloatingActionBar() {
     runBatch,
     requestStop,
     runCount,
+    batchImages,
     setRunCount,
     batch,
     mockTutorialExecution,
@@ -361,6 +364,7 @@ export function FloatingActionBar() {
     runBatch: state.runBatch,
     requestStop: state.requestStop,
     runCount: state.runCount,
+    batchImages: Math.max(0, ...state.nodes.map((node) => (node.type === "imageInput" ? batchLength(node.data as ImageInputNodeData) : 0))),
     setRunCount: state.setRunCount,
     batch: state.batch,
     mockTutorialExecution: state.mockTutorialExecution,
@@ -523,9 +527,11 @@ export function FloatingActionBar() {
             : `Run ${batch.index} of ${batch.count}`
         : isRunning
           ? getRunningLabel()
-          : runCount > 1
-            ? `Run ${runCount} times`
-            : "Run";
+          : batchImages > 1
+            ? `Run once per image (${batchImages} images${runCount > 1 ? `, ${runCount} times each` : ""})`
+            : runCount > 1
+              ? `Run ${runCount} times`
+              : "Run";
 
   return (
     <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
@@ -600,7 +606,11 @@ export function FloatingActionBar() {
                 <>
                   <PlayIcon />
                   <span>Run</span>
-                  {runCount > 1 && <span className="-ml-0.5 tabular-nums text-neutral-500">{runCount}×</span>}
+                  {batchImages > 1 ? (
+                    <span className="-ml-0.5 tabular-nums text-neutral-500">{batchImages} images{runCount > 1 ? ` × ${runCount}` : ""}</span>
+                  ) : (
+                    runCount > 1 && <span className="-ml-0.5 tabular-nums text-neutral-500">{runCount}×</span>
+                  )}
                 </>
               )}
             </button>

@@ -6,5 +6,6 @@ export { generateWithGemini } from "./gemini";
 export { generateWithReplicate } from "./replicate";
 export { clearFalInputMappingCache, generateWithFalQueue } from "./fal";
 export { generateWithWaveSpeed } from "./wavespeed";
+export { generateWithMagnific } from "./magnific";
 export { generateWithOpenAI } from "./openai";
 export { generateWithComfy } from "./comfy";

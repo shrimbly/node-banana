@@ -212,6 +212,20 @@ async function externalizeNodeMedia(
       } else {
         newData = d;
       }
+      // A batch's images, each written once and replaced by its file's id
+      if (d.batchImages && d.batchImages.length > 0) {
+        const refs = d.batchImages.map((_, i) => d.batchImageRefs?.[i] ?? "");
+        for (let i = 0; i < d.batchImages.length; i++) {
+          if (!refs[i] && isDataUrl(d.batchImages[i])) {
+            refs[i] = await saveImageAndGetId(d.batchImages[i]!, workflowPath, savedImageIds, "inputs");
+          }
+        }
+        newData = {
+          ...newData,
+          batchImages: d.batchImages.map((image, i) => (refs[i] && isDataUrl(image) ? "" : image)),
+          batchImageRefs: refs,
+        } as WorkflowNodeData;
+      }
       break;
     }
 
@@ -992,6 +1006,14 @@ async function hydrateNodeMedia(
         };
       } else {
         newData = d;
+      }
+      if (d.batchImages && d.batchImageRefs) {
+        const batchImages = [...d.batchImages];
+        for (let i = 0; i < batchImages.length; i++) {
+          const ref = d.batchImageRefs[i];
+          if (ref && !batchImages[i]) batchImages[i] = (await loadMediaById(ref, workflowPath, loadedMedia, "image")) ?? "";
+        }
+        newData = { ...newData, batchImages } as WorkflowNodeData;
       }
       break;
     }

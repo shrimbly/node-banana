@@ -19,6 +19,7 @@ export interface ProviderKeys {
   openai?: string;
   gemini?: string;
   comfy?: string;
+  magnific?: string;
 }
 
 /**
@@ -33,6 +34,7 @@ const KEY_SOURCES: Record<Exclude<keyof ProviderKeys, "comfy">, { headers: strin
   wavespeed: { headers: ["X-WaveSpeed-Key"], env: "WAVESPEED_API_KEY" },
   openai: { headers: ["X-OpenAI-API-Key"], env: "OPENAI_API_KEY" },
   gemini: { headers: ["X-Gemini-API-Key"], env: "GEMINI_API_KEY" },
+  magnific: { headers: ["X-Magnific-Key"], env: "MAGNIFIC_API_KEY" },
 };
 
 /**

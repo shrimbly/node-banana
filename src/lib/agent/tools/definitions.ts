@@ -83,7 +83,7 @@ export const searchModelsShape = {
     .string()
     .optional()
     .describe("Narrower filter: text-to-image, image-to-image, text-to-video, image-to-video, audio-to-video, text-to-3d, image-to-3d or text-to-audio (or image, video, 3d, audio)."),
-  provider: z.string().optional().describe("Only this provider: gemini, openai, kie, fal, replicate, wavespeed or comfy. Omit to search every provider the user has a key for."),
+  provider: z.string().optional().describe("Only this provider: gemini, openai, kie, fal, replicate, wavespeed, comfy or magnific. Omit to search every provider the user has a key for."),
   query: z
     .string()
     .optional()
@@ -263,7 +263,7 @@ export const AGENT_TOOL_DEFINITIONS: AgentToolDefinition[] = [
     title: "Search models",
     readOnly: true,
     description:
-      "Search the image, video, 3D and audio models of every provider the user has an API key for (Gemini, OpenAI, Kie, fal, Replicate, WaveSpeed, ComfyUI), the same list the node's model browser shows. Returns each model's provider, exact id, name, capabilities, the node type it fits and its price, plus which providers were searched, which failed, and which have no key. Call it before setting any model you have not seen in this conversation: settings.model takes the exact id it returns (or {provider, modelId}); never guess an id. nodeType llmGenerate returns LLM Generate's fixed model list.",
+      "Search the image, video, 3D and audio models of every provider the user has an API key for (Gemini, OpenAI, Kie, fal, Replicate, WaveSpeed, ComfyUI, Magnific), the same list the node's model browser shows. Returns each model's provider, exact id, name, capabilities, the node type it fits and its price, plus which providers were searched, which failed, and which have no key. Call it before setting any model you have not seen in this conversation: settings.model takes the exact id it returns (or {provider, modelId}); never guess an id. nodeType llmGenerate returns LLM Generate's fixed model list.",
     inputShape: searchModelsShape,
   },
   {

@@ -107,6 +107,7 @@ const KEY_ENV: Record<ModelProvider, string> = {
   replicate: "REPLICATE_API_KEY",
   wavespeed: "WAVESPEED_API_KEY",
   comfy: "COMFY_API_KEY",
+  magnific: "MAGNIFIC_API_KEY",
 };
 
 const CAPABILITY_SHORTHANDS: Partial<Record<string, GenerateNodeType>> = {
